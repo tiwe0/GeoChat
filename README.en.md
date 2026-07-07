@@ -1,15 +1,52 @@
-# GeoChat Desktop
+<p align="center">
+  <img src="build/icon.png" width="96" alt="GeoChat Desktop logo">
+</p>
 
-[中文](README.md)
+<h1 align="center">GeoChat Desktop</h1>
+
+<p align="center">
+  A local-first AI mathematics visualization workspace. Enter a problem, and
+  GeoChat constructs, draws, and explains it.
+</p>
+
+<p align="center">
+  <a href="README.md">中文</a>
+  ·
+  <a href="#preview">Preview</a>
+  ·
+  <a href="#quick-start">Quick Start</a>
+  ·
+  <a href="#features">Features</a>
+  ·
+  <a href="#star-history">Star History</a>
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/tiwe0/GeoChat"></a>
+  <a href="https://github.com/tiwe0/GeoChat/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/tiwe0/GeoChat?style=social"></a>
+  <img alt="Tauri" src="https://img.shields.io/badge/Tauri-2.x-24C8DB">
+  <img alt="Bun" src="https://img.shields.io/badge/Bun-runtime-black">
+  <img alt="SolidJS" src="https://img.shields.io/badge/SolidJS-UI-2C4F7C">
+</p>
 
 ## Preview
 
 ### Screenshots
 
-<p>
-  <img src="docs/media/geochat-desktop-zh.png" alt="GeoChat Desktop Chinese interface" width="49%">
-  <img src="docs/media/geochat-desktop-en.png" alt="GeoChat Desktop English interface" width="49%">
-</p>
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/media/geochat-desktop-zh.png" alt="GeoChat Desktop Chinese interface">
+    </td>
+    <td width="50%">
+      <img src="docs/media/geochat-desktop-en.png" alt="GeoChat Desktop English interface">
+    </td>
+  </tr>
+  <tr>
+    <td align="center">Chinese interface</td>
+    <td align="center">English interface</td>
+  </tr>
+</table>
 
 ### Videos
 
@@ -33,15 +70,15 @@ workflow does not require online checks.
 
 ## Features
 
-- Local GeoGebra-powered 2D/3D mathematics canvas.
-- Assistant workflow for constructing, explaining, and reviewing mathematical
-  diagrams.
-- Bring-your-own-key model provider configuration.
-- Local conversation, blackboard, and agent-run persistence through SQLite.
-- Local problem-bank data model and import tooling.
-- Desktop debug MCP tools for local inspection and smoke testing.
-- Packaged Tauri shell with a Bun runtime sidecar and replaceable app-bundle
-  resources.
+| Capability | What it does |
+| --- | --- |
+| Math canvas | Local 2D/3D mathematics visualization canvas for construction, verification, and explanation. |
+| AI drawing workflow | Turns a problem into construction steps, writes them to the canvas, and explains the key relationships. |
+| Bring your own key | Configure model provider API keys on your own device; core desktop workflows do not require online checks. |
+| Local persistence | Stores conversations, blackboards, and agent-run records in SQLite. |
+| Problem-bank tooling | Includes local problem-bank data models, import tools, and regression tests. |
+| Desktop debugging | Includes desktop debug MCP tools for local inspection and smoke testing. |
+| Tauri packaging | Ships a desktop shell with a Bun runtime sidecar and replaceable app-bundle resources. |
 
 ## Repository Contents
 
@@ -200,5 +237,8 @@ Security-sensitive reports should avoid including live credentials in issue
 text, logs, screenshots, or reproduction data.
 
 ## Star History
+
+If GeoChat is useful to you, a Star helps us understand which directions are
+worth continuing to invest in.
 
 [![Star History Chart](https://api.star-history.com/chart?repos=tiwe0/GeoChat&type=date&legend=top-left&sealed_token=oLgvpSYDuR0sPwlHMJv5pUNWFalPacI6ExWrttKg2zYQ9hin9c-CxY9b18RI0rfy97R4_bA4Z56afgMTJ9_-k_p_MoBqB6A3-mU4YUchikyRgRfD7JJO4mX6tqwCINW-sm4HPupk3C0Ku5H0vRNrOhbombQb7PDykT-gzkXxFPKRf6zBljrBAfOEEL3V)](https://www.star-history.com/?type=date&repos=tiwe0%2FGeoChat)

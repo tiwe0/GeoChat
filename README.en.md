@@ -201,4 +201,4 @@ text, logs, screenshots, or reproduction data.
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=geochat-ai/geochat-open-core&type=Date)](https://www.star-history.com/#geochat-ai/geochat-open-core&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=tiwe0/GeoChat&type=Date)](https://www.star-history.com/#tiwe0/GeoChat&Date)

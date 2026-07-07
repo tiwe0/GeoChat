@@ -36,13 +36,13 @@
 
 ### 视频
 
-#### 中文演示视频
+#### 演示视频 1
 
 <video src="https://raw.githubusercontent.com/tiwe0/GeoChat/master/docs/media/geochat-desktop-demo-1080p.mp4" controls width="100%"></video>
 
 [无法播放时打开视频文件](docs/media/geochat-desktop-demo-1080p.mp4)
 
-#### 英文演示视频
+#### 演示视频 2
 
 <video src="https://raw.githubusercontent.com/tiwe0/GeoChat/master/docs/media/geochat-desktop-demo-en.mp4" controls width="100%"></video>
 

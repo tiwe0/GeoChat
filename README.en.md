@@ -37,13 +37,13 @@
 
 ### Videos
 
-#### Chinese demo video
+#### Demo video 1
 
 <video src="https://raw.githubusercontent.com/tiwe0/GeoChat/master/docs/media/geochat-desktop-demo-1080p.mp4" controls width="100%"></video>
 
 [Open the video file if playback is unavailable](docs/media/geochat-desktop-demo-1080p.mp4)
 
-#### English demo video
+#### Demo video 2
 
 <video src="https://raw.githubusercontent.com/tiwe0/GeoChat/master/docs/media/geochat-desktop-demo-en.mp4" controls width="100%"></video>
 

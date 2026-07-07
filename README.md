@@ -49,20 +49,17 @@
 
 ### 视频
 
-<table>
-  <tr>
-    <td width="50%">
-      <video src="docs/media/geochat-desktop-demo-1080p.mp4" controls width="100%"></video>
-    </td>
-    <td width="50%">
-      <video src="docs/media/geochat-desktop-demo-en.mp4" controls width="100%"></video>
-    </td>
-  </tr>
-  <tr>
-    <td align="center">中文演示视频</td>
-    <td align="center">英文演示视频</td>
-  </tr>
-</table>
+#### 中文演示视频
+
+<video src="https://raw.githubusercontent.com/tiwe0/GeoChat/master/docs/media/geochat-desktop-demo-1080p.mp4" controls width="100%"></video>
+
+[无法播放时打开视频文件](docs/media/geochat-desktop-demo-1080p.mp4)
+
+#### 英文演示视频
+
+<video src="https://raw.githubusercontent.com/tiwe0/GeoChat/master/docs/media/geochat-desktop-demo-en.mp4" controls width="100%"></video>
+
+[无法播放时打开视频文件](docs/media/geochat-desktop-demo-en.mp4)
 
 ## 项目介绍
 

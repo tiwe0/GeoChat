@@ -50,20 +50,17 @@
 
 ### Videos
 
-<table>
-  <tr>
-    <td width="50%">
-      <video src="docs/media/geochat-desktop-demo-1080p.mp4" controls width="100%"></video>
-    </td>
-    <td width="50%">
-      <video src="docs/media/geochat-desktop-demo-en.mp4" controls width="100%"></video>
-    </td>
-  </tr>
-  <tr>
-    <td align="center">Chinese demo video</td>
-    <td align="center">English demo video</td>
-  </tr>
-</table>
+#### Chinese demo video
+
+<video src="https://raw.githubusercontent.com/tiwe0/GeoChat/master/docs/media/geochat-desktop-demo-1080p.mp4" controls width="100%"></video>
+
+[Open the video file if playback is unavailable](docs/media/geochat-desktop-demo-1080p.mp4)
+
+#### English demo video
+
+<video src="https://raw.githubusercontent.com/tiwe0/GeoChat/master/docs/media/geochat-desktop-demo-en.mp4" controls width="100%"></video>
+
+[Open the video file if playback is unavailable](docs/media/geochat-desktop-demo-en.mp4)
 
 ## Introduction
 

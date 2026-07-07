@@ -1,0 +1,9 @@
+GeoChat Desktop
+Copyright 2026 GeoChat contributors
+
+GeoChat-owned source code and documentation in this repository are licensed
+under the Apache License, Version 2.0.
+
+This repository also includes third-party components under their own license
+terms. See THIRD_PARTY_NOTICES.md for component-specific notices, including the
+vendored GeoGebra runtime under vendor/geogebra/.

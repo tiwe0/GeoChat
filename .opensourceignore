@@ -1,0 +1,114 @@
+# Conservative open-core export exclusions.
+#
+# The export helper starts from tracked files (`git ls-files`) and then applies
+# these patterns. Ignored local files such as `.env`, `.dev.vars`, SQLite
+# databases, build output, and release artifacts are not copied because they are
+# not tracked.
+
+# Internal agent/review/runtime state.
+.privateignore
+PRIVATE_COMMERCIAL.md
+.impeccable/**
+.omx/**
+.playwright-mcp/**
+.wrangler/**
+.wrangler-home/**
+
+# Cloud/hosted services are not part of the public desktop product.
+cloudflare/**
+services/**
+
+# Production Cloudflare deployment config. These files contain real routes,
+# account IDs, service names, database IDs, bucket names, or Hyperdrive IDs.
+# Cloud/problem-bank publishing and production deployment surfaces.
+deploy/**
+.github/workflows/desktop-build.yml
+
+# Release signing, official publication, generated key, and production update
+# automation. Keep local build/smoke scripts public; keep publication private.
+scripts/generate-app-bundle-release-keys.mjs
+scripts/prepare-github-release-config.mjs
+scripts/check-github-release-config.mjs
+scripts/check-release-*.mjs
+scripts/check-app-bundle-release-config.mjs
+scripts/check-installed-client-update-evidence.mjs
+scripts/check-webui-shell-migration-acceptance.mjs
+scripts/check-webui-shell-readiness.mjs
+scripts/publish-*.mjs
+scripts/release-version.mjs
+scripts/run-tauri-release-acceptance.mjs
+scripts/sign-app-bundle-manifest.mjs
+scripts/stage-tauri-release-evidence.mjs
+scripts/smoke-app-bundle-release*.mjs
+scripts/smoke-installed-client-app-bundle-update.mjs
+scripts/smoke-installed-app-bundle-update.mjs
+scripts/smoke-remote-app-bundle-update.mjs
+scripts/smoke-shell-update-manifest.mjs
+scripts/write-default-downloads-latest.mjs
+scripts/write-shell-update-manifest.mjs
+scripts/write-tauri-shell-update-config.mjs
+scripts/export-private-commercial.mjs
+
+# Release/commercial tests reference private release environment variables and
+# production domains. Keep product/local tests public.
+tests/app-bundle-publish.test.ts
+tests/app-bundle-keygen.test.ts
+tests/app-bundle-release-config.test.ts
+tests/app-bundle-release-rehearsal.test.ts
+tests/app-bundle-release-smoke.test.ts
+tests/download-worker.test.ts
+tests/github-release-config*.test.ts
+tests/installed-client-update-evidence.test.ts
+tests/license-worker.test.ts
+tests/ops-worker.test.ts
+tests/package-config.test.ts
+tests/pages-regional-routing.test.ts
+tests/problem-bank-worker.test.ts
+tests/release-audit.test.ts
+tests/release-contract-inventory.test.ts
+tests/release-environment.test.ts
+tests/shell-update-manifest-script.test.ts
+tests/tauri-release-evidence-stage.test.ts
+tests/webui-shell-migration-acceptance.test.ts
+
+# Generated output, local state, and private runbooks.
+artifacts/**
+data/**
+dist/**
+docs/api/**
+docs/local/**
+docs/architecture-health-*.md
+docs/api-interface-management.md
+docs/cloud-problem-bank-plan.md
+docs/current-project-state.md
+docs/desktop-update-strategy.md
+docs/documentation-alignment-audit.md
+docs/problem-bank-unified-abstraction.md
+docs/problem-bank-r2-artifact-spec.md
+docs/huggingface-problem-dataset-profile.md
+docs/problem-bank-release-log.md
+docs/operations-optimization-plan.md
+docs/production-chain-checklist.md
+docs/skills-business-readiness.md
+logs/**
+out/**
+release/**
+src-tauri/target/**
+
+# Secrets and local generated credentials, including tracked-by-mistake guard.
+.env
+.env.*
+!.env.example
+*.dev.vars
+*.local.json
+*.local-generated-key.json
+*.sqlite
+
+# Official release entitlement overlay. The public desktop build uses
+# `src-tauri/src/license.rs`, which compiles without this private module.
+src-tauri/src/license_official.rs
+
+# OS/editor noise.
+.DS_Store
+*.tsbuildinfo
+*.log

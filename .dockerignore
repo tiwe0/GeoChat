@@ -1,0 +1,17 @@
+.git
+.github
+.omx
+.impeccable
+node_modules
+out
+release
+dist
+data/*
+!data/problem-cases
+!data/problem-cases/**
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+Dockerfile*
+docker-compose*.yml

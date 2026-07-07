@@ -1,0 +1,3 @@
+This tree was generated from the GeoChat Desktop monorepo.
+It contains the conservative public-core file set selected by .opensourceignore.
+Review docs/open-source-boundary.md before publishing.

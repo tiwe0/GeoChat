@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' http://127.0.0.1:* http://localhost:* data: blob: file:; script-src 'self' 'unsafe-inline' 'unsafe-eval' http://127.0.0.1:* http://localhost:* blob: file:; style-src 'self' 'unsafe-inline' http://127.0.0.1:* http://localhost:* file:; img-src 'self' https: http://127.0.0.1:* http://localhost:* data: blob: file:; font-src 'self' http://127.0.0.1:* http://localhost:* data: file:; connect-src 'self' https: ipc: http://127.0.0.1:* http://localhost:* data: blob:; worker-src 'self' http://127.0.0.1:* http://localhost:* blob:; child-src 'self' http://127.0.0.1:* http://localhost:* blob: data:; frame-src 'self' http://127.0.0.1:* http://localhost:* blob: data: file:; media-src 'self' http://127.0.0.1:* http://localhost:* data: blob: file:"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="GeoChat 把数学题变成能复核的本地 GeoGebra 画板。"
+    />
+    <meta name="theme-color" content="#2563a9" />
+    <meta property="og:site_name" content="GeoChat" />
+    <meta property="og:type" content="application" />
+    <meta property="og:title" content="GeoChat" />
+    <meta
+      property="og:description"
+      content="把题目、作图步骤和复核说明放进同一个桌面数学工作台。"
+    />
+    <title>GeoChat</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

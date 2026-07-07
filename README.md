@@ -49,12 +49,20 @@
 
 ### 视频
 
-- [1080p 桌面演示](docs/media/geochat-desktop-demo-1080p.mp4)
-- [英文界面演示](docs/media/geochat-desktop-demo-en.mp4)
-
-<video src="docs/media/geochat-desktop-demo-1080p.mp4" controls width="100%"></video>
-
-<video src="docs/media/geochat-desktop-demo-en.mp4" controls width="100%"></video>
+<table>
+  <tr>
+    <td width="50%">
+      <video src="docs/media/geochat-desktop-demo-1080p.mp4" controls width="100%"></video>
+    </td>
+    <td width="50%">
+      <video src="docs/media/geochat-desktop-demo-en.mp4" controls width="100%"></video>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">中文演示视频</td>
+    <td align="center">英文演示视频</td>
+  </tr>
+</table>
 
 ## 项目介绍
 

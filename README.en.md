@@ -33,20 +33,7 @@
 
 ### Screenshots
 
-<table>
-  <tr>
-    <td width="50%">
-      <img src="docs/media/geochat-desktop-zh.png" alt="GeoChat Desktop Chinese interface">
-    </td>
-    <td width="50%">
-      <img src="docs/media/geochat-desktop-en.png" alt="GeoChat Desktop English interface">
-    </td>
-  </tr>
-  <tr>
-    <td align="center">Chinese interface</td>
-    <td align="center">English interface</td>
-  </tr>
-</table>
+<img src="docs/media/geochat-desktop-en.png" alt="GeoChat Desktop English interface">
 
 ### Videos
 

@@ -30,6 +30,9 @@
 
 ## 预览
 
+### 在线版
+无需安装的在线体验：[点击跳转](https://chat-with-geogebra.com)
+
 ### 截图
 
 <img src="docs/media/geochat-desktop-zh.png" alt="GeoChat Desktop 中文界面">

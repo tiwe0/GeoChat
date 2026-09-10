@@ -21,6 +21,7 @@ export async function fetchRuntimeInfo() {
   return {
     platform: "web",
     appVersion: APP_VERSION,
-    backendBaseUrl: webBackendBaseUrl()
+    backendBaseUrl: webBackendBaseUrl(),
+    backendAuthToken: undefined
   } satisfies RuntimeInfo;
 }

@@ -288,6 +288,18 @@ describe("agent model registry", () => {
   });
 });
 describe("function call registry", () => {
+  test("returns isolated specs instead of the mutable registry entries", () => {
+    const first = getFunctionCallSpec("executeGeoGebraCommands");
+    const second = getFunctionCallSpec("executeGeoGebraCommands");
+    const firstEnglish = getFunctionCallSpec("executeGeoGebraCommands", "en-US");
+    const secondEnglish = getFunctionCallSpec("executeGeoGebraCommands", "en-US");
+
+    expect(first).not.toBe(second);
+    expect(first.display).not.toBe(second.display);
+    expect(firstEnglish).not.toBe(secondEnglish);
+    expect(firstEnglish.display).not.toBe(secondEnglish.display);
+  });
+
   test("keeps write tool rollback policy and display metadata in the shared registry", () => {
     const executeCommandsSpecZh = getFunctionCallSpec("executeGeoGebraCommands", "zh-CN");
     const executeCommandsSpecEn = getFunctionCallSpec("executeGeoGebraCommands", "en-US");

@@ -622,13 +622,18 @@ export function localizedFunctionCallSpec<TToolName extends FunctionCallToolName
   locale?: FunctionCallLocale | null
 ): FunctionCallSpec {
   const spec = FUNCTION_CALL_REGISTRY[toolName];
-  if (locale !== "en-US") return spec;
+  if (locale !== "en-US") {
+    return {
+      ...spec,
+      display: { ...spec.display }
+    };
+  }
   const override = FUNCTION_CALL_ENGLISH_OVERRIDES[toolName];
   return {
     ...spec,
     label: override.label,
     description: override.description,
-    display: override.display
+    display: { ...override.display }
   };
 }
 

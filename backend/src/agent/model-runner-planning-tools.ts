@@ -1,4 +1,4 @@
-import { jsonSchema, tool } from "ai";
+import { jsonSchema, tool, type Tool } from "ai";
 import {
   getFunctionCallModelInputJsonSchema,
   getFunctionCallPlanningToolNames,
@@ -54,7 +54,7 @@ function createBackendPlanningTool<TToolName extends FunctionCallToolName>(
   toolName: TToolName,
   locale?: AgentRunLedgerRecord["locale"],
   skillSelection?: AgentSkillSelectionPacket
-) {
+): Tool {
   const spec = getFunctionCallSpec(toolName, locale);
   return tool({
     title: spec.display.label,

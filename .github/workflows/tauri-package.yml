@@ -8,6 +8,12 @@ on:
     branches: [master]
   workflow_dispatch:
 
+concurrency:
+  # Keep only the newest package attempt for each branch/PR. Release tags
+  # remain isolated so a release build cannot cancel another release build.
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

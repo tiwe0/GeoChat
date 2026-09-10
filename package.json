@@ -48,7 +48,7 @@
   },
   "dependencies": {},
   "devDependencies": {
-    "@ai-sdk/alibaba": "^2.0.41",
+    "@ai-sdk/alibaba": "^1.0.26",
     "@ai-sdk/anthropic": "^3.0.81",
     "@ai-sdk/deepseek": "^2.0.35",
     "@ai-sdk/google": "^3.0.80",

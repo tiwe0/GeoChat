@@ -1,0 +1,184 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Self-hosted faces. Google Fonts is unreachable from mainland China, which is
+   this product's primary audience, so nothing may load from fonts.googleapis.
+   Latin subsets only; CJK falls back to the platform stack (see --font-sans).
+--------------------------------------------------------------------------- */
+@font-face {
+  font-family: "Archivo";
+  src: url("/fonts/archivo-latin.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Source Serif 4";
+  src: url("/fonts/source-serif-4-latin.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  /* --- The notation system -------------------------------------------------
+     Three colors, three fixed meanings, used identically in prose, in figures,
+     and in UI. A reader who sees a blue stroke in the hero and a blue label in
+     the feature list should be able to infer they mean the same thing.
+       ink       given / stated
+       construct working / in progress
+       result    solved / concluded
+     Lightness values are tuned so each clears 4.5:1 on --color-paper as text
+     and 3:1 as a graphic stroke. Verified by scripts/check-contrast.mjs.
+  -------------------------------------------------------------------------- */
+  --color-paper: oklch(0.987 0.002 250);
+  --color-paper-sunk: oklch(0.962 0.0035 250);
+  --color-paper-deep: oklch(0.928 0.005 250);
+
+  --color-ink: oklch(0.22 0.012 250);
+  --color-ink-soft: oklch(0.435 0.011 250);
+  --color-ink-faint: oklch(0.6 0.009 250);
+
+  --color-construct: oklch(0.45 0.17 262);
+  --color-construct-wash: oklch(0.95 0.025 262);
+
+  --color-result: oklch(0.47 0.185 30);
+  --color-result-wash: oklch(0.955 0.028 40);
+
+  /* Ochre is a graphic color only. Yellow cannot be dark enough to clear 4.5:1
+     as text and still read as yellow, so text that needs this hue uses
+     --color-ochre-ink instead. */
+  --color-ochre: oklch(0.655 0.14 75);
+  --color-ochre-ink: oklch(0.495 0.105 68);
+  --color-ochre-wash: oklch(0.96 0.04 80);
+
+  --color-rule: oklch(0.885 0.004 250);
+  --color-rule-strong: oklch(0.78 0.006 250);
+
+  /* --- Type ---------------------------------------------------------------- */
+  --font-sans:
+    "Archivo", "PingFang SC", "HarmonyOS Sans SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+  /* Serif is reserved for display-size quotations and theorem statements.
+     Never used below 18px: SimSun renders poorly at small sizes on Windows. */
+  --font-serif: "Source Serif 4", "Songti SC", "SimSun", Georgia, serif;
+  /* Mono carries real GeoGebra command strings, so it is functional rather
+     than decorative. The platform stack is good enough and costs no bytes. */
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  --text-display: clamp(2.6rem, 1.6rem + 4.2vw, 5.25rem);
+  --text-display--line-height: 1.02;
+  --text-display--letter-spacing: -0.035em;
+
+  --text-title: clamp(1.9rem, 1.35rem + 2.3vw, 3.1rem);
+  --text-title--line-height: 1.1;
+  --text-title--letter-spacing: -0.025em;
+
+  --text-lede: clamp(1.075rem, 1rem + 0.42vw, 1.3rem);
+  --text-lede--line-height: 1.62;
+
+  /* --- Motion --------------------------------------------------------------
+     Exponential ease-out only. No bounce, no elastic: a compass arc does not
+     overshoot and spring back. -------------------------------------------- */
+  --ease-draw: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-quart: cubic-bezier(0.25, 1, 0.5, 1);
+
+  /* --- Depth ---------------------------------------------------------------
+     Semantic scale. Nothing in this site may invent its own value. -------- */
+  --z-base: 0;
+  --z-figure-label: 10;
+  --z-sticky: 20;
+  --z-nav: 30;
+  --z-overlay: 40;
+}
+
+@layer base {
+  :root {
+    /* This design is a paper plate. It commits to light and says so, rather
+       than letting the browser force-darken it into something unowned. */
+    color-scheme: light;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      scroll-behavior: auto;
+    }
+  }
+
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-synthesis-weight: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  ::selection {
+    background-color: var(--color-ochre-wash);
+    color: var(--color-ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-construct);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  /* Chinese text needs a touch more leading than Latin at the same size. */
+  :lang(zh) p,
+  :lang(zh) li {
+    line-height: 1.78;
+  }
+}
+
+@layer components {
+  /* A hairline that reads as a drafting rule rather than a card border. */
+  .rule-t {
+    border-top: 1px solid var(--color-rule);
+  }
+
+  .rule-b {
+    border-bottom: 1px solid var(--color-rule);
+  }
+
+  /* Measure cap for prose. 65-75ch; CJK counts wide, so cap tighter there. */
+  .measure {
+    max-width: 68ch;
+  }
+
+  :lang(zh) .measure {
+    max-width: 40em;
+  }
+}
+
+@layer utilities {
+  /* Figures draw themselves by animating dashoffset to zero. Under reduced
+     motion the stroke is simply already complete: a finished construction is
+     a legitimate end state, so no separate fallback artwork is needed. */
+  .stroke-draw {
+    stroke-dasharray: var(--draw-length, 1000);
+    stroke-dashoffset: var(--draw-length, 1000);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .stroke-draw {
+      stroke-dashoffset: 0;
+    }
+  }
+}

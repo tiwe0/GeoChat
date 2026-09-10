@@ -51,7 +51,7 @@
     "@ai-sdk/alibaba": "^1.0.26",
     "@ai-sdk/anthropic": "^3.0.81",
     "@ai-sdk/deepseek": "^2.0.35",
-    "@ai-sdk/google": "^3.0.80",
+    "@ai-sdk/google": "^4.0.64",
     "@ai-sdk/openai": "^3.0.68",
     "@geochat-ai/app": "workspace:*",
     "@kobalte/core": "^0.13.11",

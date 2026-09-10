@@ -79,6 +79,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
       - name: Download packaged artifacts
         uses: actions/download-artifact@v5
         with:
@@ -89,6 +94,7 @@ jobs:
       - name: Attach installers to the release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           TAG_NAME: ${{ github.ref_name }}
         shell: bash
         run: |

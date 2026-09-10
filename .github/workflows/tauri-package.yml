@@ -1,0 +1,65 @@
+name: tauri-package
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Package (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            os: windows-latest
+            bundles: nsis,msi
+            artifact_glob: |
+              src-tauri/target/release/bundle/nsis/*.exe
+              src-tauri/target/release/bundle/msi/*.msi
+          - platform: macos
+            os: macos-latest
+            bundles: app,dmg
+            artifact_glob: |
+              src-tauri/target/release/bundle/macos/*.app
+              src-tauri/target/release/bundle/dmg/*.dmg
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # The public checkout retains legacy workspace entries in bun.lock that
+      # are not present in this sanitized tree. --no-save keeps CI installs
+      # reproducible without rewriting the tracked lockfile.
+      - name: Install JavaScript dependencies
+        run: bun install --no-save
+
+      - name: Build Tauri bundles
+        run: bunx tauri build --bundles "${{ matrix.bundles }}"
+
+      - name: Upload packaged artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: geochat-${{ matrix.platform }}-${{ github.sha }}
+          if-no-files-found: error
+          path: ${{ matrix.artifact_glob }}

@@ -10,7 +10,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 base64 = "0.23"
-pem = "3"
+pem = "4"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 ring = "0.17"
 serde = { version = "1", features = ["derive"] }

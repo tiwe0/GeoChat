@@ -3,6 +3,7 @@ name: tauri-package
 on:
   push:
     branches: [master]
+    tags: ['v*']
   pull_request:
     branches: [master]
   workflow_dispatch:
@@ -33,7 +34,7 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
@@ -63,3 +64,36 @@ jobs:
           name: geochat-${{ matrix.platform }}-${{ github.sha }}
           if-no-files-found: error
           path: ${{ matrix.artifact_glob }}
+
+  release:
+    name: Publish GitHub Release assets
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v5
+        with:
+          pattern: geochat-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Attach installers to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          mapfile -t assets < <(find release-assets -type f \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' \) -print)
+          if (( ${#assets[@]} == 0 )); then
+            echo 'No Windows or macOS installer assets were downloaded.' >&2
+            exit 1
+          fi
+
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" --clobber "${assets[@]}"
+          else
+            gh release create "$TAG_NAME" --generate-notes "${assets[@]}"
+          fi

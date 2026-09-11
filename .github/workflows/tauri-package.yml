@@ -18,8 +18,46 @@ permissions:
   contents: read
 
 jobs:
+  # Runs before the platform builds, for two reasons.
+  #
+  # Correctness: `tauri build` only runs `tauri:prepare`, which is a Vite
+  # build. Vite strips types with esbuild and never typechecks, and nothing in
+  # the packaging path runs the test suite — so a dependency bump with breaking
+  # type changes goes green here and breaks on master. That is what happened to
+  # ai 7, TypeScript 7 and @ai-sdk/alibaba 2, each merged and then reverted.
+  #
+  # Cost: a type error now fails in about a minute on a Linux runner instead of
+  # after an eight-minute Windows build.
+  verify:
+    name: Typecheck and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Install JavaScript dependencies
+        run: bun install --no-save
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun test tests
+
+      # The renderer bundle is where a removed dependency export actually
+      # surfaces (lucide-solid 1.x did exactly this). Building it here means
+      # that failure costs a Linux minute, not two platform builds.
+      - name: Build renderer bundle
+        run: bun run tauri:renderer:build
+
   package:
     name: Package (${{ matrix.platform }})
+    needs: verify
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

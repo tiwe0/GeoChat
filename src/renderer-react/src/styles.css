@@ -121,15 +121,17 @@ h2 { font-size: 18px; }
   /* Clears the traffic lights, which the shell places at x=18. */
   padding: 0 12px 0 84px;
   background: transparent;
+  /* The only affordance a transparent bar has: the pointer says "grab me". */
+  cursor: grab;
   user-select: none;
   -webkit-user-select: none;
 }
+.window-titlebar:active { cursor: grabbing; }
 /* Windows draws no traffic lights, and its controls sit on the right. */
 .window-titlebar-windows { padding-left: 16px; }
-.window-titlebar-title { display: flex; align-items: baseline; gap: 7px; flex: 1; min-width: 0; font-size: 12.5px; font-weight: 700; letter-spacing: .1px; color: #35433b; }
-.window-titlebar-version { font-size: 11px; font-weight: 500; color: #718078; }
+.window-titlebar-spacer { flex: 1; min-width: 0; align-self: stretch; }
 .window-titlebar-controls { display: flex; align-items: center; gap: 2px; }
-.window-titlebar-controls button { width: 34px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: #35433b; }
+.window-titlebar-controls button { cursor: pointer; width: 34px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: #35433b; }
 .window-titlebar-controls button:hover { background: #18231e0f; }
 .window-titlebar-controls button:focus-visible { outline: 2px solid #07c160; outline-offset: -2px; }
 .window-titlebar-controls .window-titlebar-close:hover { background: #df574d; color: #fff; }

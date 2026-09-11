@@ -12,7 +12,6 @@ import {
   Typography,
 } from "@mui/material";
 import AddCircleOutlineRounded from "@mui/icons-material/AddCircleOutlineRounded";
-import ArrowBackRounded from "@mui/icons-material/ArrowBackRounded";
 import CalculateRounded from "@mui/icons-material/CalculateRounded";
 import ConstructionRounded from "@mui/icons-material/ConstructionRounded";
 import CropSquareRounded from "@mui/icons-material/CropSquareRounded";
@@ -700,39 +699,18 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
         }}
       >
         <Stack direction="row" spacing={1} sx={{ minWidth: 0, flex: 1, minHeight: 36, alignItems: "center" }}>
-          {/* The brand mark is identity, not a control. It used to double as
-              the Settings entry, labelled "user information" — a logo reads as
-              decoration, so the one screen a keyless first run must reach was
-              effectively hidden. Settings is now a labelled gear on the right. */}
-          {panelView === "chat" ? (
-            <Box
-              aria-hidden
-              sx={{ width: 30, height: 30, flex: "0 0 auto", display: "grid", placeItems: "center" }}
-            >
-              <BrandIcon size={26} />
-            </Box>
-          ) : (
-            <IconButton
-              type="button"
-              onClick={togglePanelView}
-              aria-label={t("panel.returnToChat")}
-              title={t("panel.returnToChat")}
-              data-copilot-no-drag
-              sx={{
-                width: 30,
-                height: 30,
-                flex: "0 0 auto",
-                display: "grid",
-                placeItems: "center",
-                borderRadius: 1,
-                bgcolor: "primary.main",
-                color: "primary.contrastText",
-                "&:hover": { bgcolor: "primary.dark" },
-              }}
-            >
-              <ArrowBackRounded sx={{ fontSize: 18 }} />
-            </IconButton>
-          )}
+          {/* The brand mark is identity, not a control, in every view. It used
+              to double as the Settings entry, labelled "user information" — a
+              logo reads as decoration, so the one screen a keyless first run
+              must reach was effectively hidden. Settings is a labelled gear on
+              the right, and Settings carries its own Back; a second one here
+              would be two controls for one action. */}
+          <Box
+            aria-hidden
+            sx={{ width: 30, height: 30, flex: "0 0 auto", display: "grid", placeItems: "center" }}
+          >
+            <BrandIcon size={26} />
+          </Box>
           {panelView === "chat" ? (
             <ButtonBase
               component="button"

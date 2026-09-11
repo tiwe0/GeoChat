@@ -2,9 +2,13 @@
   "$schema": "../gen/schemas/remote-schema.json",
   "identifier": "dev-server",
   "description": "Grants shell permissions to the Vite dev server origin. Tauri treats a devUrl as remote content, so without this the window cannot be dragged and desktop commands are rejected during development. Excluded from release builds by app.security.capabilities in tauri.conf.json.",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "remote": {
-    "urls": ["http://127.0.0.1:1420", "http://127.0.0.1:1421"]
+    "urls": [
+      "http://127.0.0.1:1421"
+    ]
   },
   "permissions": [
     "core:default",

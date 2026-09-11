@@ -10,7 +10,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "tauri dev",
+    "dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "desktop:build": "bun run tauri:prepare",
     "build": "bun run typecheck && bun run tauri:prepare",
     "build:backend": "bun scripts/build-backend-bundle.mjs",
@@ -19,9 +19,9 @@
     "bundle:smoke": "bun scripts/smoke-app-bundle-manifest.mjs",
     "bundle:install": "bun scripts/install-app-bundle.mjs",
     "package:backend-smoke": "bun scripts/smoke-packaged-backend-runtime.mjs",
-    "preview": "vite preview --config vite.tauri.config.ts --host 127.0.0.1",
-    "tauri:dev": "tauri dev",
-    "tauri:dev:mcp": "tauri dev -- --mcp",
+    "preview": "vite preview --config vite.react.config.ts --host 127.0.0.1",
+    "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
+    "tauri:dev:mcp": "tauri dev --config src-tauri/tauri.dev.conf.json -- --mcp",
     "tauri:prepare": "bun run build:backend && bun run tauri:renderer:build && bun scripts/stage-vendor-bundle.mjs && bun scripts/stage-runtime-sidecar.mjs && bun scripts/write-app-bundle-manifest.mjs",
     "tauri:build": "tauri build --bundles app",
     "tauri:build:macos": "tauri build --bundles app,dmg",
@@ -29,8 +29,8 @@
     "tauri:check": "cargo check --manifest-path src-tauri/Cargo.toml",
     "tauri:local:acceptance": "bun scripts/run-tauri-local-acceptance.mjs",
     "tauri:package:smoke": "bun scripts/smoke-tauri-packaged-layout.mjs",
-    "tauri:renderer:dev": "vite --config vite.tauri.config.ts",
-    "tauri:renderer:build": "vite build --config vite.tauri.config.ts",
+    "tauri:renderer:dev": "vite --config vite.react.config.ts",
+    "tauri:renderer:build": "vite build --config vite.react.config.ts",
     "dist": "bun run tauri:build",
     "test": "bun test tests",
     "typecheck": "tsc -p packages/app/tsconfig.json --pretty && tsc -p tsconfig.node.json --pretty && tsc -p tsconfig.web.json --pretty",
@@ -44,11 +44,7 @@
     "datasets:import-gaokao-cases": "bun tools/import-gaokao-problem-cases-to-unified.ts",
     "mcp:desktop-debug": "bun tools/desktop-debug-mcp/index.ts",
     "mcp:desktop-debug:http": "bun tools/desktop-debug-mcp/http.ts",
-    "mcp:desktop-debug:smoke": "bun tools/desktop-debug-mcp/smoke.ts",
-    "react:dev": "vite --config vite.react.config.ts",
-    "react:build": "vite build --config vite.react.config.ts",
-    "react:tauri:dev": "GEOCHAT_DEV_URL=http://127.0.0.1:1421 tauri dev --config src-tauri/tauri.react.conf.json",
-    "typecheck:react": "tsc -p src/renderer-react/tsconfig.json --pretty"
+    "mcp:desktop-debug:smoke": "bun tools/desktop-debug-mcp/smoke.ts"
   },
   "dependencies": {},
   "devDependencies": {
@@ -63,7 +59,6 @@
     "@fontsource-variable/noto-sans-sc": "^5.3.0",
     "@fontsource-variable/nunito-sans": "^5.3.0",
     "@geochat-ai/app": "workspace:*",
-    "@kobalte/core": "^0.13.11",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@mui/icons-material": "^9.4.0",
     "@mui/material": "^9.4.0",
@@ -87,17 +82,14 @@
     "effect": "^3.21.2",
     "i18next": "^26.4.2",
     "katex": "^0.18.7",
-    "lucide-solid": "^1.42.0",
     "motion": "^13.2.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-i18next": "^17.0.13",
     "react-joyride": "^3.2.0",
-    "solid-js": "^1.9.13",
     "streamdown": "^2.5.0",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
-    "vite-plugin-solid": "^2.11.12",
     "zod": "^4.1.13"
   }
 }

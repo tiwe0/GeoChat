@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { normalizeDesktopConfig } from "../src/shared/desktop/desktop-config";
-import { detectPreferredLocale, localeFromLanguageTag, rendererI18n } from "../src/renderer/src/i18n";
+import { detectPreferredLocale, localeFromLanguageTag } from "../src/shared/desktop/locale";
+import { en } from "../src/renderer-react/src/i18n/locales/en";
+import { zhCN } from "../src/renderer-react/src/i18n/locales/zh-CN";
 
 describe("desktop locale defaults", () => {
   test("maps browser language tags onto supported locales", () => {
@@ -22,7 +24,9 @@ describe("desktop locale defaults", () => {
   });
 
   test("keeps locale copy key shapes in parity", () => {
-    expect(copyShape(rendererI18n("en-US"))).toEqual(copyShape(rendererI18n("zh-CN")));
+    // A key present in one locale and missing in the other renders as the raw
+    // key string, which typecheck cannot see.
+    expect(copyShape(zhCN)).toEqual(copyShape(en));
   });
 });
 

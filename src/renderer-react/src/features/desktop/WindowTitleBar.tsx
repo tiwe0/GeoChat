@@ -4,7 +4,6 @@ import {
   runDesktopWindowControl,
   shouldShowDesktopWindowControls
 } from "../../../../shared/desktop/desktop-window-controls";
-import { APP_VERSION } from "../../../../shared/desktop/platform";
 
 /**
  * The window's drag handle.
@@ -44,10 +43,10 @@ export function WindowTitleBar() {
       // way the gesture survives.
       onDoubleClick={() => void runDesktopWindowControl("toggleMaximize")}
     >
-      <span className="window-titlebar-title" data-tauri-drag-region>
-        {t("common.appName")}
-        <span className="window-titlebar-version">v{APP_VERSION}</span>
-      </span>
+      {/* Intentionally empty on the left. The bar is transparent so the canvas
+          reads edge to edge; the grab cursor is the affordance, and a name the
+          window frame already carries would only be furniture. */}
+      <span className="window-titlebar-spacer" data-tauri-drag-region />
       {shell.windowsControls && (
         <div className="window-titlebar-controls">
           <button

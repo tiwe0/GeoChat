@@ -233,7 +233,7 @@ fn initialize_main_window(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-const DEFAULT_DEV_URL: &str = "http://127.0.0.1:1420";
+const DEFAULT_DEV_URL: &str = "http://127.0.0.1:1421";
 
 fn initial_window_url(
     active_bundle: Option<&ActiveAppBundle>,
@@ -367,7 +367,7 @@ mod tests {
         app_bundle::{AppBundleAsset, AppBundleEntry, AppBundleManifest},
         app_bundle_content_type, app_bundle_protocol_request_path, initial_window_url,
         mcp::auto_start_desktop_mcp_requested_for,
-        ActiveAppBundle,
+        ActiveAppBundle, DEFAULT_DEV_URL,
     };
     use std::path::PathBuf;
 

@@ -4,8 +4,6 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { eq, sql } from "drizzle-orm";
-import { commandExecutionIntervalMs } from "../src/renderer/src/geogebra-execution";
-import { rendererI18n } from "../src/renderer/src/i18n";
 import {
   DEFAULT_AGENT_RUN_REMOTE_TOOL_MAX_ATTEMPTS,
   agentRunToolArgsMatch,
@@ -372,13 +370,6 @@ describe("function call registry", () => {
     expect(getFunctionCallInputJsonSchema("showSelectedElements").properties.elements.description).toContain("选中的对象");
     expect(getFunctionCallInputJsonSchema("showSelectedElements", "en-US").properties.elements.description).toContain("currently selected");
     expect(getFunctionCallToolNames().filter((toolName) => getFunctionCallSpec(toolName).description.length === 0)).toEqual([]);
-    for (const locale of ["zh-CN", "en-US"] as const) {
-      const copy = rendererI18n(locale);
-      for (const toolName of getFunctionCallToolNames()) {
-        expect(copy.chat.toolActivities[toolName]).toBeTruthy();
-        expect(copy.chat.toolActivities[toolName]).not.toBe(toolName);
-      }
-    }
     for (const toolName of getFunctionCallToolNames()) {
       const schemaZh = getFunctionCallModelInputJsonSchema(toolName, "zh-CN");
       const schemaEn = getFunctionCallModelInputJsonSchema(toolName, "en-US");
@@ -935,10 +926,13 @@ describe("function call registry", () => {
   });
 
   test("keeps GeoGebra command execution interval at 80ms", async () => {
-    const source = await readFile(join(process.cwd(), "src/renderer/src/geogebra-execution.ts"), "utf8");
+    // The renderer paces batches so the applet can settle between commands.
+    // Behaviour is covered in tests/react-geogebra-boundary.test.ts; this
+    // pins the constant itself so a silent edit cannot change the pacing.
+    const source = await readFile(join(process.cwd(), "src/renderer-react/src/geogebra/controller.ts"), "utf8");
 
-    expect(commandExecutionIntervalMs).toBe(80);
-    expect(source).toContain("commandDelayMs: filteredCommands.length > 1 ? commandExecutionIntervalMs : 0");
+    expect(source).toContain("const COMMAND_DELAY_MS = 80;");
+    expect(source).toContain("commandDelayMs: commands.length > 1 ? COMMAND_DELAY_MS : 0");
   });
 
   test("instructs the temporary skill selector to choose from prebuilt candidate context", () => {

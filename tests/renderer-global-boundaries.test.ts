@@ -7,16 +7,40 @@ import { expect, test } from "bun:test";
  * that a second renderer can consume them; scanning only the renderer would
  * have quietly stopped enforcing this rule on exactly the files it exists for.
  */
-const scannedRoots = ["src/renderer/src", "src/shared/desktop"];
+const scannedRoots = ["src/renderer-react/src", "src/shared/desktop"];
 
 const allowedBoundaryFiles = {
   "src/shared/desktop/desktop-window-controls.ts": {
     maxLines: 40,
     reason: "desktop window controls are the only renderer surface that imports Tauri window APIs"
   },
-  "src/renderer/src/main.tsx": {
-    maxLines: 40,
+  "src/renderer-react/src/main.tsx": {
+    maxLines: 50,
     reason: "renderer bootstrapping is the only startup entrypoint for marking readiness"
+  },
+  "src/renderer-react/src/features/desktop/runtime.ts": {
+    maxLines: 80,
+    reason: "resolves the shell-reported backend address once, before the first render"
+  },
+  "src/renderer-react/src/features/desktop/useUpdateState.ts": {
+    maxLines: 150,
+    reason: "subscribes to both update tracks through the desktop bridge"
+  },
+  "src/renderer-react/src/features/desktop/useAccessState.ts": {
+    maxLines: 120,
+    reason: "polls desktop access state through the bridge"
+  },
+  "src/renderer-react/src/features/desktop/useMcpState.ts": {
+    maxLines: 90,
+    reason: "owns the MCP toggle and its poll loop's timer globals"
+  },
+  "src/renderer-react/src/features/desktop/mcpDebugActions.ts": {
+    maxLines: 80,
+    reason: "executes MCP-queued actions against renderer surfaces"
+  },
+  "src/renderer-react/src/features/desktop/WindowTitleBar.tsx": {
+    maxLines: 90,
+    reason: "the window drag region is the only surface that drives Tauri window controls"
   },
   "src/shared/desktop/platform.ts": {
     maxLines: 60,

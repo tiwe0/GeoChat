@@ -28,10 +28,20 @@ export function LanguageButton({ tourId }: { tourId?: string } = {}) {
         void changeAppLanguage(nextLanguage);
       }}
       whileTap={{ scale: 0.86 }}
-      animate={{ rotate: rotation }}
-      transition={{ rotate: { duration: 0.28, ease: "easeInOut" }, scale: { duration: 0.12 } }}
+      transition={{ duration: 0.12 }}
     >
-      <TranslateRounded fontSize="small" />
+      {/* The turn lives on its own element. Sharing one with the tap scale put
+          both on the same transform, and the press releasing mid-turn cut the
+          rotation short of a full circle. Separated, neither can clip the
+          other. Longer and ease-out, so the end of the turn is still legible
+          rather than crawling to a stop the eye reads as unfinished. */}
+      <motion.span
+        style={{ display: "grid", placeItems: "center" }}
+        animate={{ rotate: rotation }}
+        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <TranslateRounded fontSize="small" />
+      </motion.span>
     </MotionIconButton>
   );
 }

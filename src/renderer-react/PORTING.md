@@ -247,6 +247,55 @@ Not yet done, and not claimable from code inspection alone: the full run of
 `tauri:prepare`, `bundle:smoke`, `package:backend-smoke`, and a packaged build
 on both platforms.
 
+## Cut over (done)
+
+The SolidJS renderer is gone: 12629 lines of TypeScript, 5511 of CSS, and the
+solid-js, @kobalte/core, lucide-solid and vite-plugin-solid dependencies.
+`tauri.conf.json` builds and serves this renderer, `tsconfig.web.json` now
+points here so the React code sits in the main `typecheck` gate rather than a
+side script, and `src-tauri/tauri.dev.conf.json` carries the dev-server
+capability that must not ship in a release.
+
+### Coverage that moved rather than disappearing
+
+Seven test files imported the Solid renderer. Deleting them outright would
+have dropped real coverage, so the parts that still describe live behaviour
+were rewritten against their new homes:
+
+| Was | Now |
+| --- | --- |
+| `workbench-controller-state` (update half), `config-dialog-state` (update half) | `desktop-update-state.test.ts`, against `shared/desktop/update-state` |
+| `workbench-mcp-state` (transport half) | `desktop-mcp-transport.test.ts`, against `shared/desktop/mcp-debug-actions` |
+| `geogebra-renderer-boundary` | `react-geogebra-boundary.test.ts`, against this renderer's controller and command executor |
+| `desktop-locale` copy parity | the same test, now comparing this renderer's two locale files |
+| `renderer-global-boundaries` | same test, scanning `src/renderer-react/src` |
+
+### Coverage that genuinely ended
+
+- **The canvas XML summary is no longer unit tested.** This renderer parses
+  with `DOMParser`, which the test runtime does not provide. The batch path
+  still runs headlessly because `tryReadCanvasContext` swallows it, but the
+  summary itself is now only exercised in a browser. Fixing this means adding
+  a DOM to the test runner, which is a separate decision.
+- `math-rendering` and its test went with the renderer. Streamdown and KaTeX
+  do that work here.
+- Three source-grep tests in `agent-harness-http` described Solid internals:
+  lazy math imports (this build loads both eagerly and deliberately, since it
+  loads from local disk), choice-scenario class names, and stylesheet rules.
+
+### One feature did not come across
+
+**Interactive choice-scenario preview.** The Solid renderer could replay a
+single multiple-choice option onto the canvas and restore the prior
+construction — `previewChoiceScenario`, backed by `restoreBeforeXml` and
+`normalizeFreeParameters` in its execution layer, with tabs in the transcript.
+
+This renderer *displays* choice analysis in full (labels, verdicts,
+explanations, evidence, commands) but cannot draw one option and undo it. The
+controller here has neither option. Recovering it means porting roughly 150
+lines: the two execute options, a per-card base-XML map, and the tab UI. The
+Solid implementation is in git at the commit before the cut-over.
+
 ## Deferred
 
 The **bridge receiver** is not built. This repository has no Pro backend to

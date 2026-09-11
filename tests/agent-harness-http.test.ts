@@ -10,63 +10,20 @@ import {
 import { createHttpHarness } from "./agent-harness-http-utils";
 
 describe("desktop-only renderer and backend boundaries", () => {
-  test("keeps heavy math renderers out of the static Workbench import graph", async () => {
-    const workbenchSource = await readFile(join(process.cwd(), "src/renderer/src/WorkbenchApp.tsx"), "utf8");
-    const chatPanelSource = await readFile(join(process.cwd(), "src/renderer/src/ChatPanel.tsx"), "utf8");
-    const chatTimelineSource = await readFile(join(process.cwd(), "src/renderer/src/chat-panel/ChatMessageTimeline.tsx"), "utf8");
-    const latexTextSource = await readFile(join(process.cwd(), "src/renderer/src/LatexText.tsx"), "utf8");
-    expect(workbenchSource).not.toMatch(/import\s+\{[^}]*Streamdown[^}]*\}\s+from\s+["']streamdown["']/);
-    expect(workbenchSource).not.toContain('import "streamdown/styles.css"');
-    expect(workbenchSource).not.toContain('import("streamdown")');
-    expect(workbenchSource).not.toContain('import("streamdown/styles.css")');
-    expect(chatPanelSource).not.toMatch(/import\s+\{[^}]*Streamdown[^}]*\}\s+from\s+["']streamdown["']/);
-    expect(chatPanelSource).not.toContain('import "streamdown/styles.css"');
-    expect(chatTimelineSource).not.toMatch(/import\s+\{[^}]*Streamdown[^}]*\}\s+from\s+["']streamdown["']/);
-    expect(chatTimelineSource).not.toContain('import "streamdown/styles.css"');
-    expect(chatTimelineSource).toContain('import("streamdown")');
-    expect(chatTimelineSource).toContain('import("streamdown/styles.css")');
-    expect(workbenchSource).not.toMatch(/import\s+.*\s+from\s+["']katex["']/);
-    expect(workbenchSource).not.toContain('import "katex/dist/katex.min.css"');
-    expect(workbenchSource).not.toContain('import("katex")');
-    expect(workbenchSource).not.toContain('import("katex/dist/katex.min.css")');
-    expect(latexTextSource).not.toMatch(/import\s+.*\s+from\s+["']katex["']/);
-    expect(latexTextSource).not.toContain('import "katex/dist/katex.min.css"');
-    expect(latexTextSource).toContain('import("katex")');
-    expect(latexTextSource).toContain('import("katex/dist/katex.min.css")');
-  });
-
-  test("renders choice analysis cards as switchable choice scenarios", async () => {
-    const chatPanelSource = await readFile(join(process.cwd(), "src/renderer/src/ChatPanel.tsx"), "utf8");
-    const chatTimelineSource = await readFile(join(process.cwd(), "src/renderer/src/chat-panel/ChatMessageTimeline.tsx"), "utf8");
-    const workbenchSource = await readFile(join(process.cwd(), "src/renderer/src/WorkbenchApp.tsx"), "utf8");
-    const geogebraSource = await readFile(join(process.cwd(), "src/renderer/src/geogebra-execution.ts"), "utf8");
-    const stylesSource = await readFile(join(process.cwd(), "src/renderer/src/styles.css"), "utf8");
-    const i18nSource = await readFile(join(process.cwd(), "src/renderer/src/i18n.ts"), "utf8");
-    expect(chatTimelineSource).toContain("function-card-choice-tabs");
-    expect(chatTimelineSource).toContain("setActiveChoice");
-    expect(chatTimelineSource).toContain("choiceAll");
-    expect(chatPanelSource).toContain("onPreviewChoiceScenario");
-    expect(chatTimelineSource).toContain("previewRunId");
-    expect(chatTimelineSource).toContain('label: "all"');
-    expect(workbenchSource).toContain("previewChoiceScenario");
-    expect(workbenchSource).toContain("choiceScenarioBaseXmlByCard");
-    expect(workbenchSource).toContain("restoreBeforeXml");
-    expect(workbenchSource).toContain("normalizeFreeParameters: true");
-    expect(geogebraSource).toContain("restoreBeforeXml");
-    expect(geogebraSource).toContain("normalizeFreeParameters");
-    expect(stylesSource).toContain(".function-card-choice-tab.active");
-    expect(stylesSource).toContain(".function-card-choice-verdict.true");
-    expect(stylesSource).toContain(".function-card-choice-preview-error");
-    expect(i18nSource).toContain('choiceAll: "全部"');
-    expect(i18nSource).toContain('choiceAll: "All"');
-    expect(i18nSource).toContain("choicePreviewing");
-  });
-
-  test("does not turn KaTeX spans inside function-card list items into block elements", async () => {
-    const stylesSource = await readFile(join(process.cwd(), "src/renderer/src/styles.css"), "utf8");
-    expect(stylesSource).not.toContain(".function-card li span");
-    expect(stylesSource).toContain(".function-card li > span");
-  });
+  // Three source-grep tests lived here and were deleted with the SolidJS
+  // renderer they described:
+  //
+  // - "keeps heavy math renderers out of the static Workbench import graph"
+  //   enforced lazy `import("katex")` / `import("streamdown")`. The React
+  //   renderer imports both eagerly in main.tsx. That is a deliberate
+  //   difference, not an oversight: this build loads from local disk, so the
+  //   split bought startup complexity for no user-visible gain.
+  // - "renders choice analysis cards as switchable choice scenarios" asserted
+  //   Solid class names and identifiers for the interactive choice preview.
+  //   The React renderer displays choice analysis but does not yet replay a
+  //   single option onto the canvas; see PORTING.md.
+  // - the KaTeX list-item selector test asserted rules in a stylesheet that
+  //   no longer exists.
 
   test("uses the current repository problem cases as the default desktop import source", async () => {
     const { defaultProblemCasesRoot, problemCasesRootFromUrl } = await import("../backend/src/problem-cases");

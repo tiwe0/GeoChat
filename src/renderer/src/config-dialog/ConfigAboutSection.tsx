@@ -1,14 +1,14 @@
 import {
   Bot,
   Check,
+  Code,
   FileSearch,
-  Github,
   HeartHandshake,
   Info,
   MessageCircle,
   MessageSquareText,
-  PlaySquare,
-  Sparkles
+  Sparkles,
+  SquarePlay
 } from "lucide-solid";
 import { For, Show } from "solid-js";
 import type { RendererI18n } from "../i18n";
@@ -91,8 +91,8 @@ export function ConfigAboutSection(props: {
           <p>{props.copy.about.authorBody}</p>
         </div>
         <div class="contact-links">
-          <a href="https://space.bilibili.com/266909334" target="_blank" rel="noreferrer"><PlaySquare size={15} />{props.copy.about.bilibili} <span>space.bilibili.com/266909334</span></a>
-          <a href="https://github.com/tiwe0" target="_blank" rel="noreferrer"><Github size={15} />GitHub <span>github.com/tiwe0</span></a>
+          <a href="https://space.bilibili.com/266909334" target="_blank" rel="noreferrer"><SquarePlay size={15} />{props.copy.about.bilibili} <span>space.bilibili.com/266909334</span></a>
+          <a href="https://github.com/tiwe0" target="_blank" rel="noreferrer"><Code size={15} />GitHub <span>github.com/tiwe0</span></a>
           <button type="button" onClick={props.onCopyWechat}>
             {props.wechatCopied ? <Check size={15} /> : <MessageCircle size={15} />}
             {props.copy.about.wechat} <span>{props.wechatCopied ? props.copy.about.copied : "I0v0ry"}</span>

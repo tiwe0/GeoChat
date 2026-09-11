@@ -1,4 +1,4 @@
-import { AlertCircle, ShieldCheck, Sparkles, X } from "lucide-solid";
+import { CircleAlert, ShieldCheck, Sparkles, X } from "lucide-solid";
 import { createMemo, For, Show } from "solid-js";
 import type { BlackboardEntry } from "@geochat-ai/app";
 import { interpolate, type Locale, type RendererI18n } from "../i18n";
@@ -78,7 +78,7 @@ export function ChatBlackboardPanel(props: {
               when={!props.error}
               fallback={
                 <div class="blackboard-error" role="status">
-                  <AlertCircle size={15} aria-hidden="true" />
+                  <CircleAlert size={15} aria-hidden="true" />
                   <span>{props.copy.blackboard.unavailable}</span>
                 </div>
               }

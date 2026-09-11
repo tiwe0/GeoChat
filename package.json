@@ -47,7 +47,8 @@
     "mcp:desktop-debug:smoke": "bun tools/desktop-debug-mcp/smoke.ts",
     "react:dev": "vite --config vite.react.config.ts",
     "react:build": "vite build --config vite.react.config.ts",
-    "react:tauri:dev": "GEOCHAT_DEV_URL=http://127.0.0.1:1421 tauri dev --config src-tauri/tauri.react.conf.json"
+    "react:tauri:dev": "GEOCHAT_DEV_URL=http://127.0.0.1:1421 tauri dev --config src-tauri/tauri.react.conf.json",
+    "typecheck:react": "tsc -p src/renderer-react/tsconfig.json --pretty"
   },
   "dependencies": {},
   "devDependencies": {

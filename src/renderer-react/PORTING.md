@@ -104,3 +104,40 @@ overflow menu.
 - MUI + Emotion replaces 5511 lines of `styles.css`. The existing visual
   language (hairline borders, semantic state colours, the named z-index scale)
   has to be re-expressed as an MUI theme or it will default to stock MUI.
+
+## Known gaps, measured
+
+`bun run typecheck:react` reports **29 errors**. They are deliberately not in
+the main `typecheck` gate yet — that would turn the build red for everyone —
+but they are real, and the bundler hides them: Vite strips types with esbuild
+and never checks them, which is the same blind spot the CI `verify` job was
+added to close for the rest of the repo.
+
+They fall into four groups:
+
+1. **Billing leftovers.** `ChatMessageMetadata.credits` and
+   `AgentRunToolResultResponse.credits` are read by the panel but were removed
+   with the hosted surface. The reads should go.
+2. **Ledger shape drift.** `AgentRunLedgerRecord.thinking` / `.thinkingEffort`
+   exist in the hosted shared package, not in this one. Either port the fields
+   or drop the feature.
+3. **Coordinator API drift.** `subscribeRunnerEvents` and `onReasoningDelta`
+   do not exist on this repo's coordinator.
+4. **Two missed auth imports.** `features/conversations/useConversationBlackboard.ts`
+   and `useConversations.ts` still import `../auth/session`. I believed the auth
+   excision was complete; it was not, and only typechecking found it.
+
+## Remaining before the Solid renderer can be deleted
+
+- The 29 errors above.
+- **Update UI.** `useUpdateState` exists but is not yet surfaced. Without it the
+  app cannot tell a user a new version is available, which is the one
+  capability that cannot wait for a later release.
+- **MCP toggle** (`getMcpStatus` / `setMcpEnabled`). A developer tool, lower
+  priority, but a capability the Solid renderer has and this one does not.
+
+## Deferred
+
+The **bridge receiver** is not built. This repository has no Pro backend to
+pair against, so a receiver would be speculative code with no way to test it.
+It should wait until the Pro side's interface is settled.

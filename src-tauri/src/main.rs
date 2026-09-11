@@ -226,11 +226,18 @@ fn initialize_main_window(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+const DEFAULT_DEV_URL: &str = "http://127.0.0.1:1420";
+
 fn initial_window_url(
     active_bundle: Option<&ActiveAppBundle>,
 ) -> Result<tauri::WebviewUrl, String> {
     if cfg!(debug_assertions) {
-        return Url::parse("http://127.0.0.1:1420")
+        // The dev URL is built here rather than read from tauri.conf.json's
+        // devUrl, so a --config override cannot move it. GEOCHAT_DEV_URL lets a
+        // second renderer be previewed in the shell without editing this file.
+        let dev_url = std::env::var("GEOCHAT_DEV_URL")
+            .unwrap_or_else(|_| DEFAULT_DEV_URL.to_string());
+        return Url::parse(&dev_url)
             .map(tauri::WebviewUrl::External)
             .map_err(|error| error.to_string());
     }
@@ -468,7 +475,7 @@ mod tests {
 
         match url {
             tauri::WebviewUrl::External(url) => {
-                assert_eq!(url.as_str(), "http://127.0.0.1:1420/");
+                assert_eq!(url.as_str(), format!("{DEFAULT_DEV_URL}/"));
             }
             other => panic!("expected Vite dev URL, got {other:?}"),
         }

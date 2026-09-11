@@ -72,6 +72,7 @@ const API_ORIGIN = new URL(
 ).origin;
 const AUTH_REQUIRED = import.meta.env.VITE_AUTH_REQUIRED !== "false";
 const ONBOARDING_TOUR_STORAGE_KEY = "geogebraCopilotOnboardingTourCompleted";
+const ONBOARDING_TOUR_OPT_IN_KEY = "geochatDesktopOnboardingTour";
 const REASONING_MODE_STORAGE_KEY = "geogebraCopilotReasoningMode";
 const THINKING_EFFORT_STORAGE_KEY = "geogebraCopilotThinkingEffort";
 const MotionPaper = motion.create(Paper);
@@ -380,10 +381,17 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
     panelChatRef.current.setModel(first.id);
     setSelectedModel(first.id);
   }, []);
+  // The tour does not auto-start in the desktop build. Its steps were written
+  // for the web layout and the spotlight lands on the wrong region here, which
+  // is worse on first launch than no tour at all. The first-run problem worth
+  // solving is configuring a model key, not a nine-step feature walkthrough.
+  // Re-enable by setting geochatDesktopOnboardingTour = true in local storage
+  // once the step targets have been reworked for this layout.
   useEffect(() => {
-    void browser.storage.local.get(ONBOARDING_TOUR_STORAGE_KEY).then((stored) => {
-      setOnboardingTourReady(stored[ONBOARDING_TOUR_STORAGE_KEY] !== true);
-    }).catch(() => setOnboardingTourReady(true));
+    void browser.storage.local
+      .get(ONBOARDING_TOUR_OPT_IN_KEY)
+      .then((stored) => setOnboardingTourReady(stored[ONBOARDING_TOUR_OPT_IN_KEY] === true))
+      .catch(() => setOnboardingTourReady(false));
   }, []);
   useEffect(() => {
     void browser.storage.local.get([REASONING_MODE_STORAGE_KEY, THINKING_EFFORT_STORAGE_KEY]).then((stored) => {

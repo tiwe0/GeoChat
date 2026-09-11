@@ -16,29 +16,19 @@ export async function claimRemoteTools(
 }
 
 /**
- * Wait for a server-side Runner notification. SSE is an optimization over
- * the durable pending-tool API: if it is unavailable, return after a short
- * delay so the controller can continue its polling fallback.
+ * Pause between polls of the durable pending-tool API.
+ *
+ * The hosted build subscribed to a server-sent runner event stream and treated
+ * this delay as the fallback when that stream was unavailable. The local
+ * backend exposes no such stream, so the fallback is the whole mechanism:
+ * claimRemoteTools is already the source of truth, and this only decides how
+ * often the controller asks it.
  */
-export async function waitForRunnerEvent(
-  coordinator: ReturnType<typeof createAgentRunCoordinator>,
-  runId: string,
-  signal: AbortSignal,
-) {
-  try {
-    await coordinator.subscribeRunnerEvents(runId, {
-      signal,
-      stopWhen: (event) => event.event === "runner.updated" || event.event === "runner.terminal",
-    });
-  } catch (error) {
-    if (signal.aborted) return;
-    // Authentication, canvas binding, and other run-scope conflicts are real
-    // failures. A 404/5xx can also mean an older backend or a transient SSE
-    // transport problem, so those cases use the existing polling path.
-    if (error instanceof AgentRunCoordinatorError && [401, 403, 409].includes(error.status)) throw error;
-    await delay(500, signal);
-  }
+export async function waitForRunnerEvent(signal: AbortSignal) {
+  await delay(POLL_INTERVAL_MS, signal);
 }
+
+const POLL_INTERVAL_MS = 500;
 
 function delay(ms: number, signal: AbortSignal) {
   return new Promise<void>((resolve) => {

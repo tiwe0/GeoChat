@@ -141,7 +141,7 @@ export function useAgentRunChat(input: {
       const result = await executeAgentRunLoop({ coordinator: coordinatorRef.current, runId: restored.runId, claimOwner, signal: controller.signal,
         claimRemoteTools, executeRemoteTool: executeRemoteToolRequest, afterToolResult: removeCachedToolResult,
         waitForRunnerEvent,
-        onUpdate: ({ assistantText, parts, credits }) => { setStatus(assistantText || parts.some((part) => part.type === "reasoning") ? "streaming" : "submitted"); setMessages((previous) => previous.map((item) => item.id !== restored.assistantMessageId ? item : assistantMessageUpdate(item, parts, credits))); }
+        onUpdate: ({ assistantText, parts }) => { setStatus(assistantText || parts.some((part) => part.type === "reasoning") ? "streaming" : "submitted"); setMessages((previous) => previous.map((item) => item.id !== restored.assistantMessageId ? item : assistantMessageUpdate(item, parts))); }
       });
       if (result.runner && result.runner.run.status !== "running") {
         await removeActiveRun(installationId, canvasSessionId);
@@ -208,8 +208,6 @@ export function useAgentRunChat(input: {
       mode: "ai-sdk",
       modelProvider: current.getModelProvider?.(modelId) ?? "deepseek",
       modelId,
-      thinking: current.getThinking() ? "enabled" : "disabled",
-      thinkingEffort: current.getThinkingEffort(),
       locale: current.locale,
       prompt,
       attachmentCount: attachments.length,
@@ -249,7 +247,7 @@ export function useAgentRunChat(input: {
       const result = await executeAgentRunLoop({ coordinator: coordinatorRef.current, runId, claimOwner, signal: controller.signal, attachments,
         initialRunner: runner, claimRemoteTools, executeRemoteTool: executeRemoteToolRequest, afterToolResult: removeCachedToolResult,
         waitForRunnerEvent,
-        onUpdate: ({ assistantText, parts, credits }) => { setStatus(assistantText || parts.some((part) => part.type === "reasoning") ? "streaming" : "submitted"); setMessages((previous) => previous.map((item) => item.id !== assistantMessageId ? item : assistantMessageUpdate(item, parts, credits))); }
+        onUpdate: ({ assistantText, parts }) => { setStatus(assistantText || parts.some((part) => part.type === "reasoning") ? "streaming" : "submitted"); setMessages((previous) => previous.map((item) => item.id !== assistantMessageId ? item : assistantMessageUpdate(item, parts))); }
       });
       if (result.runner && result.runner.run.status !== "running") {
         await removeActiveRun(installationId, canvasSessionId);
@@ -315,13 +313,10 @@ function assistantMessageParts(parts: AgentRunDisplayPart[]) {
   return (parts.length ? parts : [{ type: "text", text: "" }]) as unknown as ChatMessage["parts"];
 }
 
-function assistantMessageUpdate(message: ChatMessage, parts: AgentRunDisplayPart[], credits?: number): ChatMessage {
+function assistantMessageUpdate(message: ChatMessage, parts: AgentRunDisplayPart[]): ChatMessage {
   return {
     ...message,
     parts: assistantMessageParts(parts),
-    ...(credits === undefined
-      ? {}
-      : { metadata: { ...(message.metadata ?? {}), credits } }),
   };
 }
 

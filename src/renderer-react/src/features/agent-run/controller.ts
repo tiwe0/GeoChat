@@ -25,7 +25,6 @@ export type AgentRunExecutionResult = {
   assistantText: string;
   parts: AgentRunDisplayPart[];
   runner?: AgentRunRunnerSnapshot;
-  credits?: number;
 };
 
 export async function executeAgentRunLoop(input: {
@@ -39,7 +38,7 @@ export async function executeAgentRunLoop(input: {
     requests: AgentRunRemoteToolRequest[];
     terminalRunner?: AgentRunRunnerSnapshot;
   }>;
-  waitForRunnerEvent?: (coordinator: AgentRunCoordinator, runId: string, signal: AbortSignal) => Promise<void>;
+  waitForRunnerEvent?: (signal: AbortSignal) => Promise<void>;
   executeRemoteTool: (request: AgentRunRemoteToolRequest) => Promise<AgentRunToolRecord>;
   afterToolResult?: (request: AgentRunRemoteToolRequest) => Promise<void>;
   onUpdate?: (result: AgentRunExecutionResult) => void;
@@ -47,8 +46,7 @@ export async function executeAgentRunLoop(input: {
   let runner = input.initialRunner;
   let assistantText = "";
   let parts: AgentRunDisplayPart[] = [];
-  let credits: number | undefined;
-  const update = () => input.onUpdate?.({ assistantText, parts, runner, credits });
+  const update = () => input.onUpdate?.({ assistantText, parts, runner });
   const appendText = (text: string) => {
     if (!text) return;
     assistantText += text;
@@ -56,14 +54,6 @@ export async function executeAgentRunLoop(input: {
     parts = lastPart?.type === "text"
       ? [...parts.slice(0, -1), { ...lastPart, text: lastPart.text + text }]
       : [...parts, { type: "text", text }];
-    update();
-  };
-  const appendReasoning = (text: string) => {
-    if (!text) return;
-    const lastPart = parts.at(-1);
-    parts = lastPart?.type === "reasoning"
-      ? [...parts.slice(0, -1), { ...lastPart, text: lastPart.text + text }]
-      : [...parts, { type: "reasoning", text }];
     update();
   };
   if (runner) {
@@ -89,7 +79,7 @@ export async function executeAgentRunLoop(input: {
       parts = mergeRunnerToolParts(parts, runner.run.tools);
       for (const request of runner.pendingToolRequests) parts = upsertDisplayToolPart(parts, displayToolPart(request));
       update();
-      if (input.waitForRunnerEvent) await input.waitForRunnerEvent(input.coordinator, input.runId, input.signal);
+      if (input.waitForRunnerEvent) await input.waitForRunnerEvent(input.signal);
       else await delay(120);
       continue;
     }
@@ -111,11 +101,9 @@ export async function executeAgentRunLoop(input: {
           receivedTextDelta = true;
           appendText(text);
         },
-        onReasoningDelta: appendReasoning,
-        onToolRecord: (record) => {
-          parts = upsertDisplayToolPart(parts, displayToolPartFromRecord(record));
-          update();
-        },
+        // This backend streams text only. Tool records still arrive with the
+        // runner snapshot below and are merged there, so the transcript ends
+        // up correct — it just fills in per response rather than per tool.
         signal: input.signal
       });
       await input.afterToolResult?.(request);
@@ -124,7 +112,6 @@ export async function executeAgentRunLoop(input: {
         parts = mergeRunnerToolParts(parts, runner.run.tools);
       }
       if (result?.text && !receivedTextDelta) appendText(result.text);
-      if (result?.credits !== undefined) credits = result.credits;
       update();
       if (result?.runner && result.runner.run.status !== "running") {
         if (result.runner.run.error) throw new Error(result.runner.run.error);
@@ -134,7 +121,7 @@ export async function executeAgentRunLoop(input: {
     }
     if (completed) break;
   }
-  return { assistantText, parts, runner, credits };
+  return { assistantText, parts, runner };
 }
 
 function delay(ms: number) { return new Promise((resolve) => setTimeout(resolve, ms)); }

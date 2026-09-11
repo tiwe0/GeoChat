@@ -107,7 +107,7 @@ overflow menu.
 
 ## Known gaps, measured
 
-`bun run typecheck:react` reports **13 errors**, down from 29. They are deliberately not in
+`bun run typecheck:react` reports **3 errors**, down from 29. They are deliberately not in
 the main `typecheck` gate yet — that would turn the build red for everyone —
 but they are real, and the bundler hides them: Vite strips types with esbuild
 and never checks them, which is the same blind spot the CI `verify` job was
@@ -139,16 +139,33 @@ They fall into four groups:
   `preferences`, and `SettingsPanel` used MUI v8's `FormHelperTextProps`
   instead of v9's `slotProps`.
 
-### Still open (13)
+### Also fixed (13 -> 3)
 
-- `AgentRunLedgerRecord.thinking` / `.thinkingEffort`, and `AgentRunStartInput.thinking`.
-- `AgentRunToolResultStreamOptions.onReasoningDelta` and
-  `subscribeRunnerEvents` on the coordinator.
-- `AgentRunToolResultResponse.credits`.
-- The two conversation hooks want an `AuthSessionController` type. A bare
-  `{ current: { token } }` alias is **not** the right shape — trying it took the
-  count from 14 to 25. Read what the hooks actually use before naming it.
+- `waitForRunnerEvent` no longer tries to subscribe to a server-sent runner
+  stream this backend does not have. The hosted build treated a plain delay as
+  its fallback; here that fallback is the whole mechanism, because
+  `claimRemoteTools` polling is the source of truth. It now takes only a signal.
+- `onReasoningDelta` and `onToolRecord` removed: the stream options carry text
+  deltas only. Tool records still arrive with the runner snapshot and are
+  merged there, so the transcript is correct — it fills in per response rather
+  than per tool.
+- Credits removed from the execution result, the update callbacks and the
+  message helper. No pay-as-you-go in this product.
+- `AuthSessionController` implemented for real this time. It is a generation
+  guard: the conversation hooks snapshot before an await and check `isCurrent`
+  after, so a late response cannot overwrite newer state. There are no accounts
+  to switch here, but the token can still change. An absent token is sent as
+  `""`, because the local backend needs no bearer.
+
+### Still open (3)
+
 - One MUI overload in `SettingsPanel`'s provider select.
+- `useAgentRunChat`'s `onRestore` still names `thinkingEnabled` /
+  `thinkingEffort`, which `StoredActiveRun` no longer has. Narrowing the type
+  alone is not enough: `AssistantPanel` passes `getThinking` /
+  `getThinkingEffort` and reads both fields on restore, so removing them takes
+  the count from 3 to 7 until those call sites go too. Do the whole chain in
+  one pass, not the type first.
 
 ## Remaining before the Solid renderer can be deleted
 

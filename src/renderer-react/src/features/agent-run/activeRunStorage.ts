@@ -15,14 +15,14 @@ const INSTALLATION_ID_KEY = "geogebraCopilotInstallationId";
 const ACTIVE_RUN_PREFIX = "geogebraCopilotActiveAgentRun:";
 export const RUNNER_RECOVERY_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
-export type StoredActiveRun = { runId: string; conversationId: string; userMessageId: string | null; assistantMessageId: string | null; prompt: string; modelId: string; thinkingEnabled?: boolean; thinkingEffort?: AgentRunThinkingEffort; startedAt: string; attachmentCount: number };
+export type StoredActiveRun = { runId: string; conversationId: string; userMessageId: string | null; assistantMessageId: string | null; prompt: string; modelId: string; startedAt: string; attachmentCount: number };
 
 export function activeRunStorageKey(installationId: string, canvasSessionId: string) {
   return `${ACTIVE_RUN_PREFIX}${installationId}:${canvasSessionId}`;
 }
 
 export function activeRunRecord(record: AgentRunLedgerRecord): StoredActiveRun {
-  return { runId: record.runId, conversationId: record.conversationId, userMessageId: record.userMessageId ?? null, assistantMessageId: record.assistantMessageId ?? null, prompt: record.prompt, modelId: record.modelId, thinkingEnabled: record.thinking === "enabled", thinkingEffort: record.thinkingEffort, startedAt: record.startedAt, attachmentCount: record.attachmentCount };
+  return { runId: record.runId, conversationId: record.conversationId, userMessageId: record.userMessageId ?? null, assistantMessageId: record.assistantMessageId ?? null, prompt: record.prompt, modelId: record.modelId, startedAt: record.startedAt, attachmentCount: record.attachmentCount };
 }
 
 export async function getInstallationId(ref: { current: string | null }) {

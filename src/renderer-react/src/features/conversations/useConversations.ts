@@ -27,14 +27,14 @@ export function useConversations(options: {
     if (!session) { setConversations([]); return; }
     if (!silent) setLoading(true); setError(null);
     try {
-      const loaded = await fetchConversationSummaries(apiOrigin, session.token);
+      const loaded = await fetchConversationSummaries(apiOrigin, session.token ?? "");
       if (!authSessionRef.current.isCurrent(session)) return;
       setConversations(loaded);
     } catch (e) { setError(e instanceof Error ? e.message : t("history.loadFailed")); }
     finally { if (!silent) setLoading(false); }
   }, [apiOrigin, authSessionRef, t]);
 
-  useEffect(() => { if (authSessionRef.current.token) void load(); else setConversations([]); }, [authSessionRef.current.token, load]);
+  useEffect(() => { if (authSessionRef.current.token) void load(); else setConversations([]); }, [(authSessionRef.current.token ?? ""), load]);
 
   const select = useCallback(async (conversation: ConversationSummary) => {
     const session = authSessionRef.current.snapshot();
@@ -42,7 +42,7 @@ export function useConversations(options: {
     setSelectingId(conversation.id); setError(null);
     let restoringCanvas = false;
     try {
-      const stored = await fetchConversationMessages(apiOrigin, session.token, conversation.id);
+      const stored = await fetchConversationMessages(apiOrigin, (session.token ?? ""), conversation.id);
       if (!authSessionRef.current.isCurrent(session)) return;
       restoringCanvas = true;
       await replayConversationCanvas(stored.replayCommands);
@@ -62,7 +62,7 @@ export function useConversations(options: {
     setDeletingId(conversation.id);
     setError(null);
     try {
-      await deleteConversation(apiOrigin, session.token, conversation.id);
+      await deleteConversation(apiOrigin, (session.token ?? ""), conversation.id);
       if (!authSessionRef.current.isCurrent(session)) return false;
       setConversations((current) => current.filter((item) => item.id !== conversation.id));
       onDelete(conversation);

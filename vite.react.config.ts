@@ -30,7 +30,7 @@ export default defineConfig({
   },
   plugins: [react()],
   build: {
-    outDir: resolve(__dirname, "dist/renderer-react"),
+    outDir: resolve(__dirname, "dist/renderer"),
     emptyOutDir: true
   }
 });

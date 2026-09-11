@@ -18,7 +18,9 @@ const IDLE: DesktopUpdateState = {
   downloaded: false,
   downloadPercent: null,
   error: null,
-  errorCode: null
+  errorCode: null,
+  checkedAt: null,
+  preferences: { autoCheck: false, autoDownload: false, installOnQuit: false }
 };
 
 export function useUpdateState() {

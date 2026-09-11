@@ -14,6 +14,7 @@ import { useCallback, useRef, useState } from "react";
  */
 export type LocalSessionRef = { current: { token: string | null } };
 
+
 export function useLocalSession(options: { localAuthToken?: string | null } = {}) {
   const authSessionRef = useRef<{ token: string | null }>({
     token: options.localAuthToken ?? null

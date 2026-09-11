@@ -104,7 +104,7 @@ export function SettingsPanel(props: { onClose: () => void }) {
             ? t("settings.keyReady", "已配置 · 可以开始作图")
             : t("settings.keyMissing", "密钥只保存在本机，不会上传")
         }
-        FormHelperTextProps={{ sx: { color: ready ? "success.main" : "text.secondary" } }}
+        slotProps={{ formHelperText: { sx: { color: ready ? "success.main" : "text.secondary" } } }}
       />
 
       <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>

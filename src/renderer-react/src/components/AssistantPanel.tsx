@@ -1022,15 +1022,6 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
                     );
                     return null;
                   })}
-                  {message.role === "assistant" && typeof message.metadata?.credits === "number" && (
-                    <Typography
-                      component="div"
-                      variant="caption"
-                      sx={{ mt: 0.45, color: "text.secondary", fontSize: "0.68rem", lineHeight: 1.2 }}
-                    >
-                      {t("panel.creditsUsed", { credits: formatCredits(message.metadata.credits) })}
-                    </Typography>
-                  )}
                 </Box>
               ))}
               {status === "submitted" && (

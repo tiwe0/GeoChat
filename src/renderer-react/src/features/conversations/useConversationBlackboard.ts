@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BlackboardEntry } from "@geochat-ai/app/blackboard";
-import type { AuthSessionController } from "../auth/session";
+import type { AuthSessionController } from "../local-session/useLocalSession";
 import { fetchConversationBlackboard } from "./api";
 
 export function useConversationBlackboard(options: {

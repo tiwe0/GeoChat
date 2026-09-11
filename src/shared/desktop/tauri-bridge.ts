@@ -51,12 +51,6 @@ export const TAURI_DESKTOP_EVENTS = {
   appBundleUpdateState: "desktop:app-bundle-update-state"
 } as const;
 
-declare global {
-  interface Window {
-    __TAURI_INTERNALS__?: unknown;
-  }
-}
-
 export async function installTauriDesktopBridge() {
   if (window.geochatDesktop || !window.__TAURI_INTERNALS__) return;
   document.documentElement.classList.add("geochat-tauri-shell");

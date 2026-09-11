@@ -107,7 +107,7 @@ overflow menu.
 
 ## Known gaps, measured
 
-`bun run typecheck:react` reports **29 errors**. They are deliberately not in
+`bun run typecheck:react` reports **13 errors**, down from 29. They are deliberately not in
 the main `typecheck` gate yet — that would turn the build red for everyone —
 but they are real, and the bundler hides them: Vite strips types with esbuild
 and never checks them, which is the same blind spot the CI `verify` job was
@@ -126,6 +126,29 @@ They fall into four groups:
 4. **Two missed auth imports.** `features/conversations/useConversationBlackboard.ts`
    and `useConversations.ts` still import `../auth/session`. I believed the auth
    excision was complete; it was not, and only typechecking found it.
+
+### Fixed so far (29 -> 13)
+
+- `window.geochatDesktop` now has one declaration, in
+  `src/shared/desktop/desktop-global.d.ts`, where both renderers can see it. It
+  had been private to the Solid renderer's env.d.ts, which accounted for ten of
+  the errors on its own.
+- Billing reads (`metadata.credits`) removed from the transcript and the chat
+  hook.
+- Two bugs of my own: `useUpdateState`'s idle state was missing `checkedAt` and
+  `preferences`, and `SettingsPanel` used MUI v8's `FormHelperTextProps`
+  instead of v9's `slotProps`.
+
+### Still open (13)
+
+- `AgentRunLedgerRecord.thinking` / `.thinkingEffort`, and `AgentRunStartInput.thinking`.
+- `AgentRunToolResultStreamOptions.onReasoningDelta` and
+  `subscribeRunnerEvents` on the coordinator.
+- `AgentRunToolResultResponse.credits`.
+- The two conversation hooks want an `AuthSessionController` type. A bare
+  `{ current: { token } }` alias is **not** the right shape — trying it took the
+  count from 14 to 25. Read what the hooks actually use before naming it.
+- One MUI overload in `SettingsPanel`'s provider select.
 
 ## Remaining before the Solid renderer can be deleted
 

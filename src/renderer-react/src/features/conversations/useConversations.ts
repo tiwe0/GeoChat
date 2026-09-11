@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { deleteConversation, fetchConversationMessages, fetchConversationSummaries, type ConversationSummary } from "./api";
 import { restoreConversationMessages, type ChatMessage } from "./messageAdapter";
-import type { AuthSessionController } from "../auth/session";
+import type { AuthSessionController } from "../local-session/useLocalSession";
 import { replayConversationCanvas } from "./replay";
 
 export function useConversations(options: {

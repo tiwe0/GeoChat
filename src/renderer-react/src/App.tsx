@@ -4,13 +4,17 @@ import { GeoGebraController } from "./geogebra/controller";
 import { mountGeoGebra } from "./geogebra/ggbdeploy-wrapper";
 import { setFrontendGeoGebraController } from "./geogebra/runtime";
 import { WindowTitleBar } from "./features/desktop/WindowTitleBar";
-import { backendOrigin } from "./features/desktop/runtime";
+import { backendOrigin, desktopRuntimeError } from "./features/desktop/runtime";
 
 export default function App() {
   const canvasRef = useRef<HTMLDivElement>(null);
   const controllerRef = useRef(new GeoGebraController());
   const [canvasState, setCanvasState] = useState<"loading" | "ready" | "error">("loading");
   const [canvasError, setCanvasError] = useState<string | null>(null);
+
+  // A shell that will not report its backend is a hard failure, not something
+  // to paper over with a guessed port.
+  const runtimeError = desktopRuntimeError();
 
   useEffect(() => {
     let disposed = false;
@@ -51,6 +55,7 @@ export default function App() {
             <div className={canvasState === "error" ? "frontend-canvas-error" : "frontend-loader"} />
             <strong>{canvasState === "error" ? "GeoGebra 画板加载失败" : "正在加载 GeoGebra 画板…"}</strong>
             {canvasError && <span>{canvasError}</span>}
+            {runtimeError && <span>{`Desktop bridge unavailable: ${runtimeError}`}</span>}
           </div>
         )}
       </section>

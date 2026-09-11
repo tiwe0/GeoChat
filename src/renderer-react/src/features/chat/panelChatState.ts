@@ -1,8 +1,8 @@
-import { DEFAULT_AI_MODEL_ID } from "@geogebra-copilot/shared/contracts";
 
 /** Instance-local mutable values consumed by asynchronous agent callbacks. */
 export class PanelChatState {
-  #model: string = DEFAULT_AI_MODEL_ID;
+  // No hosted default: the model is whatever the user configured.
+  #model: string = "";
   #conversationId: string | null = null;
   #thinkingEnabled = false;
 

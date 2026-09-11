@@ -4,7 +4,7 @@ import {
   MAX_AGENT_ATTACHMENT_COUNT,
   MAX_AGENT_ATTACHMENTS_TOTAL_BYTES,
   isOptionalAgentRunImageAttachments,
-} from "@geogebra-copilot/shared/contracts";
+} from "@geochat-ai/app/contracts";
 
 export const MAX_AGENT_FILE_COUNT = MAX_AGENT_ATTACHMENT_COUNT;
 export const MAX_AGENT_FILE_SIZE = MAX_AGENT_ATTACHMENT_BYTES;

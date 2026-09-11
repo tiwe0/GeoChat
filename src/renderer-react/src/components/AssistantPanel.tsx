@@ -33,8 +33,7 @@ import { useTranslation } from "react-i18next";
 import { Streamdown } from "streamdown";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  DEFAULT_AI_MODEL_ID,
-} from "@geogebra-copilot/shared/contracts";
+} from "@geochat-ai/app/contracts";
 import { useAgentRunChat } from "../hooks/useAgentRunChat";
 import { formatAgentRunError } from "../features/agent-run/errorMessage";
 import { STREAMDOWN_PLUGINS } from "../features/chat/streamdownPlugins";
@@ -65,14 +64,12 @@ import { BlackboardDrawer } from "./BlackboardDrawer";
 import { OnboardingTooltip } from "./OnboardingTooltip";
 import { BrandIcon } from "./BrandIcon";
 import type { ReasoningMode, ThinkingEffort } from "./ModelMenu";
-import { fallbackModelOptionsForMarket, fetchModelCatalog, type RuntimeModelOption } from "../features/models/modelCatalog";
+import { loadModelCatalog, type RuntimeModelOption } from "../features/models/modelCatalog";
 
 const API_ORIGIN = new URL(
   import.meta.env.VITE_API_ORIGIN ?? "http://localhost:8787",
 ).origin;
 const AUTH_REQUIRED = import.meta.env.VITE_AUTH_REQUIRED !== "false";
-const PRODUCT_MARKET = import.meta.env.VITE_PRODUCT_MARKET === "cn" ? "cn" : "global";
-const FALLBACK_MODEL_OPTIONS = fallbackModelOptionsForMarket(PRODUCT_MARKET);
 const ONBOARDING_TOUR_STORAGE_KEY = "geogebraCopilotOnboardingTourCompleted";
 const REASONING_MODE_STORAGE_KEY = "geogebraCopilotReasoningMode";
 const THINKING_EFFORT_STORAGE_KEY = "geogebraCopilotThinkingEffort";
@@ -318,10 +315,10 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [panelView, setPanelView] = useState<"chat" | "user">("chat");
-  const [modelOptions, setModelOptions] = useState<RuntimeModelOption[]>(FALLBACK_MODEL_OPTIONS);
-  const modelOptionsRef = useRef<RuntimeModelOption[]>(FALLBACK_MODEL_OPTIONS);
+  const [modelOptions, setModelOptions] = useState<RuntimeModelOption[]>(loadModelCatalog());
+  const modelOptionsRef = useRef<RuntimeModelOption[]>(loadModelCatalog());
   modelOptionsRef.current = modelOptions;
-  const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_AI_MODEL_ID);
+  const [selectedModel, setSelectedModel] = useState<string>("");
   const [reasoningMode, setReasoningMode] = useState<ReasoningMode>("auto");
   const [thinkingEffort, setThinkingEffort] = useState<ThinkingEffort>("standard");
   const [conversationDrawerOpen, setConversationDrawerOpen] = useState(false);
@@ -369,29 +366,19 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
     },
   });
   const isStreaming = status === "streaming" || status === "submitted";
+  // The catalog is local and static, so there is nothing to fetch. Only the
+  // selection needs reconciling: drop one that is no longer in the registry.
   useEffect(() => {
-    const controller = new AbortController();
-    void fetchModelCatalog(API_ORIGIN, authSessionRef.current.token, controller.signal).then((models) => {
-      modelOptionsRef.current = models;
-      setModelOptions(models);
-      const current = panelChatRef.current.model;
-      if (models.some((model) => model.id === current)) return;
-      const fallback = models[0];
-      if (!fallback) return;
-      panelChatRef.current.setModel(fallback.id);
-      setSelectedModel(fallback.id);
-    }).catch(() => {
-      // Keep the bundled catalog as an offline fallback and discard stale
-      // selections that the server could not confirm.
-      const current = panelChatRef.current.model;
-      if (modelOptionsRef.current.some((model) => model.id === current)) return;
-      const fallback = FALLBACK_MODEL_OPTIONS[0];
-      if (!fallback) return;
-      panelChatRef.current.setModel(fallback.id);
-      setSelectedModel(fallback.id);
-    });
-    return () => controller.abort();
-  }, [account?.email]);
+    const models = loadModelCatalog();
+    modelOptionsRef.current = models;
+    setModelOptions(models);
+    const current = panelChatRef.current.model;
+    if (current && models.some((model) => model.id === current)) return;
+    const first = models[0];
+    if (!first) return;
+    panelChatRef.current.setModel(first.id);
+    setSelectedModel(first.id);
+  }, []);
   useEffect(() => {
     void browser.storage.local.get(ONBOARDING_TOUR_STORAGE_KEY).then((stored) => {
       setOnboardingTourReady(stored[ONBOARDING_TOUR_STORAGE_KEY] !== true);

@@ -1,5 +1,5 @@
-import type { AgentRunRemoteToolRequest, AgentRunToolRecord } from "@geogebra-copilot/shared/client";
-import { getNativeToolNameForHarnessTool, type ToolExecutionResult } from "@geogebra-copilot/shared/geogebra-protocol";
+import type { AgentRunRemoteToolRequest, AgentRunToolRecord } from "@geochat-ai/app/client";
+import type { ToolExecutionResult } from "@geochat-ai/app/geogebra-protocol";
 import { getFrontendGeoGebraController } from "../../geogebra/runtime";
 import { readCachedToolResult, saveCachedToolResult } from "./activeRunStorage";
 
@@ -42,7 +42,8 @@ export async function executeRemoteToolRequest(request: AgentRunRemoteToolReques
 }
 
 export async function executeRendererTool(toolName: AgentRunRemoteToolRequest["toolName"], args: unknown): Promise<ToolExecutionResult> {
-  if (!getNativeToolNameForHarnessTool(toolName)) throw new Error(`Renderer tool is not supported by GeoChatPro Web: ${toolName}`);
+  // The web build routed renderer tools through an extension native host
+  // and gated on that mapping. This build executes them in-process.
   const controller = getFrontendGeoGebraController();
   if (!controller) throw new Error("GeoGebra 画板尚未加载完成。");
   const value = await controller.executeTool(toolName, args);

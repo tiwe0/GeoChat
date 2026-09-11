@@ -1,5 +1,5 @@
 import type { UIMessage } from "ai";
-import type { ChatMessageMetadata } from "@geogebra-copilot/shared/contracts";
+import type { ChatMessageMetadata } from "@geochat-ai/app/contracts";
 import type { StoredConversationMessage, StoredConversationPart } from "./api";
 
 export type ChatMessage = UIMessage<ChatMessageMetadata>;

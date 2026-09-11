@@ -2,9 +2,9 @@ import type {
   AgentRunRemoteToolRequest,
   AgentRunRunnerSnapshot,
   AgentRunToolRecord,
-} from "@geogebra-copilot/shared/client";
-import { createAgentRunCoordinator } from "@geogebra-copilot/shared/client";
-import type { AgentRunImageAttachment } from "@geogebra-copilot/shared/contracts";
+} from "@geochat-ai/app/client";
+import { createAgentRunCoordinator } from "@geochat-ai/app/client";
+import type { AgentRunImageAttachment } from "@geochat-ai/app/contracts";
 type AgentRunCoordinator = ReturnType<typeof createAgentRunCoordinator>;
 
 export type AgentRunDisplayToolPart = {

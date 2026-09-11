@@ -2,7 +2,7 @@ import { Stack, Typography } from "@mui/material";
 import type { UIMessage } from "ai";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import type { ChatMessageMetadata, ChatTokenUsage } from "@geogebra-copilot/shared/contracts";
+import type { ChatMessageMetadata, ChatTokenUsage } from "@geochat-ai/app/contracts";
 
 type TokenUsageProps = {
   messages: UIMessage<ChatMessageMetadata>[];

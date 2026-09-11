@@ -4,13 +4,13 @@ import {
   createAgentRunCoordinator,
   createAgentRunLedgerFromStart,
   type AgentRunRunnerSnapshot,
-} from "@geogebra-copilot/shared/client";
+} from "@geochat-ai/app/client";
 import type {
   AgentRunImageAttachment,
   ChatMessageMetadata,
-} from "@geogebra-copilot/shared/contracts";
-import { createAgentRunRunnerClaimOwner } from "@geogebra-copilot/shared/contracts";
-import type { AgentRunThinkingEffort } from "@geogebra-copilot/shared";
+} from "@geochat-ai/app/contracts";
+import { createAgentRunRunnerClaimOwner } from "@geochat-ai/app/contracts";
+import type { AgentRunThinkingEffort } from "@geochat-ai/app";
 import { areSupportedAgentAttachments } from "../features/attachments/capabilities";
 import {
   getInstallationId,
@@ -34,7 +34,6 @@ type SendMessageInput = { text?: string; files?: FileUIPart[] };
 type SendMessageOptions = { body?: { conversationId?: string } };
 
 const canvasSessionId = getCanvasSessionId();
-const PRODUCT_MARKET = import.meta.env.VITE_PRODUCT_MARKET === "cn" ? "cn" : "global";
 
 export function useAgentRunChat(input: {
   apiOrigin: string;
@@ -61,11 +60,10 @@ export function useAgentRunChat(input: {
     backendBaseUrl: input.apiOrigin,
     headers: () => {
       const headers: Record<string, string> = {
-        "x-client-channel": "web-geochatpro",
+        "x-client-channel": "desktop-workbench",
         // Guest Harness requests have no persisted session to establish the
         // market. Keep the deployment market explicit so a China build cannot
         // silently fall back to the global policy.
-        "x-product-market": PRODUCT_MARKET,
       };
       const token = inputRef.current.getAuthToken();
       if (token) {
@@ -115,7 +113,7 @@ export function useAgentRunChat(input: {
 
   async function continueRecoveredRun(restored: StoredActiveRun, controller: AbortController) {
     const installationId = await getInstallationId(installationIdRef);
-    const claimOwner = createAgentRunRunnerClaimOwner("web-geochatpro", installationId, canvasSessionId);
+    const claimOwner = createAgentRunRunnerClaimOwner("desktop-workbench", installationId, canvasSessionId);
     let completedWithError = false;
     try {
       const runner = await coordinatorRef.current.runnerSnapshot(restored.runId);
@@ -237,7 +235,7 @@ export function useAgentRunChat(input: {
 
     try {
       const installationId = await getInstallationId(installationIdRef);
-      const claimOwner = createAgentRunRunnerClaimOwner("web-geochatpro", installationId, canvasSessionId);
+      const claimOwner = createAgentRunRunnerClaimOwner("desktop-workbench", installationId, canvasSessionId);
       const runnerStart = {
         run: record,
         attachments,
@@ -298,8 +296,7 @@ async function uploadImageAttachments(apiOrigin: string, token: string | null, a
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
-          "x-client-channel": "web-geochatpro",
-          "x-product-market": PRODUCT_MARKET,
+          "x-client-channel": "desktop-workbench",
         },
         body: form,
       });

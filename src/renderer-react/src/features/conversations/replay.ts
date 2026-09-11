@@ -1,5 +1,5 @@
-import type { AgentRunRemoteToolRequest } from "@geogebra-copilot/shared/client";
-import type { ToolExecutionResult } from "@geogebra-copilot/shared/geogebra-protocol";
+import type { AgentRunRemoteToolRequest } from "@geochat-ai/app/client";
+import type { ToolExecutionResult } from "@geochat-ai/app/geogebra-protocol";
 import { executeRendererTool } from "../agent-run/toolWorker";
 
 type ReplayToolName = Extract<AgentRunRemoteToolRequest["toolName"], "resetCanvas" | "executeGeoGebraCommands">;

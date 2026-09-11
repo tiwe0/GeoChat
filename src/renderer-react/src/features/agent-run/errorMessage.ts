@@ -1,4 +1,4 @@
-import { AgentRunCoordinatorError } from "@geogebra-copilot/shared/client";
+import { AgentRunCoordinatorError } from "@geochat-ai/app/client";
 
 type ErrorTranslator = (key: string) => string;
 

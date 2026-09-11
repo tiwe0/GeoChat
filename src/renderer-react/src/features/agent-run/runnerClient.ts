@@ -1,4 +1,4 @@
-import { AgentRunCoordinatorError, type AgentRunRemoteToolRequest, type AgentRunRunnerSnapshot, type createAgentRunCoordinator } from "@geogebra-copilot/shared/client";
+import { AgentRunCoordinatorError, type AgentRunRemoteToolRequest, type AgentRunRunnerSnapshot, type createAgentRunCoordinator } from "@geochat-ai/app/client";
 
 export async function claimRemoteTools(
   coordinator: ReturnType<typeof createAgentRunCoordinator>,

@@ -20,7 +20,7 @@ import {
   type BlackboardCategory,
   type BlackboardEntry,
   type BlackboardEntryStatus,
-} from "@geogebra-copilot/shared/blackboard";
+} from "@geochat-ai/app/blackboard";
 import { STREAMDOWN_PLUGINS } from "../features/chat/streamdownPlugins";
 import { useStreamdownTranslations } from "../i18n/useStreamdownTranslations";
 

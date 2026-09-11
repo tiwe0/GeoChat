@@ -1,9 +1,9 @@
-import type { ChatMessageMetadata } from "@geogebra-copilot/shared/contracts";
+import type { ChatMessageMetadata } from "@geochat-ai/app/contracts";
 import {
   isBlackboardCategory,
   isBlackboardEntryStatus,
   type BlackboardEntry,
-} from "@geogebra-copilot/shared/blackboard";
+} from "@geochat-ai/app/blackboard";
 
 export type ConversationSummary = { id: string; model: string; title: string | null; createdAt: string; updatedAt: string; messageCount: number };
 export type StoredConversationPart =

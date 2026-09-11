@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { BlackboardEntry } from "@geogebra-copilot/shared/blackboard";
+import type { BlackboardEntry } from "@geochat-ai/app/blackboard";
 import type { AuthSessionController } from "../auth/session";
 import { fetchConversationBlackboard } from "./api";
 

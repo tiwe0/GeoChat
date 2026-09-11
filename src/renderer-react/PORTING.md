@@ -29,17 +29,18 @@ overflow menu.
 
 ## Remaining work
 
-1. **Shared package.** Imports still point at `@geogebra-copilot/shared/{contracts,client,blackboard,geogebra-protocol,model-registry}`.
-   22 of the 33 symbols already exist in `@geochat-ai/app`; the 11 that do not:
-
-   - Portable, need porting: `AgentRunThinkingEffort`, `ChatMessageMetadata`,
-     `ChatTokenUsage`, `MAX_AGENT_ATTACHMENT_BYTES`,
-     `MAX_AGENT_ATTACHMENT_COUNT`, `MAX_AGENT_ATTACHMENTS_TOTAL_BYTES`
-   - Hosted-only, should be dropped or replaced with the local model registry:
-     `AiModelId`, `DEFAULT_AI_MODEL_ID`, `PLATFORM_MODEL_CATALOG`,
-     `createAgentRunRunnerClaimOwner`, `getNativeToolNameForHarnessTool`
-
-   `@geochat-ai/app` needs subpath exports to match the import shape.
+1. ~~**Shared package.**~~ Done. `@geochat-ai/app` gained subpath exports
+   (`/contracts`, `/client`, `/blackboard`, `/geogebra-protocol`,
+   `/model-registry`, `/chat`) as barrels over existing modules, and every
+   import here points at them. Six symbols were ported (`ChatTokenUsage`,
+   `ChatMessageMetadata`, the three attachment limits, `AgentRunThinkingEffort`)
+   plus `createAgentRunRunnerClaimOwner`, whose `claimOwner` value the backend
+   already accepted but had no builder for. The hosted ones were replaced:
+   the model catalog now reads the local `AGENT_MODEL_REGISTRY` instead of
+   fetching `/api/models`, `AiModelId` became `string` because model ids are
+   open-ended under bring-your-own-key, and the native-host tool gate went
+   away because this build executes tools in-process. Market routing and the
+   `web-geochatpro` client channel are gone.
 
 2. **Desktop layer** (~1227 lines in the Solid renderer, no React counterpart):
    `tauri-bridge`, window controls, `desktop-config` (BYOK key storage),

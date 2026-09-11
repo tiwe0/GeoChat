@@ -8,6 +8,30 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./contracts": {
+      "types": "./src/contracts.ts",
+      "default": "./src/contracts.ts"
+    },
+    "./client": {
+      "types": "./src/client.ts",
+      "default": "./src/client.ts"
+    },
+    "./blackboard": {
+      "types": "./src/blackboard.ts",
+      "default": "./src/blackboard.ts"
+    },
+    "./geogebra-protocol": {
+      "types": "./src/geogebra-protocol.ts",
+      "default": "./src/geogebra-protocol.ts"
+    },
+    "./model-registry": {
+      "types": "./src/model-registry.ts",
+      "default": "./src/model-registry.ts"
+    },
+    "./chat": {
+      "types": "./src/chat.ts",
+      "default": "./src/chat.ts"
     }
   },
   "scripts": {

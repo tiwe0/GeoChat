@@ -949,3 +949,6 @@ function stableJson(value: unknown): string {
     .map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`)
     .join(",")}}`;
 }
+
+/** How much deliberation the model is asked for on a run. */
+export type AgentRunThinkingEffort = "light" | "standard" | "extended";

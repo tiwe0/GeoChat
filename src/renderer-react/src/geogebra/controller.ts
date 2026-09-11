@@ -1,5 +1,6 @@
 import type { GeoGebraApi } from "./ggbdeploy-wrapper";
 import { canvasLabels, getAppletXml, readCanvasContext, tryReadCanvasContext, type CanvasContext } from "./canvas-context";
+import { normalizeGeoGebraFreeParameterCommands } from "@geochat-ai/app";
 import { evaluateCommand, type CommandResult } from "./command-executor";
 
 const COMMAND_DELAY_MS = 80;
@@ -52,12 +53,38 @@ export class GeoGebraController {
     }
   }
 
+  /** The construction as GeoGebra currently holds it, for callers that need to restore it later. */
+  getCanvasXml() {
+    return this.api ? getAppletXml(this.api) : undefined;
+  }
+
+  /** Put a previously captured construction back. Returns false if the applet cannot. */
+  restoreCanvasXml(xml: string) {
+    if (!this.api || typeof this.api.setXML !== "function") return false;
+    this.call("setXML", xml);
+    return true;
+  }
+
   private async executeCommands(input: Record<string, unknown>) {
-    const commands = requiredCommands(input.commands);
+    let commands = requiredCommands(input.commands);
+    // Rewind to a known construction before running anything. The choice
+    // preview uses this to replay one option from the same starting point
+    // every time, instead of stacking each option on the last one's leftovers.
+    if (typeof input.restoreBeforeXml === "string" && input.restoreBeforeXml && typeof this.api!.setXML === "function") {
+      this.call("setXML", input.restoreBeforeXml);
+    }
     const canvasBefore = tryReadCanvasContext(this.api!, false);
     const savedXml = getAppletXml(this.api!);
     let resetMeta: Record<string, unknown> | null = null;
     if (input.resetBefore === true) resetMeta = await this.resetConstruction(canvasBefore);
+    if (input.normalizeFreeParameters === true) {
+      // Replayed option commands redeclare names the construction already
+      // holds; without this each replay collides with the objects it just
+      // restored.
+      commands = normalizeGeoGebraFreeParameterCommands(commands, {
+        declaredNames: canvasBefore ? canvasLabels(canvasBefore) : [],
+      });
+    }
 
     let perspectiveResult: PerspectiveResult | null = null;
     if (typeof input.perspective === "string" && input.perspective.trim()) {
@@ -97,6 +124,8 @@ export class GeoGebraController {
         commandDelayMs: commands.length > 1 ? COMMAND_DELAY_MS : 0,
         restoreOnError: input.restoreOnError === true,
         restoredAfterError,
+        restoredBefore: typeof input.restoreBeforeXml === "string" && Boolean(input.restoreBeforeXml),
+        normalizeFreeParameters: input.normalizeFreeParameters === true,
         resetBefore: input.resetBefore === true,
         resetMeta,
         perspectiveResult,

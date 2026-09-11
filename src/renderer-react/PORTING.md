@@ -283,18 +283,24 @@ were rewritten against their new homes:
   lazy math imports (this build loads both eagerly and deliberately, since it
   loads from local disk), choice-scenario class names, and stylesheet rules.
 
-### One feature did not come across
+### The one missing feature, since recovered
 
-**Interactive choice-scenario preview.** The Solid renderer could replay a
-single multiple-choice option onto the canvas and restore the prior
-construction — `previewChoiceScenario`, backed by `restoreBeforeXml` and
-`normalizeFreeParameters` in its execution layer, with tabs in the transcript.
+**Interactive choice-scenario preview** did not come across in the cut-over
+and was ported immediately after, in `features/geogebra/choiceScenario.ts`
+plus a tabbed `ChoiceAnalysis` in `AgentToolResult`.
 
-This renderer *displays* choice analysis in full (labels, verdicts,
-explanations, evidence, commands) but cannot draw one option and undo it. The
-controller here has neither option. Recovering it means porting roughly 150
-lines: the two execute options, a per-card base-XML map, and the tab UI. The
-Solid implementation is in git at the commit before the cut-over.
+Two differences from the Solid original, both deliberate:
+
+- Returning to "all" restores the baseline directly instead of running an
+  empty command batch. This renderer's `requiredCommands` rejects an empty
+  list, and "restore" was never really "execute nothing" anyway.
+- The baseline is keyed by the card's own content rather than by position.
+  Tool results re-render as a run streams, and an index-based key would hand
+  a card its neighbour's baseline.
+
+The style policy is re-checked here rather than trusted. A card's commands
+come from the model like any other, and arriving inside a card is not
+evidence that they are safe to run.
 
 ## Deferred
 

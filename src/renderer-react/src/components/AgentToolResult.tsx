@@ -1,4 +1,12 @@
-import { Box, Chip, Stack, Typography } from "@mui/material";
+import { Box, Chip, CircularProgress, Stack, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import {
+  choiceScenarioCardKey,
+  previewChoiceScenario,
+  type ChoiceScenarioPreviewInput
+} from "../features/geogebra/choiceScenario";
+import type { Locale } from "../../../shared/desktop/locale";
 import { Streamdown } from "streamdown";
 import { STREAMDOWN_PLUGINS } from "../features/chat/streamdownPlugins";
 import { useStreamdownTranslations } from "../i18n/useStreamdownTranslations";
@@ -60,6 +68,8 @@ type CardLabels = {
   true: string;
   false: string;
   unknown: string;
+  choiceAll: string;
+  choicePreviewing: string;
 };
 
 const labels: Record<"zh-CN" | "en-US", CardLabels> = {
@@ -81,6 +91,8 @@ const labels: Record<"zh-CN" | "en-US", CardLabels> = {
     true: "正确",
     false: "错误",
     unknown: "待确认",
+    choiceAll: "全部",
+    choicePreviewing: "正在画板上演示…",
   },
   "en-US": {
     answer: "Answer",
@@ -100,6 +112,8 @@ const labels: Record<"zh-CN" | "en-US", CardLabels> = {
     true: "True",
     false: "False",
     unknown: "Uncertain",
+    choiceAll: "All",
+    choicePreviewing: "Drawing on the canvas…",
   },
 } as const;
 
@@ -202,22 +216,113 @@ export function AgentToolResult({ part, locale, statusLabel }: { part: ToolPart;
         <Stack spacing={0.25}><Typography variant="caption" color="text.secondary">{copy.controls}</Typography><MarkdownList items={card.controls} /></Stack>
         <Stack spacing={0.25}><Typography variant="caption" color="text.secondary">{copy.observations}</Typography><MarkdownList items={card.observations} /></Stack>
       </>}
-      {toolName === "showChoiceAnalysis" && <>
-        <Stack spacing={0.25}><Typography variant="caption" color="text.secondary">{copy.baseConditions}</Typography><MarkdownList items={card.baseConditions} /></Stack>
-        {card.choices?.map((choice, index) => (
-          <Stack spacing={0.25} key={`${choice.label}-${index}`}>
-            <Stack direction="row" spacing={0.5}><Typography variant="subtitle2">{choice.label}</Typography><Verdict value={choice.verdict} copy={copy} /></Stack>
-            {choice.statement && <Markdown>{choice.statement}</Markdown>}
-            {choice.explanation && <Markdown>{choice.explanation}</Markdown>}
-            {choice.constructionFocus && <Typography variant="body2"><strong>{copy.focus}: </strong>{choice.constructionFocus}</Typography>}
-            {choice.evidence?.length ? <Stack spacing={0.25}><Typography variant="caption" color="text.secondary">{copy.evidence}</Typography><MarkdownList items={choice.evidence} /></Stack> : null}
-            {choice.commands?.length ? <Stack spacing={0.25}><Typography variant="caption" color="text.secondary">{copy.commands}</Typography>{choice.commands.map((command, commandIndex) => <Typography component="code" variant="caption" key={`${command}-${commandIndex}`}>{command}</Typography>)}</Stack> : null}
-          </Stack>
-        ))}
-      </>}
+      {toolName === "showChoiceAnalysis" && <ChoiceAnalysis card={card} copy={copy} />}
       {toolName === "showSelectedElements" && <Stack spacing={0.5}><Typography variant="caption" color="text.secondary">{copy.selected}</Typography>{card.elements?.map((element, index) => <Stack spacing={0.25} key={`${element.label}-${index}`}><Typography component="code" variant="body2">{element.label}</Typography>{element.type && <Typography variant="caption">{copy.type}: {element.type}</Typography>}{element.description && <Markdown>{element.description}</Markdown>}{element.role && <Typography variant="body2"><strong>{copy.role}: </strong>{element.role}</Typography>}</Stack>)}{card.nextActionHint && <Typography variant="body2"><strong>{copy.nextAction}: </strong>{card.nextActionHint}</Typography>}</Stack>}
       {card.auxiliaryElementReview && <Stack spacing={0.25}><Typography variant="caption" color="text.secondary">{copy.auxiliary}</Typography><Markdown>{card.auxiliaryElementReview}</Markdown></Stack>}
       {part.state !== "output-available" && <Typography variant="caption" color="text.secondary">{toolName}: {statusLabel}{error ? ` (${error})` : ""}</Typography>}
     </Stack>
+  );
+}
+
+const ALL_CHOICES = "all";
+
+/**
+ * Choice analysis, one option at a time.
+ *
+ * Every option's construction drawn at once overlaps into noise, so selecting
+ * a tab replays that option alone onto the canvas, from the construction as it
+ * stood when the card first appeared. "All" returns to that baseline and shows
+ * every option's reasoning together, without drawing any of them.
+ *
+ * Preview is best-effort: the reasoning is readable whether or not the canvas
+ * cooperates, so a failed replay reports itself under the tabs and leaves the
+ * text alone.
+ */
+function ChoiceAnalysis({ card, copy }: { card: ToolCard; copy: CardLabels }) {
+  const { i18n } = useTranslation();
+  const choices = useMemo(() => card.choices ?? [], [card.choices]);
+  const cardKey = useMemo(() => choiceScenarioCardKey(card), [card]);
+  const [active, setActive] = useState<string>(ALL_CHOICES);
+  const [previewing, setPreviewing] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  // Tabs can be clicked faster than a replay finishes; only the newest run may
+  // report, or a slow earlier one overwrites the current state.
+  const runRef = useRef(0);
+
+  useEffect(() => {
+    if (active === ALL_CHOICES) return;
+    if (!choices.some((choice) => choice.label === active)) setActive(ALL_CHOICES);
+  }, [active, choices]);
+
+  const visible = active === ALL_CHOICES ? choices : choices.filter((choice) => choice.label === active);
+
+  const preview = async (label: string, commands: string[]) => {
+    setActive(label);
+    setPreviewError(null);
+    const run = ++runRef.current;
+    setPreviewing(label);
+    const input: ChoiceScenarioPreviewInput = { cardKey, label, commands };
+    const locale: Locale = i18n.language.startsWith("en") ? "en-US" : "zh-CN";
+    try {
+      const result = await previewChoiceScenario(input, locale);
+      if (run === runRef.current && !result.ok && result.error) setPreviewError(result.error);
+    } finally {
+      if (run === runRef.current) setPreviewing(null);
+    }
+  };
+
+  return (
+    <>
+      {card.baseConditions?.length ? (
+        <Stack spacing={0.25}>
+          <Typography variant="caption" color="text.secondary">{copy.baseConditions}</Typography>
+          <MarkdownList items={card.baseConditions} />
+        </Stack>
+      ) : null}
+
+      {choices.length > 1 ? (
+        <Stack spacing={0.5}>
+          <ToggleButtonGroup
+            exclusive
+            size="small"
+            value={active}
+            sx={{ flexWrap: "wrap", gap: 0.5, "& .MuiToggleButton-root": { px: 1, py: 0.25, border: 1, borderColor: "divider", borderRadius: 1, textTransform: "none" } }}
+          >
+            {choices.map((choice, index) => (
+              <ToggleButton
+                key={`${choice.label}-${index}`}
+                value={choice.label ?? ""}
+                onClick={() => void preview(choice.label ?? "", choice.commands ?? [])}
+              >
+                <Typography variant="caption" sx={{ fontWeight: 700 }}>{choice.label}</Typography>
+              </ToggleButton>
+            ))}
+            {/* Returning to "all" is a replay with no commands, which is what
+                restores the canvas to the construction the card started from. */}
+            <ToggleButton value={ALL_CHOICES} onClick={() => void preview(ALL_CHOICES, [])}>
+              <Typography variant="caption">{copy.choiceAll}</Typography>
+            </ToggleButton>
+          </ToggleButtonGroup>
+          {previewing ? (
+            <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
+              <CircularProgress size={12} />
+              <Typography variant="caption" color="text.secondary">{copy.choicePreviewing}</Typography>
+            </Stack>
+          ) : null}
+          {previewError ? <Typography variant="caption" color="error.main">{previewError}</Typography> : null}
+        </Stack>
+      ) : null}
+
+      {visible.map((choice, index) => (
+        <Stack spacing={0.25} key={`${choice.label}-${index}`}>
+          <Stack direction="row" spacing={0.5}><Typography variant="subtitle2">{choice.label}</Typography><Verdict value={choice.verdict} copy={copy} /></Stack>
+          {choice.statement && <Markdown>{choice.statement}</Markdown>}
+          {choice.explanation && <Markdown>{choice.explanation}</Markdown>}
+          {choice.constructionFocus && <Typography variant="body2"><strong>{copy.focus}: </strong>{choice.constructionFocus}</Typography>}
+          {choice.evidence?.length ? <Stack spacing={0.25}><Typography variant="caption" color="text.secondary">{copy.evidence}</Typography><MarkdownList items={choice.evidence} /></Stack> : null}
+          {choice.commands?.length ? <Stack spacing={0.25}><Typography variant="caption" color="text.secondary">{copy.commands}</Typography>{choice.commands.map((command, commandIndex) => <Typography component="code" variant="caption" key={`${command}-${commandIndex}`}>{command}</Typography>)}</Stack> : null}
+        </Stack>
+      ))}
+    </>
   );
 }

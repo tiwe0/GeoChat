@@ -3,6 +3,7 @@ import { AssistantPanel } from "./components/AssistantPanel";
 import { GeoGebraController } from "./geogebra/controller";
 import { mountGeoGebra } from "./geogebra/ggbdeploy-wrapper";
 import { setFrontendGeoGebraController } from "./geogebra/runtime";
+import { WindowTitleBar } from "./features/desktop/WindowTitleBar";
 // The desktop shell runs its own Bun backend; this is its default address.
 const BACKEND_BASE_URL = (import.meta.env.VITE_GEOCHAT_DESKTOP_BACKEND_URL ?? "http://127.0.0.1:17365").replace(/\/$/, "");
 
@@ -43,6 +44,7 @@ export default function App() {
 
   return (
     <main className="frontend-shell">
+      <WindowTitleBar />
       <section className="frontend-canvas" aria-label="GeoGebra 画板">
         <div ref={canvasRef} className="frontend-canvas-host" />
         {canvasState !== "ready" && (

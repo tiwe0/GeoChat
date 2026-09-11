@@ -1,6 +1,6 @@
 export const zhCN = {
   common: {
-    appName: "Copilot",
+    appName: "GeoChat",
     attachment: "\u9644\u4ef6",
     copy: "\u590d\u5236",
     paste: "\u7c98\u8d34",
@@ -349,5 +349,10 @@ export const zhCN = {
     mcpEnabled: "\u8fd0\u884c\u4e2d",
     mcpDisabled: "\u5df2\u5173\u95ed",
     mcpStarting: "\u542f\u52a8\u4e2d\u2026",
+  },
+  window: {
+    minimize: "\u6700\u5c0f\u5316",
+    maximize: "\u6700\u5927\u5316",
+    close: "\u5173\u95ed",
   },
 } as const;

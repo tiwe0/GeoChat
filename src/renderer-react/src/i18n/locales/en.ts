@@ -1,6 +1,6 @@
 export const en = {
   common: {
-    appName: "Copilot",
+    appName: "GeoChat",
     attachment: "Attachment",
     copy: "Copy",
     paste: "Paste",
@@ -349,5 +349,10 @@ export const en = {
     mcpEnabled: "Running",
     mcpDisabled: "Off",
     mcpStarting: "Starting\u2026",
+  },
+  window: {
+    minimize: "Minimize",
+    maximize: "Maximize",
+    close: "Close",
   },
 } as const;

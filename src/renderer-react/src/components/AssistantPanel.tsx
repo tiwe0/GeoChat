@@ -65,6 +65,11 @@ import { BlackboardDrawer } from "./BlackboardDrawer";
 import { OnboardingTooltip } from "./OnboardingTooltip";
 import { BrandIcon } from "./BrandIcon";
 import type { ReasoningMode, ThinkingEffort } from "./ModelMenu";
+import { createDesktopDebugActionExecutor } from "../features/desktop/mcpDebugActions";
+import { useMcpState } from "../features/desktop/useMcpState";
+import { DEFAULT_MCP_STATUS, type DesktopDebugAction } from "../../../shared/desktop/mcp-debug-actions";
+import { readDesktopConfig } from "../../../shared/desktop/desktop-config";
+import type { RendererMcpStatus } from "../../../shared/desktop/workbench-types";
 import { loadModelCatalog, type RuntimeModelOption } from "../features/models/modelCatalog";
 
 const API_ORIGIN = new URL(
@@ -360,6 +365,37 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
     },
   });
   const isStreaming = status === "streaming" || status === "submitted";
+
+  // The MCP server queues actions and waits for the renderer to run them, so
+  // the poll loop belongs here, where the app is mounted, rather than in the
+  // Settings screen that merely toggles it. The executor is built once and
+  // reads live state through this ref, because an MCP action can arrive on any
+  // render and must see the state of that moment, not of its construction.
+  const mcpStatusRef = useRef<RendererMcpStatus>(DEFAULT_MCP_STATUS);
+  const debugStateRef = useRef({ conversationId: currentConversationId, view: panelView, isStreaming });
+  debugStateRef.current = { conversationId: currentConversationId, view: panelView, isStreaming };
+  const executeDebugActionRef = useRef<((action: DesktopDebugAction) => Promise<unknown>) | null>(null);
+  if (!executeDebugActionRef.current) {
+    executeDebugActionRef.current = createDesktopDebugActionExecutor({
+      getConversationId: () => debugStateRef.current.conversationId,
+      getView: () => debugStateRef.current.view,
+      getModelConfig: () => readDesktopConfig().model,
+      getMcpStatus: () => mcpStatusRef.current,
+      isRunning: () => debugStateRef.current.isStreaming,
+      sendMessage: (content) => submit(content),
+      activateConversation: async (conversationId) => {
+        if (!conversationId || conversationId === debugStateRef.current.conversationId) return;
+        panelChatRef.current.setConversationId(conversationId);
+        setCurrentConversationId(conversationId);
+      },
+      showChat: () => setPanelView("chat")
+    });
+  }
+  const mcp = useMcpState({
+    authToken: () => authSessionRef.current.token ?? undefined,
+    executeDebugAction: (action) => executeDebugActionRef.current!(action)
+  });
+  mcpStatusRef.current = mcp.status;
   // The catalog is local and static, so there is nothing to fetch. Only the
   // selection needs reconciling: drop one that is no longer in the registry.
   useEffect(() => {
@@ -811,7 +847,7 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
             style={{ display: "flex", flex: 1, minHeight: 0, flexDirection: "column", overflow: "hidden" }}
           >
           {panelView === "user" ? (
-            <SettingsPanel onClose={() => setPanelView("chat")} />
+            <SettingsPanel mcp={mcp} onClose={() => setPanelView("chat")} />
           ) : (
         <>
           <Box

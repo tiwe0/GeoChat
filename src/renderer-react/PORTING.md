@@ -198,8 +198,22 @@ switch the user flips that changes nothing.
   testable was made testable — the decision logic is pure and shared, and
   `tests/react-settings-i18n.test.ts` checks that every `settings.*` key the
   panel names exists in both locales, which typecheck cannot see.
-- **MCP toggle** (`getMcpStatus` / `setMcpEnabled`). A developer tool, lower
-  priority, but a capability the Solid renderer has and this one does not.
+- ~~**MCP toggle**~~ Done, and narrower than the Solid renderer's by one
+  action. The transport moved to `src/shared/desktop/mcp-debug-actions.ts`
+  (both renderers poll the same queue); the executor could not move, because
+  it reaches into renderer surfaces.
+
+  `select_problem` is not implemented: it drives the problem bank, which is a
+  Pro surface and is not in this build. It returns an explicit error saying so
+  rather than failing obscurely, since an MCP client has no other way to learn
+  the capability is gone. `get_ui_status`, `export_png` and `send_message`
+  behave as before, with `send_message` going through the panel's own submit
+  path so it creates and titles a conversation exactly like a typed message.
+
+  The poll loop lives in `AssistantPanel`, not in Settings. The server holds no
+  canvas and waits for the renderer to act; if polling only ran while the
+  Settings screen was open, an enabled server would accept every request and
+  answer none.
 
 ## Deferred
 

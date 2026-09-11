@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Box, Button, Divider, MenuItem, Stack, TextField, Typography } from "@mui/material";
+import { Box, Button, Divider, FormControlLabel, MenuItem, Stack, Switch, TextField, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import {
   getAgentModelOptions,
@@ -13,6 +13,7 @@ import {
 } from "../../../../shared/desktop/desktop-config";
 import type { ModelConfig } from "../../../../shared/desktop/workbench-types";
 import { UpdateSection } from "./UpdateSection";
+import type { McpController } from "./useMcpState";
 
 /**
  * Desktop settings, deliberately small.
@@ -25,7 +26,7 @@ import { UpdateSection } from "./UpdateSection";
  * What a local-first desktop build actually needs is one screen: which
  * provider, which model, and the key. Everything else follows from those.
  */
-export function SettingsPanel(props: { onClose: () => void }) {
+export function SettingsPanel(props: { mcp: McpController; onClose: () => void }) {
   const { t } = useTranslation();
   const [model, setModel] = useState<ModelConfig>(DEFAULT_MODEL_CONFIG);
   const [saved, setSaved] = useState(false);
@@ -120,6 +121,57 @@ export function SettingsPanel(props: { onClose: () => void }) {
       <Divider flexItem />
 
       <UpdateSection />
+
+      <Divider flexItem />
+
+      <McpSection mcp={props.mcp} />
+    </Stack>
+  );
+}
+
+/**
+ * The local MCP server, off by default.
+ *
+ * It lets an external client drive this canvas, which is a developer tool
+ * rather than a drawing feature, so it sits at the foot of Settings and states
+ * its endpoint only once something is actually listening.
+ */
+function McpSection({ mcp }: { mcp: McpController }) {
+  const { t } = useTranslation();
+  const { status, busy } = mcp;
+
+  return (
+    <Stack spacing={0.75}>
+      <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+        {t("settings.mcpTitle")}
+      </Typography>
+      <Typography variant="body2" color="text.secondary">
+        {t("settings.mcpDescription")}
+      </Typography>
+      <FormControlLabel
+        control={
+          <Switch
+            size="small"
+            checked={status.enabled}
+            disabled={busy}
+            onChange={(event) => void mcp.setEnabled(event.target.checked)}
+          />
+        }
+        label={
+          <Typography variant="body2">
+            {status.enabled ? t("settings.mcpEnabled") : t("settings.mcpDisabled")}
+          </Typography>
+        }
+      />
+      {status.error ? (
+        <Typography variant="caption" color="error.main">{status.error}</Typography>
+      ) : status.enabled && status.running && status.endpoint ? (
+        <Typography variant="caption" color="text.secondary" sx={{ wordBreak: "break-all" }}>
+          {status.endpoint}
+        </Typography>
+      ) : status.enabled ? (
+        <Typography variant="caption" color="text.secondary">{t("settings.mcpStarting")}</Typography>
+      ) : null}
     </Stack>
   );
 }

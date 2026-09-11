@@ -24,36 +24,6 @@ import type { ProblemBankFilters } from "./problem-bank-utils";
 import { readCachedCloudProblemJson, writeCachedCloudProblemJson } from "../../shared/desktop/problem-bank-cache";
 import type { DesktopChatMessage } from "../../shared/desktop/workbench-types";
 
-export type DesktopDebugAction =
-  | {
-      id: string;
-      type: "get_ui_status";
-    }
-  | {
-      id: string;
-      type: "export_png";
-      exportScale?: number;
-      transparent?: boolean;
-      dpi?: number;
-    }
-  | {
-      id: string;
-      type: "send_message";
-      conversationId?: string;
-      content: string;
-    }
-  | {
-      id: string;
-      type: "select_problem";
-      conversationId?: string;
-      source?: "local" | "cloud";
-      cloudBaseUrl?: string;
-      bankSlug?: string;
-      problemApiPath?: string | null;
-      problemId: string;
-      mode: "show" | "draft" | "send";
-    };
-
 export type ProblemListSource = {
   source?: "local" | "cloud";
   backendBaseUrl: string;
@@ -74,6 +44,15 @@ export type ProblemDetailSource = {
   problemApiPath?: string | null;
   id: string;
 };
+
+// The MCP debug-action transport is identical in both renderers, so it lives
+// in shared/desktop and is re-exported here for this renderer's import sites.
+export {
+  desktopMcpHttpBase,
+  fetchNextDesktopDebugAction,
+  reportDesktopDebugAction
+} from "../../shared/desktop/mcp-debug-actions";
+export type { DesktopDebugAction } from "../../shared/desktop/mcp-debug-actions";
 
 const CLOUD_PROBLEM_BANK_TIMEOUT_MS = 2500;
 const CLOUD_MODEL_REGISTRY_TIMEOUT_MS = 2500;
@@ -332,23 +311,3 @@ function matchesProblemFilters(problem: ProblemDetail | ProblemListResponse["pro
   return haystack.includes(query);
 }
 
-export function desktopMcpHttpBase(endpoint: string | null | undefined) {
-  return endpoint?.replace(/\/mcp\/?$/, "") ?? "";
-}
-
-export async function fetchNextDesktopDebugAction(endpoint: string, authToken?: string) {
-  const response = await fetch(`${desktopMcpHttpBase(endpoint)}/debug-actions/next`, {
-    headers: desktopHeaders({ backendAuthToken: authToken })
-  });
-  if (!response.ok) throw new Error(`MCP debug action poll failed: ${response.status}`);
-  const payload = await response.json() as { action?: DesktopDebugAction | null };
-  return payload.action ?? null;
-}
-
-export async function reportDesktopDebugAction(endpoint: string, id: string, payload: { ok: boolean; result?: unknown; error?: string }, authToken?: string) {
-  await fetch(`${desktopMcpHttpBase(endpoint)}/debug-actions/${encodeURIComponent(id)}/result`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...desktopHeaders({ backendAuthToken: authToken }) },
-    body: JSON.stringify(payload)
-  }).catch(() => undefined);
-}

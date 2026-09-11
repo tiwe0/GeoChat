@@ -344,5 +344,10 @@ export const zhCN = {
     updateUnsupported: "\u66f4\u65b0\u7531\u684c\u9762\u7aef\u7edf\u4e00\u7ba1\u7406\u3002",
     updateNeverChecked: "\u5c1a\u672a\u68c0\u67e5",
     updateLastChecked: "\u4e0a\u6b21\u68c0\u67e5 {{when}}",
+    mcpTitle: "\u672c\u5730 MCP \u670d\u52a1",
+    mcpDescription: "\u5141\u8bb8\u5916\u90e8 MCP \u5ba2\u6237\u7aef\u64cd\u4f5c\u8fd9\u5757\u753b\u677f\uff0c\u9ed8\u8ba4\u5173\u95ed\u3002",
+    mcpEnabled: "\u8fd0\u884c\u4e2d",
+    mcpDisabled: "\u5df2\u5173\u95ed",
+    mcpStarting: "\u542f\u52a8\u4e2d\u2026",
   },
 } as const;

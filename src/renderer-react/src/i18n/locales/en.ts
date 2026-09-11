@@ -344,5 +344,10 @@ export const en = {
     updateUnsupported: "Updates are managed by the desktop app.",
     updateNeverChecked: "Not checked yet",
     updateLastChecked: "Last checked {{when}}",
+    mcpTitle: "Local MCP server",
+    mcpDescription: "Lets an external MCP client drive this canvas. Off by default.",
+    mcpEnabled: "Running",
+    mcpDisabled: "Off",
+    mcpStarting: "Starting\u2026",
   },
 } as const;

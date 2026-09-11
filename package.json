@@ -46,7 +46,8 @@
     "mcp:desktop-debug:http": "bun tools/desktop-debug-mcp/http.ts",
     "mcp:desktop-debug:smoke": "bun tools/desktop-debug-mcp/smoke.ts",
     "react:dev": "vite --config vite.react.config.ts",
-    "react:build": "vite build --config vite.react.config.ts"
+    "react:build": "vite build --config vite.react.config.ts",
+    "react:tauri:dev": "tauri dev --config src-tauri/tauri.react.conf.json"
   },
   "dependencies": {},
   "devDependencies": {

@@ -38,6 +38,7 @@ import { useAgentRunChat } from "../hooks/useAgentRunChat";
 import { formatAgentRunError } from "../features/agent-run/errorMessage";
 import { STREAMDOWN_PLUGINS } from "../features/chat/streamdownPlugins";
 import { useLocalSession } from "../features/local-session/useLocalSession";
+import { SettingsPanel } from "../features/desktop/SettingsPanel";
 import { saveStoredModel } from "../features/local-session/storage";
 import { areSupportedAgentAttachments } from "../features/attachments/capabilities";
 import { useConversations } from "../features/conversations/useConversations";
@@ -810,11 +811,7 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
             style={{ display: "flex", flex: 1, minHeight: 0, flexDirection: "column", overflow: "hidden" }}
           >
           {panelView === "user" ? (
-            // TODO(react-port): desktop Settings renders here. Sign-in and
-            // billing were removed with the rest of the hosted surface.
-            <Box sx={{ flex: 1, display: "grid", placeItems: "center", p: 3, color: "text.secondary" }}>
-              {t("panel.settingsPlaceholder", "设置")}
-            </Box>
+            <SettingsPanel onClose={() => setPanelView("chat")} />
           ) : (
         <>
           <Box

@@ -174,9 +174,16 @@ fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
         Some(&local_backend_auth_token),
     )?;
     let shell_update_state = initial_shell_update_state(settings.update_preferences.clone());
-    let app_bundle_update_state = initial_app_bundle_update_state(&app_data_dir, &resource_dir);
+    // Resolving verifies every asset in the manifest by hash, so it happens
+    // exactly once here and everything downstream reads the cached result.
     let active_app_bundle =
         resolve_active_app_bundle(&app_data_dir, &resource_dir, env!("CARGO_PKG_VERSION"));
+    let app_bundle_update_state = initial_app_bundle_update_state(
+        &app_data_dir,
+        active_app_bundle
+            .as_ref()
+            .map(|bundle| bundle.manifest.bundle_version.clone()),
+    );
     app.manage(DesktopState {
         backend: Mutex::new(backend),
         mcp: Mutex::new(McpRuntime::new()),

@@ -32,6 +32,10 @@
     "./chat": {
       "types": "./src/chat.ts",
       "default": "./src/chat.ts"
+    },
+    "./model-discovery": {
+      "types": "./src/model-discovery.ts",
+      "default": "./src/model-discovery.ts"
     }
   },
   "scripts": {

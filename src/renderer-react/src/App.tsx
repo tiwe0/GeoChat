@@ -4,8 +4,7 @@ import { GeoGebraController } from "./geogebra/controller";
 import { mountGeoGebra } from "./geogebra/ggbdeploy-wrapper";
 import { setFrontendGeoGebraController } from "./geogebra/runtime";
 import { WindowTitleBar } from "./features/desktop/WindowTitleBar";
-// The desktop shell runs its own Bun backend; this is its default address.
-const BACKEND_BASE_URL = (import.meta.env.VITE_GEOCHAT_DESKTOP_BACKEND_URL ?? "http://127.0.0.1:17365").replace(/\/$/, "");
+import { backendOrigin } from "./features/desktop/runtime";
 
 export default function App() {
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -20,7 +19,7 @@ export default function App() {
     if (!container) return;
     void mountGeoGebra({
       container,
-      backendBaseUrl: BACKEND_BASE_URL,
+      backendBaseUrl: backendOrigin(),
       onReady: (api) => {
         if (disposed) return;
         controllerRef.current.setApi(api);

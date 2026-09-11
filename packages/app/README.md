@@ -54,6 +54,7 @@ refactors.
 - `canvas-visual-guidance`
 - `geogebra-command-usage`
 - `geogebra-style-policy`
+- `model-discovery`
 - `provider-proxy-policy`
 - `workflow-policy`
 

@@ -72,10 +72,8 @@ import { DEFAULT_MCP_STATUS, type DesktopDebugAction } from "../../../shared/des
 import { readDesktopConfig } from "../../../shared/desktop/desktop-config";
 import type { RendererMcpStatus } from "../../../shared/desktop/workbench-types";
 import { loadModelCatalog, type RuntimeModelOption } from "../features/models/modelCatalog";
+import { backendAuthToken, backendOrigin } from "../features/desktop/runtime";
 
-const API_ORIGIN = new URL(
-  import.meta.env.VITE_API_ORIGIN ?? "http://localhost:8787",
-).origin;
 const AUTH_REQUIRED = import.meta.env.VITE_AUTH_REQUIRED !== "false";
 const ONBOARDING_TOUR_STORAGE_KEY = "geogebraCopilotOnboardingTourCompleted";
 const ONBOARDING_TOUR_OPT_IN_KEY = "geochatDesktopOnboardingTour";
@@ -338,7 +336,11 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
   const panelChatRef = useRef(new PanelChatState());
   // Desktop is local-first: no account, no credits, no device bridge.
   // The Pro build owns those surfaces; see features/local-session.
-  const { account, authError, setAuthError, authSessionRef } = useLocalSession();
+  // Resolved during bootstrap, so this is stable for the life of the renderer.
+  const API_ORIGIN = backendOrigin();
+  const { account, authError, setAuthError, authSessionRef } = useLocalSession({
+    localAuthToken: backendAuthToken()
+  });
   const blackboard = useConversationBlackboard({
     apiOrigin: API_ORIGIN,
     authSessionRef,

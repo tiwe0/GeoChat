@@ -22,7 +22,7 @@ export const CONFIG_STORAGE_KEY = "geochat-desktop-ui-config";
 
 export const DEFAULT_MODEL_CONFIG: ModelConfig = {
   provider: "deepseek",
-  model: "deepseek-v4-flash",
+  model: "deepseek-flash",
   apiKey: "",
   customBaseUrl: ""
 };

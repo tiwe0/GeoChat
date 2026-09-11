@@ -113,6 +113,7 @@ export * from "./geometry-ir";
 export * from "./geometry-verifier";
 export * from "./construction-recipes";
 export * from "./model-registry";
+export * from "./model-discovery";
 export * from "./migration";
 export * from "./provider-proxy-policy";
 export * from "./problem-bank";

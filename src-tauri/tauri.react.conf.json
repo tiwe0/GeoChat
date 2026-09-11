@@ -5,5 +5,13 @@
     "devUrl": "http://127.0.0.1:1421",
     "beforeBuildCommand": "bun run build:backend && bun run react:build && bun scripts/stage-vendor-bundle.mjs && bun scripts/stage-runtime-sidecar.mjs && bun scripts/write-app-bundle-manifest.mjs",
     "frontendDist": "../dist/renderer"
+  },
+  "app": {
+    "security": {
+      "capabilities": [
+        "default",
+        "dev-server"
+      ]
+    }
   }
 }

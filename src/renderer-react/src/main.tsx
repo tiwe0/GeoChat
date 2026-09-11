@@ -1,0 +1,39 @@
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { CacheProvider } from "@emotion/react";
+import createCache from "@emotion/cache";
+import { CssBaseline, ThemeProvider } from "@mui/material";
+import { MotionConfig } from "motion/react";
+import "@fontsource-variable/noto-sans-sc/wght.css";
+import "@fontsource-variable/nunito-sans/wght.css";
+import "katex/dist/katex.min.css";
+import "streamdown/styles.css";
+import App from "./App";
+import "./styles.css";
+import { initializeI18n } from "./i18n";
+import { copilotTheme } from "./theme";
+import { installWebPlatform } from "./platform-web";
+
+installWebPlatform();
+const emotionCache = createCache({ key: "geochatpro-web" });
+
+async function bootstrap() {
+  await initializeI18n();
+  createRoot(document.getElementById("root")!).render(
+    <StrictMode>
+      <CacheProvider value={emotionCache}>
+        <ThemeProvider theme={copilotTheme}>
+          <CssBaseline />
+          <MotionConfig reducedMotion="user">
+            <App />
+          </MotionConfig>
+        </ThemeProvider>
+      </CacheProvider>
+    </StrictMode>,
+  );
+}
+
+void bootstrap().catch((error) => {
+  document.getElementById("root")!.textContent = error instanceof Error ? error.message : String(error);
+});
+

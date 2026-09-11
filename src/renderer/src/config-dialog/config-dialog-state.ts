@@ -20,7 +20,16 @@ import type {
   VisualProfileName
 } from "../../../shared/desktop/workbench-types";
 
-export type ConfigPrimaryUpdateAction = "install_shell" | "download_shell" | "install_app_bundle" | "check";
+import { primaryUpdateAction } from "../../../shared/desktop/update-state";
+
+// The decision itself is shared with the React renderer; only the copy that
+// labels it is renderer-specific.
+export {
+  primaryUpdateAction,
+  primaryUpdateActionBusy,
+  updateCanDownload
+} from "../../../shared/desktop/update-state";
+export type { DesktopPrimaryUpdateAction as ConfigPrimaryUpdateAction } from "../../../shared/desktop/update-state";
 
 export type ConfigProviderFormState = {
   provider: string;
@@ -174,40 +183,6 @@ export function unifiedUpdateStatusBody(state: RendererUnifiedUpdateState, copy:
   }
   if (state.recommendation === "error") return friendly ?? state.error ?? copy.config.updateRecommendations.error;
   return copy.config.updateRecommendations.none;
-}
-
-export function updateCanDownload(state: RendererUpdateState) {
-  return state.status === "available" && !state.downloaded;
-}
-
-export function primaryUpdateAction(input: {
-  updateState: RendererUpdateState;
-  appBundleUpdateState: RendererAppBundleUpdateState;
-}): ConfigPrimaryUpdateAction {
-  if (input.updateState.status === "downloaded") return "install_shell";
-  if (updateCanDownload(input.updateState)) return "download_shell";
-  if (input.appBundleUpdateState.updateAvailable) return "install_app_bundle";
-  return "check";
-}
-
-export function primaryUpdateActionBusy(input: {
-  unifiedUpdateBusy: boolean;
-  updateBusy: boolean;
-  appBundleUpdateBusy: boolean;
-  unifiedUpdateState: RendererUnifiedUpdateState;
-  updateState: RendererUpdateState;
-  appBundleUpdateState: RendererAppBundleUpdateState;
-}) {
-  return (
-    input.unifiedUpdateBusy ||
-    input.updateBusy ||
-    input.appBundleUpdateBusy ||
-    input.unifiedUpdateState.status === "checking" ||
-    input.updateState.status === "checking" ||
-    input.updateState.status === "downloading" ||
-    input.appBundleUpdateState.status === "checking" ||
-    input.appBundleUpdateState.status === "downloading"
-  );
 }
 
 export function primaryUpdateActionLabel(input: {

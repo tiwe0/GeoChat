@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Box, Button, MenuItem, Stack, TextField, Typography } from "@mui/material";
+import { Box, Button, Divider, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import {
   getAgentModelOptions,
@@ -12,6 +12,7 @@ import {
   readDesktopConfig
 } from "../../../../shared/desktop/desktop-config";
 import type { ModelConfig } from "../../../../shared/desktop/workbench-types";
+import { UpdateSection } from "./UpdateSection";
 
 /**
  * Desktop settings, deliberately small.
@@ -60,13 +61,13 @@ export function SettingsPanel(props: { onClose: () => void }) {
   return (
     <Stack spacing={2.5} sx={{ flex: 1, overflowY: "auto", p: 2.5 }}>
       <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-        {t("settings.title", "模型设置")}
+        {t("settings.title")}
       </Typography>
 
       <TextField
         select
         size="small"
-        label={t("settings.provider", "供应商")}
+        label={t("settings.provider")}
         value={model.provider}
         onChange={(event) => update({ provider: event.target.value })}
       >
@@ -80,7 +81,7 @@ export function SettingsPanel(props: { onClose: () => void }) {
       <TextField
         select
         size="small"
-        label={t("settings.model", "模型")}
+        label={t("settings.model")}
         value={models.some((option) => option.value === model.model) ? model.model : ""}
         onChange={(event) => update({ model: event.target.value })}
       >
@@ -94,27 +95,31 @@ export function SettingsPanel(props: { onClose: () => void }) {
       <TextField
         size="small"
         type="password"
-        label={t("settings.apiKey", "API 密钥")}
+        label={t("settings.apiKey")}
         value={model.apiKey}
         onChange={(event) => update({ apiKey: event.target.value })}
         // The verdict sits under the field that decides it, rather than in a
         // separate status card above it.
         helperText={
           ready
-            ? t("settings.keyReady", "已配置 · 可以开始作图")
-            : t("settings.keyMissing", "密钥只保存在本机，不会上传")
+            ? t("settings.keyReady")
+            : t("settings.keyMissing")
         }
         slotProps={{ formHelperText: { sx: { color: ready ? "success.main" : "text.secondary" } } }}
       />
 
       <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
         <Button variant="contained" size="small" onClick={save} disabled={saved}>
-          {saved ? t("settings.saved", "已保存") : t("settings.save", "保存")}
+          {saved ? t("settings.saved") : t("settings.save")}
         </Button>
         <Button size="small" onClick={props.onClose}>
-          {t("settings.back", "返回")}
+          {t("settings.back")}
         </Button>
       </Box>
+
+      <Divider flexItem />
+
+      <UpdateSection />
     </Stack>
   );
 }

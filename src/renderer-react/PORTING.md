@@ -181,9 +181,23 @@ switch the user flips that changes nothing.
 ## Remaining before the Solid renderer can be deleted
 
 - ~~The 29 errors above.~~ `bun run typecheck:react` is clean.
-- **Update UI.** `useUpdateState` exists but is not yet surfaced. Without it the
-  app cannot tell a user a new version is available, which is the one
-  capability that cannot wait for a later release.
+- ~~**Update UI.**~~ Done. `features/desktop/UpdateSection` renders at the foot
+  of Settings: one status line, one button, and download progress.
+
+  Two things came out of building it. The hook only watched the shell track,
+  which would have left renderer-only releases — the common kind — invisible;
+  it now watches the app bundle track too. And the decision of *which* action
+  to offer moved to `src/shared/desktop/update-state.ts`, because it is not a
+  styling choice: install an app bundle before the shell version it needs and
+  the shell rejects it. The Solid renderer's copies of that logic were deleted
+  in favour of the shared module, so its existing tests now cover both
+  renderers' behaviour.
+
+  Not covered by a unit test: the hook itself. There is no React test
+  environment in this repo, and adding one is a separate decision. What was
+  testable was made testable — the decision logic is pure and shared, and
+  `tests/react-settings-i18n.test.ts` checks that every `settings.*` key the
+  panel names exists in both locales, which typecheck cannot see.
 - **MCP toggle** (`getMcpStatus` / `setMcpEnabled`). A developer tool, lower
   priority, but a capability the Solid renderer has and this one does not.
 

@@ -69,36 +69,74 @@ export async function mountGeoGebra(options: {
 
   const id = options.container.id || "geogebra-applet";
   options.container.id = id;
+  /**
+   * Measure the stage, not the applet host.
+   *
+   * syncSize writes an explicit pixel size onto the host, so measuring the
+   * host would measure the last answer rather than the space available. The
+   * parent is the element that actually tracks the window.
+   */
   const initialSize = () => {
-    const rect = options.container.getBoundingClientRect();
+    const stage = options.container.parentElement instanceof HTMLElement
+      ? options.container.parentElement
+      : options.container;
+    const rect = stage.getBoundingClientRect();
     return {
-      width: Math.max(320, Math.floor(rect.width || options.container.clientWidth || 900)),
-      height: Math.max(320, Math.floor(rect.height || options.container.clientHeight || 620)),
+      width: Math.max(320, Math.floor(rect.width || stage.clientWidth || 900)),
+      height: Math.max(320, Math.floor(rect.height || stage.clientHeight || 620)),
     };
   };
   let runtimeApi: GeoGebraApi | null = null;
-  let lastSize = "";
+  let resizeFrame: number | undefined;
   let disposed = false;
+
+  /**
+   * Resizing the applet takes more than setSize.
+   *
+   * deployggb wraps the applet in `.applet_scaler` and fits it with a CSS
+   * transform, so on its own setSize leaves the drawing scaled inside a box
+   * of the old shape rather than redrawn at the new one. The scaler is given
+   * the real box and its transform cleared, `.appletParameters` is kept in
+   * step so a reload starts at the current size, and only then does the
+   * runtime get told.
+   */
   const syncSize = () => {
     if (disposed) return;
     const { width, height } = initialSize();
-    const sizeKey = `${width}x${height}`;
-    if (sizeKey === lastSize) return;
+    const root = options.container;
+    root.style.width = `${width}px`;
+    root.style.height = `${height}px`;
+    const scaler = root.querySelector<HTMLElement>(".applet_scaler");
+    if (scaler) {
+      scaler.style.width = `${width}px`;
+      scaler.style.height = `${height}px`;
+      scaler.style.transform = "none";
+    }
+    const parameters = root.querySelector<HTMLElement>(".appletParameters");
+    if (parameters) {
+      parameters.setAttribute("data-param-width", String(width));
+      parameters.setAttribute("data-param-height", String(height));
+    }
     const setSize = runtimeApi?.setSize;
     if (typeof setSize === "function") {
-      try {
-        setSize.call(runtimeApi, width, height);
-        lastSize = sizeKey;
-      } catch {
-        // Keep the key dirty so a later observer/window event retries after
-        // the runtime finishes booting.
-      }
-    } else {
-      // deployggb.js exposes resize() for its responsive scaler. Use it until
-      // the patched applet API is ready, then switch to the exact setSize API.
-      try { applet.resize?.(); } catch { /* best effort during teardown */ }
-      lastSize = sizeKey;
+      // A throw here needs no bookkeeping: the next observer or window event
+      // recomputes from the stage, which is always the current truth.
+      try { setSize.call(runtimeApi, width, height); } catch { /* retried on the next event */ }
+      return;
     }
+    // Until the runtime API exists, deployggb's own resize() is all there is.
+    try { applet.resize?.(); } catch { /* best effort during teardown */ }
+  };
+
+  // A window drag fires resize continuously; coalescing to one frame keeps the
+  // applet from re-laying out dozens of times per second.
+  const scheduleSyncSize = () => {
+    if (disposed) return;
+    if (resizeFrame !== undefined) window.cancelAnimationFrame(resizeFrame);
+    resizeFrame = window.requestAnimationFrame(() => {
+      resizeFrame = undefined;
+      syncSize();
+    });
   };
   const applet = new window.GGBApplet(5.0, {
     id,
@@ -119,7 +157,6 @@ export async function mountGeoGebra(options: {
     appletOnLoad: (api: GeoGebraApi) => {
       if (disposed) return;
       runtimeApi = api;
-      lastSize = "";
       const showToolBar = api.showToolBar;
       const showAlgebraInput = api.showAlgebraInput;
       const setPerspective = api.setPerspective;
@@ -136,17 +173,19 @@ export async function mountGeoGebra(options: {
   });
   applet.setHTML5Codebase(codebase);
   applet.inject(options.container, "html5", true);
-  const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(syncSize);
-  resizeObserver?.observe(options.container);
-  window.addEventListener("resize", syncSize);
+  // Observe the stage. Observing the host would feed syncSize its own writes.
+  const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleSyncSize);
+  resizeObserver?.observe(options.container.parentElement ?? options.container);
+  window.addEventListener("resize", scheduleSyncSize);
   syncSize();
 
   return {
     applet,
     dispose() {
       disposed = true;
+      if (resizeFrame !== undefined) window.cancelAnimationFrame(resizeFrame);
       resizeObserver?.disconnect();
-      window.removeEventListener("resize", syncSize);
+      window.removeEventListener("resize", scheduleSyncSize);
       runtimeApi = null;
       try { applet.removeExistingApplet?.(options.container, false); } catch { /* best effort */ }
       options.container.replaceChildren();

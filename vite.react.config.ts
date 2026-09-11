@@ -28,6 +28,13 @@ export default defineConfig({
     port: 1421,
     strictPort: true
   },
+  // The bridge reaches @tauri-apps/api only through dynamic imports, so Vite
+  // does not see it during initial dependency scanning and answers the first
+  // request with 504 Outdated Optimize Dep. Declaring it up front avoids the
+  // re-optimize round trip.
+  optimizeDeps: {
+    include: ["@tauri-apps/api/core", "@tauri-apps/api/event", "@tauri-apps/api/window"]
+  },
   plugins: [react()],
   build: {
     outDir: resolve(__dirname, "dist/renderer"),

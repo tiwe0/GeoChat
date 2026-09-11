@@ -13,11 +13,13 @@ import "./styles.css";
 import { initializeI18n } from "./i18n";
 import { copilotTheme } from "./theme";
 import { installWebPlatform } from "./platform-web";
+import { installTauriDesktopBridge } from "../../shared/desktop/tauri-bridge";
 
 installWebPlatform();
 const emotionCache = createCache({ key: "geochatpro-web" });
 
 async function bootstrap() {
+  await installTauriDesktopBridge();
   await initializeI18n();
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
@@ -31,6 +33,8 @@ async function bootstrap() {
       </CacheProvider>
     </StrictMode>,
   );
+  // Tells the shell the renderer painted, which releases its splash state.
+  void window.geochatDesktop?.markRendererReady().catch(() => undefined);
 }
 
 void bootstrap().catch((error) => {

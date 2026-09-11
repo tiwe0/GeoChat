@@ -52,8 +52,64 @@ export function normalizeGeoGebraFreeParameterCommands(commands: string[], optio
   return normalizedCommands;
 }
 
+/**
+ * GeoGebra command names are case-sensitive, and models reliably get a handful
+ * of them wrong in the same ways. Canonicalising the casing first means the
+ * rewrite rules below (and GeoGebra itself) see the real command name, instead
+ * of the rules silently missing `extrema(f)` because they test for `Extremum`.
+ */
+const canonicalCommandNames = new Map<string, string>(
+  [
+    "Extremum",
+    "Maximum",
+    "Minimum",
+    "Root",
+    "Intersect",
+    "Circle",
+    "Sphere",
+    "Segment",
+    "Polygon",
+    "Midpoint",
+    "Tangent",
+    "PerpendicularLine",
+    "PerpendicularBisector",
+    "Line",
+    "Vector",
+    "Point",
+    "Slider",
+    "Text",
+    "Angle",
+    "Distance",
+    "ShowLabel",
+    "HideLabel",
+    "SetCaption",
+    "SetColor",
+    "SetFilling",
+    "SetOpacity",
+    "SetPointSize",
+    "SetLineThickness",
+    "SetConditionToShowObject",
+    "StartAnimation",
+    "Pyramid",
+    "Prism",
+    "Plane",
+    "Locus",
+    "Delete"
+  ].map((name) => [name.toLowerCase(), name] as const).concat([["extrema", "Extremum"]])
+);
+
+function canonicalizeGeoGebraCommandName(command: string) {
+  return command.replace(
+    /^(\s*(?:[\p{L}_][\p{L}\p{N}_]*\s*(?::?=)\s*)?)([\p{L}_][\p{L}\p{N}_]*)(\s*\()/u,
+    (full, prefix: string, name: string, open: string) => {
+      const canonical = canonicalCommandNames.get(name.toLowerCase());
+      return canonical && canonical !== name ? `${prefix}${canonical}${open}` : full;
+    }
+  );
+}
+
 function normalizeGeoGebraCommandSyntax(command: string): string[] {
-  const aliasedCommand = normalizeGeoGebraCommandAliases(command);
+  const aliasedCommand = canonicalizeGeoGebraCommandName(normalizeGeoGebraCommandAliases(command));
   const call = parseGeoGebraCommandCall(aliasedCommand);
   if (!call) return [aliasedCommand];
 

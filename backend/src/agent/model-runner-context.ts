@@ -1,4 +1,4 @@
-import type { ModelMessage } from "ai";
+import type { ModelMessage, ToolResultPart } from "ai";
 import type {
   AgentRunImageAttachment,
   AgentRunLedgerRecord,
@@ -7,6 +7,8 @@ import type {
 } from "@geochat-ai/app";
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue | undefined };
+
+type ToolResultOutput = ToolResultPart["output"];
 
 const GEOCHAT_REPAIR_ATTEMPTS = 1;
 
@@ -72,9 +74,40 @@ export function maybeCreateRepairAction(run: AgentRunLedgerRecord): BackendRepai
   return undefined;
 }
 
-export function modelMessagesFromRun(run: AgentRunLedgerRecord, attachments: AgentRunImageAttachment[]): ModelMessage[] {
+export type ModelMessagesFromRunOptions = {
+  /**
+   * Whether the selected model can read images. When it cannot, a canvas
+   * screenshot is replaced by a short note instead of being sent as an
+   * unreadable blob.
+   */
+  supportsImages?: boolean;
+};
+
+/**
+ * Rebuilds the model conversation from the run ledger.
+ *
+ * Only the most recent canvas snapshot and the most recent screenshot are sent
+ * in full. Earlier ones are replaced by a one-line marker. This is not only a
+ * cost measure: a run may read the canvas a dozen times, and replaying every
+ * historical snapshot puts a dozen stale descriptions of the canvas in front of
+ * the model to compete with the one that is actually current.
+ */
+export function modelMessagesFromRun(
+  run: AgentRunLedgerRecord,
+  attachments: AgentRunImageAttachment[],
+  options: ModelMessagesFromRunOptions = {}
+): ModelMessage[] {
   const messages: ModelMessage[] = [createUserMessage(run.prompt, attachments)];
-  for (const toolRecord of run.tools) {
+  const latestCanvasIndex = lastIndexMatching(
+    run.tools,
+    (toolRecord) => toolRecord.status === "succeeded" && toolRecord.canvasAfter != null
+  );
+  const latestScreenshotIndex = lastIndexMatching(
+    run.tools,
+    (toolRecord) => toolRecord.status === "succeeded" && pngBase64FromResult(toolRecord.result) !== null
+  );
+
+  for (const [index, toolRecord] of run.tools.entries()) {
     messages.push({
       role: "assistant",
       content: [
@@ -93,15 +126,23 @@ export function modelMessagesFromRun(run: AgentRunLedgerRecord, attachments: Age
           type: "tool-result",
           toolCallId: toolRecord.toolCallId,
           toolName: toolRecord.toolName,
-          output: {
-            type: "json",
-            value: toJsonValue(serializableToolOutput(toolRecord))
-          }
+          output: toolResultOutput(toolRecord, {
+            isLatestCanvas: index === latestCanvasIndex,
+            isLatestScreenshot: index === latestScreenshotIndex,
+            supportsImages: options.supportsImages === true
+          })
         }
       ]
     });
   }
   return messages;
+}
+
+function lastIndexMatching<T>(items: readonly T[], predicate: (item: T) => boolean) {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    if (predicate(items[index]!)) return index;
+  }
+  return -1;
 }
 
 export function createRepairUserMessage(
@@ -325,19 +366,85 @@ function dataUrlPayload(dataUrl: string) {
   return dataUrl.includes(",") ? dataUrl.slice(dataUrl.indexOf(",") + 1) : dataUrl;
 }
 
-function serializableToolOutput(toolRecord: AgentRunLedgerRecord["tools"][number]) {
-  if (toolRecord.status === "succeeded") {
+type ToolOutputScope = {
+  isLatestCanvas: boolean;
+  isLatestScreenshot: boolean;
+  supportsImages: boolean;
+};
+
+/**
+ * A `getPNGBase64` result carries the screenshot as a base64 string inside the
+ * JSON result. Sent that way it is unreadable — the model receives tens of
+ * thousands of text tokens and no picture. The current screenshot is therefore
+ * promoted to a real image part, and superseded ones are dropped.
+ */
+function toolResultOutput(
+  toolRecord: AgentRunLedgerRecord["tools"][number],
+  scope: ToolOutputScope
+): ToolResultOutput {
+  if (toolRecord.status !== "succeeded") {
     return {
-      ok: true,
-      result: toolRecord.result ?? null,
-      canvasBefore: toolRecord.canvasBefore ?? null,
-      canvasAfter: toolRecord.canvasAfter ?? null
+      type: "json",
+      value: toJsonValue({
+        ok: false,
+        error: toolRecord.error ?? "Tool execution failed.",
+        result: toolRecord.result ?? null
+      })
     };
   }
+
+  const png = pngBase64FromResult(toolRecord.result);
+  if (png) {
+    if (!scope.isLatestScreenshot) {
+      return {
+        type: "json",
+        value: toJsonValue({ ok: true, screenshotSuperseded: true, ...png.meta })
+      };
+    }
+    if (!scope.supportsImages) {
+      return {
+        type: "json",
+        value: toJsonValue({
+          ok: true,
+          screenshotUnavailable: "The selected model cannot read images. Use getCanvasContext to verify the canvas.",
+          ...png.meta
+        })
+      };
+    }
+    return {
+      type: "content",
+      value: [
+        { type: "image-data", data: png.base64, mediaType: png.mediaType },
+        { type: "text", text: "Current canvas screenshot." }
+      ]
+    };
+  }
+
   return {
-    ok: false,
-    error: toolRecord.error ?? "Tool execution failed.",
-    result: toolRecord.result ?? null
+    type: "json",
+    value: toJsonValue({
+      ok: true,
+      result: toolRecord.result ?? null,
+      // canvasBefore is never sent: the model needs the canvas as it is now,
+      // not as it was before a write it has already seen the result of.
+      canvasAfter: scope.isLatestCanvas ? (toolRecord.canvasAfter ?? null) : undefined,
+      canvasSuperseded: !scope.isLatestCanvas && toolRecord.canvasAfter != null ? true : undefined
+    })
+  };
+}
+
+function pngBase64FromResult(result: unknown): { base64: string; mediaType: string; meta: Record<string, unknown> } | null {
+  if (!result || typeof result !== "object") return null;
+  const payload = result as { base64?: unknown; mediaType?: unknown; byteEstimate?: unknown; exportScale?: unknown };
+  if (typeof payload.base64 !== "string" || payload.base64.length === 0) return null;
+  return {
+    base64: payload.base64,
+    mediaType: typeof payload.mediaType === "string" ? payload.mediaType : "image/png",
+    meta: {
+      mediaType: payload.mediaType ?? "image/png",
+      byteEstimate: payload.byteEstimate ?? null,
+      exportScale: payload.exportScale ?? null
+    }
   };
 }
 

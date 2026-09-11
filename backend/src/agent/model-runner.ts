@@ -34,10 +34,7 @@ import {
   maybeCreateRepairAction,
   modelMessagesFromRun
 } from "./model-runner-context";
-import {
-  createBackendLanguageModel,
-  runBackendModelStep
-} from "./model-runner-models";
+import { createBackendLanguageModel, runBackendModelStep, systemCacheProviderOptions } from "./model-runner-models";
 
 export {
   formatSkillSelectionPacketPrompt,
@@ -118,7 +115,9 @@ export async function createBackendModelNextAction(input: BackendModelNextAction
   const systemPrompt = await systemPromptForRun(input.run, Boolean(repairingFailure), skillSelection, commandReferencePacket);
   const messages = repairingFailure
     ? [createRepairUserMessage(input.run, repairingFailure, input.attachments ?? [])]
-    : modelMessagesFromRun(input.run, input.attachments ?? []);
+    : modelMessagesFromRun(input.run, input.attachments ?? [], {
+        supportsImages: modelPolicy.supportsImages
+      });
 
   const tools = createBackendPlanningTools(input.run.locale, input.disabledToolNames, skillSelection, input.run);
   let protocolError: Error | undefined;
@@ -127,6 +126,7 @@ export async function createBackendModelNextAction(input: BackendModelNextAction
     const result = await runBackendModelStep({
       model,
       system: systemPrompt,
+      systemProviderOptions: systemCacheProviderOptions(input.modelConfig),
       messages: attempt === 0 ? messages : [...messages, createModelProtocolRepairUserMessage(protocolError, input.run.locale)],
       tools,
       toolChoice: "auto",

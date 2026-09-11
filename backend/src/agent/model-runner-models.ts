@@ -4,14 +4,47 @@ import { createDeepSeek } from "@ai-sdk/deepseek";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { generateText, stepCountIs, streamText, type LanguageModel, type ModelMessage } from "ai";
+import { generateText, stepCountIs, streamText, type LanguageModel, type ModelMessage, type SystemModelMessage } from "ai";
+
+/** Re-derived from the SDK so this file needs no extra dependency. */
+type ProviderOptions = NonNullable<SystemModelMessage["providerOptions"]>;
 import type { AgentModelConfig } from "@geochat-ai/app";
 import type { createBackendPlanningTools } from "./model-runner-planning-tools";
 import type { ModelResultLike } from "./model-runner-toolcalls";
 
+/**
+ * Marks the system prompt as a cache breakpoint for providers that require an
+ * explicit one.
+ *
+ * The system prompt is several thousand tokens and is resent on every step of a
+ * run, so caching it is the difference between paying for it once and paying
+ * for it twenty times. Providers differ: OpenAI, DeepSeek and Alibaba cache
+ * long prefixes automatically and need no annotation; Anthropic requires an
+ * explicit `cacheControl` breakpoint. Only the explicit case is handled here.
+ *
+ * This works because systemPromptForRun puts the stable base prompt first and
+ * the per-run skill/command packets after it — the prefix is byte-stable across
+ * the steps of a run.
+ */
+export function systemCacheProviderOptions(config: AgentModelConfig): ProviderOptions | undefined {
+  if (config.provider === "anthropic") {
+    return { anthropic: { cacheControl: { type: "ephemeral" } } };
+  }
+  return undefined;
+}
+
+
+function instructionsFor(input: {
+  system: string;
+  systemProviderOptions?: ProviderOptions;
+}): SystemModelMessage {
+  return { role: "system", content: input.system, providerOptions: input.systemProviderOptions };
+}
+
 export async function runBackendModelStep(input: {
   model: LanguageModel;
   system: string;
+  systemProviderOptions?: ProviderOptions;
   messages: ModelMessage[];
   tools: ReturnType<typeof createBackendPlanningTools>;
   toolChoice: "auto";
@@ -24,7 +57,7 @@ export async function runBackendModelStep(input: {
   if (!input.onTextDelta) {
     return generateText({
       model: input.model,
-      system: input.system,
+      instructions: instructionsFor(input),
       messages: input.messages,
       tools: input.tools,
       toolChoice: input.toolChoice,
@@ -37,7 +70,7 @@ export async function runBackendModelStep(input: {
 
   const result = streamText({
     model: input.model,
-    system: input.system,
+    instructions: instructionsFor(input),
     messages: input.messages,
     tools: input.tools,
     toolChoice: input.toolChoice,

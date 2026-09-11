@@ -114,10 +114,8 @@ export const AGENT_MODEL_REGISTRY = [
     provider: "deepseek",
     id: "deepseek-flash",
     label: "DeepSeek V4.1 Flash",
-    // DeepSeek describes V4.1 Flash as natively multimodal, but this build has
-    // not exercised image input against it, and claiming a capability the run
-    // then fails on is worse than not offering it. Left to a verified change.
-    capabilities: ["text", "toolCalling"],
+    // Native multimodal understanding, confirmed against the live API.
+    capabilities: ["text", "imageInput", "toolCalling"],
     maxToolSteps: 24,
     defaultTemperature: 0.2
   },

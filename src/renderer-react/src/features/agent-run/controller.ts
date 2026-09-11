@@ -56,6 +56,19 @@ export async function executeAgentRunLoop(input: {
       : [...parts, { type: "text", text }];
     update();
   };
+  /**
+   * Reasoning is kept out of assistantText. It is the model working, not its
+   * answer — the transcript shows it in its own collapsible block, and
+   * folding it into the answer would also corrupt what gets stored.
+   */
+  const appendReasoning = (text: string) => {
+    if (!text) return;
+    const lastPart = parts.at(-1);
+    parts = lastPart?.type === "reasoning"
+      ? [...parts.slice(0, -1), { ...lastPart, text: lastPart.text + text }]
+      : [...parts, { type: "reasoning", text }];
+    update();
+  };
   if (runner) {
     parts = mergeRunnerToolParts(parts, runner.run.tools);
     for (const request of runner.pendingToolRequests) parts = upsertDisplayToolPart(parts, displayToolPart(request));
@@ -101,6 +114,7 @@ export async function executeAgentRunLoop(input: {
           receivedTextDelta = true;
           appendText(text);
         },
+        onReasoningDelta: appendReasoning,
         // This backend streams text only. Tool records still arrive with the
         // runner snapshot below and are merged there, so the transcript ends
         // up correct — it just fills in per response rather than per tool.

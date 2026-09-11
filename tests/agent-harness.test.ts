@@ -188,7 +188,8 @@ describe("agent model registry", () => {
   test("exposes image and tool capability gates", () => {
     expect(getAgentProviderOptions()).toContainEqual({ value: "openrouter", label: "OpenRouter" });
     expect(getAgentProviderOptions()).toContainEqual({ value: "qwen", label: "通义千问（阿里云百炼）" });
-    expect(agentModelSupportsImages("deepseek", "deepseek-flash")).toBe(false);
+    expect(agentModelSupportsImages("deepseek", "deepseek-flash")).toBe(true);
+    expect(agentModelSupportsImages("deepseek", "deepseek-v4-pro")).toBe(false);
     expect(agentModelSupportsImages("openai", "gpt-5.5")).toBe(true);
     expect(agentModelSupportsImages("openrouter", "openai/gpt-5.5")).toBe(true);
     expect(agentModelSupportsImages("qwen", "qwen-plus")).toBe(false);

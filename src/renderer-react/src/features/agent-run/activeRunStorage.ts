@@ -1,3 +1,4 @@
+import { normalizeAgentRunThinkingEffort, type AgentRunThinkingEffort } from "@geochat-ai/app/contracts";
 import {
   agentRunRemoteToolExecutionCacheKey,
   cachedRemoteToolExecutionMatchesRequest,
@@ -14,14 +15,14 @@ const INSTALLATION_ID_KEY = "geogebraCopilotInstallationId";
 const ACTIVE_RUN_PREFIX = "geogebraCopilotActiveAgentRun:";
 export const RUNNER_RECOVERY_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
-export type StoredActiveRun = { runId: string; conversationId: string; userMessageId: string | null; assistantMessageId: string | null; prompt: string; modelId: string; startedAt: string; attachmentCount: number };
+export type StoredActiveRun = { runId: string; conversationId: string; userMessageId: string | null; assistantMessageId: string | null; prompt: string; modelId: string; thinking: boolean; thinkingEffort: AgentRunThinkingEffort | null; startedAt: string; attachmentCount: number };
 
 export function activeRunStorageKey(installationId: string, canvasSessionId: string) {
   return `${ACTIVE_RUN_PREFIX}${installationId}:${canvasSessionId}`;
 }
 
 export function activeRunRecord(record: AgentRunLedgerRecord): StoredActiveRun {
-  return { runId: record.runId, conversationId: record.conversationId, userMessageId: record.userMessageId ?? null, assistantMessageId: record.assistantMessageId ?? null, prompt: record.prompt, modelId: record.modelId, startedAt: record.startedAt, attachmentCount: record.attachmentCount };
+  return { runId: record.runId, conversationId: record.conversationId, userMessageId: record.userMessageId ?? null, assistantMessageId: record.assistantMessageId ?? null, prompt: record.prompt, modelId: record.modelId, thinking: record.thinking === true, thinkingEffort: record.thinkingEffort ?? null, startedAt: record.startedAt, attachmentCount: record.attachmentCount };
 }
 
 export async function getInstallationId(ref: { current: string | null }) {
@@ -39,7 +40,11 @@ export async function getInstallationId(ref: { current: string | null }) {
 export function isStoredActiveRun(value: unknown): value is StoredActiveRun {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const run = value as Record<string, unknown>;
-  return typeof run.runId === "string" && typeof run.conversationId === "string" && (typeof run.userMessageId === "string" || run.userMessageId === null) && (typeof run.assistantMessageId === "string" || run.assistantMessageId === null) && typeof run.prompt === "string" && typeof run.modelId === "string" && typeof run.startedAt === "string" && typeof run.attachmentCount === "number";
+  return typeof run.runId === "string" && typeof run.conversationId === "string" && (typeof run.userMessageId === "string" || run.userMessageId === null) && (typeof run.assistantMessageId === "string" || run.assistantMessageId === null) && typeof run.prompt === "string" && typeof run.modelId === "string" && typeof run.startedAt === "string" && typeof run.attachmentCount === "number"
+    // Markers written before thinking was recorded are still valid; they
+    // simply resume with it off, which is what they ran with.
+    && (run.thinking === undefined || typeof run.thinking === "boolean")
+    && (run.thinkingEffort === undefined || run.thinkingEffort === null || normalizeAgentRunThinkingEffort(run.thinkingEffort) !== null);
 }
 
 export function isStuckRunner(snapshot: AgentRunRunnerSnapshot) {

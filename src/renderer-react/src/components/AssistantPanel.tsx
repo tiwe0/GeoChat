@@ -355,6 +355,8 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
     getAuthToken: () => authSessionRef.current.token,
     getModel: () => panelChatRef.current.model,
     getModelProvider: (model) => modelOptionsRef.current.find((option) => option.id === model)?.provider ?? "deepseek",
+    getThinking: () => reasoningMode === "thinking",
+    getThinkingEffort: () => thinkingEffort,
     locale: i18n.language.startsWith("en") ? "en-US" : "zh-CN",
     onFinish: () => {
       if (authSessionRef.current.token) void conversationHistory.load(true);
@@ -365,6 +367,10 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
       setCurrentConversationId(run.conversationId);
       setCurrentConversationTitle(run.prompt.replace(/\s+/g, " ").trim().slice(0, 80));
       changeModel(run.modelId);
+      // A recovered run keeps the reasoning setting it started with, not
+      // whatever the composer happens to show now.
+      setReasoningMode(run.thinking ? "thinking" : "auto");
+      if (run.thinkingEffort) setThinkingEffort(run.thinkingEffort);
     },
   });
   const isStreaming = status === "streaming" || status === "submitted";

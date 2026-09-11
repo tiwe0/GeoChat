@@ -32,6 +32,7 @@ export function createAgentRunRemoteToolResultService(
     toolCallId: string;
     payload: AgentRunRemoteToolResultInput;
     onModelTextDelta?: (text: string) => void;
+    onModelReasoningDelta?: (text: string) => void;
   }): Promise<RemoteToolResultOutcome> {
     const { record, payload } = input;
     if (isTerminalAgentRunStatus(record.status)) {
@@ -133,7 +134,8 @@ export function createAgentRunRemoteToolResultService(
       model: payload.model,
       attachments: payload.attachments,
       pendingToolRequests: requests.map((request, index) => index === requestIndex ? completedRequestInput : request),
-      onModelTextDelta: input.onModelTextDelta
+      onModelTextDelta: input.onModelTextDelta,
+      onModelReasoningDelta: input.onModelReasoningDelta
     });
   }
 

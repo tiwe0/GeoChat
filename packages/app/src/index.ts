@@ -114,6 +114,7 @@ export * from "./geometry-verifier";
 export * from "./construction-recipes";
 export * from "./model-registry";
 export * from "./model-discovery";
+export * from "./agent-thinking";
 export * from "./migration";
 export * from "./provider-proxy-policy";
 export * from "./problem-bank";

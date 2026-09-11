@@ -5,7 +5,7 @@
  * A barrel over existing modules, grouped the way the React renderer imports
  * them (`@geochat-ai/app/client`).
  */
-export { createAgentRunCoordinator, type AgentRunCoordinatorError } from "./run-coordinator";
+export { AgentRunCoordinatorError, createAgentRunCoordinator } from "./run-coordinator";
 export {
   createAgentRunLedgerFromStart,
   type AgentRunLedgerRecord,

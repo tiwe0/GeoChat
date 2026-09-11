@@ -53,18 +53,18 @@ function loadGeoGebraStylesheet(url: string) {
 
 export async function mountGeoGebra(options: {
   container: HTMLElement;
-  apiOrigin: string;
-  version: string;
+  /** Base URL of the local backend, which serves vendor/geogebra. */
+  backendBaseUrl: string;
   onReady: (api: GeoGebraApi) => void;
 }) {
-  const origin = options.apiOrigin.replace(/\/$/, "");
-  const resourceRoot = `${origin}/api/geogebra/resources`;
-  const versionPath = encodeURIComponent(options.version);
-  // The GWT permutation contains SVG markup but not the layout/reset rules for
-  // toolbar and view chrome. Keep the exact release stylesheet alongside the
-  // patched runtime so standalone Web rendering matches the extension host.
-  await loadGeoGebraStylesheet(`${resourceRoot}/patched/${versionPath}/css/bundles/bundle.css`);
-  await loadDeployScript(`${resourceRoot}/original/${versionPath}/deployggb.js`);
+  // The desktop app serves one vendored GeoGebra runtime from its own backend,
+  // so there is no version path and no original/patched split — the web build
+  // needed those because it fetched releases from a hosted origin.
+  const origin = options.backendBaseUrl.replace(/\/$/, "");
+  const assetBase = `${origin}/tools/geogebra-assets-v2`;
+  const codebase = `${assetBase}/HTML5/5.0/web3d/`;
+  await loadGeoGebraStylesheet(`${codebase}css/bundles/bundle.css`);
+  await loadDeployScript(`${assetBase}/deployggb.js`);
   if (!window.GGBApplet) throw new Error("GeoGebra deployggb.js 未就绪。");
 
   const id = options.container.id || "geogebra-applet";
@@ -134,7 +134,7 @@ export async function mountGeoGebra(options: {
       syncSize();
     },
   });
-  applet.setHTML5Codebase(`${resourceRoot}/patched/${versionPath}/web3d/`);
+  applet.setHTML5Codebase(codebase);
   applet.inject(options.container, "html5", true);
   const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(syncSize);
   resizeObserver?.observe(options.container);

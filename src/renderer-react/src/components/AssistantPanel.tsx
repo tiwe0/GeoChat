@@ -402,7 +402,6 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
   }
 
   const onboardingSteps: Step[] = [
-    { target: () => panelRef.current?.querySelector<HTMLElement>('[data-copilot-tour="account"]') ?? null, title: t("tour.accountTitle"), content: t("tour.accountDescription"), placement: "bottom", skipBeacon: true, buttons: ["back", "skip", "primary"] },
     { target: () => panelRef.current?.querySelector<HTMLElement>('[data-copilot-tour="history"]') ?? null, title: t("tour.historyTitle"), content: t("tour.historyDescription"), placement: "bottom", skipBeacon: true, buttons: ["back", "skip", "primary"] },
     { target: () => panelRef.current?.querySelector<HTMLElement>('[data-copilot-tour="blackboard"]') ?? null, title: t("tour.blackboardTitle"), content: t("tour.blackboardDescription"), placement: "bottom", skipBeacon: true, buttons: ["back", "skip", "primary"] },
     { target: () => panelRef.current?.querySelector<HTMLElement>('[data-copilot-tour="language"]') ?? null, title: t("tour.languageTitle"), content: t("tour.languageDescription"), placement: "bottom", skipBeacon: true, buttons: ["back", "skip", "primary"] },
@@ -676,7 +675,6 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
                 "&:hover": { bgcolor: "action.hover" },
               } : {}),
             }}
-            data-copilot-tour="account"
           >
             {panelView === "chat"
               ? <BrandIcon size={26} />

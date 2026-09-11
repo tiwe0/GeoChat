@@ -104,6 +104,22 @@ export function AboutSettings() {
 
       <Divider flexItem />
 
+      {/* Pro is described, not sold, and deliberately has no key field. There
+          is no Pro service behind this build, and an input that accepts a code
+          and does nothing is the same defect as a toggle that changes nothing. */}
+      <Stack spacing={0.75}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t("about.proTitle")}</Typography>
+        <Typography variant="body2" color="text.secondary">{t("about.proBody")}</Typography>
+        <Typography variant="caption" color="text.secondary">{t("about.proStatus")}</Typography>
+      </Stack>
+
+      <Stack spacing={0.25}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t("about.sponsorTitle")}</Typography>
+        <Typography variant="caption" color="text.secondary">{t("about.sponsorStatus")}</Typography>
+      </Stack>
+
+      <Divider flexItem />
+
       <Stack spacing={0.5}>
         <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t("about.licence")}</Typography>
         {/* Verbatim from NOTICE. The vendored GeoGebra runtime is not ours and

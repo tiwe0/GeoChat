@@ -70,7 +70,7 @@
     "drizzle-orm": "^0.45.2",
     "effect": "^3.21.2",
     "katex": "^0.18.7",
-    "lucide-solid": "^0.555.0",
+    "lucide-solid": "^1.42.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "solid-js": "^1.9.13",

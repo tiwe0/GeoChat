@@ -1,4 +1,4 @@
-import { Trash2, X } from "lucide-solid";
+import { Trash, X } from "lucide-solid";
 import { createMemo, For, Show } from "solid-js";
 import { interpolate, type Locale, type RendererI18n } from "../i18n";
 import { IconButton } from "../workbench-ui";
@@ -59,7 +59,7 @@ export function ChatHistoryDrawer(props: {
                   disabled={props.disabled}
                   onClick={() => props.onDelete(item.id)}
                 >
-                  <Trash2 size={14} />
+                  <Trash size={14} />
                 </button>
               </div>
             )}

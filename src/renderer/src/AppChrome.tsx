@@ -1,11 +1,11 @@
 import {
   BookOpen,
-  Home,
+  Ellipsis,
+  House,
   Info,
   Maximize2,
   MessageSquareText,
   Minus,
-  MoreHorizontal,
   PanelLeft,
   Plus,
   RefreshCw,
@@ -110,14 +110,14 @@ export function AppChrome(props: AppChromeProps) {
           ariaExpanded={props.moreOpen}
           onClick={props.onToggleMore}
         >
-          <MoreHorizontal size={16} />
+          <Ellipsis size={16} />
         </IconButton>
         <Show when={props.moreOpen}>
           <div id="chrome-more-menu" class="chrome-menu">
             <button type="button" onClick={() => props.onOpenSettings("model")}><Settings size={15} />{props.copy.app.settings}</button>
             <button type="button" onClick={() => props.onOpenSettings("runs")}><MessageSquareText size={15} />{props.copy.app.runRecords}</button>
             <button type="button" onClick={() => props.onOpenSettings("about")}><Info size={15} />{props.copy.app.aboutGeoChat}</button>
-            <button type="button" onClick={props.onBackToWorkbench}><Home size={15} />{props.copy.app.backToWorkbench}</button>
+            <button type="button" onClick={props.onBackToWorkbench}><House size={15} />{props.copy.app.backToWorkbench}</button>
           </div>
         </Show>
       </div>

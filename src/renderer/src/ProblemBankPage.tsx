@@ -1,4 +1,4 @@
-import { BookOpen, Home, ImageIcon, Search, Send } from "lucide-solid";
+import { BookOpen, House, Image as ImageIcon, Search, Send } from "lucide-solid";
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
 import type { ProblemDetail, ProblemSetSummary, ProblemSummary } from "@geochat-ai/app";
 import { interpolate, type Locale, type RendererI18n } from "./i18n";
@@ -270,7 +270,7 @@ export default function ProblemBankPage(props: ProblemBankPageProps) {
             <p>{props.copy.problem.body}</p>
           </div>
           <button class="app-button secondary" type="button" onClick={props.onBack}>
-            <Home size={16} />{props.copy.app.backToWorkbench}
+            <House size={16} />{props.copy.app.backToWorkbench}
           </button>
         </header>
 
@@ -283,7 +283,7 @@ export default function ProblemBankPage(props: ProblemBankPageProps) {
               <small>{props.copy.problem.unavailableHint}</small>
             </div>
             <button class="app-button" type="button" onClick={props.onBack}>
-              <Home size={16} />{props.copy.problem.unavailableAction}
+              <House size={16} />{props.copy.problem.unavailableAction}
             </button>
           </section>
         </Show>

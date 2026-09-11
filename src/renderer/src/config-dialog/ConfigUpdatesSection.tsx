@@ -1,4 +1,4 @@
-import { DownloadCloud, RefreshCw } from "lucide-solid";
+import { CloudDownload, RefreshCw } from "lucide-solid";
 import type { RendererI18n } from "../i18n";
 import { SectionCard } from "../workbench-ui";
 import type { RendererAppBundleUpdateState, RendererUnifiedUpdateState, RendererUpdateState } from "../workbench-types";
@@ -44,7 +44,7 @@ export function ConfigUpdatesSection(props: {
           </strong>
         </div>
         <button class="app-button" type="button" disabled={props.primaryActionBusy} onClick={props.onPrimaryAction}>
-          <DownloadCloud size={16} />{props.primaryActionLabel}
+          <CloudDownload size={16} />{props.primaryActionLabel}
         </button>
       </div>
     </SectionCard>

@@ -7,8 +7,8 @@ import {
 import {
   resolveWorkbenchDesktopRuntime,
   type WorkbenchDesktopRuntime
-} from "./workbench-desktop-runtime";
-import type { RendererMcpStatus } from "./workbench-types";
+} from "../../shared/desktop/workbench-desktop-runtime";
+import type { RendererMcpStatus } from "../../shared/desktop/workbench-types";
 
 const DEFAULT_MCP_STATUS: RendererMcpStatus = {
   available: false,

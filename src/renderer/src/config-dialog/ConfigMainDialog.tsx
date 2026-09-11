@@ -7,7 +7,7 @@ import {
   type AgentRunRunnerSnapshot
 } from "@geochat-ai/app";
 import type { Locale, RendererI18n } from "../i18n";
-import type { BUILTIN_AGENT_SKILL_NAMES } from "../desktop-config";
+import type { BUILTIN_AGENT_SKILL_NAMES } from "../../../shared/desktop/desktop-config";
 import type {
   ConfigTab,
   RendererAppBundleUpdateState,
@@ -16,7 +16,7 @@ import type {
   RendererUnifiedUpdateState,
   RendererUpdateState,
   VisualProfileName
-} from "../workbench-types";
+} from "../../../shared/desktop/workbench-types";
 import { ConfigCreditsSection } from "./ConfigAboutSection";
 import { ConfigAboutTab } from "./ConfigAboutTab";
 import { ConfigDebugSection, ConfigExternalMcpSection, ConfigMemorySection } from "./ConfigMcpSection";

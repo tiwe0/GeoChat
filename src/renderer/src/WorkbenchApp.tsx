@@ -32,7 +32,7 @@ import { rendererI18n } from "./i18n";
 import type {
   DesktopChatMessage,
   RendererMcpStatus
-} from "./workbench-types";
+} from "../../shared/desktop/workbench-types";
 import "./styles.css";
 
 function defaultAssistantMessageKind(content: string) {

@@ -9,7 +9,7 @@ import {
   credentialsForProvider,
   normalizeDesktopConfig,
   normalizeModelStepTimeoutMs
-} from "../desktop-config";
+} from "../../../shared/desktop/desktop-config";
 import { interpolate, type Locale, type RendererI18n } from "../i18n";
 import type {
   DesktopConfig,
@@ -18,7 +18,7 @@ import type {
   RendererUnifiedUpdateState,
   RendererUpdateState,
   VisualProfileName
-} from "../workbench-types";
+} from "../../../shared/desktop/workbench-types";
 
 export type ConfigPrimaryUpdateAction = "install_shell" | "download_shell" | "install_app_bundle" | "check";
 

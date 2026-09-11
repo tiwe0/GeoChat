@@ -23,5 +23,8 @@
     "backend/**/*.ts",
     "tools/**/*.ts",
     "drizzle.config.ts"
+  ],
+  "exclude": [
+    "src/shared/desktop/**"
   ]
 }

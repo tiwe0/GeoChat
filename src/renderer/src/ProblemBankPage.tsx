@@ -2,7 +2,7 @@ import { BookOpen, House, Image as ImageIcon, Search, Send } from "lucide-solid"
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
 import type { ProblemDetail, ProblemSetSummary, ProblemSummary } from "@geochat-ai/app";
 import { interpolate, type Locale, type RendererI18n } from "./i18n";
-import { readCachedCloudProblemMedia, writeCachedCloudProblemMedia } from "./problem-bank-cache";
+import { readCachedCloudProblemMedia, writeCachedCloudProblemMedia } from "../../shared/desktop/problem-bank-cache";
 import { problemDisplayPrompt, type ProblemBankFilters } from "./problem-bank-utils";
 import { SelectField } from "./workbench-ui";
 

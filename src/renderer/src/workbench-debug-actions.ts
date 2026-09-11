@@ -1,12 +1,12 @@
 import type { Accessor } from "solid-js";
 import type { RuntimeInfo } from "@geochat-ai/app";
 import type { createGeoGebraController } from "./geogebra";
-import { hasConfiguredApiKey } from "./desktop-config";
+import { hasConfiguredApiKey } from "../../shared/desktop/desktop-config";
 import {
   fetchProblemDetail,
   type DesktopDebugAction
 } from "./workbench-api";
-import type { ModelConfig, RendererMcpStatus, ViewMode } from "./workbench-types";
+import type { ModelConfig, RendererMcpStatus, ViewMode } from "../../shared/desktop/workbench-types";
 
 type GeoGebraController = ReturnType<typeof createGeoGebraController>;
 

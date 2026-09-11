@@ -6,7 +6,7 @@ import {
   validateCurriculumCatalogReferences
 } from "../backend/src/agent/curriculum";
 import { listAvailableAgentSkills } from "../backend/src/agent/skills";
-import { VISUAL_PROFILE_NAMES } from "../src/renderer/src/desktop-config";
+import { VISUAL_PROFILE_NAMES } from "../src/shared/desktop/desktop-config";
 
 const isolatedSkillEnv = {
   ...process.env,

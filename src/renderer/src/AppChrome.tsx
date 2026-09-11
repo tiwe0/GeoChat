@@ -14,11 +14,11 @@ import {
   X
 } from "lucide-solid";
 import { Show } from "solid-js";
-import { runDesktopWindowControl, shouldShowDesktopWindowControls } from "./desktop-window-controls";
+import { runDesktopWindowControl, shouldShowDesktopWindowControls } from "../../shared/desktop/desktop-window-controls";
 import type { Locale, RendererI18n } from "./i18n";
-import { APP_VERSION } from "./platform";
+import { APP_VERSION } from "../../shared/desktop/platform";
 import { IconButton, LanguageSwitcher } from "./workbench-ui";
-import type { ConfigTab, ViewMode } from "./workbench-types";
+import type { ConfigTab, ViewMode } from "../../shared/desktop/workbench-types";
 
 type AppChromeProps = {
   copy: RendererI18n;

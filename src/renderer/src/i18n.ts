@@ -1,29 +1,6 @@
+export { detectPreferredLocale, localeFromLanguageTag, type Locale } from "../../shared/desktop/locale";
+import type { Locale } from "../../shared/desktop/locale";
 import { enUSConfig, zhCNConfig } from "./i18n/config-copy";
-
-export type Locale = "zh-CN" | "en-US";
-
-export function localeFromLanguageTag(language?: string | null): Locale | null {
-  const normalized = language?.trim().replace(/_/g, "-").toLowerCase();
-  if (!normalized) return null;
-  const [base] = normalized.split("-");
-  if (base === "zh") return "zh-CN";
-  if (base === "en") return "en-US";
-  return null;
-}
-
-function browserLanguagePreferences(): string[] {
-  if (typeof navigator === "undefined") return [];
-  if (navigator.languages?.length) return [...navigator.languages];
-  return navigator.language ? [navigator.language] : [];
-}
-
-export function detectPreferredLocale(languages: readonly string[] = browserLanguagePreferences()): Locale {
-  for (const language of languages) {
-    const locale = localeFromLanguageTag(language);
-    if (locale) return locale;
-  }
-  return "en-US";
-}
 
 const zhCN = {
   app: {

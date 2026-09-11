@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { normalizeDesktopConfig } from "../src/renderer/src/desktop-config";
+import { normalizeDesktopConfig } from "../src/shared/desktop/desktop-config";
 import { detectPreferredLocale, localeFromLanguageTag, rendererI18n } from "../src/renderer/src/i18n";
 
 describe("desktop locale defaults", () => {

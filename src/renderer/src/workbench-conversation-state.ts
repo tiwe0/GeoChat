@@ -2,7 +2,7 @@ import { createSignal } from "solid-js";
 import type { DesktopConversationDetail } from "@geochat-ai/app";
 import type { Locale } from "./i18n";
 import { createRendererId } from "./ids";
-import type { DesktopChatActivity, DesktopChatMessage, ImageAttachment } from "./workbench-types";
+import type { DesktopChatActivity, DesktopChatMessage, ImageAttachment } from "../../shared/desktop/workbench-types";
 import {
   assistantUiMessage,
   desktopMessageFromConversationMessage,

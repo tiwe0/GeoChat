@@ -1,7 +1,7 @@
 import { ShieldCheck } from "lucide-solid";
 import type { RendererI18n } from "../i18n";
 import { SectionCard, SwitchField } from "../workbench-ui";
-import type { RendererImprovementPlanState } from "../workbench-types";
+import type { RendererImprovementPlanState } from "../../../shared/desktop/workbench-types";
 
 export function ConfigImprovementPlanSection(props: {
   copy: RendererI18n;

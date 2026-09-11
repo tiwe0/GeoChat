@@ -1,27 +1,32 @@
 import { readdirSync, readFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import { expect, test } from "bun:test";
 
-const rendererRoot = "src/renderer/src";
+/**
+ * Both roots are scanned. The desktop boundary modules moved to src/shared so
+ * that a second renderer can consume them; scanning only the renderer would
+ * have quietly stopped enforcing this rule on exactly the files it exists for.
+ */
+const scannedRoots = ["src/renderer/src", "src/shared/desktop"];
 
 const allowedBoundaryFiles = {
-  "desktop-window-controls.ts": {
+  "src/shared/desktop/desktop-window-controls.ts": {
     maxLines: 40,
     reason: "desktop window controls are the only renderer surface that imports Tauri window APIs"
   },
-  "main.tsx": {
+  "src/renderer/src/main.tsx": {
     maxLines: 40,
     reason: "renderer bootstrapping is the only startup entrypoint for marking readiness"
   },
-  "platform.ts": {
+  "src/shared/desktop/platform.ts": {
     maxLines: 60,
     reason: "runtime platform detection is the only fallback path for web-vs-desktop runtime info"
   },
-  "tauri-bridge.ts": {
+  "src/shared/desktop/tauri-bridge.ts": {
     maxLines: 380,
     reason: "Tauri bridge installation maps stable desktop API methods to Tauri commands and events"
   },
-  "workbench-desktop-runtime.ts": {
+  "src/shared/desktop/workbench-desktop-runtime.ts": {
     maxLines: 90,
     reason: "default injected runtime adapters own timer globals for workbench state modules"
   }
@@ -47,8 +52,8 @@ function listSourceFiles(directory: string): string[] {
 test("renderer direct global and Tauri API access stays in boundary modules", () => {
   const violations: string[] = [];
 
-  for (const filePath of listSourceFiles(rendererRoot)) {
-    const relativePath = relative(rendererRoot, filePath);
+  for (const filePath of scannedRoots.flatMap(listSourceFiles)) {
+    const relativePath = filePath.split("\\").join("/");
     const source = readFileSync(filePath, "utf8");
 
     for (const { label, pattern } of directGlobalPatterns) {
@@ -65,7 +70,7 @@ test("renderer direct global and Tauri API access stays in boundary modules", ()
 
 test("approved renderer boundary modules stay documented and thin", () => {
   const boundaryHealth = Object.entries(allowedBoundaryFiles).map(([relativePath, boundary]) => {
-    const source = readFileSync(join(rendererRoot, relativePath), "utf8");
+    const source = readFileSync(relativePath, "utf8");
     return {
       path: relativePath,
       lines: source.split(/\r?\n/).length,

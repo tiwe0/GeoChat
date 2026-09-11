@@ -7,7 +7,7 @@ import {
   runMcpDebugActionPollOnce
 } from "../src/renderer/src/workbench-mcp-state";
 import type { DesktopDebugAction } from "../src/renderer/src/workbench-api";
-import type { RendererMcpStatus } from "../src/renderer/src/workbench-types";
+import type { RendererMcpStatus } from "../src/shared/desktop/workbench-types";
 
 const runningMcpStatus: RendererMcpStatus = {
   available: true,

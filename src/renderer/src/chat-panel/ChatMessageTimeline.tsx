@@ -4,7 +4,7 @@ import type { DesktopFunctionCall } from "@geochat-ai/app";
 import { interpolate, type Locale, type RendererI18n } from "../i18n";
 import { normalizeStreamdownMath } from "../math-rendering";
 import { isScrolledNearBottom } from "../chat-scroll";
-import type { DesktopChatActivity, DesktopChatMessage } from "../workbench-types";
+import type { DesktopChatActivity, DesktopChatMessage } from "../../../shared/desktop/workbench-types";
 import { toolCallVisualStatus } from "../workbench-tool-calls";
 import { toolActivityText } from "../tool-activity";
 import { formatIsoTime } from "./formatting";

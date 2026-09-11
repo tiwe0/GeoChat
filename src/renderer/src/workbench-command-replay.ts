@@ -1,5 +1,5 @@
 import type { DesktopFunctionCall } from "@geochat-ai/app";
-import type { DesktopChatMessage } from "./workbench-types";
+import type { DesktopChatMessage } from "../../shared/desktop/workbench-types";
 import { commandResultsForCall, toolExecutionResult } from "./workbench-tool-calls";
 
 type ExecuteCommandsCall = DesktopFunctionCall<"executeGeoGebraCommands">;

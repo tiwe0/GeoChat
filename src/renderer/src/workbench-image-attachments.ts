@@ -1,8 +1,8 @@
 import { createEffect, createMemo, createSignal, type Accessor } from "solid-js";
 import type { AgentModelRegistrySchema } from "@geochat-ai/app";
 import { interpolate, type RendererI18n } from "./i18n";
-import type { DesktopChatMessage, DesktopConfig, ImageAttachment } from "./workbench-types";
-import { configHasImageCapableModel, configSupportsImageAttachments } from "./desktop-config";
+import type { DesktopChatMessage, DesktopConfig, ImageAttachment } from "../../shared/desktop/workbench-types";
+import { configHasImageCapableModel, configSupportsImageAttachments } from "../../shared/desktop/desktop-config";
 import { formatFileSize, readImageFile } from "./workbench-messages";
 
 const MAX_IMAGE_ATTACHMENTS = 4;

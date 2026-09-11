@@ -2,7 +2,7 @@ import type { Accessor } from "solid-js";
 import type { AgentModelRegistrySchema, RuntimeInfo } from "@geochat-ai/app";
 import type { createGeoGebraController } from "./geogebra";
 import type { Locale, RendererI18n } from "./i18n";
-import { hasConfiguredApiKey, modelConfigForRun, promptWithSkillPolicy } from "./desktop-config";
+import { hasConfiguredApiKey, modelConfigForRun, promptWithSkillPolicy } from "../../shared/desktop/desktop-config";
 import { runBackendAgent } from "./workbench-backend-runner";
 import type { createBlackboardState } from "./workbench-blackboard-state";
 import type { WorkbenchConversationState } from "./workbench-conversation-state";
@@ -11,7 +11,7 @@ import type { createImageAttachmentState } from "./workbench-image-attachments";
 import type {
   DesktopChatMessage,
   DesktopConfig
-} from "./workbench-types";
+} from "../../shared/desktop/workbench-types";
 
 type GeoGebraController = ReturnType<typeof createGeoGebraController>;
 type BlackboardState = ReturnType<typeof createBlackboardState>;

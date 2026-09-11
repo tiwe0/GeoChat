@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import type { ConfigTab, ViewMode } from "./workbench-types";
+import type { ConfigTab, ViewMode } from "../../shared/desktop/workbench-types";
 
 export function createWorkbenchShellState() {
   const [configOpen, setConfigOpen] = createSignal(false);

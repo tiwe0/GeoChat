@@ -5,7 +5,7 @@ import {
   geometryPlanPayloadFromCall,
   toolExecutionResult
 } from "./workbench-tool-calls";
-import type { DesktopChatMessage } from "./workbench-types";
+import type { DesktopChatMessage } from "../../shared/desktop/workbench-types";
 
 const BLACKBOARD_TEXT_LIMIT = 900;
 const BLACKBOARD_LIST_LIMIT = 8;

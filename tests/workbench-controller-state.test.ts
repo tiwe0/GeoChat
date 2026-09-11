@@ -11,7 +11,7 @@ import type {
   RendererAppBundleUpdateState,
   RendererAccessState,
   RendererUpdateState
-} from "../src/renderer/src/workbench-types";
+} from "../src/shared/desktop/workbench-types";
 
 const runtime: RuntimeInfo = {
   appVersion: "0.2.4-test",

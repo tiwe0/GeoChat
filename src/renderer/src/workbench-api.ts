@@ -21,8 +21,8 @@ import {
   normalizeAgentModelRegistrySchema
 } from "@geochat-ai/app";
 import type { ProblemBankFilters } from "./problem-bank-utils";
-import { readCachedCloudProblemJson, writeCachedCloudProblemJson } from "./problem-bank-cache";
-import type { DesktopChatMessage } from "./workbench-types";
+import { readCachedCloudProblemJson, writeCachedCloudProblemJson } from "../../shared/desktop/problem-bank-cache";
+import type { DesktopChatMessage } from "../../shared/desktop/workbench-types";
 
 export type DesktopDebugAction =
   | {

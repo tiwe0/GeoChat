@@ -4,8 +4,8 @@ import {
   normalizeDesktopConfig,
   persistDesktopConfig,
   readDesktopConfig
-} from "./desktop-config";
-import type { DesktopConfig } from "./workbench-types";
+} from "../../shared/desktop/desktop-config";
+import type { DesktopConfig } from "../../shared/desktop/workbench-types";
 
 export function createDesktopConfigState() {
   const initial = readDesktopConfig();

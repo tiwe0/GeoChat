@@ -5,7 +5,7 @@ import type {
   RendererImprovementPlanState,
   RendererUnifiedUpdateState,
   RendererUpdateState
-} from "../workbench-types";
+} from "../../../shared/desktop/workbench-types";
 import {
   primaryUpdateAction,
   primaryUpdateActionBusy,

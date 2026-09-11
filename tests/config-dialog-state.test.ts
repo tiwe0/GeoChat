@@ -16,7 +16,7 @@ import type {
   RendererAppBundleUpdateState,
   RendererUnifiedUpdateState,
   RendererUpdateState
-} from "../src/renderer/src/workbench-types";
+} from "../src/shared/desktop/workbench-types";
 
 const copy = rendererI18n("zh-CN");
 

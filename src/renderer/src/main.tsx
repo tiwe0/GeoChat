@@ -1,6 +1,6 @@
 import { render } from "solid-js/web";
 import WorkbenchApp from "./WorkbenchApp";
-import { installTauriDesktopBridge } from "./tauri-bridge";
+import { installTauriDesktopBridge } from "../../shared/desktop/tauri-bridge";
 
 void bootstrap();
 

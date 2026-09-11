@@ -1,5 +1,5 @@
 import { createResource } from "solid-js";
-import { fetchRuntimeInfo } from "./platform";
+import { fetchRuntimeInfo } from "../../shared/desktop/platform";
 import {
   fetchCloudModelRegistrySchema,
   fetchHealth

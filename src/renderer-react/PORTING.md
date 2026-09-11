@@ -42,11 +42,28 @@ overflow menu.
    away because this build executes tools in-process. Market routing and the
    `web-geochatpro` client channel are gone.
 
-2. **Desktop layer** (~1227 lines in the Solid renderer, no React counterpart):
-   `tauri-bridge`, window controls, `desktop-config` (BYOK key storage),
-   sidecar lifecycle, `platform`, access state. This is new construction and
-   should be done immediately after the web path runs, not last — it decides
-   whether the thing works as a desktop app at all.
+2. **Desktop layer.** Mostly done, and far cheaper than estimated: the bridge
+   installs `window.geochatDesktop`, a plain global, and most of the layer
+   turned out to be framework-agnostic already. Moved to `src/shared/desktop/`
+   and now consumed by both renderers:
+
+   `tauri-bridge` (288), `desktop-config` (365), `improvement-plan` (258),
+   `problem-bank-cache` (199), `workbench-types` (98), `workbench-desktop-runtime`
+   (53), `platform` (27), `run-cancellation` (16), `desktop-window-controls` (12),
+   plus `locale` split out of the renderer's i18n so shared code can name a
+   locale without pulling in translation dictionaries.
+
+   Two exceptions:
+   - `workbench-backend-runner` (435) stayed with the Solid renderer. It reaches
+     into twelve renderer modules, so it is renderer orchestration rather than a
+     desktop primitive, and needs a React rewrite.
+   - Access state was genuinely reactive, so it has a React hook at
+     `features/desktop/useAccessState.ts` with identical behaviour.
+
+   `tests/renderer-global-boundaries.test.ts` was widened to scan
+   `src/shared/desktop` as well. It enforces that direct Tauri/global access
+   stays in a documented, line-capped allowlist, and scanning only the renderer
+   would have quietly stopped enforcing that on the very files it exists for.
 
 3. **Business surfaces to rebuild**: settings (rebuilt to the audited 4-tab
    shape, not ported as-is), problem bank (795 lines), improvement plan (258),

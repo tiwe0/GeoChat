@@ -1,6 +1,6 @@
 import type { RuntimeInfo } from "@geochat-ai/app";
 import type { DesktopChatMessage, DesktopConfig } from "./workbench-types";
-import type { Locale } from "./i18n";
+import type { Locale } from "./locale";
 import {
   resolveWorkbenchDesktopRuntime,
   type WorkbenchDesktopRuntime

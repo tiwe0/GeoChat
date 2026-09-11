@@ -4,11 +4,11 @@ import type {
   RendererAppBundleUpdateState,
   RendererUnifiedUpdateState,
   RendererUpdateState
-} from "./workbench-types";
+} from "../../shared/desktop/workbench-types";
 import {
   resolveWorkbenchDesktopRuntime,
   type WorkbenchDesktopRuntime
-} from "./workbench-desktop-runtime";
+} from "../../shared/desktop/workbench-desktop-runtime";
 
 const DEFAULT_UPDATE_STATE: RendererUpdateState = {
   available: false,

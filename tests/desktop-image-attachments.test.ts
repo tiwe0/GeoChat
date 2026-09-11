@@ -6,7 +6,7 @@ import {
   modelCapabilityOverviewFor,
   modelConfigForRun,
   normalizeDesktopConfig
-} from "../src/renderer/src/desktop-config";
+} from "../src/shared/desktop/desktop-config";
 
 describe("desktop image attachment model selection", () => {
   test("enables image input for a configured multimodal primary model", () => {

@@ -6,7 +6,7 @@ import {
   fetchConversations,
   upsertConversationMessage
 } from "./workbench-api";
-import type { DesktopChatMessage, HistoryItem } from "./workbench-types";
+import type { DesktopChatMessage, HistoryItem } from "../../shared/desktop/workbench-types";
 
 export function createConversationHistoryState(input: {
   runtime: Accessor<RuntimeInfo | undefined>;

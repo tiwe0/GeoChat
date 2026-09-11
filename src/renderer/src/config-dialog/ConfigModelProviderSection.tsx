@@ -6,7 +6,7 @@ import {
   MIN_AGENT_RUNNER_MAX_TOOL_STEPS,
   type AgentModelOption
 } from "@geochat-ai/app";
-import { DEFAULT_VISION_MODEL_CONFIG } from "../desktop-config";
+import { DEFAULT_VISION_MODEL_CONFIG } from "../../../shared/desktop/desktop-config";
 import type { RendererI18n } from "../i18n";
 import { interpolate } from "../i18n";
 import { SectionCard, SelectField } from "../workbench-ui";

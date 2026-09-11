@@ -22,34 +22,8 @@ import { interpolate, type RendererI18n } from "./i18n";
 
 export type { ToolDisplayInfo } from "@geochat-ai/app";
 
-export type FunctionCallCard = {
-  title: string;
-  summary?: string | null;
-  answer?: string | null;
-  steps?: Array<{ label: string; body: string }>;
-  items?: string[] | null;
-  commands?: string[] | null;
-  controls?: string[] | null;
-  observations?: string[] | null;
-  baseConditions?: string[] | null;
-  displayMode?: "single_active_choice" | "compare_choices" | "text_only" | null;
-  choices?: Array<{
-    label: "A" | "B" | "C" | "D";
-    statement: string;
-    verdict: "true" | "false" | "unknown";
-    explanation: string;
-    constructionFocus?: string | null;
-    evidence?: string[] | null;
-    commands?: string[] | null;
-  }> | null;
-  elements?: Array<{
-    label: string;
-    type?: string | null;
-    description?: string | null;
-    role?: string | null;
-  }> | null;
-  nextActionHint?: string | null;
-};
+import type { FunctionCallCard } from "../../shared/desktop/workbench-types";
+export type { FunctionCallCard };
 
 type GeoGebraController = ReturnType<typeof createGeoGebraController>;
 

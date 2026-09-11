@@ -4,7 +4,7 @@ import type {
   RendererImprovementPlanState,
   RendererUnifiedUpdateState,
   RendererUpdateState
-} from "../workbench-types";
+} from "../../../shared/desktop/workbench-types";
 import { ConfigAboutSection } from "./ConfigAboutSection";
 import { ConfigImprovementPlanSection } from "./ConfigImprovementPlanSection";
 import { ConfigUpdatesSection } from "./ConfigUpdatesSection";

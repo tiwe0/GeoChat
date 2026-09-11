@@ -1,17 +1,17 @@
 import { createSignal, onCleanup, type Accessor } from "solid-js";
 import type { RuntimeInfo } from "@geochat-ai/app";
-import { createImprovementPlanUploader } from "./improvement-plan";
+import { createImprovementPlanUploader } from "../../shared/desktop/improvement-plan";
 import type { Locale } from "./i18n";
 import type {
   DesktopChatMessage,
   DesktopConfig,
   RendererImprovementPlanState,
   RendererAccessState
-} from "./workbench-types";
+} from "../../shared/desktop/workbench-types";
 import {
   resolveWorkbenchDesktopRuntime,
   type WorkbenchDesktopRuntime
-} from "./workbench-desktop-runtime";
+} from "../../shared/desktop/workbench-desktop-runtime";
 
 const DEFAULT_IMPROVEMENT_PLAN_STATE: RendererImprovementPlanState = {
   available: false,

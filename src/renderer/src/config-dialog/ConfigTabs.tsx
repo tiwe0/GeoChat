@@ -8,7 +8,7 @@ import {
   Terminal
 } from "lucide-solid";
 import type { RendererI18n } from "../i18n";
-import type { ConfigTab } from "../workbench-types";
+import type { ConfigTab } from "../../../shared/desktop/workbench-types";
 
 const CONFIG_TABS: Array<{
   tab: ConfigTab;

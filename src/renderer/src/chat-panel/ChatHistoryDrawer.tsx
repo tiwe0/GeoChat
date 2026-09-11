@@ -2,7 +2,7 @@ import { Trash, X } from "lucide-solid";
 import { createMemo, For, Show } from "solid-js";
 import { interpolate, type Locale, type RendererI18n } from "../i18n";
 import { IconButton } from "../workbench-ui";
-import type { HistoryItem } from "../workbench-types";
+import type { HistoryItem } from "../../../shared/desktop/workbench-types";
 import { formatIsoTime } from "./formatting";
 
 export function ChatHistoryDrawer(props: {

@@ -15,7 +15,7 @@ import {
   DEFAULT_SKILL_CONFIG,
   modelCapabilityOverviewFor,
   modelStepTimeoutSecondsInputValue
-} from "./desktop-config";
+} from "../../shared/desktop/desktop-config";
 import { ConfigMainDialog } from "./config-dialog/ConfigMainDialog";
 import { createConfigAboutController } from "./config-dialog/config-dialog-about-controller";
 import {
@@ -38,7 +38,7 @@ import type {
   RendererUnifiedUpdateState,
   RendererUpdateState,
   VisualProfileName
-} from "./workbench-types";
+} from "../../shared/desktop/workbench-types";
 
 type BuiltinAgentSkillName = (typeof BUILTIN_AGENT_SKILL_NAMES)[number];
 

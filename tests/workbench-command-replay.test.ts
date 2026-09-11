@@ -6,7 +6,7 @@ import {
   commandsFromToolCall,
   isSuccessfulReplayCall
 } from "../src/renderer/src/workbench-command-replay";
-import type { DesktopChatMessage } from "../src/renderer/src/workbench-types";
+import type { DesktopChatMessage } from "../src/shared/desktop/workbench-types";
 
 function executeCall(input: {
   id: string;

@@ -1,7 +1,7 @@
 import { For, Show } from "solid-js";
 import type { HealthStatus } from "@geochat-ai/app";
 import type { RendererI18n } from "./i18n";
-import type { ViewMode } from "./workbench-types";
+import type { ViewMode } from "../../shared/desktop/workbench-types";
 
 type GeoGebraLoadMessage = {
   status: string;

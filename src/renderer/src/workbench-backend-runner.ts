@@ -1,4 +1,9 @@
-import type { Accessor } from "solid-js";
+/**
+ * A lazily-read input. Structurally identical to Solid's `Accessor`, declared
+ * locally so this module stays framework-agnostic: a React caller passes
+ * `() => value` or a ref read, a Solid caller passes a signal getter.
+ */
+type Accessor<T> = () => T;
 import {
   agentRunStartPayload,
   createAgentRunLedger,
@@ -11,9 +16,9 @@ import { executeFunctionCall } from "./functioncalls";
 import type { createGeoGebraController } from "./geogebra";
 import { createRendererId } from "./ids";
 import { interpolate, type Locale, type RendererI18n } from "./i18n";
-import { hasConfiguredApiKey } from "./desktop-config";
+import { hasConfiguredApiKey } from "../../shared/desktop/desktop-config";
 import { backendPromptWithBlackboard } from "./workbench-blackboard";
-import { isRunCancelledError, throwIfRunCancelled } from "./run-cancellation";
+import { isRunCancelledError, throwIfRunCancelled } from "../../shared/desktop/run-cancellation";
 import type { WorkbenchConversationState } from "./workbench-conversation-state";
 import { nowLabel } from "./workbench-messages";
 import {
@@ -40,7 +45,7 @@ import type {
   DesktopChatMessage,
   ImageAttachment,
   ModelConfig
-} from "./workbench-types";
+} from "../../shared/desktop/workbench-types";
 
 type GeoGebraController = ReturnType<typeof createGeoGebraController>;
 

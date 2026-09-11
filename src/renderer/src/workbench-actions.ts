@@ -12,7 +12,7 @@ import type { createBlackboardState } from "./workbench-blackboard-state";
 import type { WorkbenchConversationState } from "./workbench-conversation-state";
 import type { createConversationHistoryState } from "./workbench-history-state";
 import type { createWorkbenchShellState } from "./workbench-shell-state";
-import type { DesktopChatMessage } from "./workbench-types";
+import type { DesktopChatMessage } from "../../shared/desktop/workbench-types";
 
 type GeoGebraController = ReturnType<typeof createGeoGebraController>;
 type BlackboardState = ReturnType<typeof createBlackboardState>;

@@ -1,6 +1,6 @@
 import type { DesktopConversationMessage } from "@geochat-ai/app";
 import { createRendererId } from "./ids";
-import type { DesktopChatMessage, ImageAttachment } from "./workbench-types";
+import type { DesktopChatMessage, ImageAttachment } from "../../shared/desktop/workbench-types";
 import type { Locale } from "./i18n";
 
 export type RendererUiMessage = {

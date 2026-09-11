@@ -1,7 +1,7 @@
 import { CloudDownload, RefreshCw } from "lucide-solid";
 import type { RendererI18n } from "../i18n";
 import { SectionCard } from "../workbench-ui";
-import type { RendererAppBundleUpdateState, RendererUnifiedUpdateState, RendererUpdateState } from "../workbench-types";
+import type { RendererAppBundleUpdateState, RendererUnifiedUpdateState, RendererUpdateState } from "../../../shared/desktop/workbench-types";
 
 export function ConfigUpdatesSection(props: {
   copy: RendererI18n;

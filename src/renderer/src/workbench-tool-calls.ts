@@ -15,7 +15,7 @@ import {
 import { createRendererId } from "./ids";
 import { interpolate, type Locale, type RendererI18n } from "./i18n";
 import { formatIsoTime, nowLabel } from "./workbench-messages";
-import type { DesktopChatMessage } from "./workbench-types";
+import type { DesktopChatMessage } from "../../shared/desktop/workbench-types";
 
 export function localizedToolDisplayInfo(toolName: FunctionCallToolName, copy: RendererI18n) {
   return copy.tools.displays[toolName] ?? toolDisplayInfo(toolName);

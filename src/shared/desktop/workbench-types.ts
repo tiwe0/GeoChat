@@ -1,3 +1,32 @@
+export type FunctionCallCard = {
+  title: string;
+  summary?: string | null;
+  answer?: string | null;
+  steps?: Array<{ label: string; body: string }>;
+  items?: string[] | null;
+  commands?: string[] | null;
+  controls?: string[] | null;
+  observations?: string[] | null;
+  baseConditions?: string[] | null;
+  displayMode?: "single_active_choice" | "compare_choices" | "text_only" | null;
+  choices?: Array<{
+    label: "A" | "B" | "C" | "D";
+    statement: string;
+    verdict: "true" | "false" | "unknown";
+    explanation: string;
+    constructionFocus?: string | null;
+    evidence?: string[] | null;
+    commands?: string[] | null;
+  }> | null;
+  elements?: Array<{
+    label: string;
+    type?: string | null;
+    description?: string | null;
+    role?: string | null;
+  }> | null;
+  nextActionHint?: string | null;
+};
+
 import type {
   FunctionCallToolName,
   AgentModelConfig,
@@ -11,8 +40,7 @@ import type {
   DesktopUnifiedUpdateState,
   DesktopUpdateState
 } from "../../shared/desktop-api";
-import type { FunctionCallCard } from "./functioncalls";
-import type { Locale } from "./i18n";
+import type { Locale } from "./locale";
 
 export type DesktopChatMessage = {
   id: string;

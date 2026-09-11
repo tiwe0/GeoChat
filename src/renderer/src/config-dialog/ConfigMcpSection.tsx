@@ -3,7 +3,7 @@ import { For, Show } from "solid-js";
 import { interpolate, type Locale, type RendererI18n } from "../i18n";
 import { SectionCard, SwitchField } from "../workbench-ui";
 import type { AgentRunModelStepRecord, AgentRunRunnerSnapshot } from "@geochat-ai/app";
-import type { RendererMcpStatus } from "../workbench-types";
+import type { RendererMcpStatus } from "../../../shared/desktop/workbench-types";
 
 export function ConfigExternalMcpSection(props: { copy: RendererI18n }) {
   return (

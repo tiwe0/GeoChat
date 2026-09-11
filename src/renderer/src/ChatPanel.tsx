@@ -13,7 +13,7 @@ import { ChatComposer } from "./chat-panel/ChatComposer";
 import { ChatHistoryDrawer } from "./chat-panel/ChatHistoryDrawer";
 import { ChatMessageTimeline, type ChoiceScenarioPreviewInput, type ChoiceScenarioPreviewResult, type LatexTextComponent } from "./chat-panel/ChatMessageTimeline";
 import { IconButton } from "./workbench-ui";
-import type { DesktopChatMessage, HistoryItem, ImageAttachment } from "./workbench-types";
+import type { DesktopChatMessage, HistoryItem, ImageAttachment } from "../../shared/desktop/workbench-types";
 
 export type { ChoiceScenarioPreviewInput, ChoiceScenarioPreviewResult } from "./chat-panel/ChatMessageTimeline";
 

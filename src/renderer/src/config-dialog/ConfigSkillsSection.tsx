@@ -4,10 +4,10 @@ import {
   BUILTIN_AGENT_SKILL_NAMES,
   DEFAULT_SKILL_CONFIG,
   VISUAL_PROFILE_NAMES
-} from "../desktop-config";
+} from "../../../shared/desktop/desktop-config";
 import { interpolate, type RendererI18n } from "../i18n";
 import { SectionCard, SwitchField } from "../workbench-ui";
-import type { VisualProfileName } from "../workbench-types";
+import type { VisualProfileName } from "../../../shared/desktop/workbench-types";
 
 type BuiltinAgentSkillName = (typeof BUILTIN_AGENT_SKILL_NAMES)[number];
 

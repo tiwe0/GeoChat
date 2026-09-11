@@ -5,7 +5,7 @@ import {
   DEFAULT_VISUAL_PROFILE,
   normalizeDesktopConfig,
   promptWithSkillPolicy
-} from "../src/renderer/src/desktop-config";
+} from "../src/shared/desktop/desktop-config";
 
 describe("desktop Agent Skill configuration", () => {
   test("defaults older configs to enabled built-in skills", () => {

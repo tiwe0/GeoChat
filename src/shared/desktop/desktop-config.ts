@@ -16,7 +16,7 @@ import type {
   SkillConfig,
   VisualProfileName
 } from "./workbench-types";
-import { detectPreferredLocale, type Locale } from "./i18n";
+import { detectPreferredLocale, type Locale } from "./locale";
 
 export const CONFIG_STORAGE_KEY = "geochat-desktop-ui-config";
 

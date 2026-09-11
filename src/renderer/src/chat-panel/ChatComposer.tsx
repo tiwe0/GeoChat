@@ -2,7 +2,7 @@ import { ImagePlus, Send, Square, X } from "lucide-solid";
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { interpolate, type RendererI18n } from "../i18n";
 import { IconButton } from "../workbench-ui";
-import type { ImageAttachment } from "../workbench-types";
+import type { ImageAttachment } from "../../../shared/desktop/workbench-types";
 
 const MAX_TEXT_FILE_BYTES = 256 * 1024;
 const textFileExtensionPattern = /\.(?:txt|md|markdown|csv|tsv|json|jsonl|geo|ggbscript|tex)$/iu;

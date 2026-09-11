@@ -1,9 +1,9 @@
 import { createSignal, onCleanup } from "solid-js";
-import type { RendererAccessState } from "./workbench-types";
+import type { RendererAccessState } from "../../shared/desktop/workbench-types";
 import {
   resolveWorkbenchDesktopRuntime,
   type WorkbenchDesktopRuntime
-} from "./workbench-desktop-runtime";
+} from "../../shared/desktop/workbench-desktop-runtime";
 
 const DEFAULT_ACCESS_STATE: RendererAccessState = {
   available: false,

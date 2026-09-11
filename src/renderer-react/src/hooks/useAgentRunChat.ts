@@ -10,7 +10,6 @@ import type {
   ChatMessageMetadata,
 } from "@geochat-ai/app/contracts";
 import { createAgentRunRunnerClaimOwner } from "@geochat-ai/app/contracts";
-import type { AgentRunThinkingEffort } from "@geochat-ai/app";
 import { areSupportedAgentAttachments } from "../features/attachments/capabilities";
 import {
   getInstallationId,
@@ -42,9 +41,7 @@ export function useAgentRunChat(input: {
   getModelProvider?: (model: string) => string;
   locale: "zh-CN" | "en-US";
   onFinish?: () => void;
-  onRestore?: (run: Pick<StoredActiveRun, "conversationId" | "modelId" | "prompt" | "thinkingEnabled" | "thinkingEffort">) => void;
-  getThinking: () => boolean;
-  getThinkingEffort: () => AgentRunThinkingEffort;
+  onRestore?: (run: Pick<StoredActiveRun, "conversationId" | "modelId" | "prompt">) => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [status, setStatus] = useState<ChatStatus>("ready");

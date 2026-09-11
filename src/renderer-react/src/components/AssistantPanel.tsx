@@ -347,8 +347,6 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
     getAuthToken: () => authSessionRef.current.token,
     getModel: () => panelChatRef.current.model,
     getModelProvider: (model) => modelOptionsRef.current.find((option) => option.id === model)?.provider ?? "deepseek",
-    getThinking: () => reasoningMode === "thinking",
-    getThinkingEffort: () => thinkingEffort,
     locale: i18n.language.startsWith("en") ? "en-US" : "zh-CN",
     onFinish: () => {
       if (authSessionRef.current.token) void conversationHistory.load(true);
@@ -359,12 +357,6 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
       setCurrentConversationId(run.conversationId);
       setCurrentConversationTitle(run.prompt.replace(/\s+/g, " ").trim().slice(0, 80));
       changeModel(run.modelId);
-      const restoredThinking = run.thinkingEnabled === true;
-      panelChatRef.current.setThinkingEnabled(restoredThinking);
-      setReasoningMode(restoredThinking ? "thinking" : "auto");
-      if (run.thinkingEffort === "light" || run.thinkingEffort === "standard" || run.thinkingEffort === "extended") {
-        setThinkingEffort(run.thinkingEffort);
-      }
     },
   });
   const isStreaming = status === "streaming" || status === "submitted";

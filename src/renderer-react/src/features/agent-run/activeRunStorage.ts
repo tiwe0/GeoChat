@@ -1,4 +1,3 @@
-import type { AgentRunThinkingEffort } from "@geochat-ai/app";
 import {
   agentRunRemoteToolExecutionCacheKey,
   cachedRemoteToolExecutionMatchesRequest,
@@ -40,7 +39,7 @@ export async function getInstallationId(ref: { current: string | null }) {
 export function isStoredActiveRun(value: unknown): value is StoredActiveRun {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const run = value as Record<string, unknown>;
-  return typeof run.runId === "string" && typeof run.conversationId === "string" && (typeof run.userMessageId === "string" || run.userMessageId === null) && (typeof run.assistantMessageId === "string" || run.assistantMessageId === null) && typeof run.prompt === "string" && typeof run.modelId === "string" && (run.thinkingEnabled === undefined || typeof run.thinkingEnabled === "boolean") && (run.thinkingEffort === undefined || run.thinkingEffort === "light" || run.thinkingEffort === "standard" || run.thinkingEffort === "extended") && typeof run.startedAt === "string" && typeof run.attachmentCount === "number";
+  return typeof run.runId === "string" && typeof run.conversationId === "string" && (typeof run.userMessageId === "string" || run.userMessageId === null) && (typeof run.assistantMessageId === "string" || run.assistantMessageId === null) && typeof run.prompt === "string" && typeof run.modelId === "string" && typeof run.startedAt === "string" && typeof run.attachmentCount === "number";
 }
 
 export function isStuckRunner(snapshot: AgentRunRunnerSnapshot) {

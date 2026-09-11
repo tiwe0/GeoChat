@@ -59,7 +59,7 @@ export function SettingsPanel(props: { onClose: () => void }) {
 
   return (
     <Stack spacing={2.5} sx={{ flex: 1, overflowY: "auto", p: 2.5 }}>
-      <Typography variant="subtitle1" fontWeight={600}>
+      <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
         {t("settings.title", "模型设置")}
       </Typography>
 

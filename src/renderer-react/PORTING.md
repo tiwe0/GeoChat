@@ -107,7 +107,7 @@ overflow menu.
 
 ## Known gaps, measured
 
-`bun run typecheck:react` reports **3 errors**, down from 29. They are deliberately not in
+`bun run typecheck:react` is now clean, down from 29. It is deliberately not in
 the main `typecheck` gate yet — that would turn the build red for everyone —
 but they are real, and the bundler hides them: Vite strips types with esbuild
 and never checks them, which is the same blind spot the CI `verify` job was
@@ -157,19 +157,30 @@ They fall into four groups:
   to switch here, but the token can still change. An absent token is sent as
   `""`, because the local backend needs no bearer.
 
-### Still open (3)
+### Cleared (3 -> 0)
 
-- One MUI overload in `SettingsPanel`'s provider select.
-- `useAgentRunChat`'s `onRestore` still names `thinkingEnabled` /
-  `thinkingEffort`, which `StoredActiveRun` no longer has. Narrowing the type
-  alone is not enough: `AssistantPanel` passes `getThinking` /
-  `getThinkingEffort` and reads both fields on restore, so removing them takes
-  the count from 3 to 7 until those call sites go too. Do the whole chain in
-  one pass, not the type first.
+- `SettingsPanel`'s heading used MUI v8's top-level `fontWeight`; v9 takes it
+  through `sx`.
+- The thinking chain went in one pass, as the note above warned it had to.
+  Removing it was the right call rather than porting the ledger fields,
+  because the chain was already dead end to end: `useAgentRunChat` declared
+  `getThinking` / `getThinkingEffort` and never read either one, the run-start
+  contract has no thinking field, and the backend has no thinking concept at
+  all. `AgentRunThinkingEffort` in `run-ledger.ts` is now unreferenced outside
+  the UI. Gone: the two getters, the `onRestore` fields, and two vacuous
+  optional-field checks in `isStoredActiveRun` for keys the type never had.
+
+**The reasoning-mode / thinking-effort control in the composer is inert.** It
+persists to local storage and renders its state, but nothing forwards it to a
+run. This predates the port and was surfaced by typechecking, not caused by
+it. Two honest options: wire it through (start contract -> ledger -> per
+provider options: Anthropic `thinking.budget_tokens`, OpenAI `reasoningEffort`,
+DeepSeek reasoner model ids), or remove the control. Shipping it as-is means a
+switch the user flips that changes nothing.
 
 ## Remaining before the Solid renderer can be deleted
 
-- The 29 errors above.
+- ~~The 29 errors above.~~ `bun run typecheck:react` is clean.
 - **Update UI.** `useUpdateState` exists but is not yet surfaced. Without it the
   app cannot tell a user a new version is available, which is the one
   capability that cannot wait for a later release.

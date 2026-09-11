@@ -15,7 +15,7 @@ export function BrandIcon({ size = 48, className }: BrandIconProps) {
     <Box
       component="img"
       src={BRAND_ICON_DATA_URI}
-      alt="GeoGebra Copilot"
+      alt="GeoChat"
       draggable={false}
       className={className}
       sx={{

@@ -201,7 +201,7 @@ export const en = {
   },
   composer: {
     attachFiles: "Attach files",
-    placeholder: "Ask GeoGebra Copilot...",
+    placeholder: "Ask GeoChat...",
     sendMessage: "Send message",
     stopGeneration: "Stop generating",
     dropFiles: "Drop files to attach",
@@ -258,7 +258,7 @@ export const en = {
     payWithMethod: "Pay with {{method}}",
     recommended: "Popular",
     noCreditPackages: "Credit purchases are not available yet.",
-    subscriptionDescription: "Recurring access to the hosted GeoGebra Copilot service.",
+    subscriptionDescription: "Recurring access to the hosted GeoChat service.",
     subscriptionPeriod: "/month",
     subscriptionActive: "Active",
     checkoutPopupBlocked: "Please allow pop-ups to open checkout.",

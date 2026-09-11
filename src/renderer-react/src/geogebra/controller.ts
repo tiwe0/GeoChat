@@ -48,7 +48,7 @@ export class GeoGebraController {
         const name = requiredString(input.name, "name");
         return { ok: true, name, objectType: String(this.call("getObjectType", name)) };
       }
-      default: throw new Error(`GeoChatPro 不支持工具 ${toolName}。`);
+      default: throw new Error(`GeoChat 不支持工具 ${toolName}。`);
     }
   }
 

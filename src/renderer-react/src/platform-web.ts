@@ -35,8 +35,8 @@ export function installWebPlatform() {
     storage: { local: storage },
     runtime: {
       async sendMessage(message: unknown) {
-        // Native extension messages have no Web equivalent. GeoChatPro Web
-        // intentionally exposes no MCP/native-host surface.
+        // Native extension messages have no desktop equivalent. GeoChat
+        // runs its tools in-process and exposes no native-host surface.
         void message;
         return undefined;
       },

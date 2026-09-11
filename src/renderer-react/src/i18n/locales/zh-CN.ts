@@ -201,7 +201,7 @@ export const zhCN = {
   },
   composer: {
     attachFiles: "\u6dfb\u52a0\u9644\u4ef6",
-    placeholder: "\u8be2\u95ee GeoGebra Copilot...",
+    placeholder: "\u8be2\u95ee GeoChat...",
     sendMessage: "\u53d1\u9001\u6d88\u606f",
     stopGeneration: "\u505c\u6b62\u751f\u6210",
     dropFiles: "\u677e\u5f00\u4ee5\u6dfb\u52a0\u9644\u4ef6",
@@ -258,7 +258,7 @@ export const zhCN = {
     payWithMethod: "\u4f7f\u7528 {{method}} \u652f\u4ed8",
     recommended: "\u63a8\u8350",
     noCreditPackages: "\u6682\u65e0\u53ef\u7528\u7684\u79ef\u5206\u5957\u9910\u3002",
-    subscriptionDescription: "\u8ba2\u9605 Hosted GeoGebra Copilot \u670d\u52a1\uff0c\u6309\u5468\u671f\u7eed\u8d39\u3002",
+    subscriptionDescription: "\u8ba2\u9605 Hosted GeoChat \u670d\u52a1\uff0c\u6309\u5468\u671f\u7eed\u8d39\u3002",
     subscriptionPeriod: "/\u6708",
     subscriptionActive: "\u5df2\u6fc0\u6d3b",
     checkoutPopupBlocked: "\u8bf7\u5141\u8bb8\u5f39\u51fa\u7a97\u53e3\u4ee5\u6253\u5f00\u652f\u4ed8\u9875\u9762\u3002",

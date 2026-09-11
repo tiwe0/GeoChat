@@ -65,9 +65,30 @@ overflow menu.
    stays in a documented, line-capped allowlist, and scanning only the renderer
    would have quietly stopped enforcing that on the very files it exists for.
 
-3. **Business surfaces to rebuild**: settings (rebuilt to the audited 4-tab
-   shape, not ported as-is), problem bank (795 lines), improvement plan (258),
-   update panels.
+3. **Business surfaces.** Scope narrowed after the desktop's role was settled
+   (free tier: local problem entry on the desktop; Pro: cloud conversation
+   storage and miniprogram linkage, with the desktop as the drawing surface):
+
+   - Settings: still to build, and deliberately minimal — provider, model, key.
+     The audited 4-tab shape is already more than this build needs.
+   - Problem bank, improvement plan: **not ported.** They belong to Pro.
+   - Bridge receiver: to add, default off. `features/bridge` in the web build is
+     the device-pairing and task-claiming mechanism behind "photograph a problem
+     on the phone, draw it on the desktop", so the desktop needs the receiving
+     half. The sending half and its account surface stay in Pro.
+   - Brand: user-visible strings now say GeoChat. Internal identifiers
+     (`data-copilot-tour`, `copilot-markdown`, storage keys, theme names) were
+     left alone; renaming them would churn selectors, CSS classes and persisted
+     localStorage keys for no user-facing gain.
+
+   Two things that looked like defects and are not, both confirmed by
+   measurement rather than assumption:
+   - The grey rectangle over the canvas in headless screenshots is
+     react-joyride's spotlight scrim, not a canvas sizing bug. Host, applet and
+     canvas all measure correctly (1440x900 / 1438x898), and the region hits a
+     947x598 SVG `path` that disappears once the tour is dismissed.
+   - `workbench-backend-runner` needs no port; the React feature set already has
+     the equivalent loop and interrupted-run recovery.
 
 4. **Cut over**: point `vite.tauri.config.ts` at this renderer, run the full
    acceptance set, then delete `src/renderer/` and drop solid-js,

@@ -12,7 +12,7 @@ export const en = {
     expandThinking: "Show thinking process",
     collapseThinking: "Hide thinking process",
     user: "User",
-    openUserInformation: "Open user information",
+    openSettings: "Settings",
     returnToChat: "Return to chat",
     account: "Account",
     signIn: "Sign in",

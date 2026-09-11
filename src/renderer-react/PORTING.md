@@ -215,6 +215,38 @@ switch the user flips that changes nothing.
   Settings screen was open, an enabled server would accept every request and
   answer none.
 
+## Acceptance: the audit's nine hard defects
+
+The UX audit of the SolidJS renderer listed nine defects it had measured
+directly. That list lived only in a conversation, so it is recorded here and
+checked against this renderer. Three of the nine survived the port and were
+fixed in the same pass; the others do not exist here.
+
+| # | Defect in the Solid renderer | Status here |
+| --- | --- | --- |
+| 1 | Panel position not re-clamped on resize: 16% visible at 1100px, 0% at 980px, and `overflow: hidden` meant no way back | **Gone.** `usePanelWindow` listens for `resize` and runs `clampPanelGeometry`, shrinking the panel to the viewport and pulling it back inside |
+| 2 | At 360px the chrome rendered 421px wide and the only Settings entry sat in the clipped 61px | **Gone**, twice over: the panel is clamped into the viewport at any width, and Settings is no longer in the chrome |
+| 3 | Responsive CSS was dead code — inline `panelStyle()` outranked the stylesheet | **Gone.** Position is clamped in JS against the real viewport, so there is no stylesheet rule to lose the argument |
+| 4 | Focus rings at 1.14:1 and 2.49:1, both below the 3:1 minimum | **Gone.** No `outline: none` anywhere in this renderer; MUI's focus-visible ring is intact, and the one custom ring is a 2px `primary.main` outline |
+| 5 | Four inputs named only by placeholder | **Was partly reintroduced, now fixed.** The three Settings fields use real `label`s, but the composer — the app's primary input — was placeholder-only. It now carries an `aria-label` |
+| 6 | `.stage-intent > p` at 4.41:1 | **Element does not exist.** Not the same as a clean bill of health: a rendered-contrast sweep of this UI needs a browser pass and has not been done |
+| 7 | Inter named first and never loaded, collapsing 16 weights under `font-synthesis: none` | **Was carried over, now fixed.** `:root` still led with Inter. The MUI theme was already on self-hosted Nunito Sans, so only the non-MUI shell was affected, and it uses three weights rather than sixteen — but naming an unloaded font first is the same mistake, and the stack now starts with what is actually loaded |
+| 8 | Header said v0.2.8 while About said 0.0.0 | **Gone.** One version is displayed, in the update section, straight from the shell |
+| 9 | `stage-grid-drift 28s linear infinite` behind the canvas, against DESIGN.md's "no ambient animation" | **Gone.** Every remaining infinite animation is state-bound: a loading spinner, the typing indicator, the thinking pulse, the refresh icon |
+
+The heuristic table's worst finding — Settings reachable only through an
+unlabelled control — also survived the port in a new costume, and was the most
+worth fixing. Settings had become the brand mark in the panel header, labelled
+"open user information". A logo does not read as a control and the label named
+the wrong screen, which matters more here than it did in the Solid build: on a
+free-tier first run with no key configured, Settings is the one screen the user
+has to reach. It is now a labelled gear beside the other panel actions, and the
+brand mark is inert.
+
+Not yet done, and not claimable from code inspection alone: the full run of
+`tauri:prepare`, `bundle:smoke`, `package:backend-smoke`, and a packaged build
+on both platforms.
+
 ## Deferred
 
 The **bridge receiver** is not built. This repository has no Pro backend to

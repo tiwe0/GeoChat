@@ -12,7 +12,7 @@ export const zhCN = {
     expandThinking: "展开思考过程",
     collapseThinking: "收起思考过程",
     user: "\u7528\u6237",
-    openUserInformation: "\u6253\u5f00\u7528\u6237\u4fe1\u606f",
+    openSettings: "\u8bbe\u7f6e",
     returnToChat: "\u8fd4\u56de\u5bf9\u8bdd",
     account: "\u8d26\u6237",
     signIn: "\u767b\u5f55",

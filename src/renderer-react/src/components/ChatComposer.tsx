@@ -341,6 +341,10 @@ export function ChatComposer({
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           placeholder={t("composer.placeholder")}
+          // A placeholder is not an accessible name: assistive tech treats it
+          // inconsistently and it vanishes on the first keystroke. This is the
+          // app's primary input, so it gets a real one.
+          aria-label={t("composer.placeholder")}
           disabled={busy}
           multiline
           minRows={1}

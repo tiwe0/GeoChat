@@ -1,5 +1,8 @@
 :root {
-  font-family: Inter, "Noto Sans SC", "PingFang SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* Only self-hosted families are named first. Inter led this stack and was
+     never loaded — with font-synthesis: none that silently collapsed the
+     weight range on any machine without it. */
+  font-family: "Nunito Sans Variable", "Noto Sans SC Variable", "Noto Sans SC", "PingFang SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #18231e;
   background: #f4f7f5;
   font-synthesis: none;

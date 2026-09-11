@@ -20,6 +20,7 @@ import FactCheckRounded from "@mui/icons-material/FactCheckRounded";
 import HelpOutlineRounded from "@mui/icons-material/HelpOutlineRounded";
 import AddCommentRounded from "@mui/icons-material/AddCommentRounded";
 import MinimizeRounded from "@mui/icons-material/MinimizeRounded";
+import SettingsRounded from "@mui/icons-material/SettingsRounded";
 import KeyboardArrowDownRounded from "@mui/icons-material/KeyboardArrowDownRounded";
 import PsychologyRounded from "@mui/icons-material/PsychologyRounded";
 import { Joyride, STATUS, type Step } from "react-joyride";
@@ -691,32 +692,39 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
         }}
       >
         <Stack direction="row" spacing={1} sx={{ minWidth: 0, flex: 1, minHeight: 36, alignItems: "center" }}>
-          <IconButton
-            type="button"
-            onClick={togglePanelView}
-            aria-label={panelView === "chat" ? t("panel.openUserInformation") : t("panel.returnToChat")}
-            title={panelView === "chat" ? t("panel.openUserInformation") : t("panel.returnToChat")}
-            sx={{
-              width: 30,
-              height: 30,
-              flex: "0 0 auto",
-              display: "grid",
-              placeItems: "center",
-              borderRadius: 1,
-              bgcolor: "primary.main",
-              color: "primary.contrastText",
-              "&:hover": { bgcolor: "primary.dark" },
-              ...(panelView === "chat" ? {
-                p: 0,
-                bgcolor: "transparent",
-                "&:hover": { bgcolor: "action.hover" },
-              } : {}),
-            }}
-          >
-            {panelView === "chat"
-              ? <BrandIcon size={26} />
-              : <ArrowBackRounded sx={{ fontSize: 18 }} />}
-          </IconButton>
+          {/* The brand mark is identity, not a control. It used to double as
+              the Settings entry, labelled "user information" — a logo reads as
+              decoration, so the one screen a keyless first run must reach was
+              effectively hidden. Settings is now a labelled gear on the right. */}
+          {panelView === "chat" ? (
+            <Box
+              aria-hidden
+              sx={{ width: 30, height: 30, flex: "0 0 auto", display: "grid", placeItems: "center" }}
+            >
+              <BrandIcon size={26} />
+            </Box>
+          ) : (
+            <IconButton
+              type="button"
+              onClick={togglePanelView}
+              aria-label={t("panel.returnToChat")}
+              title={t("panel.returnToChat")}
+              data-copilot-no-drag
+              sx={{
+                width: 30,
+                height: 30,
+                flex: "0 0 auto",
+                display: "grid",
+                placeItems: "center",
+                borderRadius: 1,
+                bgcolor: "primary.main",
+                color: "primary.contrastText",
+                "&:hover": { bgcolor: "primary.dark" },
+              }}
+            >
+              <ArrowBackRounded sx={{ fontSize: 18 }} />
+            </IconButton>
+          )}
           {panelView === "chat" ? (
             <ButtonBase
               component="button"
@@ -789,6 +797,16 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
                 <FactCheckRounded fontSize="small" />
               </IconButton>
               <LanguageButton tourId="language" />
+              <IconButton
+                type="button"
+                size="small"
+                onClick={togglePanelView}
+                aria-label={t("panel.openSettings")}
+                title={t("panel.openSettings")}
+                data-copilot-no-drag
+              >
+                <SettingsRounded fontSize="small" />
+              </IconButton>
             </>
           )}
           <IconButton

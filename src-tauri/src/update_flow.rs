@@ -2,7 +2,7 @@ use crate::{
     app_bundle::{
         app_bundle_manifest_url, app_bundle_requires_shell_update, install_configured_app_bundle,
         is_newer_app_bundle_version, is_shell_version_compatible, normalize_update_error,
-        read_remote_app_bundle_manifest, resolve_active_app_bundle,
+        read_remote_app_bundle_manifest,
         rollback_app_bundle_installation, shell_update_required_message,
     },
     installed_client_smoke::{
@@ -434,7 +434,7 @@ pub(crate) fn app_bundle_update_state(
         .map_err(|error| error.to_string())?;
     runtime.state = hydrate_app_bundle_update_state_for_paths(
         &state.app_data_dir,
-        &state.resource_dir,
+        current_app_bundle_version(state),
         runtime.state.clone(),
     );
     Ok(runtime.state.clone())
@@ -686,7 +686,7 @@ fn set_app_bundle_update_state(
         .map_err(|error| error.to_string())?;
     let next = apply_app_bundle_update_patch(
         &state.app_data_dir,
-        &state.resource_dir,
+        current_app_bundle_version(state),
         runtime.state.clone(),
         patch,
     );
@@ -695,16 +695,22 @@ fn set_app_bundle_update_state(
         .map_err(|error| error.to_string())
 }
 
+/// Read the active bundle version from the cache DesktopState filled at
+/// startup. Never re-resolve here: that verifies every asset in the manifest
+/// by hash, and these callers are on the main thread.
 fn current_app_bundle_version(state: &DesktopState) -> Option<String> {
     if let Some(version) = installed_client_smoke_current_bundle_version() {
         return Some(version);
     }
-    resolve_active_app_bundle(
-        &state.app_data_dir,
-        &state.resource_dir,
-        env!("CARGO_PKG_VERSION"),
-    )
-    .map(|bundle| bundle.manifest.bundle_version)
+    state
+        .active_app_bundle
+        .lock()
+        .ok()
+        .and_then(|bundle| {
+            bundle
+                .as_ref()
+                .map(|active| active.manifest.bundle_version.clone())
+        })
 }
 
 fn schedule_app_bundle_restart(app: AppHandle) {

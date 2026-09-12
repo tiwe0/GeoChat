@@ -112,9 +112,10 @@ export const AGENT_PROVIDER_REGISTRY = [
 export const AGENT_MODEL_REGISTRY = [
   {
     provider: "deepseek",
-    id: "deepseek-v4-flash",
-    label: "DeepSeek V4 Flash",
-    capabilities: ["text", "toolCalling"],
+    id: "deepseek-flash",
+    label: "DeepSeek V4.1 Flash",
+    // Native multimodal understanding, confirmed against the live API.
+    capabilities: ["text", "imageInput", "toolCalling"],
     maxToolSteps: 24,
     defaultTemperature: 0.2
   },

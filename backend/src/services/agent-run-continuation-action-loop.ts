@@ -49,6 +49,7 @@ export async function continueRunnerActionLoop(input: {
   attachments?: AgentRunImageAttachment[];
   pendingToolRequests: AgentRunRemoteToolRequest[];
   onModelTextDelta?: (text: string) => void;
+  onModelReasoningDelta?: (text: string) => void;
   agentRunCommits: AgentRunCommitService;
   agentRunRunnerSnapshots: AgentRunRunnerSnapshotService;
   modelNextAction: (input: BackendModelNextActionInput) => Promise<BackendModelNextAction>;
@@ -236,6 +237,7 @@ export async function continueRunnerActionLoop(input: {
       model: input.model,
       attachments: input.attachments,
       onModelTextDelta: input.onModelTextDelta,
+      onModelReasoningDelta: input.onModelReasoningDelta,
       modelNextAction: input.modelNextAction
     });
     if (nextModelTurn.type === "failed") {

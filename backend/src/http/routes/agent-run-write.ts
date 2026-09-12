@@ -137,7 +137,10 @@ export async function handleAgentRunWriteRoute(
           record,
           toolCallId: route.toolCallId,
           payload,
-          onModelTextDelta: (text) => emit({ type: "text-delta", text })
+          onModelTextDelta: (text) => emit({ type: "text-delta", text }),
+          // Reasoning arrives on its own channel so the transcript can
+          // show it apart from the answer rather than interleaved with it.
+          onModelReasoningDelta: (text) => emit({ type: "reasoning-delta", text })
         });
         emit({
           type: "done",

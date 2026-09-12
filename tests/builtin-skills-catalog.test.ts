@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BUILTIN_AGENT_SKILL_NAMES, DEFAULT_BUSINESS_AGENT_SKILL_NAMES } from "../src/renderer/src/desktop-config";
+import { BUILTIN_AGENT_SKILL_NAMES, DEFAULT_BUSINESS_AGENT_SKILL_NAMES } from "../src/shared/desktop/desktop-config";
 import {
   activateAgentSkill,
   filterBusinessReadyAgentSkills,

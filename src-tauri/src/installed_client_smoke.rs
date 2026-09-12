@@ -105,7 +105,12 @@ pub(crate) fn run_installed_client_update_smoke_cli() -> Result<(), String> {
             settings.update_preferences.clone(),
         ))),
         app_bundle_update: Mutex::new(AppBundleUpdateRuntime::new(
-            initial_app_bundle_update_state(&app_data_dir, &resource_dir),
+            initial_app_bundle_update_state(
+                &app_data_dir,
+                active_app_bundle
+                    .as_ref()
+                    .map(|bundle| bundle.manifest.bundle_version.clone()),
+            ),
         )),
         settings_path,
         app_data_dir: app_data_dir.clone(),

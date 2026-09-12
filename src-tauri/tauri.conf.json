@@ -1,11 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "GeoChat",
-  "version": "0.2.8",
+  "version": "0.4.0",
   "identifier": "ai.geochat.desktop",
   "build": {
     "beforeDevCommand": "bun run tauri:renderer:dev",
-    "devUrl": "http://127.0.0.1:1420",
+    "devUrl": "http://127.0.0.1:1421",
     "beforeBuildCommand": "bun run tauri:prepare",
     "frontendDist": "../dist/renderer"
   },
@@ -31,7 +31,10 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "capabilities": [
+        "default"
+      ]
     }
   },
   "plugins": {

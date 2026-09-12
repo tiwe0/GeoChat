@@ -53,6 +53,7 @@ export function createAgentRunContinuationService(
     attachments?: AgentRunImageAttachment[];
     pendingToolRequests: AgentRunRemoteToolRequest[];
     onModelTextDelta?: (text: string) => void;
+    onModelReasoningDelta?: (text: string) => void;
   }): Promise<RunnerContinuationOutcome> {
     let run = input.run;
     const modelTurn = await runRunnerContinuationModelTurn({
@@ -60,6 +61,7 @@ export function createAgentRunContinuationService(
       model: input.model,
       attachments: input.attachments,
       onModelTextDelta: input.onModelTextDelta,
+      onModelReasoningDelta: input.onModelReasoningDelta,
       modelNextAction: options.modelNextAction
     });
     if (modelTurn.type === "failed") {
@@ -91,6 +93,7 @@ export function createAgentRunContinuationService(
         attachments: input.attachments,
         pendingToolRequests: input.pendingToolRequests,
         onModelTextDelta: input.onModelTextDelta,
+      onModelReasoningDelta: input.onModelReasoningDelta,
         agentRunCommits,
         agentRunRunnerSnapshots,
         modelNextAction: options.modelNextAction,

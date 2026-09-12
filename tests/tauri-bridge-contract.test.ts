@@ -5,7 +5,7 @@ import {
   createTauriDesktopApi,
   TAURI_DESKTOP_COMMANDS,
   TAURI_DESKTOP_EVENTS
-} from "../src/renderer/src/tauri-bridge";
+} from "../src/shared/desktop/tauri-bridge";
 
 const expectedCommandByMethod = {
   getRuntimeInfo: "get_runtime_info",

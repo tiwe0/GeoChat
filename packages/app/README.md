@@ -50,10 +50,12 @@ allowed to change, but changes should be reviewed as behavior changes rather tha
 refactors.
 
 - `agent-prompts`
+- `agent-thinking`
 - `agent-routing-text`
 - `canvas-visual-guidance`
 - `geogebra-command-usage`
 - `geogebra-style-policy`
+- `model-discovery`
 - `provider-proxy-policy`
 - `workflow-policy`
 

@@ -5,7 +5,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateText, stepCountIs, streamText, type LanguageModel, type ModelMessage } from "ai";
-import type { AgentModelConfig } from "@geochat-ai/app";
+import type { AgentModelConfig, AgentThinkingProviderOptions } from "@geochat-ai/app";
 import type { createBackendPlanningTools } from "./model-runner-planning-tools";
 import type { ModelResultLike } from "./model-runner-toolcalls";
 
@@ -19,9 +19,11 @@ export async function runBackendModelStep(input: {
   maxRetries: number;
   temperature: number | undefined;
   timeout: number;
+  providerOptions?: AgentThinkingProviderOptions;
   onTextDelta?: (text: string) => void | Promise<void>;
+  onReasoningDelta?: (text: string) => void | Promise<void>;
 }): Promise<ModelResultLike> {
-  if (!input.onTextDelta) {
+  if (!input.onTextDelta && !input.onReasoningDelta) {
     return generateText({
       model: input.model,
       system: input.system,
@@ -31,7 +33,8 @@ export async function runBackendModelStep(input: {
       stopWhen: input.stopWhen,
       maxRetries: input.maxRetries,
       temperature: input.temperature,
-      timeout: input.timeout
+      timeout: input.timeout,
+      ...(input.providerOptions ? { providerOptions: input.providerOptions } : {})
     });
   }
 
@@ -44,10 +47,14 @@ export async function runBackendModelStep(input: {
     stopWhen: input.stopWhen,
     maxRetries: input.maxRetries,
     temperature: input.temperature,
-    timeout: input.timeout
+    timeout: input.timeout,
+    ...(input.providerOptions ? { providerOptions: input.providerOptions } : {})
   });
   for await (const part of result.fullStream) {
-    if (part.type === "text-delta" && part.text) await input.onTextDelta(part.text);
+    if (part.type === "text-delta" && part.text) await input.onTextDelta?.(part.text);
+    // Providers that expose their reasoning send it as a separate part type.
+    // Ones that only summarise, or hide it entirely, simply never emit these.
+    if (part.type === "reasoning-delta" && part.text) await input.onReasoningDelta?.(part.text);
   }
   return {
     toolCalls: await result.toolCalls,

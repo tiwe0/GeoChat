@@ -97,6 +97,13 @@ export type AgentRunLedgerRecord = {
   maxToolSteps?: number | null;
   modelStepTimeoutMs?: number | null;
   locale?: AgentRunLocale | null;
+  /**
+   * Whether the model was asked to reason before answering, and how hard.
+   * Recorded on the run rather than read from live UI state, so a run
+   * recovered after a reload resumes with the setting it actually started on.
+   */
+  thinking?: boolean | null;
+  thinkingEffort?: AgentRunThinkingEffort | null;
   prompt: string;
   attachmentCount: number;
   startedAt: string;
@@ -205,6 +212,8 @@ export type AgentRunStartInput = {
   maxToolSteps?: number | null;
   modelStepTimeoutMs?: number | null;
   locale?: AgentRunLocale | null;
+  thinking?: boolean | null;
+  thinkingEffort?: AgentRunThinkingEffort | null;
   prompt: string;
   attachmentCount: number;
   startedAt?: string;
@@ -226,6 +235,8 @@ export function createAgentRunLedger(input: {
   model: AgentModelConfig;
   modelStepTimeoutMs?: number | null;
   locale?: AgentRunLocale | null;
+  thinking?: boolean | null;
+  thinkingEffort?: AgentRunThinkingEffort | null;
   prompt: string;
   attachmentCount: number;
   startedAt?: string;
@@ -242,6 +253,8 @@ export function createAgentRunLedger(input: {
     maxToolSteps: normalizeAgentRunnerMaxToolSteps(input.model.maxToolSteps),
     modelStepTimeoutMs: normalizeAgentModelStepTimeoutMs(input.modelStepTimeoutMs),
     locale: input.locale ?? null,
+    thinking: input.thinking ?? null,
+    thinkingEffort: normalizeAgentRunThinkingEffort(input.thinkingEffort),
     prompt: input.prompt,
     attachmentCount: input.attachmentCount,
     startedAt: input.startedAt ?? new Date().toISOString(),
@@ -266,6 +279,8 @@ export function createAgentRunLedgerFromStart(input: AgentRunStartInput): AgentR
     maxToolSteps: normalizeAgentRunnerMaxToolSteps(input.maxToolSteps),
     modelStepTimeoutMs: normalizeAgentModelStepTimeoutMs(input.modelStepTimeoutMs),
     locale: input.locale ?? null,
+    thinking: input.thinking ?? null,
+    thinkingEffort: normalizeAgentRunThinkingEffort(input.thinkingEffort),
     prompt: input.prompt,
     attachmentCount: input.attachmentCount,
     startedAt: input.startedAt ?? new Date().toISOString(),
@@ -435,10 +450,20 @@ export function isAgentRunStartInput(value: unknown): value is AgentRunStartInpu
     isOptionalAgentRunnerMaxToolSteps(payload.maxToolSteps) &&
     isOptionalAgentModelStepTimeoutMs(payload.modelStepTimeoutMs) &&
     isOptionalAgentRunLocale(payload.locale) &&
+    isOptionalThinking(payload.thinking) &&
+    isOptionalThinkingEffort(payload.thinkingEffort) &&
     typeof payload.prompt === "string" &&
     isNonNegativeInteger(payload.attachmentCount) &&
     isOptionalAgentRunTimestamp(payload.startedAt)
   );
+}
+
+function isOptionalThinking(value: unknown) {
+  return value === undefined || value === null || typeof value === "boolean";
+}
+
+function isOptionalThinkingEffort(value: unknown) {
+  return value === undefined || value === null || normalizeAgentRunThinkingEffort(value) !== null;
 }
 
 export function isAgentRunToolRecord(value: unknown): value is AgentRunToolRecord {
@@ -490,6 +515,9 @@ export function isAgentRunLedgerRecord(value: unknown): value is AgentRunLedgerR
     isOptionalAgentRunnerMaxToolSteps(payload.maxToolSteps) &&
     isOptionalAgentModelStepTimeoutMs(payload.modelStepTimeoutMs) &&
     isOptionalAgentRunLocale(payload.locale) &&
+    // Optional, so ledgers written before thinking existed still validate.
+    isOptionalThinking(payload.thinking) &&
+    isOptionalThinkingEffort(payload.thinkingEffort) &&
     typeof payload.prompt === "string" &&
     isNonNegativeInteger(payload.attachmentCount) &&
     isAgentRunTimestamp(payload.startedAt) &&
@@ -948,4 +976,14 @@ function stableJson(value: unknown): string {
     .sort()
     .map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`)
     .join(",")}}`;
+}
+
+/** How much deliberation the model is asked for on a run. */
+export type AgentRunThinkingEffort = "light" | "standard" | "extended";
+
+export const AGENT_RUN_THINKING_EFFORTS = ["light", "standard", "extended"] as const;
+
+/** Anything unrecognised becomes null, so a bad value cannot reach a provider. */
+export function normalizeAgentRunThinkingEffort(value: unknown): AgentRunThinkingEffort | null {
+  return value === "light" || value === "standard" || value === "extended" ? value : null;
 }

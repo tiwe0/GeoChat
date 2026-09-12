@@ -1,5 +1,6 @@
 import { stepCountIs, type LanguageModel, type ModelMessage } from "ai";
 import {
+  agentThinkingProviderOptions,
   GEOCHAT_REPAIR_SYSTEM_PROMPT_EN,
   GEOCHAT_REPAIR_SYSTEM_PROMPT,
   GEOCHAT_SYSTEM_PROMPT_EN,
@@ -64,6 +65,7 @@ export type BackendModelNextActionInput = {
   model?: LanguageModel;
   timeoutMs?: number;
   onTextDelta?: (text: string) => void | Promise<void>;
+  onReasoningDelta?: (text: string) => void | Promise<void>;
   disabledToolNames?: FunctionCallToolName[];
 };
 
@@ -134,7 +136,15 @@ export async function createBackendModelNextAction(input: BackendModelNextAction
       maxRetries: 1,
       temperature: modelPolicy.defaultTemperature,
       timeout: input.timeoutMs ?? 120_000,
-      onTextDelta: input.onTextDelta
+      // Read from the run, not from whatever the UI currently shows: a run
+      // recovered after a reload must continue as it started.
+      providerOptions: agentThinkingProviderOptions({
+        provider: input.modelConfig.provider,
+        enabled: input.run.thinking === true,
+        effort: input.run.thinkingEffort ?? "standard"
+      }),
+      onTextDelta: input.onTextDelta,
+      onReasoningDelta: input.onReasoningDelta
     });
     try {
       return withBackendModelActionDiagnostics(

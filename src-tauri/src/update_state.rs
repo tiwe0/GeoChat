@@ -1,6 +1,6 @@
 use crate::{
     app_bundle::{
-        app_bundle_manifest_url, app_bundle_rollback_available, resolve_active_app_bundle,
+        app_bundle_manifest_url, app_bundle_rollback_available,
     },
     settings::DesktopUpdatePreferences,
     shell_update::shell_update_configured,
@@ -193,11 +193,11 @@ pub(crate) fn shell_update_state_from_update(
 
 pub(crate) fn initial_app_bundle_update_state(
     app_data_dir: &Path,
-    resource_dir: &Path,
+    active_bundle_version: Option<String>,
 ) -> DesktopAppBundleUpdateState {
     hydrate_app_bundle_update_state_for_paths(
         app_data_dir,
-        resource_dir,
+        active_bundle_version,
         DesktopAppBundleUpdateState {
             status: if app_bundle_manifest_url().is_some() {
                 "idle"
@@ -224,9 +224,18 @@ pub(crate) fn initial_app_bundle_update_state(
     )
 }
 
+/// Rebuild the derived fields of the app-bundle update state.
+///
+/// `active_bundle_version` is passed in rather than resolved here. Resolving
+/// it means reading and SHA-256ing every asset in the manifest — hundreds of
+/// megabytes, because the vendored GeoGebra runtime lives in there — and the
+/// commands that call this run on the main thread. Doing it per call froze the
+/// window for as long as the hashing took. The active bundle cannot change
+/// while the process runs (installing one requires a restart), so it is
+/// resolved once at startup and cached in DesktopState.
 pub(crate) fn hydrate_app_bundle_update_state_for_paths(
     app_data_dir: &Path,
-    resource_dir: &Path,
+    active_bundle_version: Option<String>,
     current: DesktopAppBundleUpdateState,
 ) -> DesktopAppBundleUpdateState {
     let configured = app_bundle_manifest_url().is_some();
@@ -234,13 +243,7 @@ pub(crate) fn hydrate_app_bundle_update_state_for_paths(
         available: configured,
         configured,
         manifest_url: app_bundle_manifest_url(),
-        current_bundle_version: resolve_active_app_bundle(
-            app_data_dir,
-            resource_dir,
-            env!("CARGO_PKG_VERSION"),
-        )
-        .map(|bundle| bundle.manifest.bundle_version)
-        .or(current.current_bundle_version),
+        current_bundle_version: active_bundle_version.or(current.current_bundle_version),
         rollback_available: app_bundle_rollback_available(app_data_dir),
         update_available: current.status == "available",
         error: if configured {
@@ -254,7 +257,7 @@ pub(crate) fn hydrate_app_bundle_update_state_for_paths(
 
 pub(crate) fn apply_app_bundle_update_patch(
     app_data_dir: &Path,
-    resource_dir: &Path,
+    active_bundle_version: Option<String>,
     current: DesktopAppBundleUpdateState,
     patch: AppBundleUpdatePatch,
 ) -> DesktopAppBundleUpdateState {
@@ -286,7 +289,7 @@ pub(crate) fn apply_app_bundle_update_patch(
     if let Some(value) = patch.error_code {
         next.error_code = value;
     }
-    hydrate_app_bundle_update_state_for_paths(app_data_dir, resource_dir, next)
+    hydrate_app_bundle_update_state_for_paths(app_data_dir, active_bundle_version, next)
 }
 
 pub(crate) fn unified_update_state(

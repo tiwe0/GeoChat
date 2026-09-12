@@ -30,6 +30,7 @@ export async function runRunnerContinuationModelTurn(input: {
   model: AgentModelConfig;
   attachments?: AgentRunImageAttachment[];
   onModelTextDelta?: (text: string) => void;
+  onModelReasoningDelta?: (text: string) => void;
   modelNextAction: (input: BackendModelNextActionInput) => Promise<BackendModelNextAction>;
 }): Promise<RunnerContinuationModelTurnResult> {
   const modelStep = createRunnerModelStepStart({
@@ -44,7 +45,8 @@ export async function runRunnerContinuationModelTurn(input: {
       run: input.run,
       attachments: input.attachments,
       timeoutMs: agentModelStepTimeoutMsOrDefault(input.run.modelStepTimeoutMs),
-      onTextDelta: input.onModelTextDelta
+      onTextDelta: input.onModelTextDelta,
+      onReasoningDelta: input.onModelReasoningDelta
     });
     return {
       type: "succeeded",

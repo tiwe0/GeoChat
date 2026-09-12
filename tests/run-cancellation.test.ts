@@ -3,7 +3,7 @@ import {
   RunCancelledError,
   isRunCancelledError,
   throwIfRunCancelled
-} from "../src/renderer/src/run-cancellation";
+} from "../src/shared/desktop/run-cancellation";
 
 describe("run cancellation", () => {
   test("throws when the run signal is aborted", () => {

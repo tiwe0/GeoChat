@@ -4,8 +4,8 @@ import type { GeoChatDesktopApi } from "../src/shared/desktop-api";
 import {
   createImprovementPlanUploader,
   type ImprovementPlanUploaderRuntime
-} from "../src/renderer/src/improvement-plan";
-import type { DesktopChatMessage, DesktopConfig } from "../src/renderer/src/workbench-types";
+} from "../src/shared/desktop/improvement-plan";
+import type { DesktopChatMessage, DesktopConfig } from "../src/shared/desktop/workbench-types";
 
 const runtime: RuntimeInfo = {
   appVersion: "0.2.4-test",

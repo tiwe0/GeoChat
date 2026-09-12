@@ -174,9 +174,16 @@ fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
         Some(&local_backend_auth_token),
     )?;
     let shell_update_state = initial_shell_update_state(settings.update_preferences.clone());
-    let app_bundle_update_state = initial_app_bundle_update_state(&app_data_dir, &resource_dir);
+    // Resolving verifies every asset in the manifest by hash, so it happens
+    // exactly once here and everything downstream reads the cached result.
     let active_app_bundle =
         resolve_active_app_bundle(&app_data_dir, &resource_dir, env!("CARGO_PKG_VERSION"));
+    let app_bundle_update_state = initial_app_bundle_update_state(
+        &app_data_dir,
+        active_app_bundle
+            .as_ref()
+            .map(|bundle| bundle.manifest.bundle_version.clone()),
+    );
     app.manage(DesktopState {
         backend: Mutex::new(backend),
         mcp: Mutex::new(McpRuntime::new()),
@@ -226,11 +233,18 @@ fn initialize_main_window(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+const DEFAULT_DEV_URL: &str = "http://127.0.0.1:1421";
+
 fn initial_window_url(
     active_bundle: Option<&ActiveAppBundle>,
 ) -> Result<tauri::WebviewUrl, String> {
     if cfg!(debug_assertions) {
-        return Url::parse("http://127.0.0.1:1420")
+        // The dev URL is built here rather than read from tauri.conf.json's
+        // devUrl, so a --config override cannot move it. GEOCHAT_DEV_URL lets a
+        // second renderer be previewed in the shell without editing this file.
+        let dev_url = std::env::var("GEOCHAT_DEV_URL")
+            .unwrap_or_else(|_| DEFAULT_DEV_URL.to_string());
+        return Url::parse(&dev_url)
             .map(tauri::WebviewUrl::External)
             .map_err(|error| error.to_string());
     }
@@ -353,7 +367,7 @@ mod tests {
         app_bundle::{AppBundleAsset, AppBundleEntry, AppBundleManifest},
         app_bundle_content_type, app_bundle_protocol_request_path, initial_window_url,
         mcp::auto_start_desktop_mcp_requested_for,
-        ActiveAppBundle,
+        ActiveAppBundle, DEFAULT_DEV_URL,
     };
     use std::path::PathBuf;
 
@@ -468,7 +482,7 @@ mod tests {
 
         match url {
             tauri::WebviewUrl::External(url) => {
-                assert_eq!(url.as_str(), "http://127.0.0.1:1420/");
+                assert_eq!(url.as_str(), format!("{DEFAULT_DEV_URL}/"));
             }
             other => panic!("expected Vite dev URL, got {other:?}"),
         }

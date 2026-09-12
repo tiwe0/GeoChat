@@ -1,0 +1,147 @@
+:root {
+  /* Only self-hosted families are named first. Inter led this stack and was
+     never loaded — with font-synthesis: none that silently collapsed the
+     weight range on any machine without it. */
+  font-family: "Nunito Sans Variable", "Noto Sans SC Variable", "Noto Sans SC", "PingFang SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #18231e;
+  background: #f4f7f5;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { width: 100%; height: 100%; }
+body { margin: 0; min-width: 320px; min-height: 100vh; background: #f4f7f5; }
+button, textarea { font: inherit; }
+button { cursor: pointer; }
+
+.app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+.topbar { height: 68px; flex: 0 0 68px; display: flex; align-items: center; justify-content: space-between; padding: 0 32px; background: #fff; border-bottom: 1px solid #e4ebe6; }
+.brand-lockup, .topbar-actions, .canvas-toolbar, .canvas-actions, .assistant-heading, .composer-footer { display: flex; align-items: center; }
+.brand-lockup { gap: 11px; }
+.brand-mark { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; color: #fff; font-size: 19px; font-weight: 800; background: #07c160; box-shadow: 0 5px 12px #07c16033; }
+.brand-lockup strong { display: block; font-size: 15px; letter-spacing: .1px; }
+.brand-lockup span { display: block; margin-top: 2px; color: #829087; font-size: 11px; }
+.topbar-actions { gap: 14px; }
+.status-pill { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border: 1px solid #e0e9e3; border-radius: 99px; color: #637169; font-size: 11px; background: #fbfdfb; }
+.status-pill i { width: 6px; height: 6px; border-radius: 50%; background: #a8b3ac; }
+.status-pill.ready i { background: #07c160; box-shadow: 0 0 0 3px #07c1601c; }
+.status-pill.error i { background: #df574d; }
+.icon-button, .avatar-button, .more-button { border: 0; background: transparent; color: #718078; }
+.icon-button { font-size: 17px; padding: 5px; }
+.avatar-button { width: 30px; height: 30px; border-radius: 50%; background: #e7f6ed; color: #07934b; font-size: 12px; font-weight: 700; }
+
+.workspace { position: relative; width: 100%; margin: 0 auto; padding: 20px 22px 18px; flex: 1; }
+.canvas-column, .assistant-column { min-width: 0; }
+.canvas-toolbar { justify-content: space-between; margin: 0 2px 14px; }
+.eyebrow { color: #91a097; font-size: 10px; font-weight: 800; letter-spacing: .13em; }
+h1, h2 { margin: 4px 0 0; font-size: 20px; line-height: 1.2; letter-spacing: -.02em; }
+h2 { font-size: 18px; }
+.canvas-actions { gap: 8px; }
+.canvas-actions button { border: 1px solid #dce6df; border-radius: 7px; padding: 7px 11px; color: #617068; font-size: 12px; background: #fff; }
+.canvas-actions .primary-light { border-color: #bde8cc; color: #078d48; background: #effaf3; }
+.canvas-frame { position: relative; min-height: 580px; height: calc(100vh - 143px); overflow: hidden; border: 1px solid #dfe8e1; border-radius: 10px; background: #fff; box-shadow: 0 10px 30px #183b2410; }
+.geogebra-host { width: 100%; height: 100%; }
+.geogebra-host > * { width: 100% !important; height: 100% !important; }
+.canvas-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #839088; font-size: 13px; background: #fff; }
+.canvas-overlay.hidden { display: none; }
+.canvas-overlay p { margin: 0; }
+.loader { width: 22px; height: 22px; border: 2px solid #d6eadd; border-top-color: #07c160; border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.canvas-meta { display: flex; justify-content: space-between; padding: 9px 2px; color: #89958d; font-size: 10px; }
+.secure-dot { color: #839c8c; }
+
+.assistant-column { position: absolute; z-index: 5; top: 20px; right: 34px; width: min(360px, calc(100vw - 68px)); height: calc(100vh - 181px); display: flex; flex-direction: column; min-height: 0; border: 1px solid #e0e9e3; border-radius: 10px; background: #fffffff2; box-shadow: 0 14px 34px #183b2422; backdrop-filter: blur(10px); }
+.assistant-heading { justify-content: space-between; padding: 18px 18px 15px; border-bottom: 1px solid #edf1ee; }
+.more-button { padding: 0 2px; font-size: 18px; letter-spacing: 2px; }
+.message-list { flex: 1; min-height: 240px; overflow: auto; padding: 16px 15px; }
+.message-row { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 15px; }
+.message-row.user { flex-direction: row-reverse; }
+.message-avatar { width: 25px; height: 25px; flex: 0 0 25px; display: grid; place-items: center; border-radius: 8px; color: #078d48; background: #e8f7ee; font-size: 10px; font-weight: 700; }
+.message-row.user .message-avatar { color: #fff; background: #07c160; }
+.message-row.system .message-avatar { color: #a64d44; background: #fff0ef; }
+.message-bubble { max-width: 86%; padding: 9px 11px; border-radius: 9px 9px 9px 2px; color: #35433b; font-size: 13px; line-height: 1.58; white-space: pre-wrap; background: #f4f8f5; }
+.message-row.user .message-bubble { border-radius: 9px 9px 2px 9px; color: #fff; background: #07c160; }
+.message-row.system .message-bubble { color: #a64d44; background: #fff5f4; }
+.typing { display: flex; align-items: center; gap: 4px; margin: 3px 0 0 34px; color: #92a099; font-size: 11px; }
+.typing span { width: 4px; height: 4px; border-radius: 50%; background: #8bcba4; animation: blink 1s ease-in-out infinite; }
+.typing span:nth-child(2) { animation-delay: .15s; }.typing span:nth-child(3) { animation-delay: .3s; }
+@keyframes blink { 0%, 80%, 100% { opacity: .3; } 40% { opacity: 1; } }
+.composer { margin: 0 12px 12px; padding: 10px; border: 1px solid #dce8df; border-radius: 9px; background: #fbfdfb; }
+.composer textarea { width: 100%; resize: none; border: 0; outline: 0; color: #26362c; font-size: 13px; line-height: 1.5; background: transparent; }
+.composer textarea::placeholder { color: #a0aca4; }
+.composer textarea:disabled { cursor: not-allowed; }
+.send-button { float: right; width: 28px; height: 28px; margin-top: -29px; border: 0; border-radius: 7px; color: #fff; font-size: 18px; line-height: 1; background: #07c160; }
+.send-button:disabled { cursor: not-allowed; opacity: .35; }
+.composer-footer { justify-content: space-between; clear: both; padding-top: 7px; color: #9aa69e; font-size: 10px; }
+
+@media (max-width: 900px) {
+  .topbar { padding: 0 18px; }
+  .workspace { padding: 18px; }
+  .canvas-frame { min-height: 52vh; height: 58vh; }
+  .assistant-column { position: relative; top: auto; right: auto; width: 100%; height: 390px; margin-top: 14px; }
+}
+@media (max-width: 540px) {
+  .status-pill { display: none; }
+  .workspace { padding: 13px; gap: 14px; }
+  .canvas-frame { min-height: 52vh; height: 52vh; }
+  .canvas-meta { font-size: 9px; }
+  .canvas-meta .secure-dot { display: none; }
+}
+
+/* Standalone Web shell around the migrated extension panel. */
+.frontend-shell { width: 100%; height: 100%; min-height: 100vh; position: relative; overflow: hidden; background: #f4f7f5; }
+.frontend-canvas { position: absolute; inset: 0; background: #fff; }
+.frontend-canvas-host, .frontend-canvas-host > * { width: 100%; height: 100%; }
+.frontend-canvas-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #607168; background: #fff; font-size: 13px; }
+.frontend-canvas-overlay span { max-width: min(560px, calc(100vw - 40px)); color: #a64d44; font-size: 11px; text-align: center; overflow-wrap: anywhere; }
+.frontend-loader { width: 24px; height: 24px; border: 2px solid #d6eadd; border-top-color: #07c160; border-radius: 50%; animation: frontend-spin .8s linear infinite; }
+.frontend-canvas-error { width: 24px; height: 24px; border: 2px solid #f0c8c4; border-radius: 50%; position: relative; }
+.frontend-canvas-error::before, .frontend-canvas-error::after { content: ""; position: absolute; inset: 10px 4px auto; height: 2px; background: #df574d; transform: rotate(45deg); }
+.frontend-canvas-error::after { transform: rotate(-45deg); }
+@keyframes frontend-spin { to { transform: rotate(360deg); } }
+.geochatpro-panel-host { position: fixed; z-index: 20; right: 20px; bottom: 20px; }
+/* Window titlebar.
+   Transparent, and floating over the canvas rather than pushing it down, so
+   no drawing area is lost — the canvas shows straight through.
+
+   z-index 15 is deliberate: it sits above the canvas but BELOW the assistant
+   panel (20). A titlebar drawn over the panel would swallow the pointer the
+   moment the panel was dragged up here, and the panel could never be dragged
+   back out. Below the panel, the bar keeps every pixel the panel is not
+   covering, and the panel stays grabbable everywhere. */
+.window-titlebar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 15;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Clears the traffic lights, which the shell places at x=18. */
+  padding: 0 12px 0 84px;
+  background: transparent;
+  /* The only affordance a transparent bar has: the pointer says "grab me". */
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.window-titlebar:active { cursor: grabbing; }
+/* Windows draws no traffic lights, and its controls sit on the right. */
+.window-titlebar-windows { padding-left: 16px; }
+.window-titlebar-spacer { flex: 1; min-width: 0; align-self: stretch; }
+.window-titlebar-controls { display: flex; align-items: center; gap: 2px; }
+.window-titlebar-controls button { cursor: pointer; width: 34px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: #35433b; }
+.window-titlebar-controls button:hover { background: #18231e0f; }
+.window-titlebar-controls button:focus-visible { outline: 2px solid #07c160; outline-offset: -2px; }
+.window-titlebar-controls .window-titlebar-close:hover { background: #df574d; color: #fff; }
+.window-titlebar-controls svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.2; }
+
+.geochatpro-panel-host > .MuiPaper-root { box-shadow: 0 18px 48px rgba(24, 59, 36, .2); }
+.copilot-markdown { min-width: 0; font-size: 14px; line-height: 1.68; overflow-wrap: anywhere; }
+.copilot-markdown p { margin: 0 0 9px; }
+.copilot-markdown :is(h1,h2,h3,h4) { margin: 16px 0 7px; line-height: 1.32; font-weight: 750; }
+.copilot-markdown > :first-child { margin-top: 0; }
+.copilot-markdown > :last-child { margin-bottom: 0; }
+.copilot-markdown pre { max-width: 100%; overflow-x: auto; }
+@media (max-width: 700px) { .geochatpro-panel-host { right: 10px; bottom: 10px; left: 10px; } }

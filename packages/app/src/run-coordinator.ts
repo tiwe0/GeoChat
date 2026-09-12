@@ -41,6 +41,8 @@ export type AgentRunToolResultResponse = {
 
 export type AgentRunToolResultStreamOptions = {
   onTextDelta?: (text: string) => void;
+  /** Only providers that expose their reasoning emit these. */
+  onReasoningDelta?: (text: string) => void;
   signal?: AbortSignal;
 };
 
@@ -56,6 +58,8 @@ export function agentRunStartPayload(record: AgentRunLedgerRecord) {
     maxToolSteps: record.maxToolSteps ?? null,
     modelStepTimeoutMs: record.modelStepTimeoutMs ?? null,
     locale: record.locale,
+    thinking: record.thinking ?? null,
+    thinkingEffort: record.thinkingEffort ?? null,
     prompt: record.prompt,
     attachmentCount: record.attachmentCount,
     startedAt: record.startedAt
@@ -171,6 +175,10 @@ export function createAgentRunCoordinator(options: AgentRunCoordinatorOptions) {
         const payload = event as Record<string, unknown>;
         if (payload.type === "text-delta" && typeof payload.text === "string") {
           options?.onTextDelta?.(payload.text);
+          continue;
+        }
+        if (payload.type === "reasoning-delta" && typeof payload.text === "string") {
+          options?.onReasoningDelta?.(payload.text);
           continue;
         }
         if (payload.type === "done") {

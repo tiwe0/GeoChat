@@ -32,6 +32,8 @@ export type AgentThinkingProviderOptions = Record<string, Record<string, AgentTh
 
 export type AgentThinkingRequest = {
   provider: string;
+  /** Provider model id, when model-specific request compatibility matters. */
+  model?: string;
   enabled: boolean;
   effort: AgentRunThinkingEffort;
 };
@@ -74,6 +76,13 @@ export function agentThinkingProviderOptions(
 ): AgentThinkingProviderOptions | undefined {
   const provider = request.provider as AgentModelProvider;
   const effort = request.effort;
+
+  // DeepSeek V4.1 Flash is exposed as `deepseek-flash`. It is not compatible
+  // with the V4 `thinking` / `reasoning_effort` request fields that the AI SDK
+  // uses for the older `deepseek-v4-*` models. Omitting provider options lets
+  // the model use its native default request shape instead of producing an
+  // empty stream that AI SDK reports as NoOutputGeneratedError.
+  if (provider === "deepseek" && isDeepSeekFlashModel(request.model)) return undefined;
 
   if (provider === "anthropic") {
     return {
@@ -122,4 +131,8 @@ export function agentThinkingProviderOptions(
   }
 
   return undefined;
+}
+
+function isDeepSeekFlashModel(model: string | undefined) {
+  return model === "deepseek-flash" || model === "deepseek-v4.1-flash";
 }

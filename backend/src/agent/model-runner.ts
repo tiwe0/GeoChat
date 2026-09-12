@@ -140,6 +140,7 @@ export async function createBackendModelNextAction(input: BackendModelNextAction
       // recovered after a reload must continue as it started.
       providerOptions: agentThinkingProviderOptions({
         provider: input.modelConfig.provider,
+        model: input.modelConfig.model,
         enabled: input.run.thinking === true,
         effort: input.run.thinkingEffort ?? "standard"
       }),

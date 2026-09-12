@@ -81,10 +81,15 @@ export function modelMessagesFromRun(
   const messages: ModelMessage[] = [createUserMessage(run.prompt, attachments)];
   for (const toolRecord of run.tools) {
     const reasoningText = modelSteps.find((step) => step.outputToolCallId === toolRecord.toolCallId)?.reasoningText?.trim();
+    const needsDeepSeekReasoning = run.modelProvider === "deepseek" && run.thinking === true;
     messages.push({
       role: "assistant",
       content: [
-        ...(reasoningText ? [{ type: "reasoning" as const, text: reasoningText }] : []),
+        ...(reasoningText
+          ? [{ type: "reasoning" as const, text: reasoningText }]
+          : needsDeepSeekReasoning
+            ? [{ type: "reasoning" as const, text: "" }]
+            : []),
         {
           type: "tool-call",
           toolCallId: toolRecord.toolCallId,

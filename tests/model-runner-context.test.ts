@@ -37,4 +37,27 @@ describe("model runner context", () => {
       ]
     });
   });
+
+  test("keeps an explicit empty reasoning part for DeepSeek policy tool turns", () => {
+    const run = {
+      prompt: "读取画布",
+      modelProvider: "deepseek",
+      thinking: true,
+      tools: [
+        {
+          toolCallId: "policy-read",
+          toolName: "getCanvasContext",
+          args: { includeXml: false },
+          status: "succeeded",
+          startedAt: "2026-01-01T00:00:00.000Z",
+          completedAt: "2026-01-01T00:00:01.000Z"
+        }
+      ]
+    } as never;
+
+    expect(modelMessagesFromRun(run, [])[1]).toMatchObject({
+      role: "assistant",
+      content: [{ type: "reasoning", text: "" }]
+    });
+  });
 });

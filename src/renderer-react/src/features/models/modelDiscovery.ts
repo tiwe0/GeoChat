@@ -50,6 +50,7 @@ function writeCache(key: string, value: CachedDiscovery) {
 
 export async function discoverProviderModels(input: {
   apiOrigin: string;
+  authToken?: string | null;
   provider: string;
   apiKey: string;
   customBaseUrl?: string;
@@ -76,7 +77,10 @@ export async function discoverProviderModels(input: {
   try {
     const response = await fetch(`${input.apiOrigin}/v1/provider-fetch`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...(input.authToken ? { Authorization: `Bearer ${input.authToken}` } : {})
+      },
       body: JSON.stringify({
         provider: input.provider,
         customBaseUrl: input.customBaseUrl,

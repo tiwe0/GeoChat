@@ -41,7 +41,7 @@ export function useConversationBlackboard(options: {
       setEntries(loaded);
     } catch (caught) {
       if (requestVersionRef.current !== requestVersion || !authSessionRef.current.isCurrent(session)) return;
-      setError(caught instanceof Error ? `${loadFailedMessage} ${caught.message}` : loadFailedMessage);
+      setError(caught instanceof Error && caught.message.trim() ? caught.message : loadFailedMessage);
     } finally {
       if (requestVersionRef.current === requestVersion) setLoading(false);
     }

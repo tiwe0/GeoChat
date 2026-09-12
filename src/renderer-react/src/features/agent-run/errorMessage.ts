@@ -2,30 +2,30 @@ import { AgentRunCoordinatorError } from "@geochat-ai/app/client";
 
 type ErrorTranslator = (key: string) => string;
 
-const ERROR_KEYS: Record<string, string> = {
-  INSUFFICIENT_CREDITS: "errors.insufficientCredits",
-  authentication_required: "errors.authenticationRequired",
-  guest_session_required: "errors.sessionRequired",
-  agent_run_start_failed: "errors.startFailed",
-  runner_continuation_error: "errors.continuationFailed",
-  stream_incomplete: "errors.streamIncomplete",
-  run_closed: "errors.runClosed",
-  canvas_session_mismatch: "errors.canvasSessionMismatch",
-};
-
-/** Convert transport/domain error codes into actionable, localized UI copy. */
+/** Preserve transport/domain diagnostics so the UI can show and copy the original failure. */
 export function formatAgentRunError(error: unknown, t: ErrorTranslator) {
   if (error instanceof AgentRunCoordinatorError) {
-    if (error.status === 402 || error.code === "INSUFFICIENT_CREDITS") {
-      return t("errors.insufficientCredits");
+    const message = error.message.trim();
+    if (message) return error.code ? `${error.code}: ${message}` : message;
+    const payload = error.payload;
+    if (payload !== undefined) {
+      try {
+        return JSON.stringify(payload);
+      } catch {
+        // Fall through to the localized fallback when the payload is not serializable.
+      }
     }
-    if (error.code === "workflow_blocked" && error.message.trim()) {
-      return error.message;
-    }
-    const key = error.code ? ERROR_KEYS[error.code] : undefined;
-    if (key) return t(key);
-    return t("errors.assistantUnavailable");
+    return `Agent run coordinator request failed: ${error.status}`;
   }
   if (error instanceof Error && error.message.trim()) return error.message;
+  if (typeof error === "string" && error.trim()) return error;
+  if (error !== null && error !== undefined) {
+    try {
+      const serialized = JSON.stringify(error);
+      if (serialized && serialized !== "{}") return serialized;
+    } catch {
+      // Fall through to the localized fallback for an unserializable value.
+    }
+  }
   return t("errors.assistantUnavailable");
 }

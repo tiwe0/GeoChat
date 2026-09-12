@@ -1,7 +1,7 @@
 import AttachFileRounded from "@mui/icons-material/AttachFileRounded";
 import CloseRounded from "@mui/icons-material/CloseRounded";
 import DescriptionRounded from "@mui/icons-material/DescriptionRounded";
-import SendRounded from "@mui/icons-material/SendRounded";
+import PlayArrowRounded from "@mui/icons-material/PlayArrowRounded";
 import StopRounded from "@mui/icons-material/StopRounded";
 import UploadFileRounded from "@mui/icons-material/UploadFileRounded";
 import { Box, Chip, CircularProgress, IconButton, Stack, TextField, Typography } from "@mui/material";
@@ -23,7 +23,7 @@ import {
   isSupportedAgentFile,
 } from "../features/attachments/capabilities";
 import { imageFilesFromClipboard, insertTextAtSelection } from "../features/chat/composerPaste";
-import { ModelMenu, type ReasoningMode, type ThinkingEffort } from "./ModelMenu";
+import { ModelMenu, type ThinkingEffort } from "./ModelMenu";
 import type { RuntimeModelOption } from "../features/models/modelCatalog";
 
 
@@ -40,7 +40,7 @@ type ChatComposerProps = {
   busy: boolean;
   model: string;
   models: readonly RuntimeModelOption[];
-  reasoningMode: ReasoningMode;
+  thinkingEnabled: boolean;
   thinkingEffort: ThinkingEffort;
   sendDisabled: boolean;
   error?: string | null;
@@ -50,7 +50,7 @@ type ChatComposerProps = {
   onStop: () => void;
   onModelChange: (model: string) => void;
   modelPortalContainer: () => Element | null;
-  onReasoningModeChange: (mode: ReasoningMode) => void;
+  onThinkingEnabledChange: (enabled: boolean) => void;
   onThinkingEffortChange: (effort: ThinkingEffort) => void;
 };
 
@@ -81,7 +81,7 @@ export function ChatComposer({
   busy,
   model,
   models,
-  reasoningMode,
+  thinkingEnabled,
   thinkingEffort,
   sendDisabled,
   error: submissionError,
@@ -91,7 +91,7 @@ export function ChatComposer({
   onStop,
   onModelChange,
   modelPortalContainer,
-  onReasoningModeChange,
+  onThinkingEnabledChange,
   onThinkingEffortChange,
 }: ChatComposerProps) {
   const { t } = useTranslation();
@@ -362,11 +362,11 @@ export function ChatComposer({
           value={model}
           models={models}
           disabled={busy}
-          reasoningMode={reasoningMode}
+          thinkingEnabled={thinkingEnabled}
           thinkingEffort={thinkingEffort}
           portalContainer={modelPortalContainer}
           onChange={onModelChange}
-          onReasoningModeChange={onReasoningModeChange}
+          onThinkingEnabledChange={onThinkingEnabledChange}
           onThinkingEffortChange={onThinkingEffortChange}
           tourId="model"
         />
@@ -389,7 +389,7 @@ export function ChatComposer({
             "&.Mui-disabled": { bgcolor: "action.disabledBackground" },
           }}
         >
-          {busy ? <StopRounded fontSize="small" /> : <SendRounded fontSize="small" />}
+          {busy ? <StopRounded fontSize="small" /> : <PlayArrowRounded fontSize="small" />}
         </IconButton>
       </Stack>
 

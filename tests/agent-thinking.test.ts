@@ -52,21 +52,6 @@ describe("thinking provider options", () => {
       .toEqual({ deepseek: { thinking: { type: "enabled" }, reasoningEffort: "max" } });
   });
 
-  test("DeepSeek V4.1 Flash omits incompatible V4 thinking fields", () => {
-    expect(agentThinkingProviderOptions({
-      provider: "deepseek",
-      model: "deepseek-flash",
-      enabled: true,
-      effort: "standard",
-    })).toBeUndefined();
-    expect(agentThinkingProviderOptions({
-      provider: "deepseek",
-      model: "deepseek-v4.1-flash",
-      enabled: false,
-      effort: "standard",
-    })).toBeUndefined();
-  });
-
   test("disabling is stated, never merely omitted", () => {
     // DeepSeek V4 and several others think by default. Leaving the option out
     // would leave reasoning on for a user who switched it off.

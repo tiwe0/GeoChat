@@ -3,7 +3,7 @@ import CheckRounded from "@mui/icons-material/CheckRounded";
 import ChevronRightRounded from "@mui/icons-material/ChevronRightRounded";
 import KeyboardArrowDownRounded from "@mui/icons-material/KeyboardArrowDownRounded";
 import ModelTrainingRounded from "@mui/icons-material/ModelTrainingRounded";
-import { Box, ButtonBase, Divider, ListItemIcon, ListItemText, MenuItem, MenuList, Paper, Popper, Switch, Typography } from "@mui/material";
+import { Box, ButtonBase, Divider, ListItemIcon, ListItemText, MenuItem, MenuList, Paper, Popper, Slider, Switch, Typography } from "@mui/material";
 import { motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -191,16 +191,40 @@ export function ModelMenu({ value, models, disabled, thinkingEnabled, thinkingEf
                 slotProps={{ input: { "aria-label": t("model.thinkingEnabled") } }}
               />
             </MenuItem>
-            {thinkingEnabled && selectedModel?.provider === "openai" && (
+            {thinkingEnabled && (
               <>
                 <Divider sx={{ my: 0.5 }} />
-                <ListItemText sx={{ px: 1.5, py: 0.5 }} primary={<Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>{t("model.thinkingEffort")}</Typography>} />
-                {(["light", "standard", "extended"] as const).map((effort) => (
-                  <MenuItem key={effort} selected={thinkingEffort === effort} onClick={() => onThinkingEffortChange(effort)}>
-                    <ListItemText primary={t(`model.effort.${effort}`)} />
-                    <ListItemIcon sx={{ minWidth: 28, justifyContent: "flex-end" }}>{thinkingEffort === effort && <CheckRounded fontSize="small" color="primary" />}</ListItemIcon>
-                  </MenuItem>
-                ))}
+                <Box sx={{ px: 1.5, py: 0.75 }}>
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 0.25 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+                      {t("model.thinkingEffort")}
+                    </Typography>
+                    <Typography variant="caption" color="primary.main" sx={{ fontWeight: 700 }}>
+                      {t(`model.effort.${thinkingEffort}`)}
+                    </Typography>
+                  </Box>
+                  <Slider
+                    aria-label={t("model.thinkingEffort")}
+                    min={0}
+                    max={2}
+                    step={1}
+                    value={["light", "standard", "extended"].indexOf(thinkingEffort)}
+                    marks={["light", "standard", "extended"].map((effort, index) => ({ value: index, label: t(`model.effort.${effort}`) }))}
+                    onChange={(_, value) => {
+                      if (typeof value !== "number") return;
+                      const effort = (["light", "standard", "extended"] as const)[value];
+                      if (effort) onThinkingEffortChange(effort);
+                    }}
+                    valueLabelDisplay="off"
+                    sx={{
+                      mt: 1.25,
+                      mb: 1.5,
+                      px: 0.25,
+                      "& .MuiSlider-markLabel": { fontSize: "0.64rem", color: "text.disabled" },
+                      "& .MuiSlider-markLabel[data-index='1']": { color: "text.secondary" },
+                    }}
+                  />
+                </Box>
               </>
             )}
             <Divider sx={{ my: 0.5 }} />

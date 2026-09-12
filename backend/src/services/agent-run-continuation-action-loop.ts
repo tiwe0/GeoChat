@@ -45,6 +45,7 @@ export async function continueRunnerActionLoop(input: {
   completedRequest: AgentRunRemoteToolRequest;
   expectedCompletedRequest: AgentRunRemoteToolRequest;
   modelStep: AgentRunModelStepRecord;
+  modelSteps: AgentRunModelStepRecord[];
   model: AgentModelConfig;
   attachments?: AgentRunImageAttachment[];
   pendingToolRequests: AgentRunRemoteToolRequest[];
@@ -60,6 +61,7 @@ export async function continueRunnerActionLoop(input: {
   let run = input.run;
   let action = input.action;
   let modelStep = input.modelStep;
+  let modelSteps = input.modelSteps;
   let completedRequest: AgentRunRemoteToolRequest | undefined = input.completedRequest;
   let expectedCompletedRequest: AgentRunRemoteToolRequest | undefined = input.expectedCompletedRequest;
   const responseRequest = input.completedRequest;
@@ -235,6 +237,7 @@ export async function continueRunnerActionLoop(input: {
     const nextModelTurn = await runRunnerContinuationModelTurn({
       run,
       model: input.model,
+      modelSteps,
       attachments: input.attachments,
       onModelTextDelta: input.onModelTextDelta,
       onModelReasoningDelta: input.onModelReasoningDelta,
@@ -259,6 +262,7 @@ export async function continueRunnerActionLoop(input: {
     }
     action = nextModelTurn.action;
     modelStep = nextModelTurn.modelStep;
+    modelSteps = [...modelSteps, nextModelTurn.modelStep];
   }
 
   return {

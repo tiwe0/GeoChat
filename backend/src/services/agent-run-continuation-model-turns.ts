@@ -28,6 +28,7 @@ type RunnerContinuationModelTurnResult =
 export async function runRunnerContinuationModelTurn(input: {
   run: AgentRunLedgerRecord;
   model: AgentModelConfig;
+  modelSteps?: readonly AgentRunModelStepRecord[];
   attachments?: AgentRunImageAttachment[];
   onModelTextDelta?: (text: string) => void;
   onModelReasoningDelta?: (text: string) => void;
@@ -43,6 +44,7 @@ export async function runRunnerContinuationModelTurn(input: {
     const action = await input.modelNextAction({
       modelConfig: input.model,
       run: input.run,
+      modelSteps: input.modelSteps,
       attachments: input.attachments,
       timeoutMs: agentModelStepTimeoutMsOrDefault(input.run.modelStepTimeoutMs),
       onTextDelta: input.onModelTextDelta,

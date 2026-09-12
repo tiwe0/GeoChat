@@ -9,6 +9,7 @@ import {
   type AgentModelConfig,
   type AgentRunImageAttachment,
   type AgentRunLedgerRecord,
+  type AgentRunModelStepRecord,
   type AgentRunModelStepDetails,
   type AgentRunRemoteToolRequestInput,
   type AgentRunUsage,
@@ -61,6 +62,7 @@ export type BackendModelActionDiagnostics = AgentRunModelStepDetails;
 export type BackendModelNextActionInput = {
   modelConfig: AgentModelConfig;
   run: AgentRunLedgerRecord;
+  modelSteps?: readonly AgentRunModelStepRecord[];
   attachments?: AgentRunImageAttachment[];
   model?: LanguageModel;
   timeoutMs?: number;
@@ -74,12 +76,14 @@ export type BackendModelNextAction =
       type: "tool";
       source: "model" | "policy";
       tool: AgentRunRemoteToolRequestInput;
+      reasoningText?: string;
       diagnostics?: BackendModelActionDiagnostics;
     }
   | {
       type: "finish";
       source: "model" | "policy";
       text: string;
+      reasoningText?: string;
       usage?: AgentRunUsage;
       diagnostics?: BackendModelActionDiagnostics;
     };
@@ -120,7 +124,7 @@ export async function createBackendModelNextAction(input: BackendModelNextAction
   const systemPrompt = await systemPromptForRun(input.run, Boolean(repairingFailure), skillSelection, commandReferencePacket);
   const messages = repairingFailure
     ? [createRepairUserMessage(input.run, repairingFailure, input.attachments ?? [])]
-    : modelMessagesFromRun(input.run, input.attachments ?? []);
+    : modelMessagesFromRun(input.run, input.attachments ?? [], input.modelSteps);
 
   const tools = createBackendPlanningTools(input.run.locale, input.disabledToolNames, skillSelection, input.run);
   let protocolError: Error | undefined;

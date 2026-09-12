@@ -9,6 +9,7 @@ import type {
   AgentRunImageAttachment,
   ChatMessageMetadata,
 } from "@geochat-ai/app/contracts";
+import type { AgentModelConfig } from "@geochat-ai/app/model-registry";
 import { createAgentRunRunnerClaimOwner } from "@geochat-ai/app/contracts";
 import type { AgentRunThinkingEffort } from "@geochat-ai/app/contracts";
 import { areSupportedAgentAttachments } from "../features/attachments/capabilities";
@@ -39,6 +40,7 @@ export function useAgentRunChat(input: {
   apiOrigin: string;
   getAuthToken: () => string | null;
   getModel: () => string;
+  getModelConfig?: () => AgentModelConfig;
   getModelProvider?: (model: string) => string;
   locale: "zh-CN" | "en-US";
   onFinish?: () => void;
@@ -49,6 +51,8 @@ export function useAgentRunChat(input: {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [status, setStatus] = useState<ChatStatus>("ready");
   const [error, setError] = useState<Error | undefined>();
+  const messagesRef = useRef<ChatMessage[]>(messages);
+  messagesRef.current = messages;
   const abortRef = useRef<AbortController | null>(null);
   const activeRunRef = useRef<string | null>(null);
   const stoppedRef = useRef(false);
@@ -139,6 +143,7 @@ export function useAgentRunChat(input: {
         return;
       }
       const result = await executeAgentRunLoop({ coordinator: coordinatorRef.current, runId: restored.runId, claimOwner, signal: controller.signal,
+        model: inputRef.current.getModelConfig?.(),
         claimRemoteTools, executeRemoteTool: executeRemoteToolRequest, afterToolResult: removeCachedToolResult,
         waitForRunnerEvent,
         onUpdate: ({ assistantText, parts }) => { setStatus(assistantText || parts.some((part) => part.type === "reasoning") ? "streaming" : "submitted"); setMessages((previous) => previous.map((item) => item.id !== restored.assistantMessageId ? item : assistantMessageUpdate(item, parts))); }
@@ -192,13 +197,14 @@ export function useAgentRunChat(input: {
       return;
     }
 
-    const prompt = message.text?.trim() || (localAttachments.length ? "Analyze the attached image and help with the GeoGebra task." : "");
-    if (!prompt) return;
+    const currentPrompt = message.text?.trim() || (localAttachments.length ? "Analyze the attached image and help with the GeoGebra task." : "");
+    if (!currentPrompt) return;
     const userMessageId = `msg_${crypto.randomUUID().replaceAll("-", "")}`;
     const assistantMessageId = `msg_${crypto.randomUUID().replaceAll("-", "")}`;
     const runId = `run_${crypto.randomUUID().replaceAll("-", "")}`;
     const current = inputRef.current;
     const attachments = await uploadImageAttachments(current.apiOrigin, current.getAuthToken(), localAttachments);
+    const prompt = conversationPrompt(currentPrompt, messagesRef.current, current.locale);
     const modelId = current.getModel();
     const record = createAgentRunLedgerFromStart({
       runId,
@@ -238,6 +244,10 @@ export function useAgentRunChat(input: {
       const claimOwner = createAgentRunRunnerClaimOwner("desktop-workbench", installationId, canvasSessionId);
       const runnerStart = {
         run: record,
+        // The backend deliberately does not persist API keys in the run
+        // ledger. Send the current desktop model config with the start request
+        // so it can validate capabilities and create the provider client.
+        ...(current.getModelConfig ? { model: current.getModelConfig() } : {}),
         attachments,
         canvasSessionId,
         claimOwner,
@@ -246,7 +256,7 @@ export function useAgentRunChat(input: {
       if (!runner) throw new Error("Agent runner did not return a snapshot.");
       await saveActiveRun(installationId, canvasSessionId, record);
 
-      const result = await executeAgentRunLoop({ coordinator: coordinatorRef.current, runId, claimOwner, signal: controller.signal, attachments,
+      const result = await executeAgentRunLoop({ coordinator: coordinatorRef.current, runId, claimOwner, signal: controller.signal, model: current.getModelConfig?.(), attachments,
         initialRunner: runner, claimRemoteTools, executeRemoteTool: executeRemoteToolRequest, afterToolResult: removeCachedToolResult,
         waitForRunnerEvent,
         onUpdate: ({ assistantText, parts }) => { setStatus(assistantText || parts.some((part) => part.type === "reasoning") ? "streaming" : "submitted"); setMessages((previous) => previous.map((item) => item.id !== assistantMessageId ? item : assistantMessageUpdate(item, parts))); }
@@ -332,4 +342,43 @@ function mergeRestoredMessages(messages: ChatMessage[], restored: StoredActiveRu
     ...(hasUser ? [] : [{ id: userId, role: "user", parts: [{ type: "text", text: restored.prompt }] } satisfies ChatMessage]),
     ...(hasAssistant ? [] : [{ id: assistantId, role: "assistant", parts: [{ type: "text", text: "" }] } satisfies ChatMessage]),
   ];
+}
+
+/**
+ * Each runner turn is intentionally stored as an independent ledger record.
+ * Include the existing transcript in the new run prompt so the backend model
+ * receives the same conversation context instead of treating every turn as a
+ * brand-new request.
+ */
+export function conversationPrompt(currentPrompt: string, previousMessages: readonly ChatMessage[], locale: "zh-CN" | "en-US") {
+  const context = previousMessages
+    .map((message) => {
+      const text = message.parts
+        .flatMap((part) => contextPartText(part))
+        .join("\n")
+        .trim();
+      if (!text) return "";
+      const role = message.role === "user" ? (locale === "en-US" ? "User" : "用户") : (locale === "en-US" ? "Assistant" : "助手");
+      return `${role}: ${text}`;
+    })
+    .filter(Boolean)
+    .join("\n\n");
+  if (!context) return currentPrompt;
+  const marker = locale === "en-US"
+    ? "[GeoChat conversation history — previous turns; continue this same conversation]"
+    : "【GeoChat 历史对话上下文（此前轮次，请在同一对话中继续）】";
+  const currentMarker = locale === "en-US" ? "[GeoChat current user message]" : "【GeoChat 本轮用户消息】";
+  return `${marker}\n${context}\n\n${currentMarker}\n${currentPrompt}`;
+}
+
+function contextPartText(part: unknown): string[] {
+  if (!part || typeof part !== "object" || Array.isArray(part)) return [];
+  const value = part as Record<string, unknown>;
+  if ((value.type === "text" || value.type === "reasoning") && typeof value.text === "string") return [value.text];
+  if (typeof value.type === "string" && value.type.startsWith("tool-")) {
+    const payload = value.output ?? value.errorText ?? value.input;
+    if (payload === undefined) return [];
+    try { return [JSON.stringify(payload)]; } catch { return []; }
+  }
+  return [];
 }

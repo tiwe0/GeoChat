@@ -5,6 +5,7 @@ import type {
 } from "@geochat-ai/app/client";
 import { createAgentRunCoordinator } from "@geochat-ai/app/client";
 import type { AgentRunImageAttachment } from "@geochat-ai/app/contracts";
+import type { AgentModelConfig } from "@geochat-ai/app/model-registry";
 type AgentRunCoordinator = ReturnType<typeof createAgentRunCoordinator>;
 
 export type AgentRunDisplayToolPart = {
@@ -32,6 +33,8 @@ export async function executeAgentRunLoop(input: {
   runId: string;
   claimOwner: string;
   signal: AbortSignal;
+  /** The model config must accompany every continuation, not only runner start. */
+  model?: AgentModelConfig;
   attachments?: AgentRunImageAttachment[];
   initialRunner?: AgentRunRunnerSnapshot;
   claimRemoteTools: (coordinator: AgentRunCoordinator, runId: string, claimOwner: string) => Promise<{
@@ -108,6 +111,7 @@ export async function executeAgentRunLoop(input: {
       const result = await input.coordinator.submitToolResultStream(input.runId, request.toolCallId, {
         tool,
         claimOwner: input.claimOwner,
+        ...(input.model ? { model: input.model } : {}),
         ...(input.attachments ? { attachments: input.attachments } : {})
       }, {
         onTextDelta: (text) => {

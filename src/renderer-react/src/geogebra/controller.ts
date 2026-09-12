@@ -39,6 +39,7 @@ export class GeoGebraController {
         const name = requiredString(input.name, "name");
         const value = requiredNumber(input.value, "value");
         this.call("setValue", name, value);
+        this.refreshVisuals();
         return { ok: true, name, value };
       }
       case "exists": {
@@ -106,6 +107,7 @@ export class GeoGebraController {
       restoredAfterError = true;
     }
     const canvasAfter = tryReadCanvasContext(this.api!, false);
+    this.refreshVisuals();
     const error = perspectiveResult && !perspectiveResult.success
       ? perspectiveResult.error ?? "GeoGebra 视图切换失败。"
       : failedIndex >= 0 ? results[failedIndex]?.error ?? "GeoGebra 命令执行失败。" : null;
@@ -141,6 +143,7 @@ export class GeoGebraController {
       perspectiveResult = await this.setPerspective(input.perspective.trim());
     }
     const canvasAfter = tryReadCanvasContext(this.api!, false);
+    this.refreshVisuals();
     const error = perspectiveResult && !perspectiveResult.success
       ? perspectiveResult.error ?? "GeoGebra 视图切换失败。"
       : null;
@@ -216,6 +219,17 @@ export class GeoGebraController {
     const fn = this.api?.[name];
     if (typeof fn !== "function") throw new Error(`GeoGebra API ${name} 不可用。`);
     return Reflect.apply(fn, this.api, args);
+  }
+
+  private refreshVisuals() {
+    const refreshViews = this.api?.refreshViews;
+    if (typeof refreshViews === "function") {
+      try { refreshViews.call(this.api); } catch { /* rendering is best effort */ }
+    }
+    const recalculateEnvironments = this.api?.recalculateEnvironments;
+    if (typeof recalculateEnvironments === "function") {
+      try { recalculateEnvironments.call(this.api); } catch { /* optional API */ }
+    }
   }
 }
 

@@ -21,6 +21,7 @@ export type ToolCallLike = {
 export type ModelResultLike = {
   toolCalls: ToolCallLike[];
   text: string;
+  reasoningText?: string;
   totalUsage: {
     inputTokens?: number;
     outputTokens?: number;
@@ -33,12 +34,14 @@ export type BackendModelResultAction =
       type: "tool";
       source: "model";
       tool: AgentRunRemoteToolRequestInput;
+      reasoningText?: string;
       diagnostics?: AgentRunModelStepDetails;
     }
   | {
       type: "finish";
       source: "model";
       text: string;
+      reasoningText?: string;
       usage?: AgentRunUsage;
     };
 
@@ -61,6 +64,7 @@ export function backendActionFromModelResult(result: ModelResultLike, run: Pick<
         type: "finish",
         source: "model",
         text: (finishInput as { summary: string }).summary,
+        reasoningText: nonEmptyReasoning(result.reasoningText),
         usage: agentUsageFromModelUsage(result.totalUsage)
       };
     }
@@ -71,6 +75,7 @@ export function backendActionFromModelResult(result: ModelResultLike, run: Pick<
       type: "tool",
       source: "model",
       tool,
+      reasoningText: nonEmptyReasoning(result.reasoningText),
       diagnostics: extraToolCalls.length
         ? {
             protocolRepairAttempts: 1,
@@ -93,8 +98,14 @@ export function backendActionFromModelResult(result: ModelResultLike, run: Pick<
     type: "finish",
     source: "model",
     text: result.text,
+    reasoningText: nonEmptyReasoning(result.reasoningText),
     usage: agentUsageFromModelUsage(result.totalUsage)
   };
+}
+
+function nonEmptyReasoning(value: string | undefined) {
+  const normalized = value?.trim();
+  return normalized || undefined;
 }
 
 function validateModelToolRequestForRun(

@@ -1,5 +1,4 @@
 import {
-  Alert,
   Box,
   ButtonBase,
   CircularProgress,
@@ -63,20 +62,27 @@ import { MessageAttachment } from "./MessageAttachment";
 import { AgentToolResult, isAgentDisplayToolPart } from "./AgentToolResult";
 import { BlackboardDrawer } from "./BlackboardDrawer";
 import { OnboardingTooltip } from "./OnboardingTooltip";
+import { ErrorToast } from "./ErrorToast";
 import { BrandIcon } from "./BrandIcon";
-import type { ReasoningMode, ThinkingEffort } from "./ModelMenu";
+import type { ThinkingEffort } from "./ModelMenu";
 import { createDesktopDebugActionExecutor } from "../features/desktop/mcpDebugActions";
 import { useMcpState } from "../features/desktop/useMcpState";
 import { DEFAULT_MCP_STATUS, type DesktopDebugAction } from "../../../shared/desktop/mcp-debug-actions";
-import { readDesktopConfig } from "../../../shared/desktop/desktop-config";
+import {
+  credentialsForProvider,
+  readDesktopConfig,
+} from "../../../shared/desktop/desktop-config";
 import type { RendererMcpStatus } from "../../../shared/desktop/workbench-types";
 import { loadModelCatalog, type RuntimeModelOption } from "../features/models/modelCatalog";
 import { backendAuthToken, backendOrigin } from "../features/desktop/runtime";
 
-const AUTH_REQUIRED = import.meta.env.VITE_AUTH_REQUIRED !== "false";
+// Desktop conversations and credentials are local-first; using the assistant
+// does not require an account or a remote session.
+const AUTH_REQUIRED = false;
 const ONBOARDING_TOUR_STORAGE_KEY = "geogebraCopilotOnboardingTourCompleted";
 const ONBOARDING_TOUR_OPT_IN_KEY = "geochatDesktopOnboardingTour";
-const REASONING_MODE_STORAGE_KEY = "geogebraCopilotReasoningMode";
+const THINKING_ENABLED_STORAGE_KEY = "geogebraCopilotThinkingEnabled";
+const LEGACY_REASONING_MODE_STORAGE_KEY = "geogebraCopilotReasoningMode";
 const THINKING_EFFORT_STORAGE_KEY = "geogebraCopilotThinkingEffort";
 const MotionPaper = motion.create(Paper);
 
@@ -324,7 +330,7 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
   const modelOptionsRef = useRef<RuntimeModelOption[]>(loadModelCatalog());
   modelOptionsRef.current = modelOptions;
   const [selectedModel, setSelectedModel] = useState<string>("");
-  const [reasoningMode, setReasoningMode] = useState<ReasoningMode>("auto");
+  const [thinkingEnabled, setThinkingEnabled] = useState(true);
   const [thinkingEffort, setThinkingEffort] = useState<ThinkingEffort>("standard");
   const [conversationDrawerOpen, setConversationDrawerOpen] = useState(false);
   const [blackboardOpen, setBlackboardOpen] = useState(false);
@@ -353,12 +359,16 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
     apiOrigin: API_ORIGIN,
     getAuthToken: () => authSessionRef.current.token,
     getModel: () => panelChatRef.current.model,
+    getModelConfig: getSelectedModelConfig,
     getModelProvider: (model) => modelOptionsRef.current.find((option) => option.id === model)?.provider ?? "deepseek",
-    getThinking: () => reasoningMode === "thinking",
+    // Auto and Thinking both request provider reasoning so the streamed
+    // reasoning deltas can be shown in the transcript. Instant is the only
+    // mode that explicitly suppresses the provider's reasoning channel.
+    getThinking: () => thinkingEnabled,
     getThinkingEffort: () => thinkingEffort,
     locale: i18n.language.startsWith("en") ? "en-US" : "zh-CN",
     onFinish: () => {
-      if (authSessionRef.current.token) void conversationHistory.load(true);
+      void conversationHistory.load(true);
       if (blackboardOpen) void blackboard.load();
     },
     onRestore: (run) => {
@@ -368,7 +378,7 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
       changeModel(run.modelId);
       // A recovered run keeps the reasoning setting it started with, not
       // whatever the composer happens to show now.
-      setReasoningMode(run.thinking ? "thinking" : "auto");
+      setThinkingEnabled(run.thinking === true);
       if (run.thinkingEffort) setThinkingEffort(run.thinkingEffort);
     },
   });
@@ -387,7 +397,7 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
     executeDebugActionRef.current = createDesktopDebugActionExecutor({
       getConversationId: () => debugStateRef.current.conversationId,
       getView: () => debugStateRef.current.view,
-      getModelConfig: () => readDesktopConfig().model,
+      getModelConfig: getSelectedModelConfig,
       getMcpStatus: () => mcpStatusRef.current,
       isRunning: () => debugStateRef.current.isStreaming,
       sendMessage: (content) => submit(content),
@@ -410,12 +420,14 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
     const models = loadModelCatalog();
     modelOptionsRef.current = models;
     setModelOptions(models);
+    const configured = readDesktopConfig().model;
     const current = panelChatRef.current.model;
-    if (current && models.some((model) => model.id === current)) return;
-    const first = models[0];
-    if (!first) return;
-    panelChatRef.current.setModel(first.id);
-    setSelectedModel(first.id);
+    const selected = models.find((model) => model.id === current)
+      ?? models.find((model) => model.id === configured.model && model.provider === configured.provider)
+      ?? models[0];
+    if (!selected) return;
+    panelChatRef.current.setModel(selected.id);
+    setSelectedModel(selected.id);
   }, []);
   // The tour does not auto-start in the desktop build. Its steps were written
   // for the web layout and the spotlight lands on the wrong region here, which
@@ -430,13 +442,21 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
       .catch(() => setOnboardingTourReady(false));
   }, []);
   useEffect(() => {
-    void browser.storage.local.get([REASONING_MODE_STORAGE_KEY, THINKING_EFFORT_STORAGE_KEY]).then((stored) => {
-      const mode = stored[REASONING_MODE_STORAGE_KEY];
-      const effort = stored[THINKING_EFFORT_STORAGE_KEY];
-      if (mode === "auto" || mode === "instant" || mode === "thinking") {
-        setReasoningMode(mode);
-        panelChatRef.current.setThinkingEnabled(mode === "thinking");
+    void browser.storage.local.get([THINKING_ENABLED_STORAGE_KEY, LEGACY_REASONING_MODE_STORAGE_KEY, THINKING_EFFORT_STORAGE_KEY]).then((stored) => {
+      const storedThinking = stored[THINKING_ENABLED_STORAGE_KEY];
+      const legacyMode = stored[LEGACY_REASONING_MODE_STORAGE_KEY];
+      const resolvedThinking = typeof storedThinking === "boolean"
+        ? storedThinking
+        : legacyMode === "thinking" || legacyMode === "auto"
+          ? true
+          : legacyMode === "instant"
+            ? false
+            : undefined;
+      if (resolvedThinking !== undefined) {
+        setThinkingEnabled(resolvedThinking);
+        panelChatRef.current.setThinkingEnabled(resolvedThinking);
       }
+      const effort = stored[THINKING_EFFORT_STORAGE_KEY];
       if (effort === "light" || effort === "standard" || effort === "extended") setThinkingEffort(effort);
     }).catch(() => undefined);
   }, []);
@@ -484,6 +504,10 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
       setAttachments([]);
       setBlackboardOpen(false);
     },
+    messages,
+    conversationId: currentConversationId,
+    model: selectedModel,
+    title: currentConversationTitle,
     t,
   });
   const {
@@ -496,10 +520,13 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
   const panelTitle = panelView === "chat"
     ? currentConversationTitle || (currentConversationId ? t("history.untitled") : t("history.newConversation"))
     : t("panel.user");
+  const toastError = error
+    ? formatAgentRunError(error, t)
+    : submissionError ?? conversationHistoryError ?? blackboard.error ?? authError;
   function openConversationHistory() {
     setBlackboardOpen(false);
     setConversationDrawerOpen(true);
-    if (authSessionRef.current.token) void conversationHistory.load();
+    void conversationHistory.load();
   }
 
   function startNewConversation() {
@@ -561,16 +588,34 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
   }
 
   function changeModel(value: string) {
-    if (!modelOptionsRef.current.some((option) => option.id === value)) return;
-    panelChatRef.current.setModel(value);
-    setSelectedModel(value);
+    const selected = modelOptionsRef.current.find((option) => option.id === value);
+    if (!selected) return;
+    panelChatRef.current.setModel(selected.id);
+    setSelectedModel(selected.id);
     void saveStoredModel(value);
   }
 
-  function changeReasoningMode(mode: ReasoningMode) {
-    setReasoningMode(mode);
-    panelChatRef.current.setThinkingEnabled(mode === "thinking");
-    void browser.storage.local.set({ [REASONING_MODE_STORAGE_KEY]: mode });
+  function getSelectedModelConfig() {
+    const config = readDesktopConfig();
+    const selected = modelOptionsRef.current.find((option) => option.id === panelChatRef.current.model);
+    if (!selected) return config.model;
+    const credentials = credentialsForProvider(config.providerCredentials, selected.provider);
+    // Model selection belongs to the conversation composer. Rebuild only the
+    // transient run config with that model and its provider credentials; keep
+    // Settings focused on storing credentials for each provider.
+    return {
+      ...config.model,
+      provider: selected.provider,
+      model: selected.id,
+      apiKey: credentials.apiKey,
+      customBaseUrl: credentials.customBaseUrl,
+    };
+  }
+
+  function changeThinkingEnabled(enabled: boolean) {
+    setThinkingEnabled(enabled);
+    panelChatRef.current.setThinkingEnabled(enabled);
+    void browser.storage.local.set({ [THINKING_ENABLED_STORAGE_KEY]: enabled });
   }
 
   function changeThinkingEffort(effort: ThinkingEffort) {
@@ -816,7 +861,9 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
         <>
           <ConversationDrawer
             open={conversationDrawerOpen}
-            signedIn={Boolean(account && authSessionRef.current.token)}
+            // Desktop history is persisted in local storage and is available
+            // before a user signs in (remote sync remains optional).
+            signedIn={true}
             interactionDisabled={isStreaming}
             loading={conversationHistoryLoading}
             selectingId={selectingConversationId}
@@ -1005,10 +1052,18 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
                 >
                   {message.parts.map((part, index) => {
                     if (part.type === "reasoning") {
+                      const answerStarted = message.parts.some((candidate) =>
+                        candidate.type === "text" && candidate.text.trim().length > 0
+                      );
                       return (
                         <ThinkingBlock
                           key={index}
-                          active={isStreaming && message.role === "assistant" && message.id === messages.at(-1)?.id}
+                          active={
+                            isStreaming &&
+                            !answerStarted &&
+                            message.role === "assistant" &&
+                            message.id === messages.at(-1)?.id
+                          }
                           label={t("panel.thinking")}
                           completeLabel={t("panel.thinkingComplete")}
                           expandLabel={t("panel.expandThinking")}
@@ -1086,14 +1141,13 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
               )}
             </Box>
           </Box>
-          {error && <Alert severity="error" sx={{ mx: 1.5, mt: 1 }}>{formatAgentRunError(error, t)}</Alert>}
           <ChatComposer
             value={input}
             attachments={attachments}
             busy={isStreaming}
             model={selectedModel}
             models={modelOptions}
-            reasoningMode={reasoningMode}
+            thinkingEnabled={thinkingEnabled}
             thinkingEffort={thinkingEffort}
             sendDisabled={
               (!input.trim() && attachments.length === 0)
@@ -1113,7 +1167,7 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
             onStop={stop}
             onModelChange={changeModel}
             modelPortalContainer={() => panelRef.current?.parentElement ?? null}
-            onReasoningModeChange={changeReasoningMode}
+            onThinkingEnabledChange={changeThinkingEnabled}
             onThinkingEffortChange={changeThinkingEffort}
           />
         </>
@@ -1203,6 +1257,7 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
           <ListItemText primary={t("common.paste")} />
         </MenuItem>
       </Menu>
+      <ErrorToast message={toastError} />
     </MotionPaper>
   );
 }

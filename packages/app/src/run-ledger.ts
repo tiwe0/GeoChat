@@ -196,6 +196,8 @@ export type AgentRunModelStepRecord = {
   outputToolCallId?: string | null;
   outputToolName?: FunctionCallToolName | null;
   outputTextLength?: number | null;
+  /** Reasoning emitted by the model, required for DeepSeek tool continuations. */
+  reasoningText?: string | null;
   usage?: AgentRunUsage | null;
   error?: string | null;
   details?: AgentRunModelStepDetails;
@@ -576,6 +578,7 @@ export function isAgentRunModelStepRecord(value: unknown): value is AgentRunMode
     isOptionalAgentRunToolCallIdOrNull(payload.outputToolCallId) &&
     isOptionalToolNameOrNull(payload.outputToolName) &&
     isOptionalNonNegativeIntegerOrNull(payload.outputTextLength) &&
+    isOptionalStringOrNull(payload.reasoningText) &&
     isAgentRunModelStepOutputState(payload.status, payload.outputType, payload.outputToolCallId, payload.outputToolName, payload.outputTextLength) &&
     isAgentRunUsage(payload.usage) &&
     isAgentRunStatusUsageState(payload.status, payload.usage) &&

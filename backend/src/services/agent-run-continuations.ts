@@ -56,9 +56,11 @@ export function createAgentRunContinuationService(
     onModelReasoningDelta?: (text: string) => void;
   }): Promise<RunnerContinuationOutcome> {
     let run = input.run;
+    const modelSteps = await agentRunRepository.listModelSteps(run.runId);
     const modelTurn = await runRunnerContinuationModelTurn({
       run,
       model: input.model,
+      modelSteps,
       attachments: input.attachments,
       onModelTextDelta: input.onModelTextDelta,
       onModelReasoningDelta: input.onModelReasoningDelta,
@@ -92,8 +94,9 @@ export function createAgentRunContinuationService(
         model: input.model,
         attachments: input.attachments,
         pendingToolRequests: input.pendingToolRequests,
+        modelSteps: [...modelSteps, modelTurn.modelStep],
         onModelTextDelta: input.onModelTextDelta,
-      onModelReasoningDelta: input.onModelReasoningDelta,
+        onModelReasoningDelta: input.onModelReasoningDelta,
         agentRunCommits,
         agentRunRunnerSnapshots,
         modelNextAction: options.modelNextAction,

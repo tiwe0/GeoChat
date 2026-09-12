@@ -59,6 +59,7 @@ export async function runBackendModelStep(input: {
   return {
     toolCalls: await result.toolCalls,
     text: await result.text,
+    reasoningText: await result.reasoningText,
     totalUsage: await result.totalUsage
   };
 }

@@ -21,8 +21,8 @@ export function parseConversationSummaries(value: unknown): ConversationSummary[
   return value.flatMap((item) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) return [];
     const data = item as Record<string, unknown>;
-    if (typeof data.id !== "string" || typeof data.model !== "string") return [];
-    return [{ id: data.id, model: data.model, title: typeof data.title === "string" ? data.title : null, createdAt: typeof data.createdAt === "string" ? data.createdAt : "", updatedAt: typeof data.updatedAt === "string" ? data.updatedAt : "", messageCount: typeof data.messageCount === "number" ? data.messageCount : 0 }];
+    if (typeof data.id !== "string") return [];
+    return [{ id: data.id, model: typeof data.model === "string" ? data.model : "", title: typeof data.title === "string" ? data.title : null, createdAt: typeof data.createdAt === "string" ? data.createdAt : "", updatedAt: typeof data.updatedAt === "string" ? data.updatedAt : "", messageCount: typeof data.messageCount === "number" ? data.messageCount : 0 }];
   });
 }
 
@@ -98,60 +98,40 @@ export function parseBlackboardEntries(value: unknown): BlackboardEntry[] {
 }
 
 export async function fetchConversationSummaries(apiOrigin: string, token: string, request: typeof fetch = fetch) {
-  const conversations: ConversationSummary[] = [];
-  let cursor: string | null = null;
-  do {
-    const query = new URLSearchParams({ limit: "100" });
-    if (cursor) query.set("cursor", cursor);
-    const response = await request(`${apiOrigin}/api/user/conversations?${query}`, { headers: { Authorization: `Bearer ${token}` } });
-    const data = await response.json() as { conversations?: unknown; nextCursor?: unknown; error?: unknown };
-    if (!response.ok || !Array.isArray(data.conversations)) throw new Error(responseError(data, "Unable to load conversation history."));
-    conversations.push(...parseConversationSummaries(data.conversations));
-    const next = typeof data.nextCursor === "string" && data.nextCursor ? data.nextCursor : null;
-    if (next === cursor) break;
-    cursor = next;
-  } while (cursor);
-  return conversations;
+  const response = await request(`${apiOrigin}/v1/conversations`, { headers: { Authorization: `Bearer ${token}` } });
+  const data = await response.json() as { conversations?: unknown; error?: unknown; message?: unknown };
+  if (!response.ok || !Array.isArray(data.conversations)) throw new Error(responseError(data, "Unable to load conversation history."));
+  return parseConversationSummaries(data.conversations);
 }
 
 export async function fetchConversationMessages(apiOrigin: string, token: string, conversationId: string, request: typeof fetch = fetch) {
-  const messages: StoredConversationMessage[] = [];
-  const replayCommands = new Set<string>();
-  let cursor: string | null = null;
-  let firstError: unknown = null;
-  do {
-    const query = new URLSearchParams({ limit: "500" });
-    if (cursor) query.set("cursor", cursor);
-    const response = await request(`${apiOrigin}/api/user/conversations/${encodeURIComponent(conversationId)}/messages?${query}`, { headers: { Authorization: `Bearer ${token}` } });
-    const data = await response.json() as { messages?: unknown; replayCommands?: unknown; nextCursor?: unknown; error?: unknown };
-    if (!response.ok || !Array.isArray(data.messages)) {
-      firstError = data;
-      break;
-    }
-    messages.push(...parseConversationMessages(data.messages, apiOrigin));
-    for (const command of parseReplayCommands(data.replayCommands)) replayCommands.add(command);
-    const next = typeof data.nextCursor === "string" && data.nextCursor ? data.nextCursor : null;
-    if (next === cursor) break;
-    cursor = next;
-  } while (cursor);
-  if (firstError) throw new Error(responseError(firstError, "Unable to load this conversation."));
+  const response = await request(`${apiOrigin}/v1/conversations/${encodeURIComponent(conversationId)}`, { headers: { Authorization: `Bearer ${token}` } });
+  const data = await response.json() as { conversation?: { messages?: unknown }; error?: unknown; message?: unknown };
+  if (!response.ok || !data.conversation || !Array.isArray(data.conversation.messages)) {
+    throw new Error(responseError(data, "Unable to load this conversation."));
+  }
   return {
-    messages,
-    replayCommands: [...replayCommands],
+    messages: parseConversationMessages(data.conversation.messages, apiOrigin),
+    replayCommands: [],
   } satisfies ConversationRestore;
 }
 
 export async function deleteConversation(apiOrigin: string, token: string, conversationId: string, request: typeof fetch = fetch) {
-  const response = await request(`${apiOrigin}/api/user/conversations/${encodeURIComponent(conversationId)}`, {
+  const response = await request(`${apiOrigin}/v1/conversations/${encodeURIComponent(conversationId)}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
-  const data = await response.json() as { deleted?: unknown; error?: unknown };
-  if (!response.ok || data.deleted !== true) throw new Error(responseError(data, "Unable to delete this conversation."));
+  if (response.status === 204) return;
+  // Local-first conversations may not have a corresponding server record.
+  // DELETE is idempotent for the history UI, so an already-missing record is
+  // a successful end state rather than an error shown to the user.
+  if (response.status === 404) return;
+  const data = await response.json() as { deleted?: unknown; error?: unknown; message?: unknown };
+  if (!response.ok) throw new Error(responseError(data, "Unable to delete this conversation."));
 }
 
 export async function fetchConversationBlackboard(apiOrigin: string, token: string, conversationId: string, request: typeof fetch = fetch) {
-  const response = await request(`${apiOrigin}/api/user/conversations/${encodeURIComponent(conversationId)}/blackboard`, {
+  const response = await request(`${apiOrigin}/v1/conversations/${encodeURIComponent(conversationId)}/blackboard`, {
     cache: "no-store",
     headers: { Authorization: `Bearer ${token}` },
   });

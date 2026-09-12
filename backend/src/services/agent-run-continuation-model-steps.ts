@@ -46,6 +46,7 @@ export function completeRunnerModelStepSuccess(
     outputToolName: action.type === "tool" ? action.tool.toolName : null,
     outputTextLength: action.type === "finish" ? action.text.length : null,
     usage: action.type === "finish" ? action.usage ?? null : null,
+    reasoningText: action.reasoningText ?? null,
     error: null,
     details: persistableModelStepDetails(action.diagnostics)
   };

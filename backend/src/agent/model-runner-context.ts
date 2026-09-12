@@ -2,6 +2,7 @@ import type { ModelMessage } from "ai";
 import type {
   AgentRunImageAttachment,
   AgentRunLedgerRecord,
+  AgentRunModelStepRecord,
   AgentRunRemoteToolRequestInput,
   AgentRunUsage
 } from "@geochat-ai/app";
@@ -72,12 +73,23 @@ export function maybeCreateRepairAction(run: AgentRunLedgerRecord): BackendRepai
   return undefined;
 }
 
-export function modelMessagesFromRun(run: AgentRunLedgerRecord, attachments: AgentRunImageAttachment[]): ModelMessage[] {
+export function modelMessagesFromRun(
+  run: AgentRunLedgerRecord,
+  attachments: AgentRunImageAttachment[],
+  modelSteps: readonly AgentRunModelStepRecord[] = []
+): ModelMessage[] {
   const messages: ModelMessage[] = [createUserMessage(run.prompt, attachments)];
   for (const toolRecord of run.tools) {
+    const reasoningText = modelSteps.find((step) => step.outputToolCallId === toolRecord.toolCallId)?.reasoningText?.trim();
+    const needsDeepSeekReasoning = run.modelProvider === "deepseek" && run.thinking === true;
     messages.push({
       role: "assistant",
       content: [
+        ...(reasoningText
+          ? [{ type: "reasoning" as const, text: reasoningText }]
+          : needsDeepSeekReasoning
+            ? [{ type: "reasoning" as const, text: "" }]
+            : []),
         {
           type: "tool-call",
           toolCallId: toolRecord.toolCallId,

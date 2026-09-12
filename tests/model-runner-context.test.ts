@@ -55,9 +55,8 @@ describe("model runner context", () => {
       ]
     } as never;
 
-    expect(modelMessagesFromRun(run, [])[1]).toMatchObject({
-      role: "assistant",
-      content: [{ type: "reasoning", text: "" }]
-    });
+    const assistantMessage = modelMessagesFromRun(run, [])[1];
+    expect(assistantMessage.role).toBe("assistant");
+    expect(assistantMessage.content[0]).toEqual({ type: "reasoning", text: "" });
   });
 });

@@ -1187,12 +1187,13 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
           run
           continuous
           scrollToFirstStep={false}
-          // Mount Joyride beside the panel rather than inside MotionPaper.
-          // Motion's layout transform and the panel's overflow clipping can
-          // shift or crop the fixed-coordinate spotlight. The host shares the
-          // panel's fixed viewport position, so the mask stays aligned with
-          // the dialog while remaining bounded to its area.
-          portalElement={panelRef.current?.parentElement ?? undefined}
+          // Keep the overlay in Joyride's viewport-level portal. The panel is
+          // fixed-positioned, so a panel-sized portal makes Joyride measure a
+          // 600px canvas from the viewport origin (the mask then appears on
+          // the left side of the window). The default body portal lets the
+          // overlay and tooltip use the same viewport coordinate system and
+          // resize with the window.
+          floatingOptions={{ strategy: "fixed" }}
           locale={{
             back: t("tour.back"),
             close: t("tour.close"),

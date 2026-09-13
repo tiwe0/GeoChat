@@ -77,6 +77,18 @@ jobs:
           VITE_DOWNLOADS_BASE: ${{ vars.DOWNLOADS_BASE_URL }}
         run: node scripts/check-prerender.mjs
 
+      - name: Ensure Cloudflare Pages project exists
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || 'geochat' }}
+        shell: bash
+        run: |
+          if ! bunx wrangler pages project list | grep -Fq "$PROJECT"; then
+            echo "Pages project $PROJECT was not found; creating it."
+            bunx wrangler pages project create "$PROJECT" --production-branch master
+          fi
+
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:

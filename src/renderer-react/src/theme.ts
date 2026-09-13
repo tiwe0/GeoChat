@@ -9,14 +9,14 @@ export const copilotTheme = createTheme({
       light: "#dbeafe",
     },
     background: {
-      default: "#f8fafc",
-      paper: "#ffffff",
+      default: "rgba(248, 251, 249, 0.78)",
+      paper: "rgba(255, 255, 255, 0.82)",
     },
     text: {
       primary: "#172033",
       secondary: "#526079",
     },
-    divider: "#dfe5ee",
+    divider: "rgba(185, 201, 191, 0.62)",
     error: {
       main: "#b42318",
     },
@@ -56,8 +56,13 @@ export const copilotTheme = createTheme({
     },
     MuiPaper: {
       styleOverrides: {
+        root: {
+          backgroundImage: "none",
+          backdropFilter: "blur(18px) saturate(118%)",
+          WebkitBackdropFilter: "blur(18px) saturate(118%)",
+        },
         outlined: {
-          borderColor: "#dfe5ee",
+          borderColor: "rgba(185, 201, 191, 0.62)",
         },
       },
     },
@@ -143,9 +148,12 @@ export const copilotTheme = createTheme({
       styleOverrides: {
         paper: {
           marginTop: 4,
-          border: "1px solid #dfe5ee",
-          borderRadius: 10,
-          boxShadow: "0 12px 30px rgba(23, 32, 51, 0.14)",
+          border: "1px solid rgba(255, 255, 255, 0.78)",
+          borderRadius: 14,
+          boxShadow: "0 16px 36px rgba(24, 59, 36, 0.14)",
+          backgroundColor: "rgba(255, 255, 255, 0.9)",
+          backdropFilter: "blur(20px) saturate(120%)",
+          WebkitBackdropFilter: "blur(20px) saturate(120%)",
         },
       },
     },

@@ -42,6 +42,12 @@ export type FunctionCallSpec = {
   description: string;
   executor: FunctionCallExecutor;
   sideEffectLevel: FunctionCallSideEffectLevel;
+  /** Destructive calls may require an explicit user confirmation in the UI. */
+  approvalRequired?: boolean;
+  /** Whether repeating the call is safe for the same logical request. */
+  idempotency?: "idempotent" | "best_effort" | "non_idempotent";
+  /** Stable machine-readable failure categories surfaced by the executor. */
+  errorCodes?: readonly string[];
   timeoutMs: number;
   rollbackPolicy: "none" | "rollback_on_error" | "reset_on_error";
   display: ToolDisplayInfo;

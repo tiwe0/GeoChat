@@ -59,6 +59,18 @@ jobs:
       - name: Test
         run: bun test tests
 
+      - name: Harness evaluation
+        if: always()
+        run: bun run eval:harness
+
+      - name: Upload harness evaluation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: geochat-harness-evals-${{ github.sha }}
+          if-no-files-found: warn
+          path: .artifacts/agent-harness-evals.xml
+
       # The renderer bundle is where a removed dependency export actually
       # surfaces (lucide-solid 1.x did exactly this). Building it here means
       # that failure costs a Linux minute, not two platform builds.

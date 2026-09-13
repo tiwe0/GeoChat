@@ -215,6 +215,7 @@ export function ChatComposer({
   return (
     <Box
       component="form"
+      className="geochatpro-composer"
       onSubmit={(event) => {
         event.preventDefault();
         if (!sendDisabled && !isPreparingFiles) onSend();

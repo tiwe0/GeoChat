@@ -37,8 +37,30 @@ export async function executeRemoteToolRequest(request: AgentRunRemoteToolReques
       durationMs: new Date(completedAt).getTime() - new Date(startedAt).getTime(),
     };
   }
+  tool = redactLargeImagePayloads(tool);
   await saveCachedToolResult(request, tool);
   return tool;
+}
+
+function redactLargeImagePayloads(tool: AgentRunToolRecord): AgentRunToolRecord {
+  return {
+    ...tool,
+    result: redactValue(tool.result),
+    canvasBefore: redactValue(tool.canvasBefore),
+    canvasAfter: redactValue(tool.canvasAfter),
+  };
+}
+
+function redactValue(value: unknown, key = ""): unknown {
+  if (typeof value === "string") {
+    if (/(base64|dataurl|data_url)/i.test(key) && value.length > 512) {
+      return `[redacted image payload: ${value.length} chars]`;
+    }
+    return value;
+  }
+  if (Array.isArray(value)) return value.map((item) => redactValue(item, key));
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([childKey, childValue]) => [childKey, redactValue(childValue, childKey)]));
 }
 
 export async function executeRendererTool(toolName: AgentRunRemoteToolRequest["toolName"], args: unknown): Promise<ToolExecutionResult> {

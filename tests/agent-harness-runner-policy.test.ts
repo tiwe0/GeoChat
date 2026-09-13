@@ -2419,7 +2419,7 @@ describe("paused backend runner", () => {
     expect(capturedOptions).toContain("Original problem statement");
   });
 
-  test("queues the first model tool call when a provider emits multiple calls in one step", async () => {
+  test("rejects multiple model tool calls after one protocol repair attempt", async () => {
     let providerCalls = 0;
     const fakeModel = {
       specificationVersion: "v3",
@@ -2492,18 +2492,8 @@ describe("paused backend runner", () => {
         run,
         model: fakeModel
       })
-    ).resolves.toMatchObject({
-      type: "tool",
-      tool: {
-        toolCallId: "multi-tool-1",
-        toolName: "searchGeoGebraCommands"
-      },
-      diagnostics: {
-        protocolRepairAttempts: 1,
-        protocolRepairErrors: [expect.stringContaining("2 个工具调用")]
-      }
-    });
-    expect(providerCalls).toBe(1);
+    ).rejects.toThrow("每一步只允许一个工具动作");
+    expect(providerCalls).toBe(2);
   });
 
   test("repairs empty model finishes once before accepting final text", async () => {
@@ -2605,6 +2595,7 @@ describe("paused backend runner", () => {
               input: JSON.stringify({
                 title: "判断选项",
                 summary: "公共底图为三角形 ABC 和 AB 中点 M。",
+                reason: "按公共条件分析选项。",
                 answer: "AC",
                 baseConditions: ["A(0,0)", "B(4,0)", "C(1,3)", "M 是 AB 中点"],
                 displayMode: "single_active_choice",
@@ -2737,6 +2728,7 @@ describe("paused backend runner", () => {
                 input: JSON.stringify({
                   title: "判断选项",
                   summary: "公共底图为三个圆和参数直线。",
+                reason: "按公共条件生成选项场景。",
                   answer: "BCD",
                   baseConditions: ["三个单位圆", "直线 $l:y=kx+b$"],
                   displayMode: "single_active_choice",
@@ -2766,6 +2758,7 @@ describe("paused backend runner", () => {
               input: JSON.stringify({
                 title: "判断选项",
                 summary: "公共底图为三个圆和参数直线。",
+                reason: "按公共条件生成选项场景。",
                 answer: "BCD",
                 baseConditions: ["三个单位圆", "直线 $l:y=kx+b$"],
                 displayMode: "single_active_choice",
@@ -2958,7 +2951,7 @@ describe("paused backend runner", () => {
               type: "tool-call",
               toolCallId: "model-tool-image-1",
               toolName: "executeGeoGebraCommands",
-              input: JSON.stringify({ commands: ["A = (0, 0)"] })
+              input: JSON.stringify({ commands: ["A = (0, 0)"], reason: "根据图片内容开始构造。" })
             }
           ],
           finishReason: { unified: "tool-calls", raw: "tool_calls" },
@@ -3047,7 +3040,7 @@ describe("paused backend runner", () => {
               type: "tool-call",
               toolCallId: "model-tool-2",
               toolName: "executeGeoGebraCommands",
-              input: JSON.stringify({ commands: ["O = (0, 0)", "c = Circle(O, 1)"] })
+              input: JSON.stringify({ commands: ["O = (0, 0)", "c = Circle(O, 1)"], reason: "根据画布上下文构造圆。" })
             }
           ],
           finishReason: { unified: "tool-calls", raw: "tool_calls" },
@@ -3263,7 +3256,7 @@ describe("paused backend runner", () => {
               type: "tool-call",
               toolCallId: "repair-exec-1",
               toolName: "executeGeoGebraCommands",
-              input: JSON.stringify({ commands: ["F = (-2, 0)", "G = (2, 0)", "A = (0, 3)", "c = Ellipse(F, G, A)"] })
+              input: JSON.stringify({ commands: ["F = (-2, 0)", "G = (2, 0)", "A = (0, 3)", "c = Ellipse(F, G, A)"], reason: "依据失败命令修复椭圆构造。" })
             }
           ],
           finishReason: { unified: "tool-calls", raw: "tool_calls" },

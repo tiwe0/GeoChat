@@ -123,3 +123,14 @@ export function agentThinkingProviderOptions(
 
   return undefined;
 }
+
+/** Return a bounded, user-facing summary for collapsed reasoning previews. */
+export function summarizeAgentReasoning(text: string, maxLength = 180): string {
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (!lines.length) return "";
+  const first = lines[0];
+  const latest = lines.at(-1) ?? first;
+  const candidate = latest !== first && latest.length < 100 ? `${first} · ${latest}` : first;
+  if (candidate.length <= maxLength) return candidate;
+  return `${candidate.slice(0, Math.max(1, maxLength - 1)).trimEnd()}…`;
+}

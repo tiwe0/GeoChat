@@ -1,4 +1,4 @@
-import type { ModelMessage } from "ai";
+import type { FilePart, ModelMessage, TextPart, UserContent } from "ai";
 import type {
   AgentRunImageAttachment,
   AgentRunLedgerRecord,
@@ -10,6 +10,28 @@ import type {
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue | undefined };
 
 const GEOCHAT_REPAIR_ATTEMPTS = 1;
+
+export const MAX_MODEL_CONTEXT_TOKENS = 32_000;
+
+/** Conservative character-based estimate used before provider invocation. */
+export function estimateModelContextTokens(messages: readonly ModelMessage[]) {
+  // Binary image/file payloads are not tokenized as their base64 text. Count a
+  // bounded modality allowance instead of charging the full data URL length.
+  let imageParts = 0;
+  const withoutBinaryPayloads = messages.map((message) => ({
+    ...message,
+    content: Array.isArray(message.content)
+      ? message.content.map((part) => {
+          if (part && typeof part === "object" && ((part as { type?: unknown }).type === "file" || (part as { type?: unknown }).type === "image")) {
+            imageParts += 1;
+            return { type: (part as { type: string }).type, mediaType: (part as { mediaType?: string }).mediaType ?? "image/*", data: "[binary omitted from token estimate]" };
+          }
+          return part;
+        })
+      : message.content
+  }));
+  return Math.ceil(JSON.stringify(withoutBinaryPayloads).length / 4) + imageParts * 256;
+}
 
 export type BackendRepairAction =
   | {
@@ -78,7 +100,7 @@ export function modelMessagesFromRun(
   attachments: AgentRunImageAttachment[],
   modelSteps: readonly AgentRunModelStepRecord[] = []
 ): ModelMessage[] {
-  const messages: ModelMessage[] = [createUserMessage(run.prompt, attachments)];
+  const messages: ModelMessage[] = conversationMessagesFromPrompt(run.prompt, attachments);
   for (const toolRecord of run.tools) {
     const reasoningText = modelSteps.find((step) => step.outputToolCallId === toolRecord.toolCallId)?.reasoningText?.trim();
     const needsDeepSeekReasoning = run.modelProvider === "deepseek" && run.thinking === true;
@@ -324,13 +346,50 @@ function createUserMessage(prompt: string, attachments: AgentRunImageAttachment[
     role: "user",
     content: [
       { type: "text", text: prompt },
-      ...attachments.map((attachment) => ({
-        type: "image" as const,
-        image: dataUrlPayload(attachment.dataUrl),
-        mediaType: attachment.mediaType || "image/png"
-      }))
-    ]
+      ...attachments.flatMap<TextPart | FilePart>((attachment): Array<TextPart | FilePart> => {
+        const payload = dataUrlPayload(attachment.dataUrl);
+        if (payload.length > MAX_MODEL_IMAGE_DATA_URL_CHARS) {
+          return [{ type: "text" as const, text: `[image omitted by model context budget: ${attachment.name || "unnamed image"}, ${payload.length} chars]` }];
+        }
+        return [{
+          type: "file" as const,
+          data: payload,
+          mediaType: attachment.mediaType || "image/png"
+        }];
+      })
+    ] as UserContent
   };
+}
+
+const MAX_MODEL_IMAGE_DATA_URL_CHARS = 1_500_000;
+
+/**
+ * The renderer keeps the persisted run shape backwards compatible by storing
+ * the turn transcript in `prompt`. Rehydrate the role boundaries here instead
+ * of sending the whole transcript as one user message. Old one-turn prompts
+ * still take the fast path and remain byte-for-byte compatible.
+ */
+function conversationMessagesFromPrompt(prompt: string, attachments: AgentRunImageAttachment[]): ModelMessage[] {
+  const currentMarkers = ["【GeoChat 本轮用户消息】", "[GeoChat current user message]"];
+  const marker = currentMarkers.find((value) => prompt.includes(value));
+  if (!marker) return [createUserMessage(prompt, attachments)];
+  const markerIndex = prompt.indexOf(marker);
+  const history = prompt.slice(0, markerIndex).replace(/^【GeoChat 历史对话上下文（此前轮次，请在同一对话中继续）】\s*|^\[GeoChat conversation history — previous turns; continue this same conversation\]\s*/u, "").trim();
+  const currentPrompt = prompt.slice(markerIndex + marker.length).trim();
+  const messages: ModelMessage[] = [];
+  const rolePattern = /(?:^|\n)(用户|助手|User|Assistant):\s*/g;
+  const matches = [...history.matchAll(rolePattern)];
+  for (let index = 0; index < matches.length; index += 1) {
+    const match = matches[index]!;
+    const start = (match.index ?? 0) + match[0].length;
+    const end = matches[index + 1]?.index ?? history.length;
+    const text = history.slice(start, end).trim();
+    if (!text) continue;
+    const role = match[1] === "用户" || match[1] === "User" ? "user" : "assistant";
+    messages.push({ role, content: text });
+  }
+  messages.push(createUserMessage(currentPrompt, attachments));
+  return messages;
 }
 
 function dataUrlPayload(dataUrl: string) {
@@ -341,16 +400,59 @@ function serializableToolOutput(toolRecord: AgentRunLedgerRecord["tools"][number
   if (toolRecord.status === "succeeded") {
     return {
       ok: true,
-      result: toolRecord.result ?? null,
-      canvasBefore: toolRecord.canvasBefore ?? null,
-      canvasAfter: toolRecord.canvasAfter ?? null
+      trust: "untrusted",
+      provenance: { source: "tool-ledger", recordedAt: toolRecord.completedAt ?? toolRecord.startedAt },
+      result: compactForModel(toolRecord.result),
+      canvasBefore: compactForModel(toolRecord.canvasBefore),
+      canvasAfter: compactForModel(toolRecord.canvasAfter)
     };
   }
   return {
     ok: false,
+    trust: "untrusted",
+    provenance: { source: "tool-ledger", recordedAt: toolRecord.completedAt ?? toolRecord.startedAt },
     error: toolRecord.error ?? "Tool execution failed.",
-    result: toolRecord.result ?? null
+    result: compactForModel(toolRecord.result)
   };
+}
+
+const MAX_MODEL_TOOL_RESULT_CHARS = 12_000;
+const MAX_MODEL_STRING_CHARS = 4_000;
+
+function compactForModel(value: unknown, key = "", depth = 0, seen = new WeakSet<object>()): unknown {
+  if (value === undefined || value === null || typeof value === "boolean" || typeof value === "number") return value ?? null;
+  if (typeof value === "string") {
+    const lowerKey = key.toLowerCase();
+    if (/(base64|dataurl|data_url|image)/.test(lowerKey) && value.length > 512) {
+      return `[omitted ${value.length} chars of image payload]`;
+    }
+    return value.length > MAX_MODEL_STRING_CHARS ? `${value.slice(0, MAX_MODEL_STRING_CHARS)}\n[…tool output truncated…]` : value;
+  }
+  if (depth > 6) return "[…nested tool output omitted…]";
+  if (Array.isArray(value)) {
+    if (seen.has(value)) return "[Circular]";
+    seen.add(value);
+    const items = value.slice(0, 64).map((item) => compactForModel(item, key, depth + 1, seen));
+    return value.length > items.length ? [...items, `[${value.length - items.length} more items omitted]`] : items;
+  }
+  if (typeof value === "object") {
+    if (seen.has(value)) return "[Circular]";
+    seen.add(value);
+    const result: Record<string, unknown> = {};
+    for (const [childKey, childValue] of Object.entries(value as Record<string, unknown>).slice(0, 96)) {
+      result[childKey] = compactForModel(childValue, childKey, depth + 1, seen);
+    }
+    const serialized = JSON.stringify(result);
+    if (serialized && serialized.length > MAX_MODEL_TOOL_RESULT_CHARS) {
+      return {
+        _truncated: true,
+        preview: serialized.slice(0, MAX_MODEL_TOOL_RESULT_CHARS),
+        originalChars: serialized.length
+      };
+    }
+    return result;
+  }
+  return String(value);
 }
 
 function toJsonValue(value: unknown): JsonValue {

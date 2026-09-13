@@ -49,6 +49,10 @@ export type ExecuteGeoGebraCommandsArgs = FunctionCallAuditFields & {
 
 export type ResetCanvasArgs = FunctionCallAuditFields & {
   perspective?: string | null;
+  /** Required only for manual/remote destructive requests. */
+  confirmed?: boolean | null;
+  /** Internal runner provenance marker; never substitutes for user confirmation. */
+  authorization?: "runner-policy" | null;
 };
 
 export type CreateGeometryPlanArgs = FunctionCallAuditFields & {

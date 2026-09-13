@@ -43,6 +43,8 @@ export type BackendToolExecutionContext = {
   prompt?: string;
   enabledAdvancedTools?: readonly string[] | null;
   locale?: FunctionCallLocale | null;
+  /** Latest renderer-reported canvas facts, used to validate display cards. */
+  toolHistory?: readonly AgentRunToolRecord[];
   readBlackboard: (args: ReadBlackboardArgs) => BlackboardEntry[] | Promise<BlackboardEntry[]>;
   patchBlackboard: (
     args: PatchBlackboardArgs,
@@ -251,11 +253,46 @@ async function executeBackendToolResult(request: AgentRunRemoteToolRequestInput,
     request.toolName === "showChoiceAnalysis" ||
     request.toolName === "showSelectedElements"
   ) {
+    if (request.toolName === "showSelectedElements") {
+      validateSelectedElementsCard(request.args as FunctionCallArgsByName["showSelectedElements"], context.toolHistory);
+    }
     return okBackendToolResult(request.args as FunctionCallArgsByName[typeof request.toolName], {
-      source: "backend-display-card"
+      source: "backend-display-card",
+      ...(request.toolName === "showSelectedElements" ? { selectionValidated: true } : {})
     });
   }
   throw new Error(`Backend executor does not support tool: ${request.toolName}`);
+}
+
+function validateSelectedElementsCard(
+  args: FunctionCallArgsByName["showSelectedElements"],
+  toolHistory: readonly AgentRunToolRecord[] | undefined
+) {
+  const latestContext = [...(toolHistory ?? [])]
+    .reverse()
+    .find((tool) => tool.toolName === "getCanvasContext" && tool.status === "succeeded");
+  if (!latestContext) return;
+  const context = extractCanvasContext(latestContext);
+  if (!context || (context.selection_status !== "known" && context.selection_status !== "empty")) return;
+  const selected = new Set(context.selectedObjects);
+  const invalid = args.elements.map((element) => element.label).filter((label) => !selected.has(label));
+  if (invalid.length) {
+    throw new Error(`showSelectedElements 包含当前未选中的对象：${invalid.join(", ")}`);
+  }
+}
+
+function extractCanvasContext(tool: AgentRunToolRecord): { selectedObjects: string[]; selection_status?: string } | undefined {
+  const result = tool.result;
+  if (!result || typeof result !== "object" || Array.isArray(result)) return undefined;
+  const payload = result as Record<string, unknown>;
+  const candidates = [payload.canvasContext, payload.result, payload];
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) continue;
+    const value = candidate as Record<string, unknown>;
+    if (!Array.isArray(value.selectedObjects) || !value.selectedObjects.every((item) => typeof item === "string")) continue;
+    return { selectedObjects: value.selectedObjects, selection_status: typeof value.selection_status === "string" ? value.selection_status : undefined };
+  }
+  return undefined;
 }
 
 async function enabledAdvancedDrawingToolNames(context: BackendToolExecutionContext): Promise<Set<AdvancedDrawingToolName>> {

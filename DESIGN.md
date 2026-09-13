@@ -2,9 +2,9 @@
 
 ## Source of truth
 - Status: Active
-- Last refreshed: 2026-06-21
+- Last refreshed: 2026-09-13
 - Primary product surfaces: Tauri desktop workbench, GeoGebra canvas, floating AI chat panel, problem-bank browser, local settings dialog, update panels, sponsor/about page.
-- Evidence reviewed: `README.md`, `docs/current-project-state.md`, `docs/product-design-optimization-plan.md`, `src/renderer/src/WorkbenchApp.tsx`, `src/renderer/src/ProblemBankPage.tsx`, `src/renderer/src/ConfigDialog.tsx`, `src/renderer/src/styles.css`.
+- Evidence reviewed: `README.md`, `docs/current-project-state.md`, `docs/product-design-optimization-plan.md`, `src/renderer-react/src/components/AssistantPanel.tsx`, `src/renderer-react/src/components/AgentToolResult.tsx`, `src/renderer-react/src/features/geogebra/choiceScenario.ts`, `src/renderer-react/src/features/desktop/SettingsPanel.tsx`, and current renderer styles.
 
 ## Brand
 - Personality: quiet, precise, lightweight, mathematically focused.
@@ -51,6 +51,19 @@
 - Developer controls: local debug surfaces and internal MCP inspection controls belong under Debug. Product-facing MCP configuration means Agent-calling-external-MCP capability and belongs under the MCP module.
 - About page: use a 2x2 information layout. Top row is Project on the left and Author on the right; bottom row is Update on the left and Improvement Plan on the right. Update information stays compact: show current version, update availability, and one primary update action instead of exposing every shell/app-bundle track and auto-update preference on this page.
 - Copy: settings microcopy should be direct and operational. Prefer "开发中" for unfinished product modules, "本机调试 MCP" for internal debug MCP, and "MCP" for the product module. Avoid implementation placeholders becoming user-facing labels.
+
+### Choice Analysis Cards
+- Purpose: render a multiple-choice result as a structured card inside the assistant message. The model chooses the presentation mode from the problem shape; users should not have to configure a card mode.
+- Modes:
+  - `decision_grid` (default): all options remain visible in a compact 2-column desktop grid and single-column narrow layout. Each option shows its label, claim, verdict, and one-line reason. Use for ordinary single- or multiple-select questions.
+  - `proof_stack`: a vertical evidence-first list. Each option shows verdict, explanation, and evidence bullets; use when the distinction between options needs a longer proof. Keep the final answer pinned in the card header.
+  - `canvas_scenario`: the card shows one option's canvas evidence at a time. A small segmented control can request another option preview, but rendering the card must not mutate the canvas automatically. Every preview starts from the captured shared baseline and runs only that option's commands.
+- Information hierarchy: card eyebrow `选择题分析` / `Choice analysis` → final answer banner (when known) → shared conditions (collapsible when long) → option content → optional canvas action → auxiliary-element review.
+- Verdict semantics: use icon + text (`正确`, `错误`, `待确认`) rather than color alone. Green is reserved for correct, red for incorrect, and amber for uncertain; do not use a red disabled treatment for unknown evidence.
+- Interaction rules: selecting an option only changes the preview when `canvas_scenario` is active; it never changes the recorded verdict. The `全部` state restores the captured baseline. Keyboard focus must be visible and option controls must have labels such as `在画板中查看选项 A`.
+- LLM contract: the tool must provide one entry per option (normally A–D), a non-empty statement, verdict, and explanation. `canvas_scenario` requires non-empty `constructionFocus` and executable option-only `commands`; `decision_grid` and `proof_stack` may omit commands. `text_only` is a compatibility input only and must be normalized to `decision_grid` for visual choice prompts.
+- Failure fallback: if a mode or option evidence is invalid, render `decision_grid` with the available text and an inline diagnostic; do not block the whole assistant message or issue an automatic canvas write.
+- Responsive behavior: at ≤720px, stack option cards, keep the answer banner sticky within the card only, and move preview controls below the option explanation. Never allow long statements or LaTeX to force horizontal scrolling.
 
 ## Components
 - Existing components to reuse: `IconButton`, `FloatingChatPanel`, `ConfigDialog`, `ProblemBankPage`, `SponsorPage`, `SectionCard`, `BlackboardPanel`.

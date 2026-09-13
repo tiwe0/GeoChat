@@ -2356,7 +2356,7 @@ describe("runner HTTP lifecycle", () => {
       };
 
       expect(resultResponse.status).toBe(200);
-      expect(providerCalls).toBe(2);
+      expect(providerCalls).toBe(3);
       expect(resultPayload).toMatchObject({
         nextRequest: { toolCallId: "execute-after-read", toolName: "executeGeoGebraCommands", status: "pending" },
         runner: {
@@ -2376,11 +2376,11 @@ describe("runner HTTP lifecycle", () => {
             inputToolCount: 1,
             attachmentCount: 0,
             outputType: "tool",
-            outputToolCallId: "search-and-write-1",
-            outputToolName: "searchGeoGebraCommands",
+            outputToolCallId: "execute-after-read",
+            outputToolName: "executeGeoGebraCommands",
             details: {
               protocolRepairAttempts: 1,
-              protocolRepairErrors: [expect.stringContaining("2 个工具调用")]
+              protocolRepairErrors: [expect.stringContaining("每一步只允许一个工具动作")]
             },
             error: null
           }),

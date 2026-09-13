@@ -45,7 +45,8 @@
     "datasets:import-gaokao-cases": "bun tools/import-gaokao-problem-cases-to-unified.ts",
     "mcp:desktop-debug": "bun tools/desktop-debug-mcp/index.ts",
     "mcp:desktop-debug:http": "bun tools/desktop-debug-mcp/http.ts",
-    "mcp:desktop-debug:smoke": "bun tools/desktop-debug-mcp/smoke.ts"
+    "mcp:desktop-debug:smoke": "bun tools/desktop-debug-mcp/smoke.ts",
+    "eval:harness": "mkdir -p .artifacts && bun test tests/agent-harness-evals.test.ts tests/p0-agent-hardening.test.ts --reporter=junit --reporter-outfile=.artifacts/agent-harness-evals.xml"
   },
   "dependencies": {},
   "devDependencies": {

@@ -28,7 +28,7 @@ export function createAgentRunContinuationService(
   options: {
     modelNextAction: (input: BackendModelNextActionInput) => Promise<BackendModelNextAction>;
     backendToolAutoStepLimit: () => number;
-    backendToolExecutionContext: (run: Pick<AgentRunLedgerRecord, "runId" | "conversationId" | "locale" | "prompt">) => BackendToolExecutionContext;
+    backendToolExecutionContext: (run: Pick<AgentRunLedgerRecord, "runId" | "conversationId" | "locale" | "prompt" | "tools">) => BackendToolExecutionContext;
   }
 ) {
   async function commitCompletedToolResult(input: {

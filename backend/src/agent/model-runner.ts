@@ -6,6 +6,7 @@ import {
   GEOCHAT_SYSTEM_PROMPT_EN,
   GEOCHAT_SYSTEM_PROMPT,
   getAgentModelPolicy,
+  agentModelSupportsReasoning,
   type AgentModelConfig,
   type AgentRunImageAttachment,
   type AgentRunLedgerRecord,
@@ -32,7 +33,9 @@ import {
 import { createBackendPlanningTools } from "./model-runner-planning-tools";
 import {
   createRepairUserMessage,
+  estimateModelContextTokens,
   latestUnresolvedFailedExecute,
+  MAX_MODEL_CONTEXT_TOKENS,
   maybeCreateRepairAction,
   modelMessagesFromRun
 } from "./model-runner-context";
@@ -104,6 +107,13 @@ export async function createBackendModelNextAction(input: BackendModelNextAction
         : `当前模型未声明图片输入能力：${input.modelConfig.provider}/${input.modelConfig.model}`
     );
   }
+  if (input.run.thinking === true && !agentModelSupportsReasoning(input.modelConfig.provider, input.modelConfig.model)) {
+    throw new Error(
+      isEnglishLocale(input.run.locale)
+        ? `Reasoning mode is not supported by the configured model: ${input.modelConfig.provider}/${input.modelConfig.model}`
+        : `当前模型不支持思考模式：${input.modelConfig.provider}/${input.modelConfig.model}`
+    );
+  }
 
   const repairAction = maybeCreateRepairAction(input.run);
   if (repairAction) return repairAction;
@@ -125,6 +135,14 @@ export async function createBackendModelNextAction(input: BackendModelNextAction
   const messages = repairingFailure
     ? [createRepairUserMessage(input.run, repairingFailure, input.attachments ?? [])]
     : modelMessagesFromRun(input.run, input.attachments ?? [], input.modelSteps);
+  const estimatedContextTokens = estimateModelContextTokens(messages);
+  if (estimatedContextTokens > MAX_MODEL_CONTEXT_TOKENS) {
+    throw new Error(
+      isEnglishLocale(input.run.locale)
+        ? `Model context budget exceeded before provider request (${estimatedContextTokens} estimated tokens).`
+        : `模型上下文预算超限，已阻止 provider 请求（预计 ${estimatedContextTokens} tokens）。`
+    );
+  }
 
   const tools = createBackendPlanningTools(input.run.locale, input.disabledToolNames, skillSelection, input.run);
   let protocolError: Error | undefined;

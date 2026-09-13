@@ -36,7 +36,6 @@ impl Drop for BackendRuntime {
 pub(crate) fn start_backend(
     app_data_dir: &Path,
     resource_dir: &Path,
-    auth_token: Option<&str>,
 ) -> Result<BackendRuntime, String> {
     if let Some(configured_url) = development_backend_url() {
         return Ok(BackendRuntime {
@@ -74,10 +73,6 @@ pub(crate) fn start_backend(
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
-
-    if let Some(auth_token) = auth_token {
-        command.env("GEOCHAT_DESKTOP_BACKEND_AUTH_TOKEN", auth_token);
-    }
 
     let mut child = spawn_with_retry(
         &mut command,

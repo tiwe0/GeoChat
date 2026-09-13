@@ -68,24 +68,20 @@ export function backendActionFromModelResult(result: ModelResultLike, run: Pick<
         usage: agentUsageFromModelUsage(result.totalUsage)
       };
     }
-    const extraToolCalls = result.toolCalls.slice(1);
-    const tool = remoteToolRequestInputFromToolCall(nextToolCall, locale);
+    if (result.toolCalls.length > 1) {
+      throw new Error(
+        isEnglishLocale(locale)
+          ? `The model returned ${result.toolCalls.length} tool calls in one step. Exactly one tool action is allowed; retry with a single action.`
+          : `模型在一步中返回了 ${result.toolCalls.length} 个工具调用。每一步只允许一个工具动作，请重试并只返回一个动作。`
+      );
+    }
+    const tool = remoteToolRequestInputFromToolCall(nextToolCall, locale, true);
     validateModelToolRequestForRun(tool, run);
     return {
       type: "tool",
       source: "model",
       tool,
-      reasoningText: nonEmptyReasoning(result.reasoningText),
-      diagnostics: extraToolCalls.length
-        ? {
-            protocolRepairAttempts: 1,
-            protocolRepairErrors: [
-              isEnglishLocale(locale)
-                ? `The model returned ${result.toolCalls.length} tool calls at once. The backend harness queued the first valid tool call and ignored ${extraToolCalls.length} extra call(s) for this step.`
-                : `模型一次返回了 ${result.toolCalls.length} 个工具调用。后端 harness 已排队第一个合法工具调用，并忽略本步其余 ${extraToolCalls.length} 个调用。`
-            ]
-          }
-        : undefined
+      reasoningText: nonEmptyReasoning(result.reasoningText)
     };
   }
   if (!result.text.trim()) {
@@ -153,7 +149,7 @@ export function choiceAnalysisRequiredMessage(locale?: AgentRunLedgerRecord["loc
     : "选择题或多选题必须先调用 showChoiceAnalysis；最终文本不能替代选项场景分析卡片。";
 }
 
-export function remoteToolRequestInputFromToolCall(toolCall: ToolCallLike, locale?: AgentRunLedgerRecord["locale"]): AgentRunRemoteToolRequestInput {
+export function remoteToolRequestInputFromToolCall(toolCall: ToolCallLike, locale?: AgentRunLedgerRecord["locale"], requireReason = false): AgentRunRemoteToolRequestInput {
   if (!isAgentRunToolCallId(toolCall.toolCallId)) {
     throw new Error(isEnglishLocale(locale) ? "The model returned an invalid tool call ID." : "模型返回了非法工具调用 ID。");
   }
@@ -163,6 +159,14 @@ export function remoteToolRequestInputFromToolCall(toolCall: ToolCallLike, local
   const input = normalizeModelToolInput(toolCall.toolName, toolCall.input);
   if (!isFunctionCallArgs(toolCall.toolName, input)) {
     throw new Error(isEnglishLocale(locale) ? `The model returned invalid tool arguments: ${toolCall.toolName}` : `模型返回了非法工具参数：${toolCall.toolName}`);
+  }
+  if (requireReason) {
+    const reason = input && typeof input === "object" && !Array.isArray(input)
+      ? (input as Record<string, unknown>).reason
+      : undefined;
+    if (typeof reason !== "string" || !reason.trim()) {
+      throw new Error(isEnglishLocale(locale) ? `The model tool call is missing a non-empty reason: ${toolCall.toolName}` : `模型工具调用缺少非空 reason：${toolCall.toolName}`);
+    }
   }
   const request = {
     toolCallId: toolCall.toolCallId,
@@ -180,18 +184,18 @@ function normalizeModelToolInput(toolName: FunctionCallToolName, input: unknown)
   if (toolName !== "showSolutionSteps") return input;
   if (!input || typeof input !== "object" || Array.isArray(input)) return input;
   const record = input as Record<string, unknown>;
-  const content = stringValue(record.content) ?? stringValue(record.text) ?? stringValue(record.body);
-  const summary = stringValue(record.summary) ?? content ?? null;
-  const answer = stringValue(record.answer) ?? summary ?? content ?? stringValue(record.title) ?? "";
+  const content = normalizeMathMarkup(stringValue(record.content) ?? stringValue(record.text) ?? stringValue(record.body));
+  const summary = normalizeMathMarkup(stringValue(record.summary) ?? content) ?? null;
+  const answer = normalizeMathMarkup(stringValue(record.answer) ?? summary ?? content ?? stringValue(record.title) ?? "") ?? "";
   const rawSteps = Array.isArray(record.steps) ? record.steps : content ? [content] : [];
   const steps = rawSteps
     .map((step, index) => normalizeSolutionStep(step, index))
     .filter((step): step is { label: string; body: string } => Boolean(step));
   return {
-    title: stringValue(record.title) ?? "解题步骤",
+    title: normalizeMathMarkup(stringValue(record.title) ?? "解题步骤") ?? "解题步骤",
     answer,
     ...(summary ? { summary } : {}),
-    ...(stringValue(record.auxiliaryElementReview) ? { auxiliaryElementReview: stringValue(record.auxiliaryElementReview) } : {}),
+    ...(stringValue(record.auxiliaryElementReview) ? { auxiliaryElementReview: normalizeMathMarkup(stringValue(record.auxiliaryElementReview)) } : {}),
     steps: steps.length ? steps : [{ label: "说明", body: answer || "已完成整理。" }],
     ...auditFields(record)
   };
@@ -205,14 +209,14 @@ function normalizeChoiceAnalysisInput(input: unknown) {
     .map((choice, index) => normalizeChoiceAnalysisChoice(choice, index))
     .filter((choice): choice is NonNullable<ReturnType<typeof normalizeChoiceAnalysisChoice>> => Boolean(choice));
   return {
-    title: stringValue(record.title) ?? "选项分析",
-    summary: stringValue(record.summary) ?? stringValue(record.content) ?? "按题干公共条件分别判断各选项。",
-    ...(stringValue(record.answer) ? { answer: stringValue(record.answer) } : {}),
+    title: normalizeMathMarkup(stringValue(record.title) ?? "选项分析") ?? "选项分析",
+    summary: normalizeMathMarkup(stringValue(record.summary) ?? stringValue(record.content) ?? "按题干公共条件分别判断各选项。") ?? "按题干公共条件分别判断各选项。",
+    ...(stringValue(record.answer) ? { answer: normalizeMathMarkup(stringValue(record.answer)) } : {}),
     ...(stringArrayValue(record.baseConditions) ?? stringArrayValue(record.conditions) ?? stringArrayValue(record.givens)
-      ? { baseConditions: stringArrayValue(record.baseConditions) ?? stringArrayValue(record.conditions) ?? stringArrayValue(record.givens) }
+      ? { baseConditions: (stringArrayValue(record.baseConditions) ?? stringArrayValue(record.conditions) ?? stringArrayValue(record.givens))?.map((item) => normalizeMathMarkup(item) ?? item) }
       : {}),
     ...(normalizeChoiceDisplayMode(record.displayMode) ? { displayMode: normalizeChoiceDisplayMode(record.displayMode) } : {}),
-    ...(stringValue(record.auxiliaryElementReview) ? { auxiliaryElementReview: stringValue(record.auxiliaryElementReview) } : {}),
+    ...(stringValue(record.auxiliaryElementReview) ? { auxiliaryElementReview: normalizeMathMarkup(stringValue(record.auxiliaryElementReview)) } : {}),
     choices,
     ...auditFields(record)
   };
@@ -231,26 +235,28 @@ function normalizeChoiceAnalysisChoice(choice: unknown, index: number) {
       : undefined;
   }
   const record = choice as Record<string, unknown>;
-  const statement =
+  const statement = normalizeMathMarkup(
     stringValue(record.statement) ??
     stringValue(record.text) ??
     stringValue(record.content) ??
     stringValue(record.claim) ??
-    stringValue(record.title);
-  const explanation =
+    stringValue(record.title)
+  );
+  const explanation = normalizeMathMarkup(
     stringValue(record.explanation) ??
     stringValue(record.reason) ??
     stringValue(record.analysis) ??
     stringValue(record.body) ??
-    statement;
+    statement
+  );
   if (!statement || !explanation) return undefined;
   return {
     label: normalizeChoiceLabel(record.label ?? record.choice ?? record.option) ?? choiceLabelForIndex(index),
     statement,
     verdict: normalizeChoiceVerdict(record.verdict ?? record.status ?? record.judgment ?? record.result ?? record.correct),
     explanation,
-    ...(stringValue(record.constructionFocus) ?? stringValue(record.focus) ? { constructionFocus: stringValue(record.constructionFocus) ?? stringValue(record.focus) } : {}),
-    ...(stringArrayValue(record.evidence) ? { evidence: stringArrayValue(record.evidence) } : {}),
+    ...(stringValue(record.constructionFocus) ?? stringValue(record.focus) ? { constructionFocus: normalizeMathMarkup(stringValue(record.constructionFocus) ?? stringValue(record.focus)) } : {}),
+    ...(stringArrayValue(record.evidence) ? { evidence: stringArrayValue(record.evidence)?.map((item) => normalizeMathMarkup(item) ?? item) } : {}),
     ...(stringArrayValue(record.commands) ? { commands: stringArrayValue(record.commands) } : {})
   };
 }
@@ -282,15 +288,40 @@ function normalizeChoiceDisplayMode(value: unknown): "single_active_choice" | "c
 }
 
 function normalizeSolutionStep(step: unknown, index: number) {
-  if (typeof step === "string") return { label: `步骤 ${index + 1}`, body: step };
+  if (typeof step === "string") return { label: `步骤 ${index + 1}`, body: normalizeMathMarkup(step) ?? step };
   if (!step || typeof step !== "object" || Array.isArray(step)) return undefined;
   const record = step as Record<string, unknown>;
-  const body = stringValue(record.body) ?? stringValue(record.content) ?? stringValue(record.text) ?? stringValue(record.description);
+  const body = normalizeMathMarkup(stringValue(record.body) ?? stringValue(record.content) ?? stringValue(record.text) ?? stringValue(record.description));
   if (!body) return undefined;
   return {
     label: stringValue(record.label) ?? stringValue(record.title) ?? `步骤 ${index + 1}`,
     body
   };
+}
+
+/**
+ * Repair the small class of LaTeX corruption caused when a model emits a
+ * single backslash inside a JSON tool argument. For example, `"\\frac"`
+ * can be decoded as form-feed + `"rac"`, and `"\\tfrac"` as tab + `"frac"`.
+ * Only math-delimited segments are touched; ordinary prose and code remain
+ * byte-for-byte unchanged.
+ */
+export function normalizeMathMarkup(value: string | undefined) {
+  if (typeof value !== "string" || !value) return value;
+  return value.replace(/(\$\$[\s\S]*?\$\$|\$(?:\\.|[^$\\])*\$)/g, (segment) => {
+    let repaired = segment
+      .replace(/\u000c(?=rac\b)/g, "\\frac")
+      .replace(/\u0009(?=(?:frac|ext|imes|heta|au|ambda|u|pi|eft|ight|cdot|leq?|geq?|neq|approx|in|mid|sum|int|min|max|sin|cos|tan|log|ln|alpha|beta|gamma|delta|theta)\b)/g, "\\")
+      .replace(/\u0008(?=(?:egin|eta|ar|ig|matrix)\b)/g, "\\b")
+      .replace(/\u000d(?=ight\b)/g, "\\right")
+      .replace(/\u000a(?=(?:eq|abla|u|ot)\b)/g, "\\n");
+    // Models occasionally omit the slash entirely in a tool JSON string.
+    repaired = repaired.replace(
+      /(?<!\\)\b(?:tfrac|dfrac|frac|sqrt|text|left|right|cdot|times|leq?|geq?|neq|approx|in|mid|sum|int|min|max)(?=\s|[{}\[\](),.;:+\-*/=]|\d|$)/g,
+      "\\$&"
+    );
+    return repaired;
+  });
 }
 
 function stringValue(value: unknown) {

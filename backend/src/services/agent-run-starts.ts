@@ -2,6 +2,7 @@ import {
   createAgentRunInitialCanvasReadRequest,
   decideAgentRunRunnerStart,
   finishAgentRunLedger,
+  agentModelSupportsReasoning,
   getAgentModelPolicy,
   getFunctionCallRemoteBridgeToolNames,
   type AgentModelConfig,
@@ -50,7 +51,7 @@ export function createAgentRunStartService(
     }
 
     const modelPreflightError = input.model
-      ? validateRunnerModelPreflight(input.model, input.attachments?.length ?? 0, input.record.locale)
+      ? validateRunnerModelPreflight(input.model, input.attachments?.length ?? 0, input.record.thinking === true, input.record.locale)
       : undefined;
     if (modelPreflightError) {
       const failedRecord = failAgentRunForModelError(input.record, modelPreflightError);
@@ -149,7 +150,7 @@ async function seedRunnerBlackboard(
   }
 }
 
-function validateRunnerModelPreflight(model: { provider: string; model: string }, attachmentCount: number, locale?: AgentRunLedgerRecord["locale"]) {
+function validateRunnerModelPreflight(model: { provider: string; model: string }, attachmentCount: number, thinkingEnabled: boolean, locale?: AgentRunLedgerRecord["locale"]) {
   const modelPolicy = getAgentModelPolicy(model);
   if (!modelPolicy.supportsTools) {
     return new Error(
@@ -163,6 +164,13 @@ function validateRunnerModelPreflight(model: { provider: string; model: string }
       locale === "en-US"
         ? `The current model is not declared as image-input capable: ${model.provider}/${model.model}`
         : `当前模型未声明图片输入能力：${model.provider}/${model.model}`
+    );
+  }
+  if (thinkingEnabled && !agentModelSupportsReasoning(model.provider, model.model)) {
+    return new Error(
+      locale === "en-US"
+        ? `Reasoning mode is not supported by the configured model: ${model.provider}/${model.model}`
+        : `当前模型不支持思考模式：${model.provider}/${model.model}`
     );
   }
   return undefined;

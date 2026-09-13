@@ -788,7 +788,7 @@ describe("function call registry", () => {
     }, { tools: [{ toolName: "getCanvasContext", status: "succeeded" }] });
 
     expect(Object.keys(tools)).not.toEqual(expect.arrayContaining(["listSkills", "searchSkills", "loadSkill", "activateSkill"]));
-    expect(Object.keys(tools)).not.toEqual(expect.arrayContaining(["readBlackboard", "patchBlackboard"]));
+    expect(Object.keys(tools)).toEqual(expect.arrayContaining(["readBlackboard", "patchBlackboard"]));
     expect(Object.keys(tools)).toContain("executeGeoGebraCommands");
     expect(Object.keys(tools)).not.toContain("searchGeoGebraCommands");
   });

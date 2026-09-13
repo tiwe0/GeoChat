@@ -22,12 +22,12 @@ import type { McpController } from "./useMcpState";
 const TABS = ["model", "general", "about"] as const;
 type SettingsTab = (typeof TABS)[number];
 
-export function SettingsPanel(props: { mcp: McpController; onClose: () => void }) {
+export function SettingsPanel(props: { mcp: McpController; onClose: () => void; onRestartTour: () => void }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<SettingsTab>("model");
 
   return (
-    <Stack sx={{ flex: 1, minHeight: 0 }}>
+    <Stack className="geochatpro-settings" sx={{ flex: 1, minHeight: 0 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.5, borderBottom: 1, borderColor: "divider" }}>
         <Tabs
           value={tab}
@@ -45,9 +45,18 @@ export function SettingsPanel(props: { mcp: McpController; onClose: () => void }
         </Button>
       </Box>
 
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", p: 2.5 }}>
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: "auto",
+          scrollbarWidth: "none",
+          "&::-webkit-scrollbar": { display: "none" },
+          p: 2.5,
+        }}
+      >
         {tab === "model" && <ModelSettings />}
-        {tab === "general" && <GeneralSettings mcp={props.mcp} />}
+        {tab === "general" && <GeneralSettings mcp={props.mcp} onRestartTour={props.onRestartTour} />}
         {tab === "about" && <AboutSettings />}
       </Box>
     </Stack>

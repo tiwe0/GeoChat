@@ -82,6 +82,8 @@ struct DesktopState {
 }
 
 fn main() {
+    configure_linux_graphics_for_wsl();
+
     if installed_client_update_smoke_cli_enabled() {
         if let Err(error) = run_installed_client_update_smoke_cli() {
             eprintln!("Installed-client app-bundle update smoke failed: {error}");
@@ -146,6 +148,37 @@ fn main() {
     });
 }
 
+/// WSLg can expose a partial Mesa/Zink device to WebKitGTK. The resulting
+/// EGL probe is noisy and may leave the webview without a usable compositor,
+/// even though WSLg's software path works reliably. Opt into software Cairo
+/// rendering only inside WSL; native Linux and Windows keep their defaults.
+#[cfg(target_os = "linux")]
+fn configure_linux_graphics_for_wsl() {
+    let is_wsl = env::var_os("WSL_DISTRO_NAME").is_some()
+        || fs::read_to_string("/proc/version")
+            .map(|version| {
+                let normalized = version.to_ascii_lowercase();
+                normalized.contains("microsoft") || normalized.contains("wsl")
+            })
+            .unwrap_or(false);
+    if !is_wsl {
+        return;
+    }
+
+    for (name, value) in [
+        ("LIBGL_ALWAYS_SOFTWARE", "1"),
+        ("GSK_RENDERER", "cairo"),
+        ("WEBKIT_DISABLE_DMABUF_RENDERER", "1"),
+    ] {
+        if env::var_os(name).is_none() {
+            env::set_var(name, value);
+        }
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn configure_linux_graphics_for_wsl() {}
+
 fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
     let app_data_dir = desktop_app_data_dir(app)?;
     let resource_dir = app.path().resource_dir().unwrap_or_else(|_| {
@@ -168,11 +201,7 @@ fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
     let settings = load_settings(&settings_path)?;
     let local_backend_auth_token = local_runtime_auth_token();
     let runtime_authorized = access_allows_runtime_use();
-    let backend = start_backend(
-        &app_data_dir,
-        &resource_dir,
-        Some(&local_backend_auth_token),
-    )?;
+    let backend = start_backend(&app_data_dir, &resource_dir)?;
     let shell_update_state = initial_shell_update_state(settings.update_preferences.clone());
     // Resolving verifies every asset in the manifest by hash, so it happens
     // exactly once here and everything downstream reads the cached result.

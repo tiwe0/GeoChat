@@ -254,10 +254,10 @@ export async function mountGeoGebra(options: {
     width: initialSize().width,
     height: initialSize().height,
     appName: "classic",
-    // Start with the Algebra + Graphics layout while keeping GeoGebra's
-    // Algebra input field collapsed by default. Users can reopen it from the
-    // applet controls when needed.
-    perspective: "AG",
+    // Start with the Graphics-only layout while keeping GeoGebra's Algebra
+    // input field collapsed by default. Users can reopen it from the applet
+    // controls when needed.
+    perspective: "G",
     showToolBar: false,
     showToolBarHelp: false,
     showMenuBar: false,
@@ -280,8 +280,8 @@ export async function mountGeoGebra(options: {
       try {
         // This standalone frontend uses the patched applet API directly. The
         // extension-only switchThroughSubApp bridge must not be used here.
-        if (typeof setPerspective === "function") setPerspective.call(api, "AG");
-      } catch { /* perspective: AG remains the initialization fallback */ }
+        if (typeof setPerspective === "function") setPerspective.call(api, "G");
+      } catch { /* perspective: G remains the initialization fallback */ }
       options.onReady(api);
       refreshVisuals();
     },

@@ -31,8 +31,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { Streamdown } from "streamdown";
 import { AnimatePresence, motion } from "motion/react";
-import {
-} from "@geochat-ai/app/contracts";
+import { summarizeAgentReasoning } from "@geochat-ai/app";
 import { useAgentRunChat } from "../hooks/useAgentRunChat";
 import { formatAgentRunError } from "../features/agent-run/errorMessage";
 import { STREAMDOWN_PLUGINS } from "../features/chat/streamdownPlugins";
@@ -80,7 +79,6 @@ import { backendAuthToken, backendOrigin } from "../features/desktop/runtime";
 // does not require an account or a remote session.
 const AUTH_REQUIRED = false;
 const ONBOARDING_TOUR_STORAGE_KEY = "geogebraCopilotOnboardingTourCompleted";
-const ONBOARDING_TOUR_OPT_IN_KEY = "geochatDesktopOnboardingTour";
 const THINKING_ENABLED_STORAGE_KEY = "geogebraCopilotThinkingEnabled";
 const LEGACY_REASONING_MODE_STORAGE_KEY = "geogebraCopilotReasoningMode";
 const THINKING_EFFORT_STORAGE_KEY = "geogebraCopilotThinkingEffort";
@@ -208,7 +206,7 @@ function ThinkingBlock({
     .filter(Boolean);
   const firstLine = reasoningLines[0] ?? "";
   const latestLine = reasoningLines[reasoningLines.length - 1] ?? firstLine;
-  const summary = (active ? latestLine : firstLine) || label;
+  const summary = summarizeAgentReasoning(text) || (active ? latestLine : firstLine) || label;
 
   useEffect(() => {
     if (!active) setExpanded(false);
@@ -318,7 +316,13 @@ function ThinkingBlock({
   );
 }
 
-export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }) {
+export function AssistantPanel({
+  canvasReady = true,
+  onConversationStarted,
+}: {
+  canvasReady?: boolean;
+  onConversationStarted?: () => void;
+}) {
   const { t, i18n } = useTranslation();
   const streamdownTranslations = useStreamdownTranslations();
   const [input, setInput] = useState("");
@@ -429,17 +433,13 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
     panelChatRef.current.setModel(selected.id);
     setSelectedModel(selected.id);
   }, []);
-  // The tour does not auto-start in the desktop build. Its steps were written
-  // for the web layout and the spotlight lands on the wrong region here, which
-  // is worse on first launch than no tour at all. The first-run problem worth
-  // solving is configuring a model key, not a nine-step feature walkthrough.
-  // Re-enable by setting geochatDesktopOnboardingTour = true in local storage
-  // once the step targets have been reworked for this layout.
+  // Show the tour once on first launch. Completion and skipping are persisted
+  // locally so returning users are not interrupted.
   useEffect(() => {
     void browser.storage.local
-      .get(ONBOARDING_TOUR_OPT_IN_KEY)
-      .then((stored) => setOnboardingTourReady(stored[ONBOARDING_TOUR_OPT_IN_KEY] === true))
-      .catch(() => setOnboardingTourReady(false));
+      .get(ONBOARDING_TOUR_STORAGE_KEY)
+      .then((stored) => setOnboardingTourReady(stored[ONBOARDING_TOUR_STORAGE_KEY] !== true))
+      .catch(() => setOnboardingTourReady(true));
   }, []);
   useEffect(() => {
     void browser.storage.local.get([THINKING_ENABLED_STORAGE_KEY, LEGACY_REASONING_MODE_STORAGE_KEY, THINKING_EFFORT_STORAGE_KEY]).then((stored) => {
@@ -464,6 +464,17 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
   function completeOnboardingTour() {
     setOnboardingTourReady(false);
     void browser.storage.local.set({ [ONBOARDING_TOUR_STORAGE_KEY]: true });
+  }
+
+  function restartOnboardingTour() {
+    setPanelView("chat");
+    setConversationDrawerOpen(false);
+    setBlackboardOpen(false);
+    setOnboardingTourReady(false);
+    void browser.storage.local.remove(ONBOARDING_TOUR_STORAGE_KEY).then(
+      () => setOnboardingTourReady(true),
+      () => setOnboardingTourReady(true),
+    );
   }
 
   const onboardingSteps: Step[] = [
@@ -580,6 +591,7 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
     setSubmissionError(null);
     setInput("");
     if (exampleText === undefined) setAttachments([]);
+    onConversationStarted?.();
     if (text) {
       await sendMessage({ text, files }, { body: { conversationId } });
     } else {
@@ -633,6 +645,7 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
   return (
     <MotionPaper
       ref={panelRef}
+      className="geochatpro-panel"
       aria-label={t("common.appName")}
       lang={i18n.resolvedLanguage ?? i18n.language}
       elevation={dragging || resizing ? 10 : 6}
@@ -877,7 +890,9 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
           />
           <BlackboardDrawer
             open={blackboardOpen}
-            signedIn={Boolean(authSessionRef.current.token)}
+            // The desktop backend is local-first and does not require an
+            // account token, so the blackboard is available to guest users.
+            signedIn={true}
             conversationId={currentConversationId}
             loading={blackboard.loading}
             error={blackboard.error}
@@ -898,7 +913,7 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
             style={{ display: "flex", flex: 1, minHeight: 0, flexDirection: "column", overflow: "hidden" }}
           >
           {panelView === "user" ? (
-            <SettingsPanel mcp={mcp} onClose={() => setPanelView("chat")} />
+            <SettingsPanel mcp={mcp} onClose={() => setPanelView("chat")} onRestartTour={restartOnboardingTour} />
           ) : (
         <>
           <Box
@@ -1181,7 +1196,13 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
           run
           continuous
           scrollToFirstStep={false}
-          portalElement={panelRef.current}
+          // Keep the overlay in Joyride's viewport-level portal. The panel is
+          // fixed-positioned, so a panel-sized portal makes Joyride measure a
+          // 600px canvas from the viewport origin (the mask then appears on
+          // the left side of the window). The default body portal lets the
+          // overlay and tooltip use the same viewport coordinate system and
+          // resize with the window.
+          floatingOptions={{ strategy: "fixed" }}
           locale={{
             back: t("tour.back"),
             close: t("tour.close"),

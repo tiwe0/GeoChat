@@ -12,6 +12,10 @@
 <p align="center">
   <a href="README.md">中文</a>
   ·
+  <a href="https://geochat.ivory.cafe">Website</a>
+  ·
+  <a href="https://github.com/tiwe0/GeoChat/releases/latest">Download</a>
+  ·
   <a href="#preview">Preview</a>
   ·
   <a href="#quick-start">Quick Start</a>
@@ -26,8 +30,10 @@
   <a href="https://github.com/tiwe0/GeoChat/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/tiwe0/GeoChat?style=social"></a>
   <img alt="Tauri" src="https://img.shields.io/badge/Tauri-2.x-24C8DB">
   <img alt="Bun" src="https://img.shields.io/badge/Bun-runtime-black">
-  <img alt="SolidJS" src="https://img.shields.io/badge/SolidJS-UI-2C4F7C">
+  <img alt="React" src="https://img.shields.io/badge/React-UI-149ECA">
 </p>
+
+Latest stable release: [`v0.5.0`](https://github.com/tiwe0/GeoChat/releases/tag/v0.5.0) · Website: <https://geochat.ivory.cafe>
 
 ## Preview
 
@@ -52,7 +58,7 @@
 ## Introduction
 
 GeoChat Desktop is a local-first AI mathematics workbench built around an
-embedded GeoGebra canvas. It combines a Tauri 2 desktop shell, a SolidJS
+embedded GeoGebra canvas. It combines a Tauri 2 desktop shell, a React
 renderer, a local Bun backend sidecar, SQLite persistence, and shared agent
 contracts in `@geochat-ai/app`.
 
@@ -77,7 +83,7 @@ workflow does not require online checks.
 ```text
 backend/          Local Bun backend, HTTP routes, SQLite repositories, services.
 packages/app/     Shared schemas, agent contracts, policies, and GeoGebra helpers.
-src/renderer/     SolidJS desktop workbench UI.
+src/renderer-react/ React desktop workbench UI.
 src/shared/       Shared renderer/backend TypeScript helpers.
 src-tauri/        Tauri shell, Rust command bridge, packaging, sidecar control.
 tests/            Contract and regression tests.
@@ -123,11 +129,12 @@ GEOCHAT_DESKTOP_DB_PATH=./data/dev.sqlite bun run dev
 
 ## Model Configuration
 
-Open the app settings and configure a model provider key. Keys are stored in the
-desktop configuration on the current device.
+Open the app settings to save API keys for your model providers. Keys are stored
+in the desktop configuration on the current device.
 
-The shared model registry supports the providers present in the app package and
-normalizes custom provider/model settings through the local configuration UI.
+Choose the provider and concrete model on the conversation page; the settings
+page only stores provider keys. The shared model registry exposes models for the
+providers whose keys are configured.
 
 ## Common Commands
 
@@ -200,6 +207,20 @@ bun run tauri:prepare
 bun run tauri:check
 bun test tests
 ```
+
+### Desktop release
+
+The root release script keeps the desktop versions and website fallback version
+in sync, then can commit, tag, push, and watch the GitHub Actions pipeline:
+
+```sh
+bun run release -- --version 0.5.1
+bun run release -- --version 0.5.1 --commit --tag --push
+```
+
+The pipeline builds Windows/macOS installers, publishes a GitHub Release,
+mirrors installers to Cloudflare R2 when configured, and deploys the website to
+Cloudflare Pages. The current `v0.5.0` release completed all of those checks.
 
 Run an external history secret scanner before publishing a new public remote.
 Local pattern scans are useful, but they are not a substitute for a full history

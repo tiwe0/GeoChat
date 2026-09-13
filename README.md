@@ -11,6 +11,10 @@
 <p align="center">
   <a href="README.en.md">English</a>
   ·
+  <a href="https://geochat.ivory.cafe">官网</a>
+  ·
+  <a href="https://github.com/tiwe0/GeoChat/releases/latest">下载</a>
+  ·
   <a href="#预览">预览</a>
   ·
   <a href="#快速开始">快速开始</a>
@@ -25,8 +29,10 @@
   <a href="https://github.com/tiwe0/GeoChat/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/tiwe0/GeoChat?style=social"></a>
   <img alt="Tauri" src="https://img.shields.io/badge/Tauri-2.x-24C8DB">
   <img alt="Bun" src="https://img.shields.io/badge/Bun-runtime-black">
-  <img alt="SolidJS" src="https://img.shields.io/badge/SolidJS-UI-2C4F7C">
+  <img alt="React" src="https://img.shields.io/badge/React-UI-149ECA">
 </p>
+
+当前稳定版：[`v0.5.0`](https://github.com/tiwe0/GeoChat/releases/tag/v0.5.0) · 官网：<https://geochat.ivory.cafe>
 
 ## 预览
 
@@ -51,7 +57,7 @@
 ## 项目介绍
 
 GeoChat Desktop 是一个本地优先的 AI 数学可视化工作台，核心是内嵌的
-GeoGebra 画板。它把 Tauri 2 桌面外壳、SolidJS 渲染层、本地 Bun 后端
+GeoGebra 画板。它把 Tauri 2 桌面外壳、React 渲染层、本地 Bun 后端
 sidecar、SQLite 持久化，以及 `@geochat-ai/app` 中的共享 Agent 协议组合在
 一起。
 
@@ -75,7 +81,7 @@ sidecar、SQLite 持久化，以及 `@geochat-ai/app` 中的共享 Agent 协议�
 ```text
 backend/          本地 Bun 后端、HTTP 路由、SQLite 仓库和服务。
 packages/app/     共享 schema、Agent 协议、策略和 GeoGebra 辅助逻辑。
-src/renderer/     SolidJS 桌面工作台 UI。
+src/renderer-react/ React 桌面工作台 UI。
 src/shared/       渲染层和后端共享的 TypeScript 工具。
 src-tauri/        Tauri 外壳、Rust 命令桥、打包和 sidecar 控制。
 tests/            合同测试和回归测试。
@@ -121,10 +127,10 @@ GEOCHAT_DESKTOP_DB_PATH=./data/dev.sqlite bun run dev
 
 ## 模型配置
 
-打开应用设置，配置你的模型供应商密钥。密钥会保存在当前设备的桌面配置中。
+打开应用设置，只配置并保存各模型供应商的 API key。密钥会保存在当前设备的桌面配置中。
 
-共享模型注册表支持应用包中已有的供应商，并通过本地配置 UI 规范化自定义
-供应商和模型设置。
+在对话页面选择供应商和具体模型；配置页不负责选择模型。共享模型注册表会根据
+已保存的供应商 key 提供可用选项。
 
 ## 常用命令
 
@@ -203,21 +209,21 @@ bun test tests
 不会创建提交、tag 或推送远程：
 
 ```sh
-bun run release -- --version 0.4.1
+bun run release -- --version 0.5.1
 ```
 
 确认版本和检查结果后，可以分步提交和打 tag：
 
 ```sh
-bun run release -- --version 0.4.1 --commit --tag
+bun run release -- --version 0.5.1 --commit --tag
 git push origin master
-git push origin v0.4.1
+git push origin v0.5.1
 ```
 
 也可以在确认工作区干净且当前分支为 `master` 后一次完成推送：
 
 ```sh
-bun run release -- --version 0.4.1 --commit --tag --push
+bun run release -- --version 0.5.1 --commit --tag --push
 ```
 
 `--push` 会触发 `.github/workflows/tauri-package.yml`：它先运行验证，随后构建
@@ -227,6 +233,10 @@ Windows/macOS 安装包、创建 GitHub Release，并在配置了 R2 时上传�
 下载页的版本同步。使用 `--no-watch` 可跳过远程等待，`--dry-run` 可预览动作，
 `--skip-checks` 仅适用于明确知道风险的本地调试场景。R2 和官网检查分别使用
 `GEOCHAT_DOWNLOADS_BASE_URL`、`GEOCHAT_SITE_URL` 环境变量。
+
+当前 `v0.5.0` 发布已验证 Windows/macOS 安装包、GitHub Release、Cloudflare R2
+镜像和 Cloudflare Pages 部署链路。官网自定义域名需要在 Cloudflare Pages 中将
+`geochat.ivory.cafe` 绑定到 `geochat-7l8.pages.dev`。
 
 发布到新的公开远程仓库前，建议再运行一次外部历史敏感信息扫描。普通本地模式
 扫描有帮助，但不能替代完整历史扫描。

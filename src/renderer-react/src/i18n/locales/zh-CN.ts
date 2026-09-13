@@ -8,6 +8,23 @@ export const zhCN = {
     copyError: "复制错误详情",
     copied: "已复制",
   },
+  canvasIntro: {
+    badge: "开始作图",
+    title: "输入题目，GeoChat 会直接作图",
+    description: "自动生成构造步骤、同步到 GeoGebra 画板，并解释关键关系。",
+  },
+  canvasStatus: {
+    canvas: {
+      loading: "画板连接中",
+      ready: "画板就绪",
+      error: "画板连接失败",
+    },
+    service: {
+      loading: "本地服务连接中",
+      ready: "本地服务就绪",
+      error: "本地服务异常",
+    },
+  },
   panel: {
     thinking: "思考中",
     thinkingComplete: "思考完成",

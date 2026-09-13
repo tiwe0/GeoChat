@@ -317,7 +317,13 @@ function ThinkingBlock({
   );
 }
 
-export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }) {
+export function AssistantPanel({
+  canvasReady = true,
+  onConversationStarted,
+}: {
+  canvasReady?: boolean;
+  onConversationStarted?: () => void;
+}) {
   const { t, i18n } = useTranslation();
   const streamdownTranslations = useStreamdownTranslations();
   const [input, setInput] = useState("");
@@ -586,6 +592,7 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
     setSubmissionError(null);
     setInput("");
     if (exampleText === undefined) setAttachments([]);
+    onConversationStarted?.();
     if (text) {
       await sendMessage({ text, files }, { body: { conversationId } });
     } else {

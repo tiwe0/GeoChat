@@ -98,6 +98,68 @@ h2 { font-size: 18px; }
 .frontend-canvas-host .applet_scaler, .frontend-canvas-host .GeoGebraFrame, .frontend-canvas-host canvas { display: block !important; visibility: visible !important; opacity: 1 !important; }
 .frontend-canvas-host .GeoGebraFrame { position: relative !important; z-index: 0; overflow: hidden; }
 .frontend-canvas-host canvas { width: 100% !important; height: 100% !important; max-width: none; }
+.frontend-canvas-intro {
+  position: absolute;
+  top: 72px;
+  left: 38px;
+  z-index: 4;
+  max-width: min(500px, calc(100vw - 76px));
+  pointer-events: none;
+  color: #18231e;
+}
+.frontend-canvas-intro-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border: 1px solid #d6e7dc;
+  border-radius: 999px;
+  color: #18794e;
+  background: rgba(255, 255, 255, .9);
+  box-shadow: 0 3px 12px rgba(24, 59, 36, .08);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: .01em;
+}
+.frontend-canvas-intro h1 {
+  max-width: 480px;
+  margin: 14px 0 8px;
+  color: #18231e;
+  font-size: clamp(28px, 3vw, 42px);
+  font-weight: 800;
+  line-height: 1.12;
+  letter-spacing: -.045em;
+}
+.frontend-canvas-intro p {
+  max-width: 440px;
+  margin: 0;
+  color: #607168;
+  font-size: 16px;
+  line-height: 1.55;
+}
+.frontend-canvas-status {
+  position: absolute;
+  left: 20px;
+  bottom: 20px;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 13px;
+  border: 1px solid rgba(214, 227, 218, .95);
+  border-radius: 999px;
+  color: #607168;
+  background: rgba(255, 255, 255, .92);
+  box-shadow: 0 5px 16px rgba(24, 59, 36, .14);
+  backdrop-filter: blur(8px);
+  font-size: 12px;
+  font-weight: 700;
+}
+.frontend-canvas-status-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.frontend-canvas-status-item i { width: 7px; height: 7px; border-radius: 50%; background: #8fa099; }
+.frontend-canvas-status-canvas-ready .frontend-canvas-status-item:first-child i,
+.frontend-canvas-status-service-ready .frontend-canvas-status-item:last-child i { background: #42a564; box-shadow: 0 0 0 3px rgba(66, 165, 100, .12); }
+.frontend-canvas-status-canvas-error .frontend-canvas-status-item:first-child i,
+.frontend-canvas-status-service-error .frontend-canvas-status-item:last-child i { background: #d65d54; box-shadow: 0 0 0 3px rgba(214, 93, 84, .12); }
 .frontend-canvas-reset {
   position: absolute;
   right: 20px;
@@ -170,3 +232,9 @@ h2 { font-size: 18px; }
 .copilot-markdown > :last-child { margin-bottom: 0; }
 .copilot-markdown pre { max-width: 100%; overflow-x: auto; }
 @media (max-width: 700px) { .geochatpro-panel-host { right: 10px; bottom: 10px; left: 10px; } }
+@media (max-width: 700px) {
+  .frontend-canvas-intro { top: 62px; left: 20px; max-width: calc(100vw - 40px); }
+  .frontend-canvas-intro h1 { font-size: clamp(25px, 8vw, 34px); }
+  .frontend-canvas-intro p { font-size: 14px; }
+  .frontend-canvas-status { left: 12px; bottom: 12px; gap: 8px; padding: 8px 10px; font-size: 11px; }
+}

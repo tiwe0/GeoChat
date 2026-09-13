@@ -8,6 +8,23 @@ export const en = {
     copyError: "Copy error details",
     copied: "Copied",
   },
+  canvasIntro: {
+    badge: "Start drawing",
+    title: "Describe a problem, and GeoChat draws it",
+    description: "Generate construction steps, sync them to GeoGebra, and explain the key relationships.",
+  },
+  canvasStatus: {
+    canvas: {
+      loading: "Canvas connecting",
+      ready: "Canvas ready",
+      error: "Canvas connection failed",
+    },
+    service: {
+      loading: "Local service connecting",
+      ready: "Local service ready",
+      error: "Local service unavailable",
+    },
+  },
   panel: {
     thinking: "Thinking",
     thinkingComplete: "Thinking complete",

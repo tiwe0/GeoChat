@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import RestartAltRounded from "@mui/icons-material/RestartAltRounded";
 import { CircularProgress } from "@mui/material";
+import { AnimatePresence, motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { AssistantPanel } from "./components/AssistantPanel";
 import { GeoGebraController } from "./geogebra/controller";
 import { mountGeoGebra } from "./geogebra/ggbdeploy-wrapper";
@@ -9,15 +11,18 @@ import { WindowTitleBar } from "./features/desktop/WindowTitleBar";
 import { backendOrigin, desktopRuntimeError } from "./features/desktop/runtime";
 
 export default function App() {
+  const { t } = useTranslation();
   const canvasRef = useRef<HTMLDivElement>(null);
   const controllerRef = useRef(new GeoGebraController());
   const [canvasState, setCanvasState] = useState<"loading" | "ready" | "error">("loading");
   const [canvasError, setCanvasError] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
+  const [canvasIntroVisible, setCanvasIntroVisible] = useState(true);
 
   // A shell that will not report its backend is a hard failure, not something
   // to paper over with a guessed port.
   const runtimeError = desktopRuntimeError();
+  const serviceStatus = runtimeError ? "error" : canvasState === "ready" ? "ready" : "loading";
 
   useEffect(() => {
     let disposed = false;
@@ -76,6 +81,36 @@ export default function App() {
       <WindowTitleBar />
       <section className="frontend-canvas" aria-label="GeoGebra 画板">
         <div ref={canvasRef} className="frontend-canvas-host" />
+        <AnimatePresence initial={false}>
+          {canvasState === "ready" && canvasIntroVisible && (
+            <motion.div
+              className="frontend-canvas-intro"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -14, filter: "blur(3px)" }}
+              transition={{ duration: 0.28, ease: "easeOut" }}
+              aria-live="polite"
+            >
+              <span className="frontend-canvas-intro-badge">{t("canvasIntro.badge")}</span>
+              <h1>{t("canvasIntro.title")}</h1>
+              <p>{t("canvasIntro.description")}</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <div
+          className={`frontend-canvas-status frontend-canvas-status-canvas-${canvasState} frontend-canvas-status-service-${serviceStatus}`}
+          role="status"
+          aria-live="polite"
+        >
+          <span className="frontend-canvas-status-item">
+            <i aria-hidden="true" />
+            {t(`canvasStatus.canvas.${canvasState}`)}
+          </span>
+          <span className="frontend-canvas-status-item">
+            <i aria-hidden="true" />
+            {t(`canvasStatus.service.${serviceStatus}`)}
+          </span>
+        </div>
         <button
           type="button"
           className="frontend-canvas-reset"
@@ -96,7 +131,10 @@ export default function App() {
         )}
       </section>
       <div id="geochatpro-panel-host" className="geochatpro-panel-host">
-        <AssistantPanel canvasReady={canvasState === "ready"} />
+        <AssistantPanel
+          canvasReady={canvasState === "ready"}
+          onConversationStarted={() => setCanvasIntroVisible(false)}
+        />
       </div>
     </main>
   );

@@ -27,7 +27,7 @@ export function SettingsPanel(props: { mcp: McpController; onClose: () => void; 
   const [tab, setTab] = useState<SettingsTab>("model");
 
   return (
-    <Stack sx={{ flex: 1, minHeight: 0 }}>
+    <Stack className="geochatpro-settings" sx={{ flex: 1, minHeight: 0 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.5, borderBottom: 1, borderColor: "divider" }}>
         <Tabs
           value={tab}

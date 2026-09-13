@@ -646,6 +646,7 @@ export function AssistantPanel({
   return (
     <MotionPaper
       ref={panelRef}
+      className="geochatpro-panel"
       aria-label={t("common.appName")}
       lang={i18n.resolvedLanguage ?? i18n.language}
       elevation={dragging || resizing ? 10 : 6}

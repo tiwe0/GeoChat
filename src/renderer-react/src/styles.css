@@ -222,7 +222,32 @@ h2 { font-size: 18px; }
 .window-titlebar-controls .window-titlebar-close:hover { background: #df574d; color: #fff; }
 .window-titlebar-controls svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.2; }
 
-.geochatpro-panel-host > .MuiPaper-root { box-shadow: 0 18px 48px rgba(24, 59, 36, .2); }
+.geochatpro-panel-host > .MuiPaper-root {
+  box-shadow: 0 20px 54px rgba(24, 59, 36, .18), 0 2px 8px rgba(24, 59, 36, .08);
+  background: rgba(255, 255, 255, .78);
+  border-color: rgba(255, 255, 255, .72);
+  backdrop-filter: blur(22px) saturate(120%);
+  -webkit-backdrop-filter: blur(22px) saturate(120%);
+}
+.geochatpro-panel .MuiOutlinedInput-root,
+.geochatpro-panel .MuiButtonBase-root,
+.geochatpro-panel .MuiChip-root {
+  border-color: rgba(185, 201, 191, .62);
+}
+.geochatpro-panel .geochatpro-composer {
+  background: rgba(255, 255, 255, .58);
+  border-top-color: rgba(185, 201, 191, .46);
+}
+.geochatpro-settings {
+  background: rgba(255, 255, 255, .2);
+}
+.geochatpro-blackboard {
+  background: rgba(23, 63, 53, .84) !important;
+  border-color: rgba(220, 239, 226, .26) !important;
+  box-shadow: 0 20px 48px rgba(7, 31, 24, .26) !important;
+  backdrop-filter: blur(22px) saturate(120%);
+  -webkit-backdrop-filter: blur(22px) saturate(120%);
+}
 .copilot-markdown { min-width: 0; font-size: 14px; line-height: 1.68; overflow-wrap: anywhere; }
 .copilot-markdown p { margin: 0 0 9px; }
 .copilot-markdown :is(h1,h2,h3,h4) { margin: 16px 0 7px; line-height: 1.32; font-weight: 750; }

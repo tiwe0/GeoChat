@@ -74,6 +74,7 @@ export function BlackboardDrawer({
           id: "copilot-blackboard-drawer",
           role: "complementary",
           "aria-label": t("blackboard.title"),
+          className: "geochatpro-blackboard",
           sx: {
             position: "absolute",
             width: "min(380px, calc(100% - 72px))",

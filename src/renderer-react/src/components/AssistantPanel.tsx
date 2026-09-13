@@ -1187,7 +1187,12 @@ export function AssistantPanel({ canvasReady = true }: { canvasReady?: boolean }
           run
           continuous
           scrollToFirstStep={false}
-          portalElement={panelRef.current}
+          // Mount Joyride beside the panel rather than inside MotionPaper.
+          // Motion's layout transform and the panel's overflow clipping can
+          // shift or crop the fixed-coordinate spotlight. The host shares the
+          // panel's fixed viewport position, so the mask stays aligned with
+          // the dialog while remaining bounded to its area.
+          portalElement={panelRef.current?.parentElement ?? undefined}
           locale={{
             back: t("tour.back"),
             close: t("tour.close"),

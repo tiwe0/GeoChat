@@ -22,7 +22,6 @@ export default function App() {
   // A shell that will not report its backend is a hard failure, not something
   // to paper over with a guessed port.
   const runtimeError = desktopRuntimeError();
-  const serviceStatus = runtimeError ? "error" : canvasState === "ready" ? "ready" : "loading";
 
   useEffect(() => {
     let disposed = false;
@@ -98,17 +97,13 @@ export default function App() {
           )}
         </AnimatePresence>
         <div
-          className={`frontend-canvas-status frontend-canvas-status-canvas-${canvasState} frontend-canvas-status-service-${serviceStatus}`}
+          className={`frontend-canvas-status frontend-canvas-status-${canvasState}`}
           role="status"
           aria-live="polite"
         >
           <span className="frontend-canvas-status-item">
             <i aria-hidden="true" />
             {t(`canvasStatus.canvas.${canvasState}`)}
-          </span>
-          <span className="frontend-canvas-status-item">
-            <i aria-hidden="true" />
-            {t(`canvasStatus.service.${serviceStatus}`)}
           </span>
         </div>
         <button

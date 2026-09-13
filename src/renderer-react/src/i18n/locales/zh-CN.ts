@@ -19,11 +19,6 @@ export const zhCN = {
       ready: "画板就绪",
       error: "画板连接失败",
     },
-    service: {
-      loading: "本地服务连接中",
-      ready: "本地服务就绪",
-      error: "本地服务异常",
-    },
   },
   panel: {
     thinking: "思考中",

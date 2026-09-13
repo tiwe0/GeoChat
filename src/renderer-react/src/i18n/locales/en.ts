@@ -19,11 +19,6 @@ export const en = {
       ready: "Canvas ready",
       error: "Canvas connection failed",
     },
-    service: {
-      loading: "Local service connecting",
-      ready: "Local service ready",
-      error: "Local service unavailable",
-    },
   },
   panel: {
     thinking: "Thinking",

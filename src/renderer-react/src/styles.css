@@ -156,10 +156,8 @@ h2 { font-size: 18px; }
 }
 .frontend-canvas-status-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .frontend-canvas-status-item i { width: 7px; height: 7px; border-radius: 50%; background: #8fa099; }
-.frontend-canvas-status-canvas-ready .frontend-canvas-status-item:first-child i,
-.frontend-canvas-status-service-ready .frontend-canvas-status-item:last-child i { background: #42a564; box-shadow: 0 0 0 3px rgba(66, 165, 100, .12); }
-.frontend-canvas-status-canvas-error .frontend-canvas-status-item:first-child i,
-.frontend-canvas-status-service-error .frontend-canvas-status-item:last-child i { background: #d65d54; box-shadow: 0 0 0 3px rgba(214, 93, 84, .12); }
+.frontend-canvas-status-ready .frontend-canvas-status-item i { background: #42a564; box-shadow: 0 0 0 3px rgba(66, 165, 100, .12); }
+.frontend-canvas-status-error .frontend-canvas-status-item i { background: #d65d54; box-shadow: 0 0 0 3px rgba(214, 93, 84, .12); }
 .frontend-canvas-reset {
   position: absolute;
   right: 20px;

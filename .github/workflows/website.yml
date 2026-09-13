@@ -1,0 +1,90 @@
+name: website
+
+# The marketing site deploys independently of the desktop app: a typo fix in
+# copy must not trigger a Tauri build, and a Rust change must not redeploy the
+# site. Both workflows are path-filtered so each only runs when its own files
+# move.
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'website/**'
+      - '.github/workflows/website.yml'
+  pull_request:
+    paths:
+      - 'website/**'
+      - '.github/workflows/website.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: website-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Build and deploy
+    runs-on: ubuntu-latest
+    # Pull requests get a preview URL comment, which needs write access to the
+    # PR. Nothing else in this workflow writes to the repository.
+    permissions:
+      contents: read
+      pull-requests: write
+      deployments: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Install dependencies
+        working-directory: website
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        working-directory: website
+        run: bun run typecheck
+
+      # The palette is defined in OKLCH, where a small lightness change can
+      # quietly drop text below 4.5:1. Failing the build is cheaper than
+      # shipping unreadable copy.
+      - name: Verify colour contrast
+        working-directory: website
+        run: bun run check:contrast
+
+      - name: Build and prerender
+        working-directory: website
+        # Deployment hosts are not committed (this is a public repository, see
+        # OPEN_SOURCE.md), so they are injected here from repository variables.
+        # VITE_SITE_URL is required: the next step fails without it rather than
+        # shipping pages with no canonical URL and no sitemap.
+        env:
+          VITE_SITE_URL: ${{ vars.SITE_URL }}
+          VITE_DOWNLOADS_BASE: ${{ vars.DOWNLOADS_BASE_URL }}
+        run: bun run build
+
+      # Guards the thing most likely to break silently: if prerendering
+      # regresses to an empty SPA shell, share cards and crawlers see nothing.
+      - name: Verify prerendered output
+        working-directory: website
+        env:
+          VITE_SITE_URL: ${{ vars.SITE_URL }}
+          VITE_DOWNLOADS_BASE: ${{ vars.DOWNLOADS_BASE_URL }}
+        run: node scripts/check-prerender.mjs
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # A push to master publishes to the production branch; a pull request
+          # publishes to its own branch and gets a preview URL.
+          command: >-
+            pages deploy website/dist
+            --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT || 'geochat' }}
+            --branch=${{ github.head_ref || github.ref_name }}

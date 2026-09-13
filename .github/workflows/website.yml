@@ -84,10 +84,21 @@ jobs:
           PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || 'geochat' }}
         shell: bash
         run: |
-          if ! bunx wrangler pages project list | grep -Fq "$PROJECT"; then
-            echo "Pages project $PROJECT was not found; creating it."
-            bunx wrangler pages project create "$PROJECT" --production-branch master
+          # `pages deploy` does not create a project automatically. Try the
+          # idempotent create operation first; an "already exists" response is
+          # expected on subsequent deploys, while any other API error remains
+          # fatal.
+          output=$(mktemp)
+          if bunx --silent wrangler@3.90.0 pages project create "$PROJECT" \
+            --production-branch master >"$output" 2>&1; then
+            cat "$output"
+          elif grep -qiE 'already exists|already been taken|project exists' "$output"; then
+            cat "$output"
+          else
+            cat "$output" >&2
+            exit 1
           fi
+          rm -f "$output"
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3

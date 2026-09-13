@@ -30,11 +30,18 @@ export function useConversations(options: {
   const load = useCallback(async (silent = false) => {
     const session = authSessionRef.current.snapshot();
     const local = listLocalConversations();
-    if (!session) { setConversations(local); return; }
     setConversations(local);
+    // Desktop conversations are local-first. A session snapshot always exists
+    // for race protection, so use the token itself to decide whether a remote
+    // history request is authorized; never send an empty Bearer token.
+    if (!session.token) {
+      setError(null);
+      if (!silent) setLoading(false);
+      return;
+    }
     if (!silent) setLoading(true); setError(null);
     try {
-      const loaded = await fetchConversationSummaries(apiOrigin, session.token ?? "");
+      const loaded = await fetchConversationSummaries(apiOrigin, session.token);
       if (!authSessionRef.current.isCurrent(session)) return;
       const localById = new Map(local.map((conversation) => [conversation.id, conversation]));
       setConversations([...local, ...loaded.filter((conversation) => !localById.has(conversation.id))]);
@@ -59,7 +66,7 @@ export function useConversations(options: {
     let restoringCanvas = false;
     try {
       const local = readLocalConversation(conversation.id);
-      const stored = local ? null : await fetchConversationMessages(apiOrigin, (session?.token ?? ""), conversation.id);
+      const stored = local || !session.token ? null : await fetchConversationMessages(apiOrigin, session.token, conversation.id);
       if (session && !authSessionRef.current.isCurrent(session)) return;
       restoringCanvas = true;
       await replayConversationCanvas(stored?.replayCommands ?? []);
@@ -81,8 +88,8 @@ export function useConversations(options: {
     setError(null);
     try {
       deleteLocalConversation(conversation.id);
-      if (session) {
-        await deleteConversation(apiOrigin, (session.token ?? ""), conversation.id);
+      if (session.token) {
+        await deleteConversation(apiOrigin, session.token, conversation.id);
         if (!authSessionRef.current.isCurrent(session)) return false;
       }
       setConversations((current) => current.filter((item) => item.id !== conversation.id));

@@ -26,7 +26,7 @@ export function useConversationBlackboard(options: {
     const session = authSessionRef.current.snapshot();
     const requestedConversationId = conversationId;
     const requestVersion = ++requestVersionRef.current;
-    if (!session || !requestedConversationId) {
+    if (!session.token || !requestedConversationId) {
       setEntries([]);
       setError(null);
       setLoading(false);
@@ -36,7 +36,7 @@ export function useConversationBlackboard(options: {
     setLoading(true);
     setError(null);
     try {
-      const loaded = await fetchConversationBlackboard(apiOrigin, (session.token ?? ""), requestedConversationId);
+      const loaded = await fetchConversationBlackboard(apiOrigin, session.token, requestedConversationId);
       if (requestVersionRef.current !== requestVersion || !authSessionRef.current.isCurrent(session)) return;
       setEntries(loaded);
     } catch (caught) {

@@ -22,7 +22,7 @@ import type { McpController } from "./useMcpState";
 const TABS = ["model", "general", "about"] as const;
 type SettingsTab = (typeof TABS)[number];
 
-export function SettingsPanel(props: { mcp: McpController; onClose: () => void }) {
+export function SettingsPanel(props: { mcp: McpController; onClose: () => void; onRestartTour: () => void }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<SettingsTab>("model");
 
@@ -47,7 +47,7 @@ export function SettingsPanel(props: { mcp: McpController; onClose: () => void }
 
       <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", p: 2.5 }}>
         {tab === "model" && <ModelSettings />}
-        {tab === "general" && <GeneralSettings mcp={props.mcp} />}
+        {tab === "general" && <GeneralSettings mcp={props.mcp} onRestartTour={props.onRestartTour} />}
         {tab === "about" && <AboutSettings />}
       </Box>
     </Stack>

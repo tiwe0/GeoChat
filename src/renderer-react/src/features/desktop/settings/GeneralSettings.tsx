@@ -1,4 +1,4 @@
-import { Stack, Typography, FormControlLabel, Switch } from "@mui/material";
+import { Stack, Typography, FormControlLabel, Switch, Button } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { UpdateSection } from "../UpdateSection";
 import type { McpController } from "../useMcpState";
@@ -7,11 +7,30 @@ import type { McpController } from "../useMcpState";
  * Everything that is about the installation rather than about a conversation:
  * what version is running, and whether the local MCP server is listening.
  */
-export function GeneralSettings({ mcp }: { mcp: McpController }) {
+export function GeneralSettings({ mcp, onRestartTour }: { mcp: McpController; onRestartTour: () => void }) {
   return (
     <Stack spacing={3}>
+      <TourSection onRestartTour={onRestartTour} />
       <UpdateSection />
       <McpSection mcp={mcp} />
+    </Stack>
+  );
+}
+
+function TourSection({ onRestartTour }: { onRestartTour: () => void }) {
+  const { t } = useTranslation();
+
+  return (
+    <Stack spacing={0.75}>
+      <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+        {t("settings.tourTitle")}
+      </Typography>
+      <Typography variant="body2" color="text.secondary">
+        {t("settings.tourDescription")}
+      </Typography>
+      <Button variant="outlined" size="small" onClick={onRestartTour} sx={{ alignSelf: "flex-start", mt: 0.5 }}>
+        {t("settings.restartTour")}
+      </Button>
     </Stack>
   );
 }

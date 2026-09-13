@@ -31,6 +31,7 @@
     "tauri:package:smoke": "bun scripts/smoke-tauri-packaged-layout.mjs",
     "tauri:renderer:dev": "vite --config vite.react.config.ts",
     "tauri:renderer:build": "vite build --config vite.react.config.ts",
+    "release": "node scripts/release.mjs",
     "dist": "bun run tauri:build",
     "test": "bun test tests",
     "typecheck": "tsc -p packages/app/tsconfig.json --pretty && tsc -p tsconfig.node.json --pretty && tsc -p tsconfig.web.json --pretty",

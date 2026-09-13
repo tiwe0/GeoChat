@@ -18,7 +18,7 @@ export const zh: Content = {
     given: "已知",
     construct: "作图",
     conclude: "结论",
-    lede: "GeoChat 是一个本地优先的 AI 数学工作台。给它一道题，它规划构造步骤、把真实命令写进内嵌的 GeoGebra 画板，然后讲清每一步为什么成立。",
+    lede: "GeoChat 是一款把 AI 和 GeoGebra 放在一起的桌面数学工具。输入一道题，它会规划构造步骤，把 GeoGebra 命令写入画板，并说明每一步的依据。",
     ctaDownload: "下载桌面版",
     ctaDownloadFor: "下载 {platform} 版",
     ctaDemo: "看它跑一遍",
@@ -30,48 +30,48 @@ export const zh: Content = {
   },
 
   legend: {
-    title: "全站配色即记号",
+    title: "图例",
     ink: "已知条件与陈述",
     construct: "作图过程与中间量",
     result: "结论与求解结果"
   },
 
   selling: {
-    title: "它凭什么值得装在你的电脑上",
-    lede: "六件它真的做到的事。每一件都能在装完之后的十分钟内自己验证。",
+    title: "GeoChat 能做什么",
+    lede: "下面是桌面版目前已经支持的功能。",
     items: [
       {
         id: "local",
         role: "ink",
         title: "数据留在本机",
-        body: "对话、画板状态和运行记录写进本机的一个 SQLite 文件。没有账号，没有云端同步——「退出登录」这件事在这里根本不存在。",
+        body: "对话、画板状态和运行记录保存在本机的 SQLite 文件中。不需要账号，也不做云端同步。",
         literal: "./data/geochat-desktop.sqlite"
       },
       {
         id: "byok",
         role: "ink",
         title: "用你自己的模型密钥",
-        body: "在设置里填入你选的供应商 API key，请求由你的机器直连供应商。不经过我们的服务器，没有订阅，也没有额度。",
+        body: "在设置中填写模型供应商的 API key。请求从你的电脑直接发往供应商，不经过 GeoChat。",
         literal: "OpenAI · Anthropic · Google · DeepSeek · 阿里云百炼 · OpenRouter"
       },
       {
         id: "real-construction",
         role: "construct",
-        title: "它是真的在作图",
-        body: "不是生成一张图片给你看，而是往内嵌的 GeoGebra 画板里写真实命令。图形可以拖动、可以度量、可以接着往下改。",
+        title: "把命令写入 GeoGebra",
+        body: "GeoChat 会向内置的 GeoGebra 画板写入真实命令。生成的图形可以拖动、度量和继续编辑。",
         literal: "O = Intersect(m_1, m_2)"
       },
       {
         id: "canvas",
         role: "construct",
         title: "平面与立体在同一块画板",
-        body: "内置完整的 GeoGebra runtime，平面几何、解析几何、函数图像和立体几何共用一个工作区，不用在工具之间搬运。"
+        body: "内置 GeoGebra 运行环境，平面几何、解析几何、函数图像和立体几何都可以在同一个工作区中完成。"
       },
       {
         id: "reasoning",
         role: "result",
-        title: "每一步都摊开给你看",
-        body: "构造计划、工具调用和推理过程按顺序列在对话里，可以逐条核对。你拿到的是一条可复查的路径，不是一个孤零零的答案。"
+        title: "查看每一步",
+        body: "构造计划、工具调用和思考过程会按顺序显示在对话中，你可以逐条检查。"
       },
       {
         id: "export",
@@ -84,22 +84,22 @@ export const zh: Content = {
   },
 
   pipeline: {
-    title: "一道题是怎么变成一张图的",
-    lede: "四个阶段，全部在你的机器上完成编排。只有模型推理这一步需要联网。",
+    title: "一道题如何在画板中完成",
+    lede: "读题、规划、写入命令、讲解，四个阶段都由桌面端负责，只有模型推理需要联网。",
     problem: "已知 △ABC，求作它的外接圆。",
     scrollHint: "继续滚动",
     steps: [
       {
         label: "读题",
-        caption: "解析题干，识别已知量、约束条件和要求解的目标。"
+        caption: "识别题目中的已知条件、限制和目标。"
       },
       {
         label: "规划",
-        caption: "生成一份结构化的构造计划：先取哪两条边的中垂线，交点如何得到。"
+        caption: "确定构造顺序，以及每一步需要使用的几何对象。"
       },
       {
         label: "编译",
-        caption: "把计划编译成真实的 GeoGebra 命令序列，逐条写进画板。",
+        caption: "把构造方案转换为 GeoGebra 命令，并逐条写入画板。",
         code: [
           "A = (-3, -1)",
           "B = (3, -1)",
@@ -113,22 +113,22 @@ export const zh: Content = {
       },
       {
         label: "讲解",
-        caption: "说明为什么中垂线的交点到三个顶点等距，因此它就是外心。"
+        caption: "说明这些对象为什么能得到题目要求的结论。"
       }
     ]
   },
 
   demo: {
-    title: "完整跑一遍",
-    lede: "从输入题目到画板成图，没有剪辑加速。",
+    title: "完整演示",
+    lede: "从输入题目到画板完成，按实际速度播放。",
     play: "播放演示",
     posterAlt: "GeoChat 桌面版演示视频封面",
     fallback: "你的浏览器无法播放这段视频。"
   },
 
   shots: {
-    title: "工作台长这样",
-    lede: "画板占据主视野，对话面板可以随时收起和移动。所有配置都是本机的设置面板，不是云端控制台。",
+    title: "桌面版界面",
+    lede: "画板是主视图，对话面板可以收起和移动。模型配置和其他选项都在本机的设置页面中。",
     alt: "GeoChat 桌面版界面：左侧 GeoGebra 画板，右侧浮动 AI 对话面板。"
   },
 
@@ -144,7 +144,7 @@ export const zh: Content = {
     items: [
       {
         q: "必须联网吗？",
-        a: "画板、数据库和全部本地功能都不需要联网。只有模型推理需要——那一步由你的机器直接请求你自己配置的供应商。"
+        a: "画板、数据库和其他本地功能都不需要联网。只有模型推理需要联网，请求会从你的电脑直接发往已配置的供应商。"
       },
       {
         q: "要花钱吗？",

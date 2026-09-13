@@ -199,6 +199,38 @@ bun run tauri:check
 bun test tests
 ```
 
+### 发布桌面版
+
+使用根目录的发布脚本统一更新 `package.json`、`src-tauri/Cargo.toml`、
+`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json` 和官网的 fallback 版本。默认只修改本地文件并执行检查，
+不会创建提交、tag 或推送远程：
+
+```sh
+bun run release -- --version 0.4.1
+```
+
+确认版本和检查结果后，可以分步提交和打 tag：
+
+```sh
+bun run release -- --version 0.4.1 --commit --tag
+git push origin master
+git push origin v0.4.1
+```
+
+也可以在确认工作区干净且当前分支为 `master` 后一次完成推送：
+
+```sh
+bun run release -- --version 0.4.1 --commit --tag --push
+```
+
+`--push` 会触发 `.github/workflows/tauri-package.yml`：它先运行验证，随后构建
+Windows/macOS 安装包、创建 GitHub Release，并在配置了 R2 时上传安装包和
+`latest.json`；同一个发布提交还会触发 `website.yml` 构建并部署 Cloudflare Pages。
+脚本会等待并检查 Actions、Release、R2 manifest、Pages 部署，以及官网首页和
+下载页的版本同步。使用 `--no-watch` 可跳过远程等待，`--dry-run` 可预览动作，
+`--skip-checks` 仅适用于明确知道风险的本地调试场景。R2 和官网检查分别使用
+`GEOCHAT_DOWNLOADS_BASE_URL`、`GEOCHAT_SITE_URL` 环境变量。
+
 发布到新的公开远程仓库前，建议再运行一次外部历史敏感信息扫描。普通本地模式
 扫描有帮助，但不能替代完整历史扫描。
 

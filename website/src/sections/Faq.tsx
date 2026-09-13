@@ -43,7 +43,7 @@ export function Closing() {
         <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
           <Link
             to={localePath(locale, "/download")}
-            className="rounded-[9px] bg-result px-7 py-3.5 text-[0.9375rem] font-medium text-paper transition-transform duration-200 ease-quart hover:-translate-y-px hover:shadow-[0_6px_18px_-6px_oklch(0.47_0.185_30/0.5)]"
+            className="rounded-[9px] bg-ink px-7 py-3.5 text-[0.9375rem] font-medium text-paper transition-transform duration-200 ease-quart hover:-translate-y-px hover:shadow-[0_6px_18px_-6px_oklch(0.22_0.012_250/0.35)]"
           >
             {t.closing.cta}
           </Link>

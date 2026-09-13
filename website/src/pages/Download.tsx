@@ -269,7 +269,7 @@ function PlatformRow({
                 href={asset.url}
                 className={
                   index === 0 && detected
-                    ? "rounded-[9px] bg-result px-5 py-3 text-[0.875rem] font-medium text-paper transition-transform duration-200 ease-quart hover:-translate-y-px"
+                    ? "rounded-[9px] bg-ink px-5 py-3 text-[0.875rem] font-medium text-paper transition-transform duration-200 ease-quart hover:-translate-y-px"
                     : "rounded-[9px] border border-rule-strong px-5 py-3 text-[0.875rem] font-medium text-ink transition-colors hover:border-ink hover:bg-paper-sunk"
                 }
               >

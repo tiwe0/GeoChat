@@ -18,7 +18,7 @@ export const en: Content = {
     given: "Given",
     construct: "Construct",
     conclude: "Conclude",
-    lede: "GeoChat is a local-first AI workbench for mathematics. Hand it a problem: it plans the construction, writes real commands into an embedded GeoGebra canvas, and explains why each step holds.",
+    lede: "GeoChat puts an AI assistant and GeoGebra in one desktop math tool. Enter a problem and it plans the construction, writes GeoGebra commands into the canvas, and explains the reasoning behind each step.",
     ctaDownload: "Download for desktop",
     ctaDownloadFor: "Download for {platform}",
     ctaDemo: "Watch it run",
@@ -30,48 +30,48 @@ export const en: Content = {
   },
 
   legend: {
-    title: "Color is notation here",
+    title: "Legend",
     ink: "What is given or stated",
     construct: "The construction in progress",
     result: "What is concluded"
   },
 
   selling: {
-    title: "Why it earns a place on your machine",
-    lede: "Six things it actually does. You can verify every one of them within ten minutes of installing.",
+    title: "What GeoChat does",
+    lede: "These are the features currently supported in the desktop app.",
     items: [
       {
         id: "local",
         role: "ink",
         title: "Your data stays on your machine",
-        body: "Conversations, canvas state and run history are written to a SQLite file on your own disk. No account, no cloud sync — there is literally nothing to log out of.",
+        body: "Conversations, canvas state and run history are saved to a SQLite file on your own disk. No account and no cloud sync.",
         literal: "./data/geochat-desktop.sqlite"
       },
       {
         id: "byok",
         role: "ink",
         title: "Bring your own model key",
-        body: "Put your provider's API key in settings and requests go straight from your machine to that provider. No relay through us, no subscription, no credits to top up.",
+        body: "Add your model provider's API key in settings. Requests go directly from your machine to that provider, without passing through GeoChat.",
         literal: "OpenAI · Anthropic · Google · DeepSeek · Alibaba · OpenRouter"
       },
       {
         id: "real-construction",
         role: "construct",
-        title: "It genuinely constructs",
-        body: "It does not hand you a picture of a diagram. It writes real commands into an embedded GeoGebra canvas, so the figure can be dragged, measured, and built on further.",
+        title: "Write commands into GeoGebra",
+        body: "GeoChat writes real commands into the embedded GeoGebra canvas. The resulting figure can be dragged, measured, and edited further.",
         literal: "O = Intersect(m_1, m_2)"
       },
       {
         id: "canvas",
         role: "construct",
         title: "Plane and space, one canvas",
-        body: "The full GeoGebra runtime ships inside the app. Plane geometry, coordinate geometry, function graphs and solid geometry share a single workspace — nothing to carry between tools."
+        body: "The GeoGebra runtime ships inside the app. Plane geometry, coordinate geometry, function graphs and solid geometry all use the same workspace."
       },
       {
         id: "reasoning",
         role: "result",
-        title: "Every step is laid open",
-        body: "The construction plan, each tool call and the reasoning behind them are listed in order and can be checked line by line. You get a reviewable path, not an isolated answer."
+        title: "See every step",
+        body: "The construction plan, tool calls and reasoning are shown in order so you can check them one by one."
       },
       {
         id: "export",
@@ -84,22 +84,22 @@ export const en: Content = {
   },
 
   pipeline: {
-    title: "How a problem becomes a figure",
-    lede: "Four stages, orchestrated entirely on your machine. Only the model inference step needs the network.",
+    title: "How a problem is completed on the canvas",
+    lede: "Read, plan, write commands, explain. The desktop app handles all four stages; only model inference needs the network.",
     problem: "Given triangle ABC, construct its circumcircle.",
     scrollHint: "Keep scrolling",
     steps: [
       {
         label: "Read",
-        caption: "Parse the statement: what is given, what is constrained, and what is being asked for."
+        caption: "Identify the given conditions, constraints and goal."
       },
       {
         label: "Plan",
-        caption: "Produce a structured construction plan — which two perpendicular bisectors to take, and how their intersection follows."
+        caption: "Choose the construction order and the geometric objects needed at each step."
       },
       {
         label: "Compile",
-        caption: "Compile the plan into a real GeoGebra command sequence and write it into the canvas, one line at a time.",
+        caption: "Convert the construction plan into GeoGebra commands and write them into the canvas one by one.",
         code: [
           "A = (-3, -1)",
           "B = (3, -1)",
@@ -113,22 +113,22 @@ export const en: Content = {
       },
       {
         label: "Explain",
-        caption: "Set out why a point on both bisectors is equidistant from all three vertices, and is therefore the circumcenter."
+        caption: "Explain why these objects produce the requested result."
       }
     ]
   },
 
   demo: {
-    title: "The whole loop",
-    lede: "From typed problem to finished figure, at real speed.",
+    title: "Full demo",
+    lede: "From typed problem to finished figure, shown at real speed.",
     play: "Play the demo",
     posterAlt: "Cover frame of the GeoChat Desktop demo video",
     fallback: "Your browser cannot play this video."
   },
 
   shots: {
-    title: "The workbench",
-    lede: "The canvas holds the main view; the chat panel folds away and moves wherever you want it. Every setting is a local panel, not a cloud console.",
+    title: "The desktop app",
+    lede: "The canvas is the main view. The chat panel can be collapsed or moved, and model settings live in the app's local settings page.",
     alt: "GeoChat Desktop interface: a GeoGebra canvas on the left, a floating AI chat panel on the right."
   },
 
@@ -144,7 +144,7 @@ export const en: Content = {
     items: [
       {
         q: "Does it need an internet connection?",
-        a: "The canvas, the database and every local feature work offline. Only model inference needs the network, and that request goes straight from your machine to the provider you configured."
+        a: "The canvas, database and other local features work offline. Only model inference needs the network; requests go directly from your machine to the provider you configured."
       },
       {
         q: "Does it cost anything?",

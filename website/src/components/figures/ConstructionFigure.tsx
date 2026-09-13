@@ -42,6 +42,8 @@ type Props = {
   /** Seconds to wait after the figure scrolls into view. */
   delay?: number;
   strokeWidth?: number;
+  /** Whether to replay the construction when it enters the viewport. */
+  animate?: boolean;
 };
 
 export function ConstructionFigure({
@@ -50,41 +52,32 @@ export function ConstructionFigure({
   width = 400,
   className,
   delay = 0,
-  strokeWidth = 1.75
+  strokeWidth = 1.75,
+  animate: shouldAnimate = true
 }: Props) {
   const ref = useRef<SVGSVGElement>(null);
   const project = createProjection(figure, width);
 
   /**
-   * The figure is rendered complete. The animation *removes* the finished
-   * state and replays it, and only ever runs on the client, after hydration.
-   * That ordering is deliberate: the prerendered HTML, a browser with JS
-   * disabled, and a headless screenshot all show a valid finished figure,
-   * so the reveal can never strand the section blank.
+   * The figure is rendered complete. Once it enters the viewport, the
+   * animation briefly rewinds it and draws it again. Keeping the initial
+   * render complete prevents a slow observer callback, hydration, or a
+   * headless browser from leaving the section blank.
    */
   useEffect(() => {
     const svg = ref.current;
     if (!svg) return;
 
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
-    if (reduce.matches) return;
+    if (!shouldAnimate || reduce.matches) return;
 
     const strokes = Array.from(
       svg.querySelectorAll<SVGGeometryElement>("[data-draw]")
     );
     const marks = Array.from(svg.querySelectorAll<SVGElement>("[data-mark]"));
 
-    // Hide before the browser paints the animated state.
-    for (const el of strokes) {
-      const length = el.getTotalLength();
-      el.style.strokeDasharray = `${length}`;
-      el.style.strokeDashoffset = `${length}`;
-    }
-    for (const el of marks) {
-      el.style.opacity = "0";
-    }
-
     let cancelled = false;
+    let completeTimer: number | undefined;
 
     // A plain IntersectionObserver rather than motion's inView: it is the same
     // few lines, and it keeps this file on motion/mini, which is a fraction of
@@ -97,6 +90,17 @@ export function ConstructionFigure({
         // Play once. A figure that redraws every time it scrolls past turns an
         // explanation into a fidget.
         self.disconnect();
+
+        // Rewind only after the figure is known to be visible. Until then the
+        // complete SVG remains on screen as a no-JS and slow-observer fallback.
+        for (const el of strokes) {
+          const length = el.getTotalLength();
+          el.style.strokeDasharray = `${length}`;
+          el.style.strokeDashoffset = `${length}`;
+        }
+        for (const el of marks) {
+          el.style.opacity = "0";
+        }
 
         let at = delay;
         for (const el of svg.querySelectorAll<SVGElement>("[data-draw],[data-mark]")) {
@@ -118,6 +122,13 @@ export function ConstructionFigure({
           }
           at += Math.max(duration - OVERLAP, 0.08);
         }
+
+        // Keep a deterministic escape hatch for browsers that do not advance
+        // the motion timeline (for example, some headless screenshots).
+        completeTimer = window.setTimeout(() => {
+          for (const el of strokes) el.style.strokeDashoffset = "0";
+          for (const el of marks) el.style.opacity = "1";
+        }, Math.ceil((at + 0.5) * 1000));
       },
       { threshold: 0.55 }
     );
@@ -127,8 +138,9 @@ export function ConstructionFigure({
     return () => {
       cancelled = true;
       observer.disconnect();
+      if (completeTimer !== undefined) window.clearTimeout(completeTimer);
     };
-  }, [figure, delay]);
+  }, [figure, delay, shouldAnimate]);
 
   return (
     <svg

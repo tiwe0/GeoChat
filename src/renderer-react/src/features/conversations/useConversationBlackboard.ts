@@ -26,7 +26,7 @@ export function useConversationBlackboard(options: {
     const session = authSessionRef.current.snapshot();
     const requestedConversationId = conversationId;
     const requestVersion = ++requestVersionRef.current;
-    if (!session.token || !requestedConversationId) {
+    if (!requestedConversationId) {
       setEntries([]);
       setError(null);
       setLoading(false);

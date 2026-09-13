@@ -18,6 +18,9 @@ export type CanvasContext = {
   element_count: number;
   expression_count: number;
   selectedObjects: string[];
+  selection_status?: "known" | "empty" | "unknown";
+  selection_source?: "geogebra-api" | "unavailable";
+  selection_observed_at?: string;
   objects: CanvasObject[];
   object_index: Record<string, string[]>;
   expressions: string[];
@@ -29,7 +32,34 @@ export function readCanvasContext(applet: GeoGebraApplet, includeXml: boolean): 
   if (!xml) throw capability("The current GeoGebra applet does not expose getXML.");
   const context = summarizeGeoGebraXml(xml, includeXml);
   const perspective = readActivePerspective(applet);
-  return { ...context, ...perspective };
+  return { ...context, ...readSelectedObjects(applet), ...perspective };
+}
+
+export function readSelectedObjects(applet: GeoGebraApplet): Pick<CanvasContext, "selectedObjects" | "selection_status" | "selection_source" | "selection_observed_at"> {
+  const count = applet.getSelectedObjectCount;
+  const get = applet.getSelectedObject;
+  if (typeof count !== "function" || typeof get !== "function") {
+    return { selectedObjects: [], selection_status: "unknown", selection_source: "unavailable" };
+  }
+  try {
+    const selectedCount = Number(Reflect.apply(count, applet, []));
+    if (!Number.isFinite(selectedCount) || selectedCount < 0) {
+      return { selectedObjects: [], selection_status: "unknown", selection_source: "unavailable" };
+    }
+    const selectedObjects: string[] = [];
+    for (let index = 0; index < Math.min(Math.trunc(selectedCount), 256); index += 1) {
+      const label = Reflect.apply(get, applet, [index]);
+      if (typeof label === "string" && label.trim()) selectedObjects.push(label.trim());
+    }
+    return {
+      selectedObjects,
+      selection_status: selectedObjects.length ? "known" : "empty",
+      selection_source: "geogebra-api",
+      selection_observed_at: new Date().toISOString()
+    };
+  } catch {
+    return { selectedObjects: [], selection_status: "unknown", selection_source: "unavailable" };
+  }
 }
 
 export function summarizeGeoGebraXml(xml: string, includeXml: boolean): CanvasContext {

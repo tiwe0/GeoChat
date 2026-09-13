@@ -1,5 +1,6 @@
+import { requiresFunctionCallApproval } from "./functioncall-registry";
 import type { FunctionCallToolName } from "./functioncalls";
-import type { AgentRunToolRecord } from "./run-ledger";
+import type { AgentRunLocale, AgentRunToolRecord } from "./run-ledger";
 
 export type AgentWorkflowPhase = "needs_canvas_read" | "planning" | "writing" | "verifying" | "explaining";
 
@@ -79,6 +80,15 @@ export function createInitialAgentWorkflowState(): AgentWorkflowState {
     hasCanvasWrite: false,
     hasVerificationAfterWrite: false
   };
+}
+
+
+export function evaluateFunctionCallApproval(toolName: FunctionCallToolName, args: unknown, locale: AgentRunLocale = "zh-CN"): AgentWorkflowDecision {
+  if (!requiresFunctionCallApproval(toolName)) return { allowed: true };
+  const confirmed = Boolean(args && typeof args === "object" && !Array.isArray(args) && (args as Record<string, unknown>).confirmed === true);
+  return confirmed
+    ? { allowed: true }
+    : { allowed: false, reason: locale === "en-US" ? "This action clears the current canvas and requires explicit user confirmation." : "该操作会清空当前画布，需要用户明确确认后才能执行。" };
 }
 
 export function evaluateAgentWorkflowToolCall(state: AgentWorkflowState, toolName: FunctionCallToolName): AgentWorkflowDecision {

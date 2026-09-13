@@ -118,6 +118,8 @@ export const GEOGEBRA_FUNCTION_CALL_INPUT_JSON_SCHEMAS = {
         default: "G",
         description: "重置后可选切换到的 GeoGebra SetPerspective 视图或布局。默认使用 G 画板视图；3D Graphics 使用 T。"
       },
+      confirmed: { type: "boolean", nullable: true, description: "手动或远程破坏性请求必须显式确认；模型内部工作流请求不需要填写。" },
+      authorization: { type: "string", enum: ["runner-policy"], nullable: true, description: "仅用于记录后端内部 runner policy 触发来源，不能代替用户确认。" },
       ...auditProperties
     }
   },

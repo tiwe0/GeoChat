@@ -7,6 +7,7 @@ import type {
 } from "@geochat-ai/app";
 import {
   agentRunRemoteToolRequestInvalidReasons,
+  compactAgentRunLedgerForStorage,
   cancelAgentRunRemoteToolRequest,
   isAgentRunLedgerRecord,
   isAgentRunModelStepRecord,
@@ -484,7 +485,7 @@ function ledgerRowValues(record: AgentRunLedgerRecord) {
     modelId: record.modelId,
     startedAt: new Date(record.startedAt),
     completedAt: record.completedAt ? new Date(record.completedAt) : null,
-    payload: record
+    payload: compactAgentRunLedgerForStorage(record)
   };
 }
 
@@ -497,7 +498,7 @@ function ledgerRowUpdateValues(record: AgentRunLedgerRecord) {
     modelId: record.modelId,
     startedAt: new Date(record.startedAt),
     completedAt: record.completedAt ? new Date(record.completedAt) : null,
-    payload: record
+    payload: compactAgentRunLedgerForStorage(record)
   };
 }
 

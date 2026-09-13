@@ -55,7 +55,7 @@ export async function continueRunnerActionLoop(input: {
   agentRunRunnerSnapshots: AgentRunRunnerSnapshotService;
   modelNextAction: (input: BackendModelNextActionInput) => Promise<BackendModelNextAction>;
   backendToolAutoStepLimit: () => number;
-  backendToolExecutionContext: (run: Pick<AgentRunLedgerRecord, "runId" | "conversationId" | "locale" | "prompt">) => BackendToolExecutionContext;
+  backendToolExecutionContext: (run: Pick<AgentRunLedgerRecord, "runId" | "conversationId" | "locale" | "prompt" | "tools">) => BackendToolExecutionContext;
   remoteToolResultCommitConflictOutcome: RemoteToolConflictOutcome;
 }): Promise<RunnerContinuationOutcome> {
   let run = input.run;

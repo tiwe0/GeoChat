@@ -13,9 +13,9 @@ export const CARD_FUNCTION_CALL_INPUT_JSON_SCHEMAS = {
     additionalProperties: false,
     required: ["title", "answer", "steps"],
     properties: {
-      title: { type: "string" },
-      answer: { type: "string" },
-      summary: { type: "string", nullable: true },
+      title: { type: "string", description: "标题尽量使用纯文本；如包含公式，只用 `$...$`，不要裸写 LaTeX。" },
+      answer: { type: "string", description: "答案文本。行内公式使用 `$...$`，整行公式使用 `$$...$$`；不要输出未包裹的 LaTeX 命令。" },
+      summary: { type: "string", nullable: true, description: "摘要中的公式只用 `$...$` 或 `$$...$$`。" },
       auxiliaryElementReview: { type: "string", nullable: true, description: auxiliaryElementReviewDescriptionZh },
       steps: {
         type: "array",
@@ -25,7 +25,7 @@ export const CARD_FUNCTION_CALL_INPUT_JSON_SCHEMAS = {
           additionalProperties: false,
           properties: {
             label: { type: "string" },
-            body: { type: "string" }
+            body: { type: "string", description: "步骤说明。行内公式使用 `$...$`，独立公式使用单独一行的 `$$...$$`。JSON 字符串中的每个 LaTeX 反斜杠必须双写，例如 `$\\\\frac{3}{2}$`；不要写裸 `frac32`、`\\\\frac` 或未包裹的 LaTeX。" }
           }
         }
       },

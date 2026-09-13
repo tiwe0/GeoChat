@@ -31,8 +31,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { Streamdown } from "streamdown";
 import { AnimatePresence, motion } from "motion/react";
-import {
-} from "@geochat-ai/app/contracts";
+import { summarizeAgentReasoning } from "@geochat-ai/app";
 import { useAgentRunChat } from "../hooks/useAgentRunChat";
 import { formatAgentRunError } from "../features/agent-run/errorMessage";
 import { STREAMDOWN_PLUGINS } from "../features/chat/streamdownPlugins";
@@ -207,7 +206,7 @@ function ThinkingBlock({
     .filter(Boolean);
   const firstLine = reasoningLines[0] ?? "";
   const latestLine = reasoningLines[reasoningLines.length - 1] ?? firstLine;
-  const summary = (active ? latestLine : firstLine) || label;
+  const summary = summarizeAgentReasoning(text) || (active ? latestLine : firstLine) || label;
 
   useEffect(() => {
     if (!active) setExpanded(false);
@@ -891,7 +890,9 @@ export function AssistantPanel({
           />
           <BlackboardDrawer
             open={blackboardOpen}
-            signedIn={Boolean(authSessionRef.current.token)}
+            // The desktop backend is local-first and does not require an
+            // account token, so the blackboard is available to guest users.
+            signedIn={true}
             conversationId={currentConversationId}
             loading={blackboard.loading}
             error={blackboard.error}

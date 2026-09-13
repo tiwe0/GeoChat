@@ -500,6 +500,19 @@ export function agentModelSupportsTools(provider: string, model: string) {
   return getAgentModelPolicy({ provider, model }).supportsTools;
 }
 
+/**
+ * Reasoning parameters are not universally supported, even when a provider
+ * exposes a compatible chat endpoint. Keep the gate conservative: only known
+ * models with a declared provider contract may receive thinking options.
+ * DeepSeek Flash is intentionally excluded because its API rejects the
+ * thinking parameter used by the other DeepSeek models.
+ */
+export function agentModelSupportsReasoning(provider: string, model: string) {
+  const policy = getAgentModelPolicy({ provider, model });
+  if (!policy.isKnownModel) return false;
+  return !(provider === "deepseek" && /flash/i.test(model));
+}
+
 export function toolCallingModeSupportsTools(mode: AgentToolCallingMode) {
   return mode !== "unsupported";
 }

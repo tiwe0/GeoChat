@@ -194,6 +194,7 @@ export const FUNCTION_CALL_REGISTRY = {
     description: "清空当前 GeoGebra 画布并恢复默认视图。用于开始新的独立题目、用户明确要求清空，或当前画布与本题无关时；调用后应继续读取或构造画布。",
     executor: "frontend",
     sideEffectLevel: "destructive",
+    approvalRequired: true,
     timeoutMs: 30_000,
     rollbackPolicy: "none",
     display: {
@@ -639,6 +640,11 @@ export function localizedFunctionCallSpec<TToolName extends FunctionCallToolName
 
 export function isFunctionCallToolName(value: string): value is FunctionCallToolName {
   return value in FUNCTION_CALL_REGISTRY;
+}
+
+export function requiresFunctionCallApproval(toolName: FunctionCallToolName): boolean {
+  const spec = FUNCTION_CALL_REGISTRY[toolName];
+  return "approvalRequired" in spec && spec.approvalRequired === true;
 }
 
 export function getFunctionCallSpec(toolName: FunctionCallToolName, locale?: FunctionCallLocale | null): FunctionCallSpec {

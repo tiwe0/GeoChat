@@ -26,7 +26,16 @@ export default defineConfig({
   server: {
     host: "127.0.0.1",
     port: 1421,
-    strictPort: true
+    strictPort: true,
+    // The repository is commonly run from WSL on a Windows-mounted drive
+    // (`/mnt/*`). Native inotify events do not reliably cross that boundary,
+    // which makes React Fast Refresh appear to be stuck. Polling keeps HMR
+    // reliable in both WSL and regular Linux environments; the interval is
+    // intentionally modest to avoid excessive filesystem churn.
+    watch: {
+      usePolling: true,
+      interval: 200,
+    },
   },
   // The bridge reaches @tauri-apps/api only through dynamic imports, so Vite
   // does not see it during initial dependency scanning and answers the first

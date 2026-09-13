@@ -63,13 +63,16 @@ export function useAgentRunChat(input: {
   const coordinatorRef = useRef(createAgentRunCoordinator({
     backendBaseUrl: input.apiOrigin,
     headers: () => {
+      const token = inputRef.current.getAuthToken();
       const headers: Record<string, string> = {
-        "x-client-channel": "desktop-workbench",
+        // A browser-only dev session has no Tauri runtime token. Mark it as
+        // web traffic so a backend configured with desktop auth can still be
+        // used without requiring a desktop credential.
+        "x-client-channel": token ? "desktop-workbench" : "web-workbench",
         // Guest Harness requests have no persisted session to establish the
         // market. Keep the deployment market explicit so a China build cannot
         // silently fall back to the global policy.
       };
-      const token = inputRef.current.getAuthToken();
       if (token) {
         headers.Authorization = `Bearer ${token}`;
         return headers;
@@ -351,7 +354,7 @@ function mergeRestoredMessages(messages: ChatMessage[], restored: StoredActiveRu
  * brand-new request.
  */
 export function conversationPrompt(currentPrompt: string, previousMessages: readonly ChatMessage[], locale: "zh-CN" | "en-US") {
-  const context = previousMessages
+  const entries = previousMessages
     .map((message) => {
       const text = message.parts
         .flatMap((part) => contextPartText(part))
@@ -359,16 +362,44 @@ export function conversationPrompt(currentPrompt: string, previousMessages: read
         .trim();
       if (!text) return "";
       const role = message.role === "user" ? (locale === "en-US" ? "User" : "用户") : (locale === "en-US" ? "Assistant" : "助手");
-      return `${role}: ${text}`;
+      return `${role}: ${truncateConversationEntry(text)}`;
     })
-    .filter(Boolean)
-    .join("\n\n");
+    .filter(Boolean);
+  const context = fitConversationContext(entries, locale);
   if (!context) return currentPrompt;
   const marker = locale === "en-US"
     ? "[GeoChat conversation history — previous turns; continue this same conversation]"
     : "【GeoChat 历史对话上下文（此前轮次，请在同一对话中继续）】";
   const currentMarker = locale === "en-US" ? "[GeoChat current user message]" : "【GeoChat 本轮用户消息】";
   return `${marker}\n${context}\n\n${currentMarker}\n${currentPrompt}`;
+}
+
+const MAX_CONVERSATION_CONTEXT_CHARS = 24_000;
+const MAX_CONVERSATION_ENTRY_CHARS = 8_000;
+
+function truncateConversationEntry(text: string) {
+  if (text.length <= MAX_CONVERSATION_ENTRY_CHARS) return text;
+  return `${text.slice(0, MAX_CONVERSATION_ENTRY_CHARS)}\n[…context entry truncated…]`;
+}
+
+function fitConversationContext(entries: string[], locale: "zh-CN" | "en-US") {
+  if (!entries.length) return "";
+  const selected: string[] = [];
+  let used = 0;
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index]!;
+    const next = used + entry.length + (selected.length ? 2 : 0);
+    if (next > MAX_CONVERSATION_CONTEXT_CHARS) break;
+    selected.unshift(entry);
+    used = next;
+  }
+  const omitted = entries.length - selected.length;
+  if (omitted > 0) {
+    selected.unshift(locale === "en-US"
+      ? `[${omitted} earlier conversation turn(s) summarized or omitted by context budget]`
+      : `【已有 ${omitted} 轮较早对话因上下文预算被摘要或省略】`);
+  }
+  return selected.join("\n\n");
 }
 
 function contextPartText(part: unknown): string[] {
@@ -378,7 +409,9 @@ function contextPartText(part: unknown): string[] {
   if (typeof value.type === "string" && value.type.startsWith("tool-")) {
     const payload = value.output ?? value.errorText ?? value.input;
     if (payload === undefined) return [];
-    try { return [JSON.stringify(payload)]; } catch { return []; }
+    try {
+      return [`<untrusted-data source="tool-result">${JSON.stringify(payload)}</untrusted-data>`];
+    } catch { return []; }
   }
   return [];
 }

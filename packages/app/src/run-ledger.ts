@@ -990,3 +990,68 @@ export const AGENT_RUN_THINKING_EFFORTS = ["light", "standard", "extended"] as c
 export function normalizeAgentRunThinkingEffort(value: unknown): AgentRunThinkingEffort | null {
   return value === "light" || value === "standard" || value === "extended" ? value : null;
 }
+
+/**
+ * Compact large ledger payloads before persistence while preserving replayable
+ * tool status, errors, and the current user turn. In-memory records remain intact.
+ */
+export function compactAgentRunLedgerForStorage(record: AgentRunLedgerRecord, maxBytes = 2_000_000): AgentRunLedgerRecord {
+  const serialized = JSON.stringify(record);
+  const byteLength = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).byteLength;
+  if (byteLength(record) <= maxBytes) return record;
+
+  const compactValue = (value: unknown, depth = 0, stringLimit = 2048): unknown => {
+    if (typeof value === "string") {
+      if (value.length > stringLimit) return `[omitted ${value.length} chars]`;
+      return value;
+    }
+    if (depth > 4) return "[omitted nested payload]";
+    if (Array.isArray(value)) return value.slice(0, 100).map((item) => compactValue(item, depth + 1, stringLimit));
+    if (!value || typeof value !== "object") return value;
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).slice(0, 100).map(([key, child]) => [key, compactValue(child, depth + 1, stringLimit)]));
+  };
+
+  const compactPrompt = (prompt: string) => {
+    const limit = Math.min(120_000, Math.max(512, Math.floor(maxBytes / 4)));
+    if (prompt.length <= limit) return prompt;
+    const markerCandidates = ["【GeoChat 本轮用户消息】", "[GeoChat current user message]"];
+    const marker = markerCandidates.find((candidate) => prompt.includes(candidate));
+    if (!marker) return `${prompt.slice(0, limit)}\n[history omitted during ledger compaction]`;
+    const markerIndex = prompt.indexOf(marker);
+    const currentTurn = prompt.slice(markerIndex);
+    const tail = currentTurn.slice(-Math.min(40_000, Math.max(128, limit - 1)));
+    const headBudget = Math.max(0, limit - tail.length - 1);
+    return `${prompt.slice(0, headBudget)}\n${tail}`;
+  };
+
+  let tools = record.tools.map((tool) => ({
+    ...tool,
+    args: compactValue(tool.args),
+    result: compactValue(tool.result),
+    canvasBefore: compactValue(tool.canvasBefore),
+    canvasAfter: compactValue(tool.canvasAfter)
+  }));
+  let compacted: AgentRunLedgerRecord = { ...record, prompt: compactPrompt(record.prompt), tools };
+
+  // Enforce a global budget, not only per-field limits. Keep the newest tool
+  // records first because they are the most relevant for continuation/replay.
+  while (byteLength(compacted) > maxBytes && tools.length > 1) {
+    tools = tools.slice(1);
+    compacted = { ...compacted, tools };
+  }
+  if (byteLength(compacted) > maxBytes) {
+    const aggressive = (value: unknown) => compactValue(value, 0, 512);
+    compacted = {
+      ...compacted,
+      prompt: compactPrompt(compacted.prompt),
+      tools: tools.map((tool) => ({
+        ...tool,
+        args: aggressive(tool.args),
+        result: aggressive(tool.result),
+        canvasBefore: aggressive(tool.canvasBefore),
+        canvasAfter: aggressive(tool.canvasAfter)
+      }))
+    };
+  }
+  return compacted;
+}

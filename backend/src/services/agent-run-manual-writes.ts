@@ -1,6 +1,7 @@
 import {
   agentRunRunnerBudgetFor,
   evaluateAgentWorkflowToolRecord,
+  evaluateFunctionCallApproval,
   findAgentRunRemoteToolRequestConflict,
   findAgentRunToolCallConflict,
   findAgentRunToolCallIdReuseConflict,
@@ -59,6 +60,16 @@ export function createAgentRunManualWriteService(
       );
       return workflowBlockedOutcome(toolCallConflict.message, record);
     }
+    const approvalDecision = evaluateFunctionCallApproval(payload.toolName, payload.args, record.locale ?? "zh-CN");
+    if (!approvalDecision.allowed) {
+      const message = approvalDecision.reason ?? "Destructive tool approval is required.";
+      await agentRunCommits.saveAgentRunPolicyDecision(createManualWorkflowBlockedDecision({
+        record, stage: "ledger_tool_event", toolCallId: payload.toolCallId, toolName: payload.toolName,
+        message, details: { toolStatus: payload.status }
+      }));
+      return workflowBlockedOutcome(message, record);
+    }
+
     const workflowDecision = evaluateAgentWorkflowToolRecord(record.tools, payload);
     if (!workflowDecision.allowed) {
       const message = workflowDecision.reason ?? "Agent workflow rejected this tool call.";
@@ -125,6 +136,16 @@ export function createAgentRunManualWriteService(
       return workflowBlockedOutcome(toolCallConflict.message, record);
     }
     const workflowDecision = evaluateAgentWorkflowToolRecord(record.tools, payload);
+    const approvalDecision = evaluateFunctionCallApproval(payload.toolName, payload.args, record.locale ?? "zh-CN");
+    if (!approvalDecision.allowed) {
+      const message = approvalDecision.reason ?? "Destructive tool approval is required.";
+      await agentRunCommits.saveAgentRunPolicyDecision(createManualWorkflowBlockedDecision({
+        record, stage: "remote_tool_request", toolCallId: payload.toolCallId, toolName: payload.toolName,
+        message, details: { request: payload }
+      }));
+      return workflowBlockedOutcome(message, record);
+    }
+
     if (!workflowDecision.allowed) {
       const message = workflowDecision.reason ?? "Agent workflow rejected this tool request.";
       await agentRunCommits.saveAgentRunPolicyDecision(

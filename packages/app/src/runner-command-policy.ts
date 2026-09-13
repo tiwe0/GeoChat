@@ -377,6 +377,7 @@ function createRequiredCanvasResetRequest(input: {
     toolName: "resetCanvas",
     args: {
       perspective: args.perspective,
+      authorization: "runner-policy",
       reason: input.run.locale === "en-US"
         ? "The model attempted to use Delete(...) while starting or repairing an unrelated canvas. Reset the whole canvas explicitly instead."
         : "模型试图用 Delete(...) 清理无关旧画布；应显式重置整个画布。",

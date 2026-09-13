@@ -201,11 +201,7 @@ fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
     let settings = load_settings(&settings_path)?;
     let local_backend_auth_token = local_runtime_auth_token();
     let runtime_authorized = access_allows_runtime_use();
-    let backend = start_backend(
-        &app_data_dir,
-        &resource_dir,
-        Some(&local_backend_auth_token),
-    )?;
+    let backend = start_backend(&app_data_dir, &resource_dir)?;
     let shell_update_state = initial_shell_update_state(settings.update_preferences.clone());
     // Resolving verifies every asset in the manifest by hash, so it happens
     // exactly once here and everything downstream reads the cached result.

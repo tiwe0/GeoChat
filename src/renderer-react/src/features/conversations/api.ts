@@ -97,15 +97,25 @@ export function parseBlackboardEntries(value: unknown): BlackboardEntry[] {
   });
 }
 
-export async function fetchConversationSummaries(apiOrigin: string, token: string, request: typeof fetch = fetch) {
-  const response = await request(`${apiOrigin}/v1/conversations`, { headers: { Authorization: `Bearer ${token}` } });
+function conversationHeaders(token: string | null): Record<string, string> {
+  const headers: Record<string, string> = { "x-client-channel": "desktop-workbench" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+
+export async function fetchConversationSummaries(apiOrigin: string, token: string | null, request: typeof fetch = fetch) {
+  const response = await request(`${apiOrigin}/v1/conversations`, {
+    headers: conversationHeaders(token),
+  });
   const data = await response.json() as { conversations?: unknown; error?: unknown; message?: unknown };
   if (!response.ok || !Array.isArray(data.conversations)) throw new Error(responseError(data, "Unable to load conversation history."));
   return parseConversationSummaries(data.conversations);
 }
 
-export async function fetchConversationMessages(apiOrigin: string, token: string, conversationId: string, request: typeof fetch = fetch) {
-  const response = await request(`${apiOrigin}/v1/conversations/${encodeURIComponent(conversationId)}`, { headers: { Authorization: `Bearer ${token}` } });
+export async function fetchConversationMessages(apiOrigin: string, token: string | null, conversationId: string, request: typeof fetch = fetch) {
+  const response = await request(`${apiOrigin}/v1/conversations/${encodeURIComponent(conversationId)}`, {
+    headers: conversationHeaders(token),
+  });
   const data = await response.json() as { conversation?: { messages?: unknown }; error?: unknown; message?: unknown };
   if (!response.ok || !data.conversation || !Array.isArray(data.conversation.messages)) {
     throw new Error(responseError(data, "Unable to load this conversation."));
@@ -116,10 +126,10 @@ export async function fetchConversationMessages(apiOrigin: string, token: string
   } satisfies ConversationRestore;
 }
 
-export async function deleteConversation(apiOrigin: string, token: string, conversationId: string, request: typeof fetch = fetch) {
+export async function deleteConversation(apiOrigin: string, token: string | null, conversationId: string, request: typeof fetch = fetch) {
   const response = await request(`${apiOrigin}/v1/conversations/${encodeURIComponent(conversationId)}`, {
     method: "DELETE",
-    headers: { Authorization: `Bearer ${token}` },
+    headers: conversationHeaders(token),
   });
   if (response.status === 204) return;
   // Local-first conversations may not have a corresponding server record.
@@ -130,10 +140,10 @@ export async function deleteConversation(apiOrigin: string, token: string, conve
   if (!response.ok) throw new Error(responseError(data, "Unable to delete this conversation."));
 }
 
-export async function fetchConversationBlackboard(apiOrigin: string, token: string, conversationId: string, request: typeof fetch = fetch) {
+export async function fetchConversationBlackboard(apiOrigin: string, token: string | null, conversationId: string, request: typeof fetch = fetch) {
   const response = await request(`${apiOrigin}/v1/conversations/${encodeURIComponent(conversationId)}/blackboard`, {
     cache: "no-store",
-    headers: { Authorization: `Bearer ${token}` },
+    headers: conversationHeaders(token),
   });
   const data = await response.json() as { entries?: unknown; error?: unknown };
   if (!response.ok || !Array.isArray(data.entries)) throw new Error(responseError(data, "Unable to load working memory."));

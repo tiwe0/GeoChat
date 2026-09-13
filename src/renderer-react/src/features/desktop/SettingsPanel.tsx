@@ -45,7 +45,16 @@ export function SettingsPanel(props: { mcp: McpController; onClose: () => void; 
         </Button>
       </Box>
 
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", p: 2.5 }}>
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: "auto",
+          scrollbarWidth: "none",
+          "&::-webkit-scrollbar": { display: "none" },
+          p: 2.5,
+        }}
+      >
         {tab === "model" && <ModelSettings />}
         {tab === "general" && <GeneralSettings mcp={props.mcp} onRestartTour={props.onRestartTour} />}
         {tab === "about" && <AboutSettings />}

@@ -35,11 +35,12 @@ export function createAgentRunWriteController(
   });
   const agentRunManualWrites = createAgentRunManualWriteService(agentRunRepository, agentRunCommits, agentRunRunnerSnapshots);
   const agentRunLifecycleWrites = createAgentRunLifecycleWriteService(agentRunRepository, agentRunCommits);
-  const backendToolExecutionContext = (run: Pick<AgentRunLedgerRecord, "runId" | "conversationId" | "locale" | "prompt">) => ({
+  const backendToolExecutionContext = (run: Pick<AgentRunLedgerRecord, "runId" | "conversationId" | "locale" | "prompt" | "tools">) => ({
     runId: run.runId,
     conversationId: run.conversationId,
     prompt: run.prompt,
     locale: run.locale,
+    toolHistory: run.tools,
     readBlackboard: (args: ReadBlackboardArgs) => blackboardRepository.listEntries(run.conversationId, args),
     patchBlackboard: (args: PatchBlackboardArgs, patchContext: { runId: string; toolCallId: string }) =>
       blackboardRepository.patchEntries(run.conversationId, args, patchContext)

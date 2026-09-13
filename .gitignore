@@ -24,3 +24,5 @@ docs/local/
 .env
 .env.*
 !.env.example
+
+.artifacts/

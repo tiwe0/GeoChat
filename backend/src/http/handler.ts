@@ -84,9 +84,6 @@ async function routeRequest(
   const healthOrAssetResponse = await handleHealthAndAssetRoute(request, url, context);
   if (healthOrAssetResponse) return healthOrAssetResponse;
 
-  const authResponse = authorizeLocalBackendRequest(request);
-  if (authResponse) return authResponse;
-
   const conversationResponse = await handleConversationRoute(request, url, context, authenticateDataScope);
   if (conversationResponse) return conversationResponse;
 
@@ -114,20 +111,6 @@ async function routeRequest(
       message: `${request.method} ${url.pathname} is not available.`
     },
     { status: 404 }
-  );
-}
-
-function authorizeLocalBackendRequest(request: Request) {
-  const token = Bun.env.GEOCHAT_DESKTOP_BACKEND_AUTH_TOKEN;
-  if (!token) return undefined;
-  const expected = `Bearer ${token}`;
-  if (request.headers.get("authorization") === expected) return undefined;
-  return json(
-    {
-      error: "unauthorized",
-      message: "Desktop backend requests require the local runtime authorization token."
-    },
-    { status: 401 }
   );
 }
 

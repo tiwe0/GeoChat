@@ -32,22 +32,12 @@ function shouldExposeSkillDiscoveryTool(toolName: FunctionCallToolName, skillSel
 }
 
 function shouldExposeBlackboardTool(toolName: FunctionCallToolName, run?: Pick<AgentRunLedgerRecord, "tools">) {
-  if (!["readBlackboard", "patchBlackboard"].includes(toolName)) return true;
-  if (!run) return true;
-  return run.tools.some((tool) =>
-    [
-      "createGeometryPlan",
-      "executeAdvancedDrawingCommand",
-      "executeGeoGebraCommands",
-      "setPerspective",
-      "showSolutionSteps",
-      "showTeachingHint",
-      "showAnimationGuide",
-      "showChoiceAnalysis",
-      "showSelectedElements",
-      "setFinished"
-    ].includes(tool.toolName)
-  );
+  // Working memory is useful from the first planning turn: the original
+  // problem and current goal should be persisted before any drawing tool is
+  // executed. Keep the tools available throughout the run instead of waiting
+  // for a prior canvas write/explanation step.
+  void run;
+  return true;
 }
 
 function createBackendPlanningTool<TToolName extends FunctionCallToolName>(
@@ -59,8 +49,24 @@ function createBackendPlanningTool<TToolName extends FunctionCallToolName>(
   return tool({
     title: spec.display.label,
     description: spec.description,
-    inputSchema: jsonSchema(modelToolInputSchemaForRun(toolName, locale, skillSelection))
-  });
+    inputSchema: jsonSchema(modelToolInputSchemaForRun(toolName, locale, skillSelection)),
+    // Keep execution policy visible to tracing/telemetry consumers without
+    // mixing it into the model-facing description. The backend still enforces
+    // these values independently when the request is executed.
+    metadata: {
+      source: "geochat-functioncall-registry",
+      executor: spec.executor,
+      sideEffectLevel: spec.sideEffectLevel,
+      approvalRequired: spec.approvalRequired ?? false,
+      idempotency: spec.idempotency ?? (spec.sideEffectLevel === "read" ? "idempotent" : spec.sideEffectLevel === "destructive" ? "non_idempotent" : "best_effort"),
+      errorCodes: [...(spec.errorCodes ?? ["VALIDATION_ERROR", "EXECUTION_ERROR", "TIMEOUT", "CANCELLED"])],
+      timeoutMs: spec.timeoutMs,
+      rollbackPolicy: spec.rollbackPolicy
+    },
+    // Planning tools are executed outside the SDK; this schema documents the
+    // JSON envelope returned by the executor for providers that inspect it.
+    outputSchema: jsonSchema({ type: "object", additionalProperties: true })
+  } as any) as Tool;
 }
 
 function modelToolInputSchemaForRun(

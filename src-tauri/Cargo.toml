@@ -1,6 +1,6 @@
 [package]
 name = "geochat-desktop-tauri"
-version = "0.5.1"
+version = "0.5.2"
 description = "GeoChat Tauri shell migration spike"
 authors = ["GeoChat"]
 edition = "2021"

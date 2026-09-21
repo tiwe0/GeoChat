@@ -29,10 +29,9 @@ account or authorization service by default.
 
 ## Publication Checklist
 
-Before publishing a regenerated public tree, run:
+Before publishing a release, run:
 
 ```sh
-bun run oss:check
 bun run typecheck
 bun run tauri:prepare
 bun run tauri:check

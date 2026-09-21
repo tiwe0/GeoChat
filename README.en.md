@@ -191,7 +191,6 @@ bun run package:backend-smoke
   records, provider proxying, and agent-run routes.
 - Provider API keys should be supplied by users at runtime. Do not commit local
   credentials, `.env`, `.dev.vars`, SQLite databases, or generated build output.
-- See `docs/open-source-boundary.md` for the public repository boundary.
 - See `docs/geogebra-applet.md` for GeoGebra integration notes.
 - See `docs/agent-harness-roadmap.md` for the agent runner architecture.
 - See `docs/tauri2-shell-migration-plan.md` for Tauri shell notes.
@@ -201,7 +200,6 @@ bun run package:backend-smoke
 Run the public checks before pushing a release branch or public mirror:
 
 ```sh
-bun run oss:check
 bun run typecheck
 bun run tauri:prepare
 bun run tauri:check

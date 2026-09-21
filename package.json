@@ -35,8 +35,6 @@
     "dist": "bun run tauri:build",
     "test": "bun test tests",
     "typecheck": "tsc -p packages/app/tsconfig.json --pretty && tsc -p tsconfig.node.json --pretty && tsc -p tsconfig.web.json --pretty",
-    "oss:check": "bun scripts/export-open-source.mjs --check",
-    "oss:export": "bun scripts/export-open-source.mjs",
     "backend:dev": "bun --watch backend/src/index.ts",
     "backend:start": "bun backend/src/index.ts",
     "datasets:download-hf": "bun tools/download-huggingface-problem-datasets.ts",

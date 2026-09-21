@@ -185,7 +185,6 @@ bun run package:backend-smoke
 - 本地后端提供桌面健康检查、资源、对话、题库、供应商代理和 Agent 运行路由。
 - 用户应在运行时提供模型 API key。不要提交本地凭据、`.env`、`.dev.vars`、
   SQLite 数据库或生成产物。
-- 公开仓库边界见 `docs/open-source-boundary.md`。
 - GeoGebra 集成说明见 `docs/geogebra-applet.md`。
 - Agent runner 架构见 `docs/agent-harness-roadmap.md`。
 - Tauri 外壳说明见 `docs/tauri2-shell-migration-plan.md`。
@@ -195,7 +194,6 @@ bun run package:backend-smoke
 推送发布分支或公开镜像前运行：
 
 ```sh
-bun run oss:check
 bun run typecheck
 bun run tauri:prepare
 bun run tauri:check

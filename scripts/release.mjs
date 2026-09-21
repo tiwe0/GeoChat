@@ -238,7 +238,6 @@ function assertTagAvailable(tagName) {
 
 function runChecks(dryRun) {
   const commands = [
-    ["bun", ["run", "oss:check"]],
     ["bun", ["run", "typecheck"]],
     ["bun", ["run", "tauri:prepare"]],
     ["bun", ["run", "tauri:check"]],

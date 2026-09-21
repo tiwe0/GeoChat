@@ -129,7 +129,7 @@ export default function App() {
           </div>
         )}
       </section>
-      <div id="geochatpro-panel-host" className="geochatpro-panel-host">
+      <div id="geochat-panel-host" className="geochat-panel-host">
         <AssistantPanel
           canvasReady={canvasState === "ready"}
           onConversationStarted={() => setCanvasIntroVisible(false)}

@@ -6,10 +6,9 @@ import { getFrontendGeoGebraController } from "../../geogebra/runtime";
 /**
  * Executes an action the MCP server queued for the renderer.
  *
- * Narrower than the SolidJS renderer's executor by one action: `select_problem`
- * drives the problem bank, which is a Pro surface and is not part of this
- * build. It reports that explicitly rather than failing obscurely, because an
- * MCP client has no other way to find out the capability is gone.
+ * `select_problem` is unavailable because this desktop exposes direct canvas
+ * control rather than a bundled problem-bank browser. Report that explicitly
+ * so an MCP client receives a stable capability error.
  */
 export function createDesktopDebugActionExecutor(input: {
   getConversationId: () => string | null;
@@ -68,6 +67,6 @@ export function createDesktopDebugActionExecutor(input: {
       return { type: action.type, conversationId: input.getConversationId(), sent: true };
     }
 
-    throw new Error(`The problem bank is not part of this build, so ${action.type} is unavailable. It returns with the Pro release.`);
+    throw new Error(`The problem bank is not available in this desktop, so ${action.type} is unsupported.`);
   };
 }

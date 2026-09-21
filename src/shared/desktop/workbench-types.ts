@@ -76,7 +76,7 @@ export type ImageAttachment = {
 
 export type HistoryItem = DesktopConversationSummary;
 
-export type ConfigTab = "model" | "skills" | "externalMcp" | "memory" | "runs" | "about" | "credits" | "debug";
+export type ConfigTab = "model" | "skills" | "externalMcp" | "memory" | "runs" | "about" | "debug";
 export type ViewMode = "chat" | "problem-bank";
 
 export type ModelConfig = AgentModelConfig & {

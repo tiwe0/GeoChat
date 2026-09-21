@@ -9,7 +9,7 @@ export type ConversationSummary = { id: string; model: string; title: string | n
 export type StoredConversationPart =
   | { type: "text"; text: string }
   | { type: "file"; url: string; mediaType: string; filename?: string };
-export type StoredConversationMessage = { id: string; clientMessageId: string | null; role: string; content: string; parts: StoredConversationPart[]; usage: ChatMessageMetadata["tokenUsage"] | null; credits: number | null };
+export type StoredConversationMessage = { id: string; clientMessageId: string | null; role: string; content: string; parts: StoredConversationPart[]; usage: ChatMessageMetadata["tokenUsage"] | null };
 export type ConversationRestore = { messages: StoredConversationMessage[]; replayCommands: string[] };
 
 function responseError(data: unknown, fallback: string) {
@@ -34,8 +34,7 @@ export function parseConversationMessages(value: unknown, apiOrigin?: string): S
     if (typeof data.id !== "string" || typeof data.role !== "string" || typeof data.content !== "string") return [];
     const parts = parseConversationParts(data.parts, apiOrigin);
     const usage = data.usage && typeof data.usage === "object" && !Array.isArray(data.usage) ? data.usage as ChatMessageMetadata["tokenUsage"] : null;
-    const credits = typeof data.credits === "number" && Number.isFinite(data.credits) && data.credits >= 0 ? data.credits : null;
-    return [{ id: data.id, clientMessageId: typeof data.clientMessageId === "string" ? data.clientMessageId : null, role: data.role, content: data.content, parts, usage, credits }];
+    return [{ id: data.id, clientMessageId: typeof data.clientMessageId === "string" ? data.clientMessageId : null, role: data.role, content: data.content, parts, usage }];
   });
 }
 

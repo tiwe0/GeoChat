@@ -53,7 +53,7 @@ export function SettingsPanel(props: { mcp: McpController; onRestartTour: () => 
   }, [tab]);
 
   return (
-    <Stack ref={rootRef} className="geochatpro-settings" sx={{ flex: 1, minHeight: 0 }}>
+    <Stack ref={rootRef} className="geochat-settings" sx={{ flex: 1, minHeight: 0 }}>
       <Box className={`settings-layout${verticalNavigation ? "" : " settings-layout--compact"}`}>
         <Tabs
           className="settings-navigation"

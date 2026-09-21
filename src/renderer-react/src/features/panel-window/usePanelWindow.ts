@@ -50,7 +50,7 @@ export function clampPanelGeometry(
 function panelHost(handle: HTMLElement) {
   const root = handle.getRootNode();
   if (root instanceof ShadowRoot && root.host instanceof HTMLElement) return root.host;
-  return handle.closest<HTMLElement>("#geochatpro-panel-host") ?? handle.parentElement;
+  return handle.closest<HTMLElement>("#geochat-panel-host") ?? handle.parentElement;
 }
 
 function readPanelPosition(host: HTMLElement): PanelPosition {

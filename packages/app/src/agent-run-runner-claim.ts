@@ -7,8 +7,8 @@
  * run — the desktop workbench and the desktop debug MCP, for instance — so
  * that neither claims work intended for the other.
  *
- * The hosted build's channels ("chrome-extension", "web-geochatpro") are not
- * listed: this repository ships the desktop workbench and its debug MCP.
+ * Only the channels shipped by this repository are accepted: the desktop
+ * workbench and its debug MCP.
  */
 export const AGENT_RUNNER_CLAIM_OWNER_CHANNELS = ["desktop-workbench", "desktop-mcp"] as const;
 export type AgentRunRunnerClaimOwnerChannel = (typeof AGENT_RUNNER_CLAIM_OWNER_CHANNELS)[number];

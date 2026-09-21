@@ -5,10 +5,7 @@ export type ChatTokenUsage = {
   totalTokens: number;
 };
 
-/**
- * Per-message metadata. The hosted build also carries a `credits` field; this
- * build has no billing, so usage is reported for transparency only.
- */
+/** Per-message token accounting reported for local usage transparency. */
 export type ChatMessageMetadata = {
   tokenUsage?: ChatTokenUsage;
 };

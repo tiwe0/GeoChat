@@ -21,7 +21,7 @@ describe("desktop-only renderer and backend boundaries", () => {
   // - "renders choice analysis cards as switchable choice scenarios" asserted
   //   Solid class names and identifiers for the interactive choice preview.
   //   The React renderer displays choice analysis but does not yet replay a
-  //   single option onto the canvas; see PORTING.md.
+  //   single option onto the canvas.
   // - the KaTeX list-item selector test asserted rules in a stylesheet that
   //   no longer exists.
 

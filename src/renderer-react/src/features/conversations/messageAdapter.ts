@@ -8,7 +8,7 @@ export function restoreConversationMessages(items: StoredConversationMessage[]):
   return items.flatMap((item) => {
     if (item.role !== "user" && item.role !== "assistant") return [];
     const parts = item.parts.length ? item.parts.map(toUiPart) : [{ type: "text" as const, text: item.content }];
-    return [{ id: item.clientMessageId || item.id, role: item.role, parts, ...((item.usage || item.credits !== null) ? { metadata: { ...(item.usage ? { tokenUsage: item.usage } : {}), ...(item.credits === null ? {} : { credits: item.credits }) } } : {}) } satisfies ChatMessage];
+    return [{ id: item.clientMessageId || item.id, role: item.role, parts, ...(item.usage ? { metadata: { tokenUsage: item.usage } } : {}) } satisfies ChatMessage];
   });
 }
 

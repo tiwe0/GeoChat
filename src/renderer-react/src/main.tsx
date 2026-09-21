@@ -18,7 +18,7 @@ import { loadDesktopRuntime } from "./features/desktop/runtime";
 import { desktopLogger, installDesktopLogging } from "./features/desktop/desktopLogger";
 
 installWebPlatform();
-const emotionCache = createCache({ key: "geochatpro-web" });
+const emotionCache = createCache({ key: "geochat-web" });
 
 async function bootstrap() {
   await installTauriDesktopBridge();

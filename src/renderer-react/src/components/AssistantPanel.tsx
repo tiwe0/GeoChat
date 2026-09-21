@@ -78,9 +78,6 @@ import type { RendererMcpStatus } from "../../../shared/desktop/workbench-types"
 import { loadModelCatalog, type RuntimeModelOption } from "../features/models/modelCatalog";
 import { backendAuthToken, backendOrigin } from "../features/desktop/runtime";
 
-// Desktop conversations and credentials are local-first; using the assistant
-// does not require an account or a remote session.
-const AUTH_REQUIRED = false;
 const ONBOARDING_TOUR_STORAGE_KEY = "geogebraCopilotOnboardingTourCompleted";
 const THINKING_ENABLED_STORAGE_KEY = "geogebraCopilotThinkingEnabled";
 const LEGACY_REASONING_MODE_STORAGE_KEY = "geogebraCopilotReasoningMode";
@@ -178,11 +175,6 @@ function TypewriterText({ text }: { text: string }) {
       {visibleText}
     </Typography>
   );
-}
-
-function formatCredits(value: number) {
-  const precision = value >= 1 ? 2 : 4;
-  return value.toFixed(precision).replace(/\.?0+$/, "");
 }
 
 function ThinkingBlock({
@@ -348,11 +340,9 @@ export function AssistantPanel({
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [currentConversationTitle, setCurrentConversationTitle] = useState<string | null>(null);
   const panelChatRef = useRef(new PanelChatState());
-  // Desktop is local-first: no account, no credits, no device bridge.
-  // The Pro build owns those surfaces; see features/local-session.
   // Resolved during bootstrap, so this is stable for the life of the renderer.
   const API_ORIGIN = backendOrigin();
-  const { account, authError, setAuthError, authSessionRef } = useLocalSession({
+  const { authSessionRef } = useLocalSession({
     localAuthToken: backendAuthToken()
   });
   const blackboard = useConversationBlackboard({
@@ -546,7 +536,7 @@ export function AssistantPanel({
     : t("settings.title");
   const toastError = error
     ? formatAgentRunError(error, t)
-    : submissionError ?? conversationHistoryError ?? blackboard.error ?? authError;
+    : submissionError ?? conversationHistoryError ?? blackboard.error;
   function openConversationHistory() {
     setBlackboardOpen(false);
     setConversationDrawerOpen(true);
@@ -583,10 +573,7 @@ export function AssistantPanel({
   async function submit(exampleText?: string) {
     const text = (exampleText ?? input).trim();
     const pendingAttachments = exampleText === undefined ? attachments : [];
-    if ((!text && pendingAttachments.length === 0) || isStreaming || (AUTH_REQUIRED && !authSessionRef.current.token)) {
-      if (AUTH_REQUIRED && !authSessionRef.current.token) setAuthError(t("auth.creditsRequired"));
-      return;
-    }
+    if ((!text && pendingAttachments.length === 0) || isStreaming) return;
     const files = pendingAttachments.map((attachment) => attachment.part);
     if (!areSupportedAgentAttachments(files)) {
       const unsupported = pendingAttachments.find((attachment) => !attachment.part.mediaType?.startsWith("image/"));
@@ -687,7 +674,7 @@ export function AssistantPanel({
   return (
     <MotionPaper
       ref={panelRef}
-      className="geochatpro-panel"
+      className="geochat-panel"
       aria-label={t("common.appName")}
       lang={i18n.resolvedLanguage ?? i18n.language}
       elevation={dragging || resizing ? 10 : 6}
@@ -924,9 +911,6 @@ export function AssistantPanel({
         <>
           <ConversationDrawer
             open={conversationDrawerOpen}
-            // Desktop history is persisted in local storage and is available
-            // before a user signs in (remote sync remains optional).
-            signedIn={true}
             interactionDisabled={isStreaming}
             loading={conversationHistoryLoading}
             selectingId={selectingConversationId}
@@ -940,9 +924,6 @@ export function AssistantPanel({
           />
           <BlackboardDrawer
             open={blackboardOpen}
-            // The desktop backend is local-first and does not require an
-            // account token, so the blackboard is available to guest users.
-            signedIn={true}
             conversationId={currentConversationId}
             loading={blackboard.loading}
             error={blackboard.error}
@@ -956,7 +937,7 @@ export function AssistantPanel({
         <AnimatePresence initial={false} mode="wait">
           <motion.div
             data-language-transition-surface
-            key={panelView === "chat" ? "chat" : account ? "user" : "login"}
+            key={panelView}
             initial={{ opacity: 0, x: panelView === "chat" ? -12 : 12 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: panelView === "chat" ? 12 : -12 }}
@@ -1218,7 +1199,6 @@ export function AssistantPanel({
             sendDisabled={
               (!input.trim() && attachments.length === 0)
               || isStreaming
-              || (AUTH_REQUIRED && !authSessionRef.current.token)
             }
             error={submissionError}
             onChange={(value) => {

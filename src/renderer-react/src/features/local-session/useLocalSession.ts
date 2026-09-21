@@ -1,16 +1,9 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
 
 /**
- * Stands in for the hosted account session of the web build.
- *
- * GeoChat Desktop is local-first: there is no sign-in, no credit balance and
- * no OAuth. The shape is kept because the panel threads `authSessionRef`
- * through to every backend call, and the local Bun backend does accept an
- * optional shared token (GEOCHAT_DESKTOP_LOCAL_AUTH_TOKEN) for the desktop MCP
- * batch path — so the slot stays, only its source changes.
- *
- * Sign-in, billing and device bridging belong to the Pro build and are
- * deliberately absent from this repository (see OPEN_SOURCE.md).
+ * Keeps the optional local backend token stable across renderer requests.
+ * The generation counter prevents a response created with an older token from
+ * overwriting state after the local runtime configuration changes.
  */
 /**
  * The generation guard the conversation hooks rely on: they snapshot before an
@@ -40,8 +33,6 @@ export function useLocalSession(options: { localAuthToken?: string | null } = {}
     snapshot: () => ({ token: tokenRef.current, generation: generationRef.current }),
     isCurrent: (snapshot: AuthSessionSnapshot) => snapshot.generation === generationRef.current
   });
-  const [authError, setAuthError] = useState<string | null>(null);
-
   const setLocalToken = useCallback((token: string | null) => {
     // A new generation invalidates anything already in flight.
     generationRef.current += 1;
@@ -51,10 +42,6 @@ export function useLocalSession(options: { localAuthToken?: string | null } = {}
 
   return {
     authSessionRef,
-    /** Always null: the desktop build has no account. */
-    account: null,
-    authError,
-    setAuthError,
     setLocalToken
   };
 }

@@ -26,7 +26,6 @@ import { useStreamdownTranslations } from "../i18n/useStreamdownTranslations";
 
 type BlackboardDrawerProps = {
   open: boolean;
-  signedIn: boolean;
   conversationId: string | null;
   loading: boolean;
   error: string | null;
@@ -37,7 +36,6 @@ type BlackboardDrawerProps = {
 
 export function BlackboardDrawer({
   open,
-  signedIn,
   conversationId,
   loading,
   error,
@@ -74,7 +72,7 @@ export function BlackboardDrawer({
           id: "copilot-blackboard-drawer",
           role: "complementary",
           "aria-label": t("blackboard.title"),
-          className: "geochatpro-blackboard",
+          className: "geochat-blackboard",
           sx: {
             position: "absolute",
             width: "min(380px, calc(100% - 72px))",
@@ -195,10 +193,6 @@ export function BlackboardDrawer({
             </Stack>
           ) : error ? (
             <Alert severity="error" sx={{ bgcolor: "rgba(255, 244, 242, 0.94)" }}>{error}</Alert>
-          ) : !signedIn ? (
-            <Typography variant="body2" sx={{ py: 1, color: mutedChalk, fontFamily: chalkFont, fontSize: 16 }}>
-              {t("blackboard.signInRequired")}
-            </Typography>
           ) : !conversationId ? (
             <Typography variant="body2" sx={{ py: 1, color: mutedChalk, fontFamily: chalkFont, fontSize: 16 }}>
               {t("blackboard.emptyNoConversation")}

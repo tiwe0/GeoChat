@@ -27,7 +27,6 @@ export type ConversationSummary = {
 
 type ConversationDrawerProps = {
   open: boolean;
-  signedIn: boolean;
   interactionDisabled: boolean;
   loading: boolean;
   selectingId: string | null;
@@ -42,7 +41,6 @@ type ConversationDrawerProps = {
 
 export function ConversationDrawer({
   open,
-  signedIn,
   interactionDisabled,
   loading,
   selectingId,
@@ -120,11 +118,7 @@ export function ConversationDrawer({
             "&::-webkit-scrollbar": { display: "none" },
           }}
         >
-          {!signedIn ? (
-            <Typography variant="body2" color="text.secondary" sx={{ px: 1, py: 2 }}>
-              {t("history.signInRequired")}
-            </Typography>
-          ) : loading ? (
+          {loading ? (
             <Stack spacing={0.75} aria-label={t("history.loading")}>
               {Array.from({ length: 5 }, (_, index) => (
                 <Skeleton key={index} variant="rounded" height={42} animation="wave" />

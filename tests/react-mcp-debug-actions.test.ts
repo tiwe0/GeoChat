@@ -126,9 +126,9 @@ describe("react MCP debug action executor", () => {
     await expect(execute({ id: "1", type: "send_message", content: "   " })).rejects.toThrow(/non-empty/);
   });
 
-  test("says plainly that the problem bank is not in this build", async () => {
+  test("says plainly that the problem bank is unavailable", async () => {
     const { execute } = harness({ controller: { ready: true } });
     await expect(execute({ id: "1", type: "select_problem", problemId: "p1", mode: "show" }))
-      .rejects.toThrow(/problem bank is not part of this build/);
+      .rejects.toThrow(/problem bank is not available in this desktop/);
   });
 });

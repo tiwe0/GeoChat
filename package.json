@@ -3,7 +3,7 @@
   "version": "0.5.1",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
-  "description": "GeoChat Desktop open-core client built with a Tauri 2 shell, SolidJS UI, and a backend bundle on a Bun runtime sidecar.",
+  "description": "GeoChat Desktop open-source client built with a Tauri 2 shell, SolidJS UI, and a backend bundle on a Bun runtime sidecar.",
   "type": "module",
   "packageManager": "bun@1.3.11",
   "workspaces": [

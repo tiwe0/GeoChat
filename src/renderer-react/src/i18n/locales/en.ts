@@ -461,8 +461,6 @@ export const en = {
     geogebraCredit: "Open-source dynamic mathematics software that provides the core foundation for GeoChat's local canvas, geometry construction, and visual verification.",
     gaokaoCredit: "Source problem bank and evaluation reference for GAOKAO math tasks, used as foundation data for GeoChat coverage.",
     conic10kCredit: "MIT-licensed conic-section analytic geometry dataset that adds dense visualization training and evaluation samples.",
-    proTitle: "GeoChat Pro",
-    proBody: "A paid tier is planned. It will add cloud conversation storage and a WeChat mini program for photographing a problem on your phone and drawing it here. The desktop stays the drawing surface, and entering problems locally stays free.",
     sponsorTitle: "Sponsorship",
     sponsorImageAlt: "Hanshan sponsorship QR code",
     licence: "Licence",

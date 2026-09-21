@@ -113,12 +113,6 @@ export function AboutSettings() {
           </Box>
         </Stack>
 
-        {/* Pro is described, not sold, and deliberately has no key field. */}
-        <Stack className="settings-about-section" spacing={0.75}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t("about.proTitle")}</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.55 }}>{t("about.proBody")}</Typography>
-        </Stack>
-
         <Stack className="settings-about-section" spacing={1}>
           <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t("about.sponsorTitle")}</Typography>
           <Box

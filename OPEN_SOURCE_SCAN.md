@@ -2,7 +2,7 @@
 
 Date: 2026-07-07
 
-Scope: `geochat-open-core` public desktop repository.
+Scope: GeoChat public desktop repository.
 
 ## Result
 

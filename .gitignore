@@ -26,3 +26,6 @@ docs/local/
 !.env.example
 
 .artifacts/
+
+# Local-only public/commercial boundary audit.
+tests/public-ui-boundary.test.ts

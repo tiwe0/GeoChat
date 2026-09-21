@@ -337,11 +337,17 @@ export const en = {
     zoomOut: "Zoom out",
   },
   settings: {
-    title: "Model settings",
+    title: "Settings",
+    navigationLabel: "Settings categories",
     tabs: {
       model: "Model",
       general: "General",
       about: "About",
+    },
+    tabDescriptions: {
+      model: "Configure AI providers, credentials, and custom models",
+      general: "Manage updates, local logs, and debugging services",
+      about: "Project, author, credits, and licence information",
     },
     provider: "Provider",
     model: "Model",
@@ -397,6 +403,8 @@ export const en = {
     restartTour: "Show tutorial again",
     updateTitle: "Updates",
     updateCurrentVersion: "Current version",
+    updateLatest: "You are on the latest version: {{version}}",
+    updateVersionComparison: "Latest: {{latestVersion}} \u00b7 Current: {{currentVersion}}",
     updateChecking: "Checking\u2026",
     updateCheck: "Check for updates",
     updateDownload: "Download update",

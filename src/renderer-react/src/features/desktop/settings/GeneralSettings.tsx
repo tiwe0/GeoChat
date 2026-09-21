@@ -1,10 +1,13 @@
+import type { ReactNode } from "react";
 import FolderOpenRounded from "@mui/icons-material/FolderOpenRounded";
-import { Stack, Typography, FormControlLabel, Switch, Button, MenuItem, TextField } from "@mui/material";
+import { Box, Stack, Typography, FormControlLabel, Switch, Button, IconButton, MenuItem, TextField, Tooltip } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import type { DesktopLogLevel } from "../../../../../shared/desktop-api";
 import { UpdateSection } from "../UpdateSection";
 import type { McpController } from "../useMcpState";
 import { useLoggingState } from "../useLoggingState";
+import { SettingsDisclosure } from "./SettingsDisclosure";
+import { SettingsHint } from "./SettingsHint";
 
 const LOG_LEVELS: DesktopLogLevel[] = ["error", "warn", "info", "debug", "trace"];
 
@@ -14,12 +17,12 @@ const LOG_LEVELS: DesktopLogLevel[] = ["error", "warn", "info", "debug", "trace"
  */
 export function GeneralSettings({ mcp, onRestartTour }: { mcp: McpController; onRestartTour: () => void }) {
   return (
-    <Stack spacing={3}>
+    <Box className="settings-page settings-general-page">
       <TourSection onRestartTour={onRestartTour} />
       <UpdateSection />
       <LoggingSection />
       <McpSection mcp={mcp} />
-    </Stack>
+    </Box>
   );
 }
 
@@ -27,16 +30,17 @@ function LoggingSection() {
   const { t } = useTranslation();
   const logging = useLoggingState();
   const { status } = logging;
+  const detail = !logging.available ? (
+    <Typography variant="caption" color="text.secondary">{t("settings.loggingUnavailable")}</Typography>
+  ) : logging.error ? (
+    <Typography variant="caption" color="error.main">{logging.error}</Typography>
+  ) : null;
 
   return (
-    <Stack spacing={0.75}>
-      <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-        {t("settings.loggingTitle")}
-      </Typography>
-      <Typography variant="body2" color="text.secondary">
-        {t("settings.loggingDescription")}
-      </Typography>
+    <SettingsSection title={t("settings.loggingTitle")} description={t("settings.loggingDescription")}>
       <FormControlLabel
+        className="settings-toggle-row"
+        labelPlacement="start"
         control={
           <Switch
             size="small"
@@ -46,48 +50,47 @@ function LoggingSection() {
           />
         }
         label={
-          <Typography variant="body2">
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
             {status.enabled ? t("settings.loggingEnabled") : t("settings.loggingDisabled")}
           </Typography>
         }
       />
-      <TextField
-        select
-        size="small"
-        label={t("settings.loggingLevel")}
-        value={status.level}
-        disabled={!logging.available || !status.enabled || logging.busy}
-        onChange={(event) => void logging.setLevel(event.target.value as DesktopLogLevel)}
-        sx={{ maxWidth: 220 }}
-      >
-        {LOG_LEVELS.map((level) => (
-          <MenuItem key={level} value={level}>
-            {t(`settings.loggingLevels.${level}`)}
-          </MenuItem>
-        ))}
-      </TextField>
-      <Button
-        variant="outlined"
-        size="small"
-        startIcon={<FolderOpenRounded />}
-        disabled={!logging.available}
-        onClick={() => void logging.openDirectory()}
-        sx={{ alignSelf: "flex-start", mt: 0.5 }}
-      >
-        {t("settings.openLogFolder")}
-      </Button>
-      {!logging.available ? (
-        <Typography variant="caption" color="text.secondary">
-          {t("settings.loggingUnavailable")}
-        </Typography>
-      ) : logging.error ? (
-        <Typography variant="caption" color="error.main">{logging.error}</Typography>
-      ) : status.logDirectory ? (
-        <Typography variant="caption" color="text.secondary" sx={{ wordBreak: "break-all" }}>
-          {status.logDirectory}
-        </Typography>
-      ) : null}
-    </Stack>
+      <SettingsDisclosure open={status.enabled}>
+        <Stack className="settings-inline-controls settings-disclosure-controls" direction="row" spacing={1.25}>
+          <TextField
+            select
+            fullWidth
+            size="small"
+            label={t("settings.loggingLevel")}
+            value={status.level}
+            disabled={!logging.available || logging.busy}
+            onChange={(event) => void logging.setLevel(event.target.value as DesktopLogLevel)}
+          >
+            {LOG_LEVELS.map((level) => (
+              <MenuItem key={level} value={level}>
+                {t(`settings.loggingLevels.${level}`)}
+              </MenuItem>
+            ))}
+          </TextField>
+          <Tooltip title={t("settings.openLogFolder")} arrow>
+            <span className="settings-tooltip-action">
+              <IconButton
+                className="settings-icon-action"
+                size="small"
+                aria-label={t("settings.openLogFolder")}
+                disabled={!logging.available}
+                onClick={() => void logging.openDirectory()}
+              >
+                <FolderOpenRounded fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Stack>
+      </SettingsDisclosure>
+      <SettingsDisclosure open={detail !== null}>
+        <Box className="settings-inline-detail">{detail}</Box>
+      </SettingsDisclosure>
+    </SettingsSection>
   );
 }
 
@@ -95,17 +98,11 @@ function TourSection({ onRestartTour }: { onRestartTour: () => void }) {
   const { t } = useTranslation();
 
   return (
-    <Stack spacing={0.75}>
-      <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-        {t("settings.tourTitle")}
-      </Typography>
-      <Typography variant="body2" color="text.secondary">
-        {t("settings.tourDescription")}
-      </Typography>
-      <Button variant="outlined" size="small" onClick={onRestartTour} sx={{ alignSelf: "flex-start", mt: 0.5 }}>
+    <SettingsSection title={t("settings.tourTitle")} description={t("settings.tourDescription")}>
+      <Button className="settings-row-action" variant="outlined" size="small" onClick={onRestartTour}>
         {t("settings.restartTour")}
       </Button>
-    </Stack>
+    </SettingsSection>
   );
 }
 
@@ -119,16 +116,21 @@ function TourSection({ onRestartTour }: { onRestartTour: () => void }) {
 function McpSection({ mcp }: { mcp: McpController }) {
   const { t } = useTranslation();
   const { status, busy } = mcp;
+  const detail = status.error ? (
+    <Typography variant="caption" color="error.main">{status.error}</Typography>
+  ) : status.enabled && status.running && status.endpoint ? (
+    <Typography variant="caption" color="text.secondary" noWrap title={status.endpoint} sx={{ display: "block", maxWidth: "100%" }}>
+      {status.endpoint}
+    </Typography>
+  ) : status.enabled ? (
+    <Typography variant="caption" color="text.secondary">{t("settings.mcpStarting")}</Typography>
+  ) : null;
 
   return (
-    <Stack spacing={0.75}>
-      <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-        {t("settings.mcpTitle")}
-      </Typography>
-      <Typography variant="body2" color="text.secondary">
-        {t("settings.mcpDescription")}
-      </Typography>
+    <SettingsSection title={t("settings.mcpTitle")} description={t("settings.mcpDescription")}>
       <FormControlLabel
+        className="settings-toggle-row"
+        labelPlacement="start"
         control={
           <Switch
             size="small"
@@ -138,20 +140,29 @@ function McpSection({ mcp }: { mcp: McpController }) {
           />
         }
         label={
-          <Typography variant="body2">
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
             {status.enabled ? t("settings.mcpEnabled") : t("settings.mcpDisabled")}
           </Typography>
         }
       />
-      {status.error ? (
-        <Typography variant="caption" color="error.main">{status.error}</Typography>
-      ) : status.enabled && status.running && status.endpoint ? (
-        <Typography variant="caption" color="text.secondary" sx={{ wordBreak: "break-all" }}>
-          {status.endpoint}
-        </Typography>
-      ) : status.enabled ? (
-        <Typography variant="caption" color="text.secondary">{t("settings.mcpStarting")}</Typography>
-      ) : null}
-    </Stack>
+      <SettingsDisclosure open={detail !== null}>
+        <Box className="settings-inline-detail">{detail}</Box>
+      </SettingsDisclosure>
+    </SettingsSection>
+  );
+}
+
+function SettingsSection(props: { title: string; description: string; children: ReactNode }) {
+  return (
+    <Box component="section" className="settings-section">
+      <Box className="settings-section-copy">
+        <SettingsHint text={props.description}>
+          <Typography component="span" variant="subtitle2" sx={{ fontWeight: 750 }}>{props.title}</Typography>
+        </SettingsHint>
+      </Box>
+      <Stack className="settings-section-controls" spacing={1.25}>
+        {props.children}
+      </Stack>
+    </Box>
   );
 }

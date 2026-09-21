@@ -7,11 +7,20 @@
   background: #f4f7f5;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  --app-accent: #2563eb;
+  --app-accent-dark: #1d4ed8;
+  --app-accent-soft: rgba(37, 99, 235, .09);
+  --app-accent-hover: rgba(53, 99, 223, .07);
+  --app-accent-border: rgba(53, 99, 223, .34);
+  --app-accent-focus: rgba(37, 99, 235, .58);
+  --app-settings-surface: rgba(252, 253, 252, .78);
+  --app-shell-background: #f4f7f5;
 }
+
 
 * { box-sizing: border-box; }
 html, body, #root { width: 100%; height: 100%; }
-body { margin: 0; min-width: 320px; min-height: 100vh; background: #f4f7f5; }
+body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--app-shell-background); }
 button, textarea { font: inherit; }
 button { cursor: pointer; }
 
@@ -90,7 +99,7 @@ h2 { font-size: 18px; }
 }
 
 /* Standalone Web shell around the migrated extension panel. */
-.frontend-shell { width: 100%; height: 100%; min-height: 100vh; position: relative; overflow: hidden; background: #f4f7f5; }
+.frontend-shell { width: 100%; height: 100%; min-height: 100vh; position: relative; overflow: hidden; background: var(--app-shell-background); }
 .frontend-canvas { position: absolute; inset: 0; background: #fff; }
 .frontend-canvas-host { position: relative; z-index: 0; display: block; width: 100%; height: 100%; visibility: visible; opacity: 1; }
 .frontend-canvas-host > * { width: 100%; height: 100%; }
@@ -239,7 +248,260 @@ h2 { font-size: 18px; }
   border-top-color: rgba(185, 201, 191, .46);
 }
 .geochatpro-settings {
-  background: rgba(255, 255, 255, .2);
+  container-type: inline-size;
+  background: var(--app-settings-surface);
+  transition: background-color 180ms ease;
+}
+.geochatpro-settings .settings-hint-target {
+  display: inline-flex;
+  min-width: 0;
+  border-radius: 5px;
+  cursor: help;
+}
+.geochatpro-settings .settings-hint-target:focus-visible {
+  outline: 2px solid var(--app-accent-focus);
+  outline-offset: 3px;
+}
+.geochatpro-settings .settings-layout {
+  display: grid;
+  grid-template-columns: 136px minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+.geochatpro-settings .settings-navigation {
+  min-width: 0;
+  padding: 12px 8px;
+  border-right: 1px solid rgba(185, 201, 191, .52);
+  background: rgba(244, 248, 246, .7);
+}
+.geochatpro-settings .settings-navigation .MuiTabs-indicator { display: none; }
+.geochatpro-settings .settings-navigation .MuiTab-root {
+  min-height: 42px;
+  justify-content: flex-start;
+  gap: 9px;
+  margin: 1px 0;
+  padding: 0 12px;
+  border-radius: 9px;
+  color: #526079;
+  font-size: 13px;
+  text-transform: none;
+}
+.geochatpro-settings .settings-navigation .MuiTab-root.Mui-selected {
+  color: var(--app-accent-dark);
+  background: var(--app-accent-soft);
+}
+.geochatpro-settings .settings-content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 24px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(82, 96, 121, .22) transparent;
+}
+.geochatpro-settings .settings-content.settings-content--model { padding-bottom: 0; }
+.geochatpro-settings .settings-tab-panel {
+  flex: 1 0 auto;
+  min-height: 100%;
+}
+.geochatpro-settings .settings-page {
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+}
+.geochatpro-settings .settings-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  padding: 18px 0;
+  border-bottom: 1px solid rgba(185, 201, 191, .48);
+}
+.geochatpro-settings .settings-section:first-child { padding-top: 0; }
+.geochatpro-settings .settings-section:last-child { padding-bottom: 0; border-bottom: 0; }
+.geochatpro-settings .settings-section-copy { min-width: 0; }
+.geochatpro-settings .settings-section-wide { grid-column: 1 / -1; }
+.geochatpro-settings .settings-section-controls {
+  min-width: 0;
+  width: 100%;
+  align-self: start;
+  align-items: flex-start;
+}
+.geochatpro-settings .settings-general-page {
+  overflow: hidden;
+  border: 1px solid rgba(185, 201, 191, .58);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .76);
+  box-shadow: 0 1px 2px rgba(24, 41, 34, .025);
+}
+.geochatpro-settings .settings-general-page > .settings-section {
+  grid-template-columns: 138px minmax(0, 1fr);
+  gap: 20px;
+  min-height: 64px;
+  padding: 16px 18px;
+  border-bottom-color: rgba(185, 201, 191, .42);
+}
+.geochatpro-settings .settings-general-page > .settings-section:first-child {
+  padding-top: 16px;
+}
+.geochatpro-settings .settings-general-page > .settings-section:last-child {
+  padding-bottom: 16px;
+}
+.geochatpro-settings .settings-general-page .settings-section-copy {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  align-self: start;
+  color: #263248;
+}
+.geochatpro-settings .settings-general-page .settings-section-controls {
+  justify-content: flex-start;
+}
+.geochatpro-settings .settings-toggle-row {
+  width: 100%;
+  min-height: 32px;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0;
+}
+.geochatpro-settings .settings-toggle-row .MuiFormControlLabel-label {
+  flex: 1 1 auto;
+}
+.geochatpro-settings .settings-toggle-row .MuiSwitch-root {
+  margin-right: -7px;
+}
+.geochatpro-settings .settings-inline-controls {
+  width: 100%;
+  align-items: center;
+}
+.geochatpro-settings .settings-inline-controls .MuiTextField-root { flex: 1 1 auto; }
+.geochatpro-settings .settings-general-page .settings-row-action {
+  align-self: flex-end;
+  margin-left: auto;
+}
+.geochatpro-settings .settings-tooltip-action {
+  display: inline-flex;
+}
+.geochatpro-settings .settings-disclosure {
+  width: 100%;
+  overflow: hidden;
+}
+.geochatpro-settings .settings-inline-detail,
+.geochatpro-settings .settings-update-detail {
+  padding-top: 5px;
+}
+.geochatpro-settings .settings-disclosure-controls {
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(185, 201, 191, .38);
+}
+.geochatpro-settings .settings-update-control {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 34px;
+}
+.geochatpro-settings .settings-update-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.geochatpro-settings .settings-update-progress {
+  width: min(300px, 100%);
+  margin-top: 7px;
+}
+.geochatpro-settings .settings-icon-action {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(185, 201, 191, .7);
+  border-radius: 9px;
+  color: var(--app-accent);
+  background: rgba(255, 255, 255, .72);
+}
+.geochatpro-settings .settings-icon-action:hover {
+  border-color: var(--app-accent-border);
+  background: var(--app-accent-hover);
+}
+.geochatpro-settings .settings-model-page {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.geochatpro-settings .settings-model-form { width: 100%; }
+.geochatpro-settings .settings-model-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: flex-end;
+  margin: auto -24px 0;
+  padding: 14px 24px 18px;
+  border-top: 1px solid rgba(185, 201, 191, .52);
+  background: rgba(252, 253, 252, .96);
+}
+.geochatpro-settings .settings-custom-model-heading {
+  align-items: center;
+  justify-content: space-between;
+}
+.geochatpro-settings .settings-custom-model-fields { align-items: flex-start; }
+.geochatpro-settings .settings-about-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px 20px;
+}
+.geochatpro-settings .settings-about-section {
+  min-width: 0;
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(185, 201, 191, .48);
+}
+.geochatpro-settings .settings-about-wide { grid-column: 1 / -1; }
+.geochatpro-settings .settings-about-author { align-items: flex-start; }
+.geochatpro-settings .settings-layout--compact {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.geochatpro-settings .settings-layout--compact .settings-navigation {
+  padding: 0 8px;
+  border-right: 0;
+  border-bottom: 1px solid rgba(185, 201, 191, .52);
+}
+.geochatpro-settings .settings-layout--compact .settings-navigation .MuiTab-root {
+  min-height: 42px;
+  justify-content: center;
+  margin: 0;
+  padding-inline: 8px;
+}
+@container (max-width: 559px) {
+  .geochatpro-settings .settings-content { padding: 20px 18px; }
+  .geochatpro-settings .settings-content.settings-content--model { padding-bottom: 0; }
+  .geochatpro-settings .settings-model-actions { margin-inline: -18px; padding: 12px 18px 14px; }
+}
+@container (max-width: 470px) {
+  .geochatpro-settings .settings-section { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 18px 0; }
+  .geochatpro-settings .settings-general-page > .settings-section {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    padding: 14px;
+  }
+  .geochatpro-settings .settings-general-page > .settings-section:first-child { padding-top: 14px; }
+  .geochatpro-settings .settings-general-page > .settings-section:last-child { padding-bottom: 14px; }
+  .geochatpro-settings .settings-general-page .settings-section-copy { min-height: 32px; }
+  .geochatpro-settings .settings-update-control { align-items: flex-start; }
+  .geochatpro-settings .settings-inline-controls,
+  .geochatpro-settings .settings-custom-model-heading,
+  .geochatpro-settings .settings-custom-model-fields,
+  .geochatpro-settings .settings-about-author {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .geochatpro-settings .settings-inline-controls .MuiButton-root { align-self: flex-end; }
+  .geochatpro-settings .settings-custom-model-heading .MuiButton-root,
+  .geochatpro-settings .settings-custom-model-fields .MuiIconButton-root { align-self: flex-start; }
+  .geochatpro-settings .settings-about-grid { grid-template-columns: minmax(0, 1fr); }
+  .geochatpro-settings .settings-about-wide { grid-column: auto; }
 }
 .geochatpro-blackboard {
   background: rgba(23, 63, 53, .84) !important;

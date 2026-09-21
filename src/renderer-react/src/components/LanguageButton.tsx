@@ -7,14 +7,38 @@ import { changeAppLanguage, resolveAppLanguage } from "../i18n";
 
 const MotionIconButton = motion.create(IconButton);
 
-export function LanguageButton({ tourId }: { tourId?: string } = {}) {
+type LanguageChangeTransition = (changeLanguage: () => Promise<void>) => Promise<void>;
+
+export function LanguageButton({
+  tourId,
+  transitionLanguage,
+}: {
+  tourId?: string;
+  transitionLanguage?: LanguageChangeTransition;
+} = {}) {
   const { t, i18n } = useTranslation();
   const [rotation, setRotation] = useState(0);
+  const [switching, setSwitching] = useState(false);
   const language = resolveAppLanguage(i18n.resolvedLanguage ?? i18n.language);
   const nextLanguage = language === "zh-CN" ? "en" : "zh-CN";
   const label = nextLanguage === "zh-CN"
     ? t("language.switchToChinese")
     : t("language.switchToEnglish");
+
+  async function switchLanguage() {
+    if (switching) return;
+    setSwitching(true);
+    setRotation((value) => value + 360);
+    try {
+      const change = () => changeAppLanguage(nextLanguage);
+      if (transitionLanguage) await transitionLanguage(change);
+      else await change();
+    } catch (caughtError) {
+      console.error("[ERROR] Failed to switch application language", caughtError);
+    } finally {
+      setSwitching(false);
+    }
+  }
 
   return (
     <MotionIconButton
@@ -22,11 +46,10 @@ export function LanguageButton({ tourId }: { tourId?: string } = {}) {
       size="small"
       aria-label={label}
       title={label}
+      aria-busy={switching}
+      disabled={switching}
       data-copilot-tour={tourId}
-      onClick={() => {
-        setRotation((value) => value + 360);
-        void changeAppLanguage(nextLanguage);
-      }}
+      onClick={() => void switchLanguage()}
       whileTap={{ scale: 0.86 }}
       transition={{ duration: 0.12 }}
     >
@@ -38,7 +61,7 @@ export function LanguageButton({ tourId }: { tourId?: string } = {}) {
       <motion.span
         style={{ display: "grid", placeItems: "center" }}
         animate={{ rotate: rotation }}
-        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+        transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
       >
         <TranslateRounded fontSize="small" />
       </motion.span>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Box, Button, Divider, Link, Stack, Typography } from "@mui/material";
+import { Box, Button, Link, Stack, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { APP_VERSION } from "../../../../../shared/desktop/platform";
 
@@ -44,7 +44,7 @@ export function AboutSettings() {
   };
 
   return (
-    <Stack spacing={3}>
+    <Stack className="settings-page" spacing={2.5}>
       <Box
         component="img"
         src="/images/geochat-about-banner.png"
@@ -52,122 +52,91 @@ export function AboutSettings() {
         sx={{
           display: "block",
           width: "100%",
+          maxHeight: 150,
           aspectRatio: "1400 / 560",
           objectFit: "cover",
           borderRadius: 3,
           border: "1px solid",
           borderColor: "divider",
-          boxShadow: "0 12px 28px rgba(48, 44, 88, 0.12)",
         }}
       />
-      <Stack spacing={0.75}>
-        <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-          {t("common.appName")} <Typography component="span" variant="caption" color="text.secondary">v{APP_VERSION}</Typography>
-        </Typography>
-        <Typography variant="body2" color="text.secondary">{t("about.projectBody")}</Typography>
-      </Stack>
+      <Box className="settings-about-grid">
+        <Stack className="settings-about-section settings-about-wide" spacing={0.75}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 750 }}>
+            {t("common.appName")} <Typography component="span" variant="caption" color="text.secondary">v{APP_VERSION}</Typography>
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>{t("about.projectBody")}</Typography>
+        </Stack>
 
-      <Divider flexItem />
-
-      <Stack spacing={1}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t("about.author")}</Typography>
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ alignItems: "flex-start" }}>
-          <Box
-            component="img"
-            src="/images/thanks/author.jpg"
-            alt={t("about.authorImageAlt")}
-            sx={{ width: 76, height: 76, borderRadius: 2.5, objectFit: "cover", flexShrink: 0, border: "1px solid", borderColor: "divider" }}
-          />
-          <Stack spacing={1} sx={{ minWidth: 0, flex: 1 }}>
-            <Typography variant="body2" color="text.secondary">{t("about.authorBody")}</Typography>
-            <Stack direction="row" spacing={2} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 0.5 }}>
-              <Link href="https://space.bilibili.com/266909334" target="_blank" rel="noreferrer" variant="body2">
-                {t("about.bilibili")}
-              </Link>
-              <Link href="https://github.com/tiwe0" target="_blank" rel="noreferrer" variant="body2">
-                GitHub
-              </Link>
-              <Button size="small" variant="text" sx={{ p: 0, minWidth: 0, minHeight: 0, lineHeight: 1.5, verticalAlign: "baseline" }} onClick={() => void copyWechat()}>
-                {copied ? t("about.copied") : `${t("about.wechat")} · ${WECHAT_ID}`}
-              </Button>
+        <Stack className="settings-about-section" spacing={1}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t("about.author")}</Typography>
+          <Stack className="settings-about-author" direction="row" spacing={1.5}>
+            <Box
+              component="img"
+              src="/images/thanks/author.jpg"
+              alt={t("about.authorImageAlt")}
+              sx={{ width: 64, height: 64, borderRadius: 2, objectFit: "cover", flexShrink: 0, border: "1px solid", borderColor: "divider" }}
+            />
+            <Stack spacing={1} sx={{ minWidth: 0, flex: 1 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.55 }}>{t("about.authorBody")}</Typography>
+              <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 0.5 }}>
+                <Link href="https://space.bilibili.com/266909334" target="_blank" rel="noreferrer" variant="body2">{t("about.bilibili")}</Link>
+                <Link href="https://github.com/tiwe0" target="_blank" rel="noreferrer" variant="body2">GitHub</Link>
+                <Button size="small" variant="text" sx={{ p: 0, minWidth: 0, minHeight: 0, lineHeight: 1.5 }} onClick={() => void copyWechat()}>
+                  {copied ? t("about.copied") : `${t("about.wechat")} · ${WECHAT_ID}`}
+                </Button>
+              </Stack>
             </Stack>
           </Stack>
         </Stack>
-      </Stack>
 
-      <Divider flexItem />
-
-      <Stack spacing={1}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t("about.credits")}</Typography>
-        <Stack spacing={0.75}>
+        <Stack className="settings-about-section" spacing={1}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t("about.credits")}</Typography>
           {OPEN_SOURCE_CREDITS.map((credit) => (
             <Box key={credit.name}>
-              <Link href={credit.href} target="_blank" rel="noreferrer" variant="body2" sx={{ fontWeight: 600 }}>
-                {credit.name}
-              </Link>
-              <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
-                {t(`about.${credit.key}Credit`)}
-              </Typography>
+              <Link href={credit.href} target="_blank" rel="noreferrer" variant="body2" sx={{ fontWeight: 600 }}>{credit.name}</Link>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", lineHeight: 1.5 }}>{t(`about.${credit.key}Credit`)}</Typography>
             </Box>
           ))}
         </Stack>
-      </Stack>
 
-      <Stack spacing={1}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t("about.peopleCredits")}</Typography>
-        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 1 }}>
-          {PEOPLE_CREDITS.map((person) => (
-            <Box
-              key={person.name}
-              sx={{
-                minHeight: 64,
-                p: 1.25,
-                border: "1px solid",
-                borderColor: "divider",
-                borderRadius: 2,
-                backgroundColor: "rgba(255, 255, 255, 0.42)",
-                boxShadow: "0 4px 14px rgba(48, 44, 88, 0.06)",
-              }}
-            >
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>{person.name}</Typography>
-              {"note" in person && person.note ? (
-                <Typography variant="caption" color="text.secondary">{person.note}</Typography>
-              ) : null}
-            </Box>
-          ))}
-        </Box>
-      </Stack>
+        <Stack className="settings-about-section settings-about-wide" spacing={1}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t("about.peopleCredits")}</Typography>
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
+            {PEOPLE_CREDITS.map((person) => (
+              <Box key={person.name} sx={{ px: 1.25, py: 0.75, borderRadius: 1.5, backgroundColor: "primary.light" }}>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {person.name}{"note" in person && person.note ? ` · ${person.note}` : ""}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        </Stack>
 
-      <Divider flexItem />
+        {/* Pro is described, not sold, and deliberately has no key field. */}
+        <Stack className="settings-about-section" spacing={0.75}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t("about.proTitle")}</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.55 }}>{t("about.proBody")}</Typography>
+        </Stack>
 
-      {/* Pro is described, not sold, and deliberately has no key field. There
-          is no Pro service behind this build, and an input that accepts a code
-          and does nothing is the same defect as a toggle that changes nothing. */}
-      <Stack spacing={0.75}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t("about.proTitle")}</Typography>
-        <Typography variant="body2" color="text.secondary">{t("about.proBody")}</Typography>
-      </Stack>
+        <Stack className="settings-about-section" spacing={1}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t("about.sponsorTitle")}</Typography>
+          <Box
+            component="img"
+            src="/images/thanks/wechat.png"
+            alt={t("about.sponsorImageAlt")}
+            sx={{ display: "block", width: "min(100%, 200px)", height: "auto", borderRadius: 2, border: "1px solid", borderColor: "divider" }}
+          />
+        </Stack>
 
-      <Stack spacing={1}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t("about.sponsorTitle")}</Typography>
-        <Box
-          component="img"
-          src="/images/thanks/wechat.png"
-          alt={t("about.sponsorImageAlt")}
-          sx={{ display: "block", width: "min(100%, 280px)", height: "auto", borderRadius: 2, border: "1px solid", borderColor: "divider" }}
-        />
-      </Stack>
-
-      <Divider flexItem />
-
-      <Stack spacing={0.5}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t("about.licence")}</Typography>
-        {/* Verbatim from NOTICE. The vendored GeoGebra runtime is not ours and
-            carries its own terms, which is exactly what a reader needs to know. */}
-        <Typography variant="caption" color="text.secondary">{t("about.copyright")}</Typography>
-        <Typography variant="caption" color="text.secondary">{t("about.licenceBody")}</Typography>
-        <Typography variant="caption" color="text.secondary">{t("about.thirdParty")}</Typography>
-      </Stack>
+        <Stack className="settings-about-section settings-about-wide" spacing={0.5}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t("about.licence")}</Typography>
+          {/* Verbatim from NOTICE. The vendored GeoGebra runtime is not ours and carries its own terms. */}
+          <Typography variant="caption" color="text.secondary">{t("about.copyright")}</Typography>
+          <Typography variant="caption" color="text.secondary">{t("about.licenceBody")}</Typography>
+          <Typography variant="caption" color="text.secondary">{t("about.thirdParty")}</Typography>
+        </Stack>
+      </Box>
     </Stack>
   );
 }

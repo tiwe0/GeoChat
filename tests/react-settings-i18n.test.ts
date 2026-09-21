@@ -33,6 +33,9 @@ const INTERPOLATED_KEYS = [
   "settings.tabs.model",
   "settings.tabs.general",
   "settings.tabs.about",
+  "settings.tabDescriptions.model",
+  "settings.tabDescriptions.general",
+  "settings.tabDescriptions.about",
   "about.geogebraCredit",
   "about.gaokaoCredit",
   "about.conic10kCredit"
@@ -56,5 +59,45 @@ describe("react desktop settings i18n", () => {
   test("the two locales carry the same settings and about keys", () => {
     expect(keyPaths(zhCN.settings).sort()).toEqual(keyPaths(en.settings).sort());
     expect(keyPaths(zhCN.about).sort()).toEqual(keyPaths(en.about).sort());
+  });
+
+  test("general settings keeps secondary logging controls behind the enabled state", () => {
+    const source = readFileSync(
+      new URL("../src/renderer-react/src/features/desktop/settings/GeneralSettings.tsx", import.meta.url),
+      "utf8"
+    );
+    expect(source).toContain("<SettingsDisclosure open={status.enabled}>");
+    expect(source).toContain('className="settings-inline-controls settings-disclosure-controls"');
+    expect(source).not.toContain("{status.logDirectory}");
+  });
+
+  test("all progressively revealed general settings use the shared disclosure motion", () => {
+    const general = readFileSync(
+      new URL("../src/renderer-react/src/features/desktop/settings/GeneralSettings.tsx", import.meta.url),
+      "utf8"
+    );
+    const update = readFileSync(
+      new URL("../src/renderer-react/src/features/desktop/UpdateSection.tsx", import.meta.url),
+      "utf8"
+    );
+    const disclosure = readFileSync(
+      new URL("../src/renderer-react/src/features/desktop/settings/SettingsDisclosure.tsx", import.meta.url),
+      "utf8"
+    );
+    expect(general.match(/<SettingsDisclosure /g)?.length).toBe(3);
+    expect(update).toContain("<SettingsDisclosure open={!isLatest || downloading}>");
+    expect(disclosure).toContain("<AnimatePresence initial={false}>");
+    expect(disclosure).toContain('duration: 0.18');
+    expect(disclosure).toContain("useReducedMotion()");
+  });
+
+  test("the compact update row checks explicitly instead of exposing the primary install action", () => {
+    const source = readFileSync(
+      new URL("../src/renderer-react/src/features/desktop/UpdateSection.tsx", import.meta.url),
+      "utf8"
+    );
+    expect(source).toContain("update.check()");
+    expect(source).toContain('t("settings.updateLatest", { version: currentVersion })');
+    expect(source).not.toContain("update.runPrimaryAction()");
   });
 });

@@ -23,6 +23,12 @@ export type DesktopDebugAction =
     }
   | {
       id: string;
+      type: "execute_geogebra_tool";
+      toolName: string;
+      args: Record<string, unknown>;
+    }
+  | {
+      id: string;
       type: "send_message";
       conversationId?: string;
       content: string;

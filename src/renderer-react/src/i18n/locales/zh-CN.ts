@@ -337,11 +337,17 @@ export const zhCN = {
     zoomOut: "\u7f29\u5c0f",
   },
   settings: {
-    title: "\u6a21\u578b\u8bbe\u7f6e",
+    title: "\u8bbe\u7f6e",
+    navigationLabel: "\u8bbe\u7f6e\u5206\u7c7b",
     tabs: {
       model: "\u6a21\u578b",
       general: "\u901a\u7528",
       about: "\u5173\u4e8e",
+    },
+    tabDescriptions: {
+      model: "\u914d\u7f6e AI \u4f9b\u5e94\u5546\u3001\u5bc6\u94a5\u548c\u81ea\u5b9a\u4e49\u6a21\u578b",
+      general: "\u7ba1\u7406\u66f4\u65b0\u3001\u672c\u5730\u65e5\u5fd7\u548c\u8c03\u8bd5\u670d\u52a1",
+      about: "\u67e5\u770b\u9879\u76ee\u3001\u4f5c\u8005\u3001\u81f4\u8c22\u548c\u8bb8\u53ef\u4fe1\u606f",
     },
     provider: "\u4f9b\u5e94\u5546",
     model: "\u6a21\u578b",
@@ -397,6 +403,8 @@ export const zhCN = {
     restartTour: "\u91cd\u65b0\u67e5\u770b\u6559\u7a0b",
     updateTitle: "\u66f4\u65b0",
     updateCurrentVersion: "\u5f53\u524d\u7248\u672c",
+    updateLatest: "\u5f53\u524d\u5df2\u662f\u6700\u65b0\u7248\u672c\uff1a{{version}}",
+    updateVersionComparison: "\u6700\u65b0\u7248\u672c\uff1a{{latestVersion}} \u00b7 \u5f53\u524d\u7248\u672c\uff1a{{currentVersion}}",
     updateChecking: "\u68c0\u67e5\u4e2d\u2026",
     updateCheck: "\u68c0\u67e5\u66f4\u65b0",
     updateDownload: "\u4e0b\u8f7d\u66f4\u65b0",

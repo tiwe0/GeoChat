@@ -26,6 +26,18 @@ export type DesktopDebugAction =
     }
   | {
       id: string;
+      type: "execute_geogebra_tool";
+      toolName: string;
+      args: Record<string, unknown>;
+      createdAt: string;
+      status: DesktopDebugActionStatus;
+      claimedAt?: string;
+      completedAt?: string;
+      result?: unknown;
+      error?: string;
+    }
+  | {
+      id: string;
       type: "send_message";
       conversationId?: string;
       content: string;
@@ -57,6 +69,11 @@ export type DesktopDebugAction =
 export type DesktopDebugActionInput =
   | { type: "get_ui_status" }
   | { type: "export_png"; exportScale?: number; transparent?: boolean; dpi?: number }
+  | {
+      type: "execute_geogebra_tool";
+      toolName: string;
+      args: Record<string, unknown>;
+    }
   | { type: "send_message"; conversationId?: string; content: string }
   | {
       type: "select_problem";

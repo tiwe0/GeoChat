@@ -47,6 +47,16 @@ const knownTables = [
 ] as const;
 
 export function registerDesktopDebugTools(server: McpServer, { config, actions }: RegisterOptions) {
+  const queueGeoGebraTool = (toolName: string, args: Record<string, unknown>) => {
+    const action = actions.enqueue({ type: "execute_geogebra_tool", toolName, args });
+    return toolResult({
+      ok: true,
+      queued: true,
+      action,
+      note: `The Tauri renderer executes ${toolName} directly through the GeoGebra applet. Poll list_desktop_debug_actions for the result.`
+    });
+  };
+
   server.registerTool(
     "get_desktop_runtime_diagnostics",
     {
@@ -158,6 +168,144 @@ export function registerDesktopDebugTools(server: McpServer, { config, actions }
         note: "Poll list_desktop_debug_actions until this action succeeds, then read action.result."
       });
     }
+  );
+
+  server.registerTool(
+    "execute_geogebra_commands",
+    {
+      title: "Execute GeoGebra commands in the desktop canvas",
+      description:
+        "直接在已打开的桌面端 GeoGebra 画板执行命令数组，不经过模型或自然语言对话。可选择执行前清空画布，并在命令失败时恢复原构造。",
+      inputSchema: {
+        commands: z.array(z.string().min(1).max(5_000)).min(1).max(100),
+        resetBefore: z.boolean().optional(),
+        restoreOnError: z.boolean().optional(),
+        perspective: z.string().min(1).max(80).optional()
+      }
+    },
+    async ({ commands, resetBefore, restoreOnError, perspective }) => {
+      return queueGeoGebraTool("executeGeoGebraCommands", {
+        commands,
+        resetBefore,
+        restoreOnError,
+        perspective
+      });
+    }
+  );
+
+  server.registerTool(
+    "executeGeoGebraCommands",
+    {
+      title: "Execute GeoGebra commands",
+      description: "内部同名工具的 MCP 映射：直接在当前 GeoGebra applet 执行命令，不经过模型。",
+      inputSchema: {
+        commands: z.array(z.string().min(1).max(5_000)).min(1).max(100),
+        resetBefore: z.boolean().optional(),
+        restoreOnError: z.boolean().optional(),
+        perspective: z.string().min(1).max(80).optional()
+      }
+    },
+    async (args) => queueGeoGebraTool("executeGeoGebraCommands", args)
+  );
+
+  server.registerTool(
+    "resetCanvas",
+    {
+      title: "Reset GeoGebra canvas",
+      description: "内部同名工具的 MCP 映射：清空当前画布，可选切换视图。",
+      inputSchema: { perspective: z.string().min(1).max(80).optional() }
+    },
+    async (args) => queueGeoGebraTool("resetCanvas", args)
+  );
+
+  server.registerTool(
+    "getCanvasContext",
+    {
+      title: "Get GeoGebra canvas context",
+      description: "内部同名工具的 MCP 映射：读取当前画布对象、表达式和选择状态。",
+      inputSchema: { includeXml: z.boolean().optional() }
+    },
+    async (args) => queueGeoGebraTool("getCanvasContext", args)
+  );
+
+  server.registerTool(
+    "getPNGBase64",
+    {
+      title: "Export GeoGebra canvas PNG",
+      description: "内部同名工具的 MCP 映射：导出当前画布 PNG。",
+      inputSchema: {
+        exportScale: z.number().min(0.25).max(4).optional(),
+        transparent: z.boolean().optional(),
+        dpi: z.number().int().min(1).max(600).optional()
+      }
+    },
+    async (args) => queueGeoGebraTool("getPNGBase64", args)
+  );
+
+  server.registerTool(
+    "setPerspective",
+    {
+      title: "Set GeoGebra perspective",
+      description: "内部同名工具的 MCP 映射：切换 GeoGebra 视图布局。",
+      inputSchema: {
+        mode: z.string().min(1).max(80).optional(),
+        perspective: z.string().min(1).max(80).optional()
+      }
+    },
+    async (args) => queueGeoGebraTool("setPerspective", args)
+  );
+
+  server.registerTool(
+    "getValue",
+    {
+      title: "Get GeoGebra numeric value",
+      description: "读取指定 GeoGebra 对象的数值。",
+      inputSchema: { name: z.string().min(1).max(180) }
+    },
+    async (args) => queueGeoGebraTool("getValue", args)
+  );
+
+  server.registerTool(
+    "getValueString",
+    {
+      title: "Get GeoGebra value string",
+      description: "读取指定 GeoGebra 对象的格式化值。",
+      inputSchema: { name: z.string().min(1).max(180) }
+    },
+    async (args) => queueGeoGebraTool("getValueString", args)
+  );
+
+  server.registerTool(
+    "setValue",
+    {
+      title: "Set GeoGebra numeric value",
+      description: "设置指定 GeoGebra 数值对象的值。",
+      inputSchema: {
+        name: z.string().min(1).max(180),
+        value: z.number().finite()
+      }
+    },
+    async (args) => queueGeoGebraTool("setValue", args)
+  );
+
+  server.registerTool(
+    "exists",
+    {
+      title: "Check GeoGebra object existence",
+      description: "检查指定 GeoGebra 对象是否存在。",
+      inputSchema: { name: z.string().min(1).max(180) }
+    },
+    async (args) => queueGeoGebraTool("exists", args)
+  );
+
+  server.registerTool(
+    "getObjectType",
+    {
+      title: "Get GeoGebra object type",
+      description: "读取指定 GeoGebra 对象的类型。",
+      inputSchema: { name: z.string().min(1).max(180) }
+    },
+    async (args) => queueGeoGebraTool("getObjectType", args)
   );
 
   server.registerTool(

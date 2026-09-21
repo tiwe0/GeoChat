@@ -1,7 +1,9 @@
-import { Box, Button, LinearProgress, Stack, Typography } from "@mui/material";
+import RefreshRounded from "@mui/icons-material/RefreshRounded";
+import { Box, CircularProgress, IconButton, LinearProgress, Tooltip, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { useUpdateState } from "./useUpdateState";
 import type { DesktopUpdateRecommendation } from "../../../../shared/desktop-api";
+import { SettingsDisclosure } from "./settings/SettingsDisclosure";
 
 const RECOMMENDATION_KEYS: Record<DesktopUpdateRecommendation, string> = {
   none: "settings.updateRecommendations.none",
@@ -12,92 +14,93 @@ const RECOMMENDATION_KEYS: Record<DesktopUpdateRecommendation, string> = {
   error: "settings.updateRecommendations.error"
 };
 
-const ACTION_KEYS = {
-  install_shell: "settings.updateInstall",
-  download_shell: "settings.updateDownload",
-  install_app_bundle: "settings.updateInstallAppBundle",
-  check: "settings.updateCheck"
-} as const;
-
 /**
- * The update surface, kept to one line of status and one button.
- *
- * Which action is correct is decided in shared/desktop/update-state, because
- * getting it wrong is not cosmetic: an app bundle installed before the shell
- * it needs is rejected. This renders that decision rather than re-deriving it.
+ * The update surface, kept to one compact status and a refresh action.
+ * Installation and download policy stays in the desktop updater; Settings only
+ * reports the resolved state and lets the user request a fresh check.
  */
 export function UpdateSection() {
   const { t } = useTranslation();
   const update = useUpdateState();
-  const { shell, unified, supported, action, actionBusy } = update;
+  const { shell, appBundle, unified, supported, actionBusy } = update;
 
   if (!supported) {
     return (
-      <Typography variant="body2" color="text.secondary">
-        {t("settings.updateUnsupported")}
-      </Typography>
+      <Box component="section" className="settings-section">
+        <Box className="settings-section-copy">
+          <Typography variant="subtitle2" sx={{ fontWeight: 750 }}>{t("settings.updateTitle")}</Typography>
+        </Box>
+        <Box className="settings-section-controls">
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, lineHeight: 1.55 }}>
+            {t("settings.updateUnsupported")}
+          </Typography>
+        </Box>
+      </Box>
     );
   }
 
   const downloading = shell.status === "downloading";
   const percent = shell.downloadPercent;
   const failed = unified.status === "error";
-  const detail = failed ? unified.error ?? unified.message : unified.message;
+  const currentVersion = shell.currentVersion || "—";
+  const latestVersion = shell.updateVersion ?? appBundle.bundleVersion ?? currentVersion;
+  const isLatest = unified.recommendation === "none" && !failed;
+  const detail = failed ? unified.error ?? unified.message : null;
 
   return (
-    <Stack spacing={1.25}>
-      <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-        {t("settings.updateTitle")}
-      </Typography>
-
-      <Typography variant="body2" color={failed ? "error.main" : "text.secondary"}>
-        {t(RECOMMENDATION_KEYS[unified.recommendation])}
-      </Typography>
-
-      {/* The shell's own message names the version; the recommendation above
-          only names the kind of update. */}
-      {detail && detail !== t(RECOMMENDATION_KEYS[unified.recommendation]) ? (
-        <Typography variant="caption" color={failed ? "error.main" : "text.secondary"}>
-          {detail}
-        </Typography>
-      ) : null}
-
-      {downloading ? (
-        <Box>
-          <LinearProgress
-            variant={typeof percent === "number" ? "determinate" : "indeterminate"}
-            value={typeof percent === "number" ? percent : undefined}
-          />
-          {typeof percent === "number" ? (
-            <Typography variant="caption" color="text.secondary">
-              {t("settings.updateDownloading", { percent: Math.round(percent) })}
-            </Typography>
-          ) : null}
-        </Box>
-      ) : null}
-
-      <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
-        <Button
-          size="small"
-          variant={action === "check" ? "outlined" : "contained"}
-          disabled={actionBusy}
-          onClick={() => void update.runPrimaryAction()}
-        >
-          {actionBusy ? t("settings.updateChecking") : t(ACTION_KEYS[action])}
-        </Button>
-        <Typography variant="caption" color="text.secondary">
-          {t("settings.updateCurrentVersion")} {shell.currentVersion || "—"}
-          {" · "}
-          {shell.checkedAt
-            ? t("settings.updateLastChecked", { when: formatCheckedAt(shell.checkedAt) })
-            : t("settings.updateNeverChecked")}
-        </Typography>
+    <Box component="section" className="settings-section">
+      <Box className="settings-section-copy">
+        <Typography variant="subtitle2" sx={{ fontWeight: 750 }}>{t("settings.updateTitle")}</Typography>
       </Box>
-    </Stack>
-  );
-}
 
-function formatCheckedAt(value: string) {
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? new Date(parsed).toLocaleString() : value;
+      <Box className="settings-section-controls settings-update-control">
+        <Box className="settings-update-copy">
+          <Typography variant="body2" color={failed ? "error.main" : "text.primary"} sx={{ fontWeight: 600, lineHeight: 1.45 }}>
+            {isLatest
+              ? t("settings.updateLatest", { version: currentVersion })
+              : t(RECOMMENDATION_KEYS[unified.recommendation])}
+          </Typography>
+          <SettingsDisclosure open={!isLatest || downloading}>
+            <Box className="settings-update-detail">
+              {!isLatest && !failed ? (
+                <Typography variant="caption" color="text.secondary">
+                  {t("settings.updateVersionComparison", { latestVersion, currentVersion })}
+                </Typography>
+              ) : detail ? (
+                <Typography variant="caption" color="error.main">{detail}</Typography>
+              ) : null}
+
+              {downloading ? (
+                <Box className="settings-update-progress">
+                  <LinearProgress
+                    variant={typeof percent === "number" ? "determinate" : "indeterminate"}
+                    value={typeof percent === "number" ? percent : undefined}
+                  />
+                  {typeof percent === "number" ? (
+                    <Typography variant="caption" color="text.secondary">
+                      {t("settings.updateDownloading", { percent: Math.round(percent) })}
+                    </Typography>
+                  ) : null}
+                </Box>
+              ) : null}
+            </Box>
+          </SettingsDisclosure>
+        </Box>
+
+        <Tooltip title={actionBusy ? t("settings.updateChecking") : t("settings.updateCheck")} arrow>
+          <span className="settings-row-action settings-tooltip-action">
+            <IconButton
+              className="settings-icon-action"
+              size="small"
+              aria-label={t("settings.updateCheck")}
+              disabled={actionBusy}
+              onClick={() => void update.check()}
+            >
+              {actionBusy ? <CircularProgress size={18} thickness={4.5} /> : <RefreshRounded fontSize="small" />}
+            </IconButton>
+          </span>
+        </Tooltip>
+      </Box>
+    </Box>
+  );
 }

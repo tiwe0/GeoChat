@@ -9,8 +9,10 @@ import {
   Paper,
   Stack,
   Typography,
+  useTheme,
 } from "@mui/material";
 import AddCircleOutlineRounded from "@mui/icons-material/AddCircleOutlineRounded";
+import ArrowBackRounded from "@mui/icons-material/ArrowBackRounded";
 import CalculateRounded from "@mui/icons-material/CalculateRounded";
 import ConstructionRounded from "@mui/icons-material/ConstructionRounded";
 import CropSquareRounded from "@mui/icons-material/CropSquareRounded";
@@ -30,7 +32,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { Streamdown } from "streamdown";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { summarizeAgentReasoning } from "@geochat-ai/app";
 import { useAgentRunChat } from "../hooks/useAgentRunChat";
 import { formatAgentRunError } from "../features/agent-run/errorMessage";
@@ -325,6 +327,8 @@ export function AssistantPanel({
   onConversationStarted?: () => void;
 }) {
   const { t, i18n } = useTranslation();
+  const appTheme = useTheme();
+  const reduceMotion = useReducedMotion();
   const streamdownTranslations = useStreamdownTranslations();
   const [input, setInput] = useState("");
   const [contextMenu, setContextMenu] = useState<PanelContextMenuState | null>(null);
@@ -539,7 +543,7 @@ export function AssistantPanel({
   } = conversationHistory;
   const panelTitle = panelView === "chat"
     ? currentConversationTitle || (currentConversationId ? t("history.untitled") : t("history.newConversation"))
-    : t("panel.user");
+    : t("settings.title");
   const toastError = error
     ? formatAgentRunError(error, t)
     : submissionError ?? conversationHistoryError ?? blackboard.error ?? authError;
@@ -661,6 +665,25 @@ export function AssistantPanel({
     setPanelView((view) => view === "chat" ? "user" : "chat");
   }
 
+  async function transitionLanguage(changeLanguage: () => Promise<void>) {
+    const panel = panelRef.current;
+    await changeLanguage();
+    if (reduceMotion || !panel) return;
+
+    const surfaces = panel.querySelectorAll<HTMLElement>("[data-language-transition-surface]");
+    await Promise.all(Array.from(surfaces, async (surface) => {
+      const animation = surface.animate(
+        [{ opacity: 0.76 }, { opacity: 1 }],
+        { duration: 140, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+      );
+      try {
+        await animation.finished;
+      } catch {
+        // A new panel state may replace the surface while the brief fade runs.
+      }
+    }));
+  }
+
   return (
     <MotionPaper
       ref={panelRef}
@@ -754,6 +777,7 @@ export function AssistantPanel({
       ) : (
       <Box
         component="header"
+        data-language-transition-surface
         onPointerDown={panelWindow.startDragging}
         onPointerMove={panelWindow.moveDragging}
         onPointerUp={panelWindow.stopDragging}
@@ -776,12 +800,7 @@ export function AssistantPanel({
         }}
       >
         <Stack direction="row" spacing={1} sx={{ minWidth: 0, flex: 1, minHeight: 36, alignItems: "center" }}>
-          {/* The brand mark is identity, not a control, in every view. It used
-              to double as the Settings entry, labelled "user information" — a
-              logo reads as decoration, so the one screen a keyless first run
-              must reach was effectively hidden. Settings is a labelled gear on
-              the right, and Settings carries its own Back; a second one here
-              would be two controls for one action. */}
+          {/* The brand mark is identity, not a control, in every view. */}
           <Box
             aria-hidden
             sx={{ width: 30, height: 30, flex: "0 0 auto", display: "grid", placeItems: "center" }}
@@ -859,7 +878,7 @@ export function AssistantPanel({
               >
                 <FactCheckRounded fontSize="small" />
               </IconButton>
-              <LanguageButton tourId="language" />
+              <LanguageButton tourId="language" transitionLanguage={transitionLanguage} />
               <IconButton
                 type="button"
                 size="small"
@@ -871,6 +890,18 @@ export function AssistantPanel({
                 <SettingsRounded fontSize="small" />
               </IconButton>
             </>
+          )}
+          {panelView === "user" && (
+            <IconButton
+              type="button"
+              size="small"
+              onClick={togglePanelView}
+              aria-label={t("settings.back")}
+              title={t("settings.back")}
+              data-copilot-no-drag
+            >
+              <ArrowBackRounded fontSize="small" />
+            </IconButton>
           )}
           <IconButton
             type="button"
@@ -924,6 +955,7 @@ export function AssistantPanel({
       {!collapsed && (
         <AnimatePresence initial={false} mode="wait">
           <motion.div
+            data-language-transition-surface
             key={panelView === "chat" ? "chat" : account ? "user" : "login"}
             initial={{ opacity: 0, x: panelView === "chat" ? -12 : 12 }}
             animate={{ opacity: 1, x: 0 }}
@@ -932,7 +964,7 @@ export function AssistantPanel({
             style={{ display: "flex", flex: 1, minHeight: 0, flexDirection: "column", overflow: "hidden" }}
           >
           {panelView === "user" ? (
-            <SettingsPanel mcp={mcp} onClose={() => setPanelView("chat")} onRestartTour={restartOnboardingTour} />
+            <SettingsPanel mcp={mcp} onRestartTour={restartOnboardingTour} />
           ) : (
         <>
           <Box
@@ -1231,7 +1263,7 @@ export function AssistantPanel({
             skip: t("tour.skip"),
           }}
           options={{
-            primaryColor: "#2563eb",
+            primaryColor: appTheme.palette.primary.main,
             overlayColor: "rgba(17, 24, 39, .58)",
             overlayClickAction: false,
             spotlightPadding: 6,

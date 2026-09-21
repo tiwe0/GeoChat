@@ -9,6 +9,7 @@ use crate::{
 pub(crate) struct McpRuntime {
     pub(crate) enabled: bool,
     child: Option<Child>,
+    port: u16,
     last_error: Option<String>,
 }
 
@@ -17,6 +18,7 @@ impl McpRuntime {
         Self {
             enabled: false,
             child: None,
+            port: desktop_mcp_port(),
             last_error: None,
         }
     }
@@ -67,7 +69,7 @@ impl McpRuntime {
             }
         }
 
-        let port = desktop_mcp_port();
+        let port = self.port;
         DesktopMcpStatus {
             available: true,
             enabled: self.enabled,
@@ -92,8 +94,9 @@ impl McpRuntime {
             return;
         }
         match start_desktop_mcp(state) {
-            Ok(child) => {
+            Ok((child, port)) => {
                 self.last_error = None;
+                self.port = port;
                 self.child = Some(child);
             }
             Err(error) => {

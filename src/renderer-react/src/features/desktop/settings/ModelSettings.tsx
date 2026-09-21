@@ -4,6 +4,7 @@ import DeleteOutlineRounded from "@mui/icons-material/DeleteOutlineRounded";
 import NetworkCheckRounded from "@mui/icons-material/NetworkCheckRounded";
 import {
   Button,
+  Box,
   CircularProgress,
   FormControlLabel,
   IconButton,
@@ -31,6 +32,7 @@ import {
 import type { CustomProviderConfig } from "../../../../../shared/desktop/workbench-types";
 import { discoverProviderModels } from "../../models/modelDiscovery";
 import { backendAuthToken, backendOrigin } from "../runtime";
+import { SettingsHint } from "./SettingsHint";
 
 type KeyProbeState =
   | { status: "idle" }
@@ -169,178 +171,182 @@ export function ModelSettings() {
     : "";
 
   return (
-    <Stack spacing={2.5}>
-      <TextField
-        select
-        size="small"
-        label={t("settings.provider")}
-        value={provider}
-        onChange={(event) => selectProvider(event.target.value)}
-      >
-        {providers.map((entry) => (
-          <MenuItem key={entry.value} value={entry.value}>
-            {entry.label}
-          </MenuItem>
-        ))}
-      </TextField>
+    <Box className="settings-page settings-model-page">
+      <Stack className="settings-model-form" spacing={2.25}>
+        <TextField
+          select
+          size="small"
+          label={t("settings.provider")}
+          value={provider}
+          onChange={(event) => selectProvider(event.target.value)}
+        >
+          {providers.map((entry) => (
+            <MenuItem key={entry.value} value={entry.value}>
+              {entry.label}
+            </MenuItem>
+          ))}
+        </TextField>
 
-      {isCustom ? (
-        <>
-          <TextField
-            size="small"
-            label={t("settings.customProviderName")}
-            value={customProvider.name}
-            error={customValidationError === "nameRequired"}
-            onChange={(event) => updateCustomProvider({ ...customProvider, name: event.target.value })}
-          />
-          <TextField
-            size="small"
-            type="url"
-            label={t("settings.customBaseUrl")}
-            value={customProvider.baseUrl}
-            placeholder="https://api.example.com/v1"
-            error={customValidationError === "baseUrlInvalid"}
-            helperText={customValidationError === "baseUrlInvalid" ? customValidationMessage : t("settings.customBaseUrlRequired")}
-            onChange={(event) => updateCustomProvider({ ...customProvider, baseUrl: event.target.value })}
-          />
-        </>
-      ) : null}
+        {isCustom ? (
+          <>
+            <TextField
+              size="small"
+              label={t("settings.customProviderName")}
+              value={customProvider.name}
+              error={customValidationError === "nameRequired"}
+              onChange={(event) => updateCustomProvider({ ...customProvider, name: event.target.value })}
+            />
+            <TextField
+              size="small"
+              type="url"
+              label={t("settings.customBaseUrl")}
+              value={customProvider.baseUrl}
+              placeholder="https://api.example.com/v1"
+              error={customValidationError === "baseUrlInvalid"}
+              helperText={customValidationError === "baseUrlInvalid" ? customValidationMessage : undefined}
+              onChange={(event) => updateCustomProvider({ ...customProvider, baseUrl: event.target.value })}
+            />
+          </>
+        ) : null}
 
-      <ApiKeyField
-        apiKey={apiKey}
-        keyProbe={keyProbe}
-        probeDisabled={isCustom && !isValidRequiredBaseUrl(customProvider.baseUrl)}
-        onChange={(value) => {
-          setApiKey(value);
-          setSaved(false);
-          resetKeyProbe();
-        }}
-        onProbe={() => void probeApiKey()}
-      />
+        <ApiKeyField
+          apiKey={apiKey}
+          keyProbe={keyProbe}
+          probeDisabled={isCustom && !isValidRequiredBaseUrl(customProvider.baseUrl)}
+          onChange={(value) => {
+            setApiKey(value);
+            setSaved(false);
+            resetKeyProbe();
+          }}
+          onProbe={() => void probeApiKey()}
+        />
 
-      {isCustom ? (
-        <>
-          <TextField
-            select
-            size="small"
-            label={t("settings.customProtocol")}
-            value={customProvider.protocol}
-            onChange={(event) => updateCustomProvider({
-              ...customProvider,
-              protocol: event.target.value as AgentModelProtocol,
-            })}
-          >
-            {CUSTOM_PROTOCOLS.map((protocol) => (
-              <MenuItem key={protocol} value={protocol}>
-                {protocolLabel(protocol, t)}
-              </MenuItem>
-            ))}
-          </TextField>
+        {isCustom ? (
+          <>
+            <TextField
+              select
+              size="small"
+              label={t("settings.customProtocol")}
+              value={customProvider.protocol}
+              onChange={(event) => updateCustomProvider({
+                ...customProvider,
+                protocol: event.target.value as AgentModelProtocol,
+              })}
+            >
+              {CUSTOM_PROTOCOLS.map((protocol) => (
+                <MenuItem key={protocol} value={protocol}>
+                  {protocolLabel(protocol, t)}
+                </MenuItem>
+              ))}
+            </TextField>
 
-          <Stack spacing={1.25}>
-            <Stack direction="row" spacing={1} sx={{ alignItems: "center", justifyContent: "space-between" }}>
-              <Stack spacing={0.25}>
-                <Typography variant="subtitle2">{t("settings.customModels")}</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {t("settings.customModelsDescription")}
-                </Typography>
-              </Stack>
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<AddRounded />}
-                onClick={() => updateCustomProvider({
-                  ...customProvider,
-                  models: [...customProvider.models, { name: "", callName: "", supportsImages: false }],
-                })}
-              >
-                {t("settings.addModel")}
-              </Button>
-            </Stack>
-
-            {customProvider.models.map((model, index) => {
-              const duplicateCallName = model.callName.trim() !== "" && customProvider.models.some(
-                (candidate, candidateIndex) => candidateIndex !== index && candidate.callName.trim() === model.callName.trim(),
-              );
-              const builtinConflict = BUILTIN_MODEL_IDS.has(model.callName.trim());
-              return (
-                <Stack
-                  key={index}
-                  spacing={1}
-                  sx={{ p: 1.5, border: 1, borderColor: "divider", borderRadius: 1.5 }}
-                >
-                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ alignItems: { sm: "flex-start" } }}>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      label={t("settings.customModelName")}
-                      value={model.name}
-                      error={customValidationError === "modelFieldsRequired" && !model.name.trim()}
-                      onChange={(event) => updateCustomModel(customProvider, index, { name: event.target.value }, updateCustomProvider)}
-                    />
-                    <TextField
-                      fullWidth
-                      size="small"
-                      label={t("settings.customModelCallName")}
-                      value={model.callName}
-                      error={duplicateCallName || builtinConflict || (customValidationError === "modelFieldsRequired" && !model.callName.trim())}
-                      helperText={builtinConflict
-                        ? t("settings.customModelCallNameConflict")
-                        : duplicateCallName
-                          ? t("settings.customValidation.duplicateCallName")
-                          : undefined}
-                      onChange={(event) => updateCustomModel(customProvider, index, { callName: event.target.value }, updateCustomProvider)}
-                    />
-                    <Tooltip title={t("settings.removeModel")}>
-                      <IconButton
-                        aria-label={t("settings.removeModel")}
-                        color="error"
-                        onClick={() => updateCustomProvider({
-                          ...customProvider,
-                          models: customProvider.models.filter((_, modelIndex) => modelIndex !== index),
-                        })}
-                      >
-                        <DeleteOutlineRounded fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Stack>
-                  <FormControlLabel
-                    control={(
-                      <Switch
-                        size="small"
-                        checked={model.supportsImages}
-                        onChange={(event) => updateCustomModel(
-                          customProvider,
-                          index,
-                          { supportsImages: event.target.checked },
-                          updateCustomProvider,
-                        )}
-                      />
-                    )}
-                    label={t("settings.customModelSupportsImages")}
-                  />
+            <Stack spacing={1.25} sx={{ pt: 2, borderTop: 1, borderColor: "divider" }}>
+              <Stack className="settings-custom-model-heading" direction="row" spacing={1}>
+                <Stack spacing={0.25}>
+                  <SettingsHint text={t("settings.customModelsDescription")}>
+                    <Typography component="span" variant="subtitle2">{t("settings.customModels")}</Typography>
+                  </SettingsHint>
                 </Stack>
-              );
-            })}
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<AddRounded />}
+                  onClick={() => updateCustomProvider({
+                    ...customProvider,
+                    models: [...customProvider.models, { name: "", callName: "", supportsImages: false }],
+                  })}
+                >
+                  {t("settings.addModel")}
+                </Button>
+              </Stack>
 
-            {customValidationError ? (
-              <Typography variant="caption" color="error.main">
-                {customValidationMessage}
-              </Typography>
-            ) : null}
-          </Stack>
-        </>
-      ) : null}
+              {customProvider.models.map((model, index) => {
+                const duplicateCallName = model.callName.trim() !== "" && customProvider.models.some(
+                  (candidate, candidateIndex) => candidateIndex !== index && candidate.callName.trim() === model.callName.trim(),
+                );
+                const builtinConflict = BUILTIN_MODEL_IDS.has(model.callName.trim());
+                return (
+                  <Stack
+                    key={index}
+                    spacing={1}
+                    sx={{ p: 1.5, border: 1, borderColor: "divider", borderRadius: 1.5 }}
+                  >
+                    <Stack className="settings-custom-model-fields" direction="row" spacing={1}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        label={t("settings.customModelName")}
+                        value={model.name}
+                        error={customValidationError === "modelFieldsRequired" && !model.name.trim()}
+                        onChange={(event) => updateCustomModel(customProvider, index, { name: event.target.value }, updateCustomProvider)}
+                      />
+                      <TextField
+                        fullWidth
+                        size="small"
+                        label={t("settings.customModelCallName")}
+                        value={model.callName}
+                        error={duplicateCallName || builtinConflict || (customValidationError === "modelFieldsRequired" && !model.callName.trim())}
+                        helperText={builtinConflict
+                          ? t("settings.customModelCallNameConflict")
+                          : duplicateCallName
+                            ? t("settings.customValidation.duplicateCallName")
+                            : undefined}
+                        onChange={(event) => updateCustomModel(customProvider, index, { callName: event.target.value }, updateCustomProvider)}
+                      />
+                      <Tooltip title={t("settings.removeModel")}>
+                        <IconButton
+                          aria-label={t("settings.removeModel")}
+                          color="error"
+                          onClick={() => updateCustomProvider({
+                            ...customProvider,
+                            models: customProvider.models.filter((_, modelIndex) => modelIndex !== index),
+                          })}
+                        >
+                          <DeleteOutlineRounded fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Stack>
+                    <FormControlLabel
+                      control={(
+                        <Switch
+                          size="small"
+                          checked={model.supportsImages}
+                          onChange={(event) => updateCustomModel(
+                            customProvider,
+                            index,
+                            { supportsImages: event.target.checked },
+                            updateCustomProvider,
+                          )}
+                        />
+                      )}
+                      label={t("settings.customModelSupportsImages")}
+                    />
+                  </Stack>
+                );
+              })}
 
-      <Button
-        variant="contained"
-        size="small"
-        onClick={save}
-        disabled={saved || (isCustom && customValidationError !== null)}
-      >
-        {saved ? t("settings.saved") : t("settings.save")}
-      </Button>
-    </Stack>
+              {customValidationError ? (
+                <Typography variant="caption" color="error.main">
+                  {customValidationMessage}
+                </Typography>
+              ) : null}
+            </Stack>
+          </>
+        ) : null}
+      </Stack>
+
+      <Box className="settings-model-actions">
+        <Button
+          variant="contained"
+          size="small"
+          onClick={save}
+          disabled={saved || (isCustom && customValidationError !== null)}
+          sx={{ minWidth: 120 }}
+        >
+          {saved ? t("settings.saved") : t("settings.save")}
+        </Button>
+      </Box>
+    </Box>
   );
 }
 
@@ -368,9 +374,7 @@ function ApiKeyField(props: {
               ? t("settings.keyValid")
               : props.keyProbe.status === "invalid"
                 ? t("settings.keyInvalid", { message: props.keyProbe.message })
-                : props.apiKey.trim()
-                  ? t("settings.keyUnverified")
-                  : t("settings.keyMissing")
+                : undefined
         }
         slotProps={{
           formHelperText: {

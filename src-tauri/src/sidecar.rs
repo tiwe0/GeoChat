@@ -107,10 +107,10 @@ pub(crate) fn start_backend(
     })
 }
 
-pub(crate) fn start_desktop_mcp(state: &DesktopState) -> Result<Child, String> {
+pub(crate) fn start_desktop_mcp(state: &DesktopState) -> Result<(Child, u16), String> {
     let entry = resolve_desktop_mcp_entry()?;
     let project_root = project_root()?;
-    let port = desktop_mcp_port();
+    let port = find_available_loopback_port(desktop_mcp_port())?;
     let backend_base_url = {
         let backend = state.backend.lock().map_err(|error| error.to_string())?;
         backend.base_url.clone()
@@ -137,7 +137,7 @@ pub(crate) fn start_desktop_mcp(state: &DesktopState) -> Result<Child, String> {
     let mut child = spawn_with_retry(&mut command, "desktop MCP")?;
     capture_child_output(&mut child, "mcp");
     log::info!(target: "geochat::mcp", "Desktop MCP process started on 127.0.0.1:{port}");
-    Ok(child)
+    Ok((child, port))
 }
 
 fn capture_child_output(child: &mut Child, service: &'static str) {
@@ -467,7 +467,20 @@ fn port_from_url(value: &str) -> Option<u16> {
 
 #[cfg(test)]
 mod tests {
-    use super::{child_output_level, should_use_built_backend_for};
+    use std::net::TcpListener;
+
+    use super::{child_output_level, find_available_loopback_port, should_use_built_backend_for};
+
+    #[test]
+    fn available_port_skips_an_occupied_preferred_port() {
+        let occupied = TcpListener::bind(("127.0.0.1", 0)).expect("bind occupied test port");
+        let preferred = occupied.local_addr().expect("read occupied port").port();
+        let selected = find_available_loopback_port(preferred).expect("select fallback port");
+        assert_ne!(selected, preferred);
+
+        let _selected =
+            TcpListener::bind(("127.0.0.1", selected)).expect("selected port remains bindable");
+    }
 
     #[test]
     fn sidecar_output_preserves_explicit_log_levels() {

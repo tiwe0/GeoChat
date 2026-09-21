@@ -53,6 +53,11 @@ export function createDesktopDebugActionExecutor(input: {
       });
     }
 
+    if (action.type === "execute_geogebra_tool") {
+      if (!controller?.ready) throw new Error("The GeoGebra canvas is not ready.");
+      return controller.executeTool(action.toolName, action.args);
+    }
+
     if (action.type === "send_message") {
       const content = action.content.trim();
       if (!content) throw new Error("send_message needs non-empty content.");

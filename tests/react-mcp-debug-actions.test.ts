@@ -74,6 +74,38 @@ describe("react MCP debug action executor", () => {
     await expect(execute({ id: "1", type: "export_png" })).rejects.toThrow(/not ready/);
   });
 
+  test("executes GeoGebra commands directly without sending a chat message", async () => {
+    const calls: Array<[string, unknown]> = [];
+    const h = harness({
+      controller: {
+        ready: true,
+        executeTool: async (name: string, args: unknown) => {
+          calls.push([name, args]);
+          return { ok: true };
+        }
+      } as Partial<GeoGebraController>
+    });
+
+    const result = await h.execute({
+      id: "1",
+      type: "execute_geogebra_tool",
+      toolName: "executeGeoGebraCommands",
+      args: {
+        commands: ["O=(0,0)", "c=Circle(O,3)"],
+        resetBefore: true,
+        restoreOnError: true
+      }
+    }) as Record<string, unknown>;
+
+    expect(result.ok).toBe(true);
+    expect(h.sent).toEqual([]);
+    expect(calls).toEqual([["executeGeoGebraCommands", {
+      commands: ["O=(0,0)", "c=Circle(O,3)"],
+      resetBefore: true,
+      restoreOnError: true
+    }]]);
+  });
+
   test("sends a message through the conversation it names", async () => {
     const h = harness({ conversationId: null, controller: { ready: true } });
     const result = await h.execute({ id: "1", type: "send_message", conversationId: "conv_a", content: " draw a square " }) as Record<string, unknown>;

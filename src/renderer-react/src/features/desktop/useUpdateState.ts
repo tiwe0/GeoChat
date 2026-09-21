@@ -65,8 +65,12 @@ export function useUpdateState() {
     aliveRef.current = true;
     const api = window.geochatDesktop;
     if (!api) return;
-    void api.getUpdateState().then((next) => { if (aliveRef.current) applyShell(next); }).catch(() => undefined);
-    void api.getAppBundleUpdateState?.().then((next) => { if (aliveRef.current) applyAppBundle(next); }).catch(() => undefined);
+    void api.getUpdateState().then((next) => { if (aliveRef.current) applyShell(next); }).catch((error) => {
+      console.error("[ERROR] Failed to read shell update state", error);
+    });
+    void api.getAppBundleUpdateState?.().then((next) => { if (aliveRef.current) applyAppBundle(next); }).catch((error) => {
+      console.error("[ERROR] Failed to read app bundle update state", error);
+    });
     // The shell pushes progress during download, so polling is unnecessary.
     const unsubscribeShell = api.onUpdateState?.((next) => { if (aliveRef.current) applyShell(next); });
     const unsubscribeAppBundle = api.onAppBundleUpdateState?.((next) => { if (aliveRef.current) applyAppBundle(next); });
@@ -84,6 +88,7 @@ export function useUpdateState() {
     try {
       await action(api);
     } catch (error) {
+      console.error("[ERROR] Caught exception at src/renderer-react/src/features/desktop/useUpdateState.ts:86", error);
       if (!aliveRef.current) return;
       const message = error instanceof Error ? error.message : String(error);
       // A failed action leaves the last known state in place and reports the

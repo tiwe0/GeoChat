@@ -1,6 +1,6 @@
 use std::{
     env, fs,
-    io::{ErrorKind, Read, Write},
+    io::{BufRead, BufReader, ErrorKind, Read, Write},
     net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
@@ -10,7 +10,9 @@ use std::{
 
 use crate::{
     app_bundle::{bundled_resource_root, resolve_active_app_bundle},
-    desktop_database_path, DesktopState,
+    desktop_database_path,
+    logging::sanitize_message,
+    DesktopState,
 };
 
 #[cfg(target_os = "windows")]
@@ -55,6 +57,18 @@ pub(crate) fn start_backend(
     let bundled_skill_dirs = desktop_bundled_agent_skill_dirs(&resource_root)?;
     let base_url = format!("http://127.0.0.1:{port}");
 
+    log::info!(
+        target: "geochat::backend",
+        "Starting local backend on 127.0.0.1:{port}"
+    );
+    log::debug!(
+        target: "geochat::backend",
+        "Backend runtime={} entry={} cwd={}",
+        runtime.display(),
+        entry.display(),
+        cwd.display()
+    );
+
     let mut command = Command::new(&runtime);
     command
         .arg(&entry)
@@ -71,8 +85,8 @@ pub(crate) fn start_backend(
             env::var("GEOCHAT_BACKEND_TOOL_AUTO_STEP_LIMIT").unwrap_or_else(|_| "24".to_string()),
         )
         .stdin(Stdio::null())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit());
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
 
     let mut child = spawn_with_retry(
         &mut command,
@@ -82,8 +96,10 @@ pub(crate) fn start_backend(
             entry.display()
         ),
     )?;
+    capture_child_output(&mut child, "backend");
 
     wait_for_backend_health(&base_url, &mut child, Duration::from_millis(12_000))?;
+    log::info!(target: "geochat::backend", "Local backend health check passed");
 
     Ok(BackendRuntime {
         base_url,
@@ -116,9 +132,64 @@ pub(crate) fn start_desktop_mcp(state: &DesktopState) -> Result<Child, String> {
             &state.local_backend_auth_token,
         )
         .stdin(Stdio::null())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit());
-    spawn_with_retry(&mut command, "desktop MCP")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = spawn_with_retry(&mut command, "desktop MCP")?;
+    capture_child_output(&mut child, "mcp");
+    log::info!(target: "geochat::mcp", "Desktop MCP process started on 127.0.0.1:{port}");
+    Ok(child)
+}
+
+fn capture_child_output(child: &mut Child, service: &'static str) {
+    if let Some(stdout) = child.stdout.take() {
+        pipe_child_output(stdout, service, false);
+    }
+    if let Some(stderr) = child.stderr.take() {
+        pipe_child_output(stderr, service, true);
+    }
+}
+
+fn pipe_child_output<R>(reader: R, service: &'static str, is_stderr: bool)
+where
+    R: Read + Send + 'static,
+{
+    thread::spawn(move || {
+        for line in BufReader::new(reader).lines() {
+            let Ok(line) = line else {
+                break;
+            };
+            if is_stderr {
+                eprintln!("{line}");
+            } else {
+                println!("{line}");
+            }
+            log::log!(
+                target: "geochat::sidecar",
+                child_output_level(&line, is_stderr),
+                "[{service}] {}",
+                sanitize_message(&line)
+            );
+        }
+    });
+}
+
+fn child_output_level(line: &str, is_stderr: bool) -> log::Level {
+    let normalized = line.trim_start().to_ascii_lowercase();
+    if normalized.starts_with("[error]") || normalized.starts_with("error:") {
+        log::Level::Error
+    } else if normalized.starts_with("[warn]") || normalized.starts_with("warn:") {
+        log::Level::Warn
+    } else if normalized.starts_with("[debug]") || normalized.starts_with("debug:") {
+        log::Level::Debug
+    } else if normalized.starts_with("[trace]") || normalized.starts_with("trace:") {
+        log::Level::Trace
+    } else if normalized.starts_with("[info]") || normalized.starts_with("info:") {
+        log::Level::Info
+    } else if is_stderr {
+        log::Level::Error
+    } else {
+        log::Level::Info
+    }
 }
 
 pub(crate) fn project_root() -> Result<PathBuf, String> {
@@ -150,6 +221,11 @@ fn spawn_with_retry(command: &mut Command, label: &str) -> Result<Child, String>
             Err(error)
                 if error.kind() == ErrorKind::WouldBlock || error.raw_os_error() == Some(35) =>
             {
+                log::warn!(
+                    target: "geochat::sidecar",
+                    "Launch attempt {} for {label} was temporarily blocked; retrying",
+                    attempt + 1
+                );
                 last_error = Some(error);
                 thread::sleep(Duration::from_millis(120 * (attempt + 1)));
             }
@@ -317,6 +393,11 @@ fn wait_for_backend_health(
 ) -> Result<(), String> {
     let started = Instant::now();
     while started.elapsed() < timeout {
+        log::trace!(
+            target: "geochat::backend",
+            "Waiting for backend health check elapsed_ms={}",
+            started.elapsed().as_millis()
+        );
         if let Some(status) = child.try_wait().map_err(|error| error.to_string())? {
             return Err(format!(
                 "Backend exited before health check passed: {status}"
@@ -386,7 +467,27 @@ fn port_from_url(value: &str) -> Option<u16> {
 
 #[cfg(test)]
 mod tests {
-    use super::should_use_built_backend_for;
+    use super::{child_output_level, should_use_built_backend_for};
+
+    #[test]
+    fn sidecar_output_preserves_explicit_log_levels() {
+        assert_eq!(
+            child_output_level("[ERROR] failed", false),
+            log::Level::Error
+        );
+        assert_eq!(
+            child_output_level("[WARN] fallback", true),
+            log::Level::Warn
+        );
+        assert_eq!(child_output_level("[INFO] ready", true), log::Level::Info);
+        assert_eq!(
+            child_output_level("[DEBUG] state", false),
+            log::Level::Debug
+        );
+        assert_eq!(child_output_level("[TRACE] step", false), log::Level::Trace);
+        assert_eq!(child_output_level("plain stderr", true), log::Level::Error);
+        assert_eq!(child_output_level("plain stdout", false), log::Level::Info);
+    }
 
     #[test]
     fn release_builds_use_packaged_backend_by_default() {

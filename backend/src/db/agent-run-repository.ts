@@ -671,7 +671,8 @@ function parseAgentRunLedgerPayload(value: unknown) {
   if (typeof value === "string") {
     try {
       return JSON.parse(value);
-    } catch {
+    } catch (caughtError) {
+      console.error("[ERROR] Caught exception at backend/src/db/agent-run-repository.ts:674", caughtError);
       return undefined;
     }
   }

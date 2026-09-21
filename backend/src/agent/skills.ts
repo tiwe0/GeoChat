@@ -360,7 +360,8 @@ async function remoteSkillRootsFromEnv(env: NodeJS.ProcessEnv) {
           const manifest = await fetchRemoteSkillManifest(url);
           await cacheRemoteManifestSkills(writableCacheDir, manifest);
         } catch (error) {
-          console.warn(`Failed to refresh remote agent skills from ${url}: ${error instanceof Error ? error.message : String(error)}`);
+          console.error("[ERROR] Caught exception at backend/src/agent/skills.ts:362", error);
+          console.warn(`[WARN] Failed to refresh remote agent skills: ${error instanceof Error ? error.message : String(error)}`);
         }
       })
     );
@@ -760,7 +761,8 @@ async function canRead(path: string) {
   try {
     await access(path, constants.R_OK);
     return true;
-  } catch {
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at backend/src/agent/skills.ts:763", caughtError);
     return false;
   }
 }

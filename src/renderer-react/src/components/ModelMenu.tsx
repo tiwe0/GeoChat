@@ -22,8 +22,11 @@ const compactProviderLabels: Record<string, string> = {
   qwen: "Qwen",
 };
 
-function providerLabel(provider: string) {
-  return compactProviderLabels[provider] ?? providerLabels.get(provider) ?? provider.replace(/[-_]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+function providerLabel(provider: string, options?: readonly RuntimeModelOption[]) {
+  return options?.find((option) => option.providerLabel)?.providerLabel
+    ?? compactProviderLabels[provider]
+    ?? providerLabels.get(provider)
+    ?? provider.replace(/[-_]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function modelIdLabel(option: RuntimeModelOption) {
@@ -240,7 +243,7 @@ export function ModelMenu({ value, models, disabled, thinkingEnabled, thinkingEf
                     <MenuItem key={provider} onClick={() => setProviderView(provider)} sx={{ minHeight: 44, px: 1.25, borderRadius: 0.75 }}>
                       <Box sx={{ width: 8, height: 8, mr: 1, borderRadius: "50%", bgcolor: "primary.main", opacity: 0.75 }} />
                       <ListItemText
-                        primary={providerLabel(provider)}
+                        primary={providerLabel(provider, options)}
                         secondary={current ? current.label : t("model.modelCount", { count: options.length })}
                         slotProps={{
                           primary: { noWrap: true, sx: { fontSize: "0.82rem", fontWeight: 700 } },
@@ -261,7 +264,7 @@ export function ModelMenu({ value, models, disabled, thinkingEnabled, thinkingEf
                   <>
                     <MenuItem onClick={() => setProviderView(null)} sx={{ minHeight: 34, px: 1, color: "text.secondary" }}>
                       <ArrowBackRounded sx={{ mr: 0.75, fontSize: 17 }} />
-                      <Typography variant="caption" sx={{ fontWeight: 700 }}>{providerLabel(providerView)}</Typography>
+                      <Typography variant="caption" sx={{ fontWeight: 700 }}>{providerLabel(providerView, group.options)}</Typography>
                     </MenuItem>
                     {group.options.map((option) => {
                       const selected = option.id === value;

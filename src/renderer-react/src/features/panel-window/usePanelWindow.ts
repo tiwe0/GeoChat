@@ -131,7 +131,9 @@ export function usePanelWindow(view: PanelView) {
         expandedPositionRef.current = { left: geometry.left, top: geometry.top, right: Math.max(VIEWPORT_GUTTER, window.innerWidth - geometry.left - geometry.width) };
         expandedWidthRef.current = panel.style.width || null;
         expandedHeightRef.current = panel.style.height || null;
-      }).catch(() => undefined);
+      }).catch((error) => {
+        console.error("[ERROR] Failed to restore panel geometry", error);
+      });
     });
     return () => {
       disposed = true;

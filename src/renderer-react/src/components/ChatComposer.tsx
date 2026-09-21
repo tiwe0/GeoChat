@@ -152,6 +152,7 @@ export function ChatComposer({
       })));
       onAttachmentsChange([...attachments, ...prepared]);
     } catch (error) {
+      console.error("[ERROR] Caught exception at src/renderer-react/src/components/ChatComposer.tsx:154", error);
       setAttachmentError(error instanceof Error ? error.message : t("composer.fileAttachFailed"));
     } finally {
       setIsPreparingFiles(false);

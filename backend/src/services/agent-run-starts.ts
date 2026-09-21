@@ -33,7 +33,9 @@ export function createAgentRunStartService(
     attachments?: AgentRunImageAttachment[];
     firstTool?: AgentRunRemoteToolRequestInput;
   }): Promise<RunnerStartOutcome> {
+    console.info(`[INFO] Starting backend runner runId=${input.record.runId} provider=${input.record.modelProvider} model=${input.record.modelId}`);
     if (input.model && !agentRunModelMatches(input.record, input.model)) {
+      console.warn(`[WARN] Runner model mismatch runId=${input.record.runId}`);
       const failedRecord = finishAgentRunLedger(input.record, {
         status: "failed",
         error: runnerModelMismatchMessage(input.record)
@@ -54,6 +56,7 @@ export function createAgentRunStartService(
       ? validateRunnerModelPreflight(input.model, input.attachments?.length ?? 0, input.record.thinking === true, input.record.locale)
       : undefined;
     if (modelPreflightError) {
+      console.warn(`[WARN] Runner model preflight rejected runId=${input.record.runId}`);
       const failedRecord = failAgentRunForModelError(input.record, modelPreflightError);
       const decision = createRunnerModelErrorDecision(failedRecord.runId, "runner_start", failedRecord.error);
       await agentRunCommits.saveRunnerTerminalPolicyCommit(failedRecord, decision);
@@ -69,6 +72,7 @@ export function createAgentRunStartService(
 
     const firstTool = input.firstTool ?? createAgentRunInitialCanvasReadRequest({ locale: input.record.locale });
     if (!getFunctionCallRemoteBridgeToolNames().includes(firstTool.toolName)) {
+      console.warn(`[WARN] Runner rejected unsupported remote tool runId=${input.record.runId} tool=${firstTool.toolName}`);
       const failedRecord = finishAgentRunLedger(input.record, {
         status: "failed",
         error: remoteBridgeToolBoundaryMessage(firstTool.toolName)
@@ -94,6 +98,7 @@ export function createAgentRunStartService(
     const startDecision = decideAgentRunRunnerStart({ run: input.record, firstRequest: firstTool });
     const policyDecision = createRunnerStartPolicyDecision(input.record.runId, startDecision);
     if (startDecision.type === "workflow_blocked") {
+      console.warn(`[WARN] Runner workflow blocked runId=${input.record.runId}`);
       const failedRecord = finishAgentRunLedger(startDecision.run, {
         status: "failed",
         error: startDecision.message
@@ -109,6 +114,7 @@ export function createAgentRunStartService(
       };
     }
     if (startDecision.type === "budget_exhausted") {
+      console.warn(`[WARN] Runner budget exhausted runId=${input.record.runId}`);
       const failedRecord = finishAgentRunLedger(startDecision.run, {
         status: "failed",
         error: "Agent runner tool budget is exhausted."
@@ -127,6 +133,7 @@ export function createAgentRunStartService(
 
     const committed = await agentRunCommits.saveRunnerStartCommit(input.record, startDecision.firstRequest, policyDecision);
     await seedRunnerBlackboard(options.seedBlackboard, committed.run);
+    console.debug(`[DEBUG] Backend runner started runId=${committed.run.runId} firstTool=${committed.request.toolName}`);
     return {
       status: 201,
       body: { runner: await agentRunRunnerSnapshots.snapshot(committed.run, [committed.request]) }
@@ -146,7 +153,8 @@ async function seedRunnerBlackboard(
   try {
     await seedBlackboard(run);
   } catch (error) {
-    console.warn("Failed to seed conversation blackboard for runner start", error);
+    console.error("[ERROR] Caught exception at backend/src/services/agent-run-starts.ts:148", error);
+    console.warn("[WARN] Failed to seed conversation blackboard for runner start", error);
   }
 }
 

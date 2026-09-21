@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
   createAgentModelRegistrySchema,
+  getAgentModelPolicy,
   getAgentModelOptionsForSchema,
   getAgentModelPolicyForSchema,
   getAgentProviderOptionsForSchema,
   isAgentModelRegistrySchema,
   normalizeAgentModelRegistrySchema,
+  normalizeAgentModelConfig,
   type AgentModelRegistrySchema
 } from "@geochat-ai/app";
 
@@ -14,7 +16,19 @@ describe("agent model registry schema", () => {
     const schema = createAgentModelRegistrySchema();
     expect(isAgentModelRegistrySchema(schema)).toBe(true);
     expect(schema.providers.some((provider) => provider.id === "deepseek")).toBe(true);
-    expect(schema.models.some((model) => model.provider === "openai" && model.id === "gpt-5.5")).toBe(true);
+    expect(schema.models.some((model) => model.provider === "openai" && model.id === "gpt-5.6-terra")).toBe(true);
+  });
+
+  test("offers current models while retaining older saved model policies", () => {
+    const options = getAgentModelOptionsForSchema("openai");
+    expect(options[0]?.value).toBe("gpt-5.6-terra");
+    expect(options.some((model) => model.value === "gpt-5.5")).toBe(false);
+    expect(getAgentModelPolicyForSchema({ provider: "openai", model: "gpt-5.5" })).toMatchObject({
+      isKnownModel: true,
+      isCustomModel: false,
+      supportsImages: true,
+      supportsTools: true
+    });
   });
 
   test("drives provider options and model policy from a remote schema", () => {
@@ -125,6 +139,32 @@ describe("agent model registry schema", () => {
       capabilities: ["text", "toolCalling"],
       maxToolSteps: 8,
       defaultTemperature: 0.2
+    });
+  });
+
+  test("preserves custom model transport settings and treats configured capabilities explicitly", () => {
+    expect(normalizeAgentModelConfig({
+      provider: "custom",
+      model: "local-vision",
+      apiKey: "key",
+      customBaseUrl: "http://127.0.0.1:11434/v1",
+      protocol: "openai-compatible",
+      supportsImages: true,
+    })).toMatchObject({
+      provider: "custom",
+      model: "local-vision",
+      protocol: "openai-compatible",
+      supportsImages: true,
+    });
+    expect(getAgentModelPolicy({
+      provider: "custom",
+      model: "local-vision",
+      supportsImages: true,
+    })).toMatchObject({
+      supportsImages: true,
+      supportsTools: true,
+      toolCallingMode: "assumed",
+      isCustomModel: true,
     });
   });
 });

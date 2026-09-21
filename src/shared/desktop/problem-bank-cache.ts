@@ -37,11 +37,16 @@ export async function readCachedCloudProblemJson<T>(url: string): Promise<T | un
     db.transaction(JSON_CACHE_STORE_NAME, "readonly").objectStore(JSON_CACHE_STORE_NAME).get(url)
   );
   if (!row) return undefined;
-  void touchCachedCloudProblemJson(db, url).catch(() => undefined);
+  void touchCachedCloudProblemJson(db, url).catch((error) => {
+    console.error("[ERROR] Failed to update cached problem JSON access time", error);
+  });
   try {
     return JSON.parse(row.bodyText) as T;
-  } catch {
-    void deleteCachedCloudProblemJson(db, url).catch(() => undefined);
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at src/shared/desktop/problem-bank-cache.ts:43", caughtError);
+    void deleteCachedCloudProblemJson(db, url).catch((deleteError) => {
+      console.error("[ERROR] Failed to delete invalid cached problem JSON", deleteError);
+    });
     return undefined;
   }
 }
@@ -71,7 +76,9 @@ export async function readCachedCloudProblemMedia(url: string): Promise<Blob | u
     db.transaction(MEDIA_CACHE_STORE_NAME, "readonly").objectStore(MEDIA_CACHE_STORE_NAME).get(url)
   );
   if (!row) return undefined;
-  void touchCachedCloudProblemMedia(db, url).catch(() => undefined);
+  void touchCachedCloudProblemMedia(db, url).catch((error) => {
+    console.error("[ERROR] Failed to update cached problem media access time", error);
+  });
   return row.blob;
 }
 

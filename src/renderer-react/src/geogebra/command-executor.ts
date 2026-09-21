@@ -93,6 +93,7 @@ async function evaluateCommandOnce(applet: GeoGebraApplet, command: string): Pro
       const result = normalizeCommandResult(command, invocation, method, Math.round(performance.now() - startedAt));
       return result;
     } catch (error) {
+      console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/command-executor.ts:95", error);
       const message = error instanceof Error ? error.message : String(error);
       return { command, success: false, label: "", error: message, lastError: message, method, resultAvailable: false, durationMs: Math.round(performance.now() - startedAt) };
     }
@@ -142,6 +143,7 @@ function invokeNativeScriptingCommand(
       durationMs: Math.round(performance.now() - startedAt),
     };
   } catch (error) {
+    console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/command-executor.ts:144", error);
     const message = error instanceof Error ? error.message : String(error);
     return {
       command,
@@ -160,7 +162,8 @@ function decodeGeoGebraString(value: string) {
   try {
     const decoded = JSON.parse(`"${value}"`) as unknown;
     return typeof decoded === "string" ? decoded : undefined;
-  } catch {
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/command-executor.ts:163", caughtError);
     return undefined;
   }
 }
@@ -259,7 +262,8 @@ function readNativeErrorMessages(): string[] {
 function tryParseJson(value: string) {
   try {
     return JSON.parse(value) as unknown;
-  } catch {
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/command-executor.ts:262", caughtError);
     return value;
   }
 }

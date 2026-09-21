@@ -25,6 +25,7 @@ export async function executeRemoteToolRequest(request: AgentRunRemoteToolReques
       durationMs: new Date(completedAt).getTime() - new Date(startedAt).getTime(),
     };
   } catch (error) {
+    console.error("[ERROR] Caught exception at src/renderer-react/src/features/agent-run/toolWorker.ts:27", error);
     const completedAt = new Date().toISOString();
     tool = {
       toolCallId: request.toolCallId,

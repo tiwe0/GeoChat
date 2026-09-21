@@ -8,6 +8,7 @@ export async function claimRemoteTools(
   try {
     return { requests: await coordinator.pendingToolRequests(runId, { claimOwner }) };
   } catch (error) {
+    console.error("[ERROR] Caught exception at src/renderer-react/src/features/agent-run/runnerClient.ts:10", error);
     if (!(error instanceof AgentRunCoordinatorError) || error.code !== "run_closed") throw error;
     const runner = await coordinator.runnerSnapshot(runId);
     if (!runner || runner.run.status === "running") throw error;

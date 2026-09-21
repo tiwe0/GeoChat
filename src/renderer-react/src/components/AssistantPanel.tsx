@@ -68,6 +68,7 @@ import { createDesktopDebugActionExecutor } from "../features/desktop/mcpDebugAc
 import { useMcpState } from "../features/desktop/useMcpState";
 import { DEFAULT_MCP_STATUS, type DesktopDebugAction } from "../../../shared/desktop/mcp-debug-actions";
 import {
+  DESKTOP_CONFIG_CHANGED_EVENT,
   credentialsForProvider,
   readDesktopConfig,
 } from "../../../shared/desktop/desktop-config";
@@ -119,13 +120,13 @@ function contextMenuSelectedText(target: Element | null) {
 
 async function writeContextMenuText(text: string) {
   if (!text) return;
-  try { await navigator.clipboard.writeText(text); } catch { /* clipboard permission is browser-controlled */ }
+  try { await navigator.clipboard.writeText(text); } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/components/AssistantPanel.tsx:123", caughtError); /* clipboard permission is browser-controlled */ }
 }
 
 async function pasteContextMenuText(target: PanelContextMenuState["editable"]) {
   if (!target) return;
   let text = "";
-  try { text = await navigator.clipboard.readText(); } catch { return; }
+  try { text = await navigator.clipboard.readText(); } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/components/AssistantPanel.tsx:129", caughtError); return; }
   if (!text) return;
   if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
     const start = target.selectionStart ?? target.value.length;
@@ -418,20 +419,23 @@ export function AssistantPanel({
     executeDebugAction: (action) => executeDebugActionRef.current!(action)
   });
   mcpStatusRef.current = mcp.status;
-  // The catalog is local and static, so there is nothing to fetch. Only the
-  // selection needs reconciling: drop one that is no longer in the registry.
   useEffect(() => {
-    const models = loadModelCatalog();
-    modelOptionsRef.current = models;
-    setModelOptions(models);
-    const configured = readDesktopConfig().model;
-    const current = panelChatRef.current.model;
-    const selected = models.find((model) => model.id === current)
-      ?? models.find((model) => model.id === configured.model && model.provider === configured.provider)
-      ?? models[0];
-    if (!selected) return;
-    panelChatRef.current.setModel(selected.id);
-    setSelectedModel(selected.id);
+    const refreshCatalog = () => {
+      const models = loadModelCatalog();
+      modelOptionsRef.current = models;
+      setModelOptions(models);
+      const configured = readDesktopConfig().model;
+      const current = panelChatRef.current.model;
+      const selected = models.find((model) => model.id === current)
+        ?? models.find((model) => model.id === configured.model && model.provider === configured.provider)
+        ?? models[0];
+      if (!selected) return;
+      panelChatRef.current.setModel(selected.id);
+      setSelectedModel(selected.id);
+    };
+    refreshCatalog();
+    globalThis.addEventListener(DESKTOP_CONFIG_CHANGED_EVENT, refreshCatalog);
+    return () => globalThis.removeEventListener(DESKTOP_CONFIG_CHANGED_EVENT, refreshCatalog);
   }, []);
   // Show the tour once on first launch. Completion and skipping are persisted
   // locally so returning users are not interrupted.
@@ -439,7 +443,10 @@ export function AssistantPanel({
     void browser.storage.local
       .get(ONBOARDING_TOUR_STORAGE_KEY)
       .then((stored) => setOnboardingTourReady(stored[ONBOARDING_TOUR_STORAGE_KEY] !== true))
-      .catch(() => setOnboardingTourReady(true));
+      .catch((error) => {
+        console.error("[ERROR] Failed to read onboarding state", error);
+        setOnboardingTourReady(true);
+      });
   }, []);
   useEffect(() => {
     void browser.storage.local.get([THINKING_ENABLED_STORAGE_KEY, LEGACY_REASONING_MODE_STORAGE_KEY, THINKING_EFFORT_STORAGE_KEY]).then((stored) => {
@@ -458,7 +465,9 @@ export function AssistantPanel({
       }
       const effort = stored[THINKING_EFFORT_STORAGE_KEY];
       if (effort === "light" || effort === "standard" || effort === "extended") setThinkingEffort(effort);
-    }).catch(() => undefined);
+    }).catch((error) => {
+      console.error("[ERROR] Failed to read stored thinking preferences", error);
+    });
   }, []);
 
   function completeOnboardingTour() {
@@ -612,6 +621,16 @@ export function AssistantPanel({
     const selected = modelOptionsRef.current.find((option) => option.id === panelChatRef.current.model);
     if (!selected) return config.model;
     const credentials = credentialsForProvider(config.providerCredentials, selected.provider);
+    if (selected.provider === "custom") {
+      return {
+        provider: "custom",
+        model: selected.id,
+        apiKey: config.customProvider.apiKey,
+        customBaseUrl: config.customProvider.baseUrl,
+        protocol: config.customProvider.protocol,
+        supportsImages: selected.capabilities.includes("imageInput"),
+      };
+    }
     // Model selection belongs to the conversation composer. Rebuild only the
     // transient run config with that model and its provider credentials; keep
     // Settings focused on storing credentials for each provider.
@@ -620,7 +639,7 @@ export function AssistantPanel({
       provider: selected.provider,
       model: selected.id,
       apiKey: credentials.apiKey,
-      customBaseUrl: credentials.customBaseUrl,
+      customBaseUrl: "",
     };
   }
 

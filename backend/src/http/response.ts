@@ -46,7 +46,8 @@ export function ndjsonStream(run: (emit: (event: unknown) => void) => Promise<vo
           if (closed) return;
           try {
             controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
-          } catch {
+          } catch (caughtError) {
+            console.error("[ERROR] Caught exception at backend/src/http/response.ts:49", caughtError);
             closed = true;
           }
         };
@@ -58,12 +59,14 @@ export function ndjsonStream(run: (emit: (event: unknown) => void) => Promise<vo
           globalThis.clearInterval(heartbeat);
           try {
             controller.close();
-          } catch {
+          } catch (caughtError) {
+            console.error("[ERROR] Caught exception at backend/src/http/response.ts:61", caughtError);
             // The client may already have disconnected.
           }
         };
         void run(emit)
           .catch((error) => {
+            console.error("[ERROR] Failed while producing the NDJSON stream", error);
             emit({
               type: "error",
               status: 500,
@@ -89,7 +92,8 @@ export function ndjsonStream(run: (emit: (event: unknown) => void) => Promise<vo
 export async function readJson(request: Request) {
   try {
     return await request.json();
-  } catch {
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at backend/src/http/response.ts:92", caughtError);
     return undefined;
   }
 }

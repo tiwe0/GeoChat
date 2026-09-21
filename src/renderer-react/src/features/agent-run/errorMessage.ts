@@ -11,7 +11,8 @@ export function formatAgentRunError(error: unknown, t: ErrorTranslator) {
     if (payload !== undefined) {
       try {
         return JSON.stringify(payload);
-      } catch {
+      } catch (caughtError) {
+        console.error("[ERROR] Caught exception at src/renderer-react/src/features/agent-run/errorMessage.ts:14", caughtError);
         // Fall through to the localized fallback when the payload is not serializable.
       }
     }
@@ -23,7 +24,8 @@ export function formatAgentRunError(error: unknown, t: ErrorTranslator) {
     try {
       const serialized = JSON.stringify(error);
       if (serialized && serialized !== "{}") return serialized;
-    } catch {
+    } catch (caughtError) {
+      console.error("[ERROR] Caught exception at src/renderer-react/src/features/agent-run/errorMessage.ts:26", caughtError);
       // Fall through to the localized fallback for an unserializable value.
     }
   }

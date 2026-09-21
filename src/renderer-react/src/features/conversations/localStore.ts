@@ -21,7 +21,8 @@ function readAll(): LocalConversation[] {
       if (!summary || !Array.isArray(data.messages)) return [];
       return [{ summary, messages: data.messages as ChatMessage[] }];
     });
-  } catch {
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at src/renderer-react/src/features/conversations/localStore.ts:24", caughtError);
     return [];
   }
 }
@@ -29,7 +30,8 @@ function readAll(): LocalConversation[] {
 function writeAll(conversations: LocalConversation[]) {
   try {
     globalThis.localStorage?.setItem(LOCAL_CONVERSATIONS_KEY, JSON.stringify(conversations));
-  } catch {
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at src/renderer-react/src/features/conversations/localStore.ts:32", caughtError);
     // Storage can be unavailable or full; the in-memory chat remains usable.
   }
 }

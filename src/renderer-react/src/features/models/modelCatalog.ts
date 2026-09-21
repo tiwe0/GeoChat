@@ -1,4 +1,5 @@
 import { AGENT_MODEL_REGISTRY, type AgentModelCapability, type AgentModelDefinition } from "@geochat-ai/app/model-registry";
+import { readDesktopConfig } from "../../../../shared/desktop/desktop-config";
 
 /**
  * The desktop build has no hosted model catalog.
@@ -11,9 +12,9 @@ import { AGENT_MODEL_REGISTRY, type AgentModelCapability, type AgentModelDefinit
 export type RuntimeModelOption = Pick<
   AgentModelDefinition,
   "provider" | "id" | "label" | "capabilities" | "maxToolSteps" | "defaultTemperature"
->;
+> & { providerLabel?: string };
 
-export const LOCAL_MODEL_OPTIONS: RuntimeModelOption[] = AGENT_MODEL_REGISTRY.map((model) => ({
+export const LOCAL_MODEL_OPTIONS: RuntimeModelOption[] = AGENT_MODEL_REGISTRY.filter((model) => !("deprecated" in model && model.deprecated === true)).map((model) => ({
   provider: model.provider,
   id: model.id,
   label: model.label,
@@ -23,7 +24,24 @@ export const LOCAL_MODEL_OPTIONS: RuntimeModelOption[] = AGENT_MODEL_REGISTRY.ma
 }));
 
 export function loadModelCatalog(): RuntimeModelOption[] {
-  return LOCAL_MODEL_OPTIONS;
+  const customProvider = readDesktopConfig().customProvider;
+  const builtinIds = new Set(LOCAL_MODEL_OPTIONS.map((model) => model.id));
+  const customModels: RuntimeModelOption[] = customProvider.name.trim() && customProvider.baseUrl.trim()
+    ? customProvider.models
+      .filter((model) => !builtinIds.has(model.callName))
+      .map((model) => ({
+        provider: "custom",
+        providerLabel: customProvider.name.trim(),
+        id: model.callName,
+        label: model.name,
+        capabilities: model.supportsImages
+          ? ["text", "imageInput", "toolCalling"]
+          : ["text", "toolCalling"],
+        maxToolSteps: 8,
+        defaultTemperature: 0.2
+      }))
+    : [];
+  return [...LOCAL_MODEL_OPTIONS, ...customModels];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

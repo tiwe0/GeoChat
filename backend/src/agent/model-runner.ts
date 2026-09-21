@@ -174,6 +174,7 @@ export async function createBackendModelNextAction(input: BackendModelNextAction
         protocolRepairErrors
       );
     } catch (error) {
+      console.error("[ERROR] Caught exception at backend/src/agent/model-runner.ts:176", error);
       protocolError = error instanceof Error ? error : new Error(protocolErrorMessage(input.run.locale));
       protocolRepairErrors.push(protocolError.message);
       if (attempt >= GEOCHAT_MODEL_PROTOCOL_REPAIR_ATTEMPTS) throw protocolError;

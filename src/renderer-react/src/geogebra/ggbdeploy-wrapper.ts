@@ -84,7 +84,8 @@ function pinGeoGebraModuleBase(codebase: string) {
   try {
     sessionStorage.removeItem("__gwtDevModeHook:web3d");
     sessionStorage.removeItem("__gwtDevModeHook:webSimple");
-  } catch {
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:87", caughtError);
     // Storage can be unavailable in a restricted WebView; the explicit
     // module-base meta tag above remains sufficient in that case.
   }
@@ -201,11 +202,11 @@ export async function mountGeoGebra(options: {
     if (typeof setSize === "function") {
       // A throw here needs no bookkeeping: the next observer or window event
       // recomputes from the stage, which is always the current truth.
-      try { setSize.call(runtimeApi, width, height); } catch { /* retried on the next event */ }
+      try { setSize.call(runtimeApi, width, height); } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:204", caughtError); /* retried on the next event */ }
       return;
     }
     // Until the runtime API exists, deployggb's own resize() is all there is.
-    try { applet.resize?.(); } catch { /* best effort during teardown */ }
+    try { applet.resize?.(); } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:208", caughtError); /* best effort during teardown */ }
   };
 
   // A window drag fires resize continuously; coalescing to one frame keeps the
@@ -221,16 +222,16 @@ export async function mountGeoGebra(options: {
   const refreshVisuals = () => {
     if (disposed) return;
     scheduleSyncSize();
-    try { applet.resize?.(); } catch { /* retried by the next pass */ }
+    try { applet.resize?.(); } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:224", caughtError); /* retried by the next pass */ }
     if (runtimeApi) {
       try {
         const recalculateEnvironments = runtimeApi.recalculateEnvironments;
         if (typeof recalculateEnvironments === "function") recalculateEnvironments.call(runtimeApi);
-      } catch { /* optional API */ }
+      } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:229", caughtError); /* optional API */ }
       try {
         const refreshViews = runtimeApi.refreshViews;
         if (typeof refreshViews === "function") refreshViews.call(runtimeApi);
-      } catch { /* optional API */ }
+      } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:233", caughtError); /* optional API */ }
     }
     // GWT may create the canvas one or two turns after appletOnLoad. A single
     // requestAnimationFrame is not enough in WebView2, where the first paint
@@ -240,11 +241,11 @@ export async function mountGeoGebra(options: {
         visualRefreshTimers = visualRefreshTimers.filter((item) => item !== timer);
         if (disposed) return;
         scheduleSyncSize();
-        try { applet.resize?.(); } catch { /* best effort */ }
+        try { applet.resize?.(); } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:243", caughtError); /* best effort */ }
         try {
           const refreshViews = runtimeApi?.refreshViews;
           if (typeof refreshViews === "function") refreshViews.call(runtimeApi);
-        } catch { /* best effort */ }
+        } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:247", caughtError); /* best effort */ }
       }, delay);
       visualRefreshTimers.push(timer);
     }
@@ -276,12 +277,12 @@ export async function mountGeoGebra(options: {
       runtimeApi = api;
       const showToolBar = api.showToolBar;
       const setPerspective = api.setPerspective;
-      try { if (typeof showToolBar === "function") showToolBar.call(api, false); } catch { /* initial parameters already hide it */ }
+      try { if (typeof showToolBar === "function") showToolBar.call(api, false); } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:279", caughtError); /* initial parameters already hide it */ }
       try {
         // This standalone frontend uses the patched applet API directly. The
         // extension-only switchThroughSubApp bridge must not be used here.
         if (typeof setPerspective === "function") setPerspective.call(api, "G");
-      } catch { /* perspective: G remains the initialization fallback */ }
+      } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:284", caughtError); /* perspective: G remains the initialization fallback */ }
       options.onReady(api);
       refreshVisuals();
     },
@@ -320,7 +321,7 @@ export async function mountGeoGebra(options: {
       runtimeApi = null;
       if (!isActiveMount()) return;
       activeMounts.delete(options.container);
-      try { applet.removeExistingApplet?.(options.container, false); } catch { /* best effort */ }
+      try { applet.removeExistingApplet?.(options.container, false); } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:323", caughtError); /* best effort */ }
       options.container.replaceChildren();
     },
   };

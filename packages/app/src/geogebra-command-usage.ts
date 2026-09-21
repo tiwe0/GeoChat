@@ -320,7 +320,8 @@ function maxCanvasElementCountFromValue(value: unknown, depth = 0): number {
 function safeSerializeToolPayload(tool: AgentRunToolRecord) {
   try {
     return JSON.stringify({ args: tool.args, result: tool.result, error: tool.error });
-  } catch {
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at packages/app/src/geogebra-command-usage.ts:323", caughtError);
     return `${tool.error ?? ""}`;
   }
 }

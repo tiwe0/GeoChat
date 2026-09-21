@@ -27,6 +27,7 @@ import { claimRemoteTools, waitForRunnerEvent } from "../features/agent-run/runn
 import { executeRemoteToolRequest } from "../features/agent-run/toolWorker";
 import { executeAgentRunLoop, type AgentRunDisplayPart } from "../features/agent-run/controller";
 import { getCanvasSessionId } from "../features/agent-run/canvasIdentity";
+import { desktopLogger } from "../features/desktop/desktopLogger";
 
 type ChatMessage = UIMessage<ChatMessageMetadata>;
 type ChatStatus = "ready" | "submitted" | "streaming" | "error";
@@ -94,6 +95,7 @@ export function useAgentRunChat(input: {
       signal: controller.signal,
       onRestore: (restored) => {
         if (disposed) return;
+        console.info(`[INFO] Restoring pending agent run runId=${restored.runId}`);
         activeRunRef.current = restored.runId;
         abortRef.current = controller;
         stoppedRef.current = false;
@@ -103,9 +105,11 @@ export function useAgentRunChat(input: {
         void continueRecoveredRun(restored, controller);
       },
       onDiscard: () => {
+        console.debug("[DEBUG] No recoverable pending agent run was found");
         if (!disposed) setStatus("ready");
       },
     }).catch((caught) => {
+      console.error("[ERROR] Failed to restore the pending agent run", caught);
       if (disposed) return;
       setError(caught instanceof Error ? caught : new Error("Failed to inspect a pending agent run."));
       setStatus("error");
@@ -154,8 +158,10 @@ export function useAgentRunChat(input: {
       if (result.runner && result.runner.run.status !== "running") {
         await removeActiveRun(installationId, canvasSessionId);
       }
+      console.info(`[INFO] Recovered agent run finished runId=${restored.runId} status=${result.runner?.run.status ?? "unknown"}`);
       if (!controller.signal.aborted) inputRef.current.onFinish?.();
     } catch (caught) {
+      console.error("[ERROR] Caught exception at src/renderer-react/src/hooks/useAgentRunChat.ts:158", caught);
       if (!controller.signal.aborted) {
         completedWithError = true;
         setError(caught instanceof Error ? caught : new Error("Failed to restore the pending agent run."));
@@ -173,6 +179,7 @@ export function useAgentRunChat(input: {
     abortRef.current?.abort();
     const runId = activeRunRef.current;
     if (runId) {
+      console.warn(`[WARN] Agent run cancellation requested runId=${runId}`);
       void getInstallationId(installationIdRef).then((installationId) => finishActiveRun({
         coordinator: coordinatorRef.current,
         runId,
@@ -180,7 +187,9 @@ export function useAgentRunChat(input: {
         canvasSessionId,
         status: "cancelled",
         error: "Stopped by user.",
-      })).catch(() => undefined);
+      })).catch((caught) => {
+        console.error("[ERROR] Failed to persist the cancelled agent run", caught);
+      });
     }
     setError(undefined);
     setStatus("ready");
@@ -223,6 +232,8 @@ export function useAgentRunChat(input: {
       prompt,
       attachmentCount: attachments.length,
     });
+    console.info(`[INFO] Starting agent run runId=${runId} provider=${record.modelProvider} model=${record.modelId}`);
+    console.debug(`[DEBUG] Agent run options runId=${runId} attachments=${attachments.length} thinking=${record.thinking === true}`);
     const userMessage: ChatMessage = {
       id: userMessageId,
       role: "user",
@@ -257,6 +268,7 @@ export function useAgentRunChat(input: {
       };
       const runner = await coordinatorRef.current.startPausedRunner(runnerStart);
       if (!runner) throw new Error("Agent runner did not return a snapshot.");
+      console.debug(`[DEBUG] Agent runner accepted runId=${runId} status=${runner.run.status}`);
       await saveActiveRun(installationId, canvasSessionId, record);
 
       const result = await executeAgentRunLoop({ coordinator: coordinatorRef.current, runId, claimOwner, signal: controller.signal, model: current.getModelConfig?.(), attachments,
@@ -267,8 +279,10 @@ export function useAgentRunChat(input: {
       if (result.runner && result.runner.run.status !== "running") {
         await removeActiveRun(installationId, canvasSessionId);
       }
+      console.info(`[INFO] Agent run finished runId=${runId} status=${result.runner?.run.status ?? "unknown"}`);
       if (!stoppedRef.current) current.onFinish?.();
     } catch (caught) {
+      console.error("[ERROR] Caught exception at src/renderer-react/src/hooks/useAgentRunChat.ts:271", caught);
       if (!stoppedRef.current && !(caught instanceof DOMException && caught.name === "AbortError")) {
         const nextError = caught instanceof Error ? caught : new Error("Agent run failed.");
         completedWithError = true;
@@ -299,6 +313,7 @@ function toImageAttachments(files: FileUIPart[]): AgentRunImageAttachment[] {
 
 async function uploadImageAttachments(apiOrigin: string, token: string | null, attachments: AgentRunImageAttachment[]) {
   if (!token || attachments.length === 0) return attachments;
+  desktopLogger.trace(`Uploading ${attachments.length} agent attachment(s)`);
   return Promise.all(attachments.map(async (attachment) => {
     try {
       const image = await fetch(attachment.dataUrl);
@@ -318,7 +333,8 @@ async function uploadImageAttachments(apiOrigin: string, token: string | null, a
       return typeof payload.url === "string"
         ? { ...attachment, dataUrl: payload.url }
         : attachment;
-    } catch {
+    } catch (caughtError) {
+      console.error("[ERROR] Caught exception at src/renderer-react/src/hooks/useAgentRunChat.ts:321", caughtError);
       return attachment;
     }
   }));
@@ -411,7 +427,7 @@ function contextPartText(part: unknown): string[] {
     if (payload === undefined) return [];
     try {
       return [`<untrusted-data source="tool-result">${JSON.stringify(payload)}</untrusted-data>`];
-    } catch { return []; }
+    } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/hooks/useAgentRunChat.ts:414", caughtError); return []; }
   }
   return [];
 }

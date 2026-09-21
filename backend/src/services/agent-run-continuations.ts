@@ -37,6 +37,7 @@ export function createAgentRunContinuationService(
     expectedCompletedRequest: AgentRunRemoteToolRequest;
   }): Promise<RunnerContinuationOutcome> {
     const committed = await agentRunCommits.saveRunnerToolResultCommit(input);
+    console.debug(`[DEBUG] Tool result commit runId=${input.run.runId} committed=${committed.committed}`);
     if (!committed.committed) return await remoteToolResultCommitConflictOutcome(committed);
     return await committedRunnerOutcome({
       status: 200,
@@ -56,7 +57,9 @@ export function createAgentRunContinuationService(
     onModelReasoningDelta?: (text: string) => void;
   }): Promise<RunnerContinuationOutcome> {
     let run = input.run;
+    console.debug(`[DEBUG] Continuing backend runner runId=${run.runId} tool=${input.completedRequest.toolName}`);
     const modelSteps = await agentRunRepository.listModelSteps(run.runId);
+    console.log(`[TRACE] Loaded runner model steps runId=${run.runId} count=${modelSteps.length}`);
     const modelTurn = await runRunnerContinuationModelTurn({
       run,
       model: input.model,
@@ -67,6 +70,7 @@ export function createAgentRunContinuationService(
       modelNextAction: options.modelNextAction
     });
     if (modelTurn.type === "failed") {
+      console.warn(`[WARN] Backend runner model turn failed runId=${run.runId}`);
       run = modelTurn.run;
       const committed = await agentRunCommits.saveRunnerToolResultCommit({
         run,
@@ -105,6 +109,7 @@ export function createAgentRunContinuationService(
         remoteToolResultCommitConflictOutcome
       });
     } catch (error) {
+      console.error("[ERROR] Caught exception at backend/src/services/agent-run-continuations.ts:107", error);
       run = failAgentRunForRunnerContinuationError(run, error);
       const committed = await agentRunCommits.saveRunnerToolResultCommit({
         run,

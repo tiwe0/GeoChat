@@ -44,6 +44,11 @@ describe("provider proxy policy", () => {
       defaultBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
       allowedHosts: ["dashscope.aliyuncs.com", "dashscope-us.aliyuncs.com"]
     });
+    expect(getAgentProviderProxyPolicy("custom")).toEqual({
+      provider: "custom",
+      defaultBaseUrl: "",
+      allowedHosts: []
+    });
 
     expect(
       isAgentProviderProxyHostAllowed({
@@ -76,7 +81,7 @@ describe("provider proxy policy", () => {
     expect(
       isAgentProviderProxyHostAllowed({
         targetUrl: "https://llm.local:8443/v1/chat/completions",
-        allowedHosts: ["api.openai.com"],
+        allowedHosts: [],
         customBaseUrl: "https://llm.local:8443/v1"
       })
     ).toBe(true);

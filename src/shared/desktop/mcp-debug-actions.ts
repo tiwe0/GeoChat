@@ -74,7 +74,9 @@ export async function reportDesktopDebugAction(endpoint: string, id: string, pay
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders(authToken) },
     body: JSON.stringify(payload)
-  }).catch(() => undefined);
+  }).catch((error) => {
+    console.error("[ERROR] Failed to report the desktop MCP debug action", error);
+  });
 }
 
 /**
@@ -101,6 +103,7 @@ export async function runMcpDebugActionPollOnce(input: {
     const result = await input.executeDebugAction(action);
     await input.reportDebugAction(input.endpoint, action.id, { ok: true, result }, input.authToken);
   } catch (error) {
+    console.error("[ERROR] Caught exception at src/shared/desktop/mcp-debug-actions.ts:103", error);
     if (action) {
       await input.reportDebugAction(input.endpoint, action.id, {
         ok: false,

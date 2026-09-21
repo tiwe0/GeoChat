@@ -38,6 +38,14 @@ export type DesktopImprovementPlanUploadResult = {
   accepted: number;
 };
 
+export type DesktopLogLevel = "error" | "warn" | "info" | "debug" | "trace";
+
+export type DesktopLoggingState = {
+  enabled: boolean;
+  level: DesktopLogLevel;
+  logDirectory: string;
+};
+
 export type DesktopUpdateErrorCode =
   | "network_unavailable"
   | "metadata_missing"
@@ -111,6 +119,10 @@ export type GeoChatDesktopApi = {
   getImprovementPlanPreferences: () => Promise<DesktopImprovementPlanPreferences>;
   setImprovementPlanPreferences: (preferences: Partial<DesktopImprovementPlanPreferences>) => Promise<DesktopImprovementPlanPreferences>;
   uploadImprovementPlanSamples: (samples: unknown[]) => Promise<DesktopImprovementPlanUploadResult>;
+  getLoggingPreferences: () => Promise<DesktopLoggingState>;
+  setLoggingPreferences: (preferences: Partial<Pick<DesktopLoggingState, "enabled" | "level">>) => Promise<DesktopLoggingState>;
+  openLogDirectory: () => Promise<string>;
+  writeAppLog: (level: DesktopLogLevel, message: string) => Promise<void>;
   getAppBundleUpdateState: () => Promise<DesktopAppBundleUpdateState>;
   checkAppBundleUpdate: () => Promise<DesktopAppBundleUpdateState>;
   installAppBundleUpdate: () => Promise<DesktopAppBundleUpdateState>;

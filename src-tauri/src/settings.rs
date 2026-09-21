@@ -1,3 +1,4 @@
+use crate::logging::{default_logging_preferences, DesktopLoggingPreferences};
 use serde::{Deserialize, Serialize};
 use std::{env, fs, path::Path, path::PathBuf};
 
@@ -9,6 +10,12 @@ pub(crate) struct DesktopSettings {
     pub(crate) update_preferences: DesktopUpdatePreferences,
     #[serde(default = "default_improvement_plan_preferences")]
     pub(crate) improvement_plan_preferences: DesktopImprovementPlanPreferences,
+    #[serde(default = "default_logging_preferences")]
+    pub(crate) logging_preferences: DesktopLoggingPreferences,
+    /// Preserve settings owned by older/newer shell components when this
+    /// version updates one preference group.
+    #[serde(flatten)]
+    pub(crate) extra: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -46,6 +53,8 @@ pub(crate) fn default_settings() -> DesktopSettings {
         device_id: None,
         update_preferences: default_update_preferences(),
         improvement_plan_preferences: default_improvement_plan_preferences(),
+        logging_preferences: default_logging_preferences(),
+        extra: serde_json::Map::new(),
     }
 }
 
@@ -106,7 +115,7 @@ pub(crate) fn default_improvement_plan_preferences() -> DesktopImprovementPlanPr
 
 #[cfg(test)]
 mod tests {
-    use super::default_update_preferences;
+    use super::{default_settings, default_update_preferences, DesktopSettings};
 
     #[test]
     fn default_update_preferences_enable_silent_check_and_download() {
@@ -114,5 +123,21 @@ mod tests {
         assert!(preferences.auto_check);
         assert!(preferences.auto_download);
         assert!(!preferences.install_on_quit);
+    }
+
+    #[test]
+    fn older_settings_receive_safe_logging_defaults() {
+        let settings: DesktopSettings = serde_json::from_str(
+            r#"{"deviceId":null,"updatePreferences":{"autoCheck":true,"autoDownload":true,"installOnQuit":false},"improvementPlanPreferences":{"enabled":true},"license":{"status":"active"}}"#,
+        )
+        .expect("older settings should migrate");
+        assert!(!settings.logging_preferences.enabled);
+        assert_eq!(
+            settings.logging_preferences,
+            default_settings().logging_preferences
+        );
+        assert_eq!(settings.extra["license"]["status"], "active");
+        let serialized = serde_json::to_value(&settings).expect("settings should serialize");
+        assert_eq!(serialized["license"]["status"], "active");
     }
 }

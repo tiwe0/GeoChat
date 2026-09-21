@@ -41,9 +41,40 @@ describe("agent model discovery requests", () => {
 
   test("honours a custom base URL and trims its trailing slash", () => {
     expect(agentModelListRequest({ provider: "openai", apiKey: "k", customBaseUrl: "https://llm.local/v1/" })?.url)
-      .toBe("https://llm.local/v1/v1/models");
+      .toBe("https://llm.local/v1/models");
     expect(agentModelListRequest({ provider: "deepseek", apiKey: "k", customBaseUrl: "https://mirror.test/" })?.url)
       .toBe("https://mirror.test/models");
+    expect(agentModelListRequest({ provider: "google", apiKey: "k", customBaseUrl: "https://gemini.local/v1beta/" })?.url)
+      .toBe("https://gemini.local/v1beta/models?key=k");
+    expect(agentModelListRequest({ provider: "qwen", apiKey: "k", customBaseUrl: "http://127.0.0.1:11434/v1" })?.url)
+      .toBe("http://127.0.0.1:11434/v1/models");
+  });
+
+  test("discovers models from a custom provider according to its protocol", () => {
+    const openaiCompatible = agentModelListRequest({
+      provider: "custom",
+      apiKey: "k",
+      customBaseUrl: "http://127.0.0.1:11434/v1",
+      protocol: "openai-compatible",
+    });
+    expect(openaiCompatible?.url).toBe("http://127.0.0.1:11434/v1/models");
+    expect(openaiCompatible?.headers.authorization).toBe("Bearer k");
+
+    const anthropic = agentModelListRequest({
+      provider: "custom",
+      apiKey: "k",
+      customBaseUrl: "https://llm.example/api",
+      protocol: "anthropic",
+    });
+    expect(anthropic?.url).toBe("https://llm.example/api/v1/models");
+    expect(anthropic?.headers["x-api-key"]).toBe("k");
+
+    expect(agentModelListRequest({
+      provider: "custom",
+      apiKey: "k",
+      customBaseUrl: "https://gemini.example",
+      protocol: "google",
+    })?.url).toBe("https://gemini.example/v1beta/models?key=k");
   });
 
   test("declines without a key or for an unknown provider", () => {
@@ -64,6 +95,15 @@ describe("agent model discovery responses", () => {
     expect(parseAgentModelListResponse("google", {
       models: [{ name: "models/gemini-3-pro" }, { name: "models/gemini-3-flash" }]
     })).toEqual(["gemini-3-pro", "gemini-3-flash"]);
+  });
+
+  test("parses a custom provider catalog according to its protocol", () => {
+    expect(parseAgentModelListResponse("custom", {
+      data: [{ id: "local-model" }],
+    }, "openai-compatible")).toEqual(["local-model"]);
+    expect(parseAgentModelListResponse("custom", {
+      models: [{ name: "models/custom-gemini" }],
+    }, "google")).toEqual(["custom-gemini"]);
   });
 
   test("survives shapes it does not recognise", () => {

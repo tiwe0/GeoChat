@@ -6,6 +6,7 @@ mod app_bundle_protocol;
 mod commands;
 mod env_config;
 mod installed_client_smoke;
+mod logging;
 mod mcp;
 mod settings;
 mod shell_update;
@@ -29,6 +30,9 @@ use commands::app_bundle_update::{
 use commands::improvement::{
     get_improvement_plan_preferences, set_improvement_plan_preferences,
     upload_improvement_plan_samples,
+};
+use commands::logging::{
+    get_logging_preferences, open_log_directory, set_logging_preferences, write_app_log,
 };
 use commands::mcp::{get_mcp_status, set_mcp_enabled};
 use commands::runtime::{get_runtime_info, mark_renderer_ready};
@@ -94,6 +98,7 @@ fn main() {
 
     let app = tauri::Builder::default()
         .register_uri_scheme_protocol(APP_BUNDLE_PROTOCOL, handle_app_bundle_protocol_request)
+        .plugin(logging::plugin())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .on_page_load(|webview, payload| {
@@ -120,6 +125,10 @@ fn main() {
             get_improvement_plan_preferences,
             set_improvement_plan_preferences,
             upload_improvement_plan_samples,
+            get_logging_preferences,
+            set_logging_preferences,
+            open_log_directory,
+            write_app_log,
             get_app_bundle_update_state,
             check_app_bundle_update,
             install_app_bundle_update,
@@ -199,6 +208,8 @@ fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
     let settings_path = app_data_dir.join("settings.json");
     let database_path = desktop_database_path(&app_data_dir);
     let settings = load_settings(&settings_path)?;
+    logging::configure_logging(&settings.logging_preferences);
+    log::info!(target: "geochat::lifecycle", "GeoChat desktop shell is starting");
     let local_backend_auth_token = local_runtime_auth_token();
     let runtime_authorized = access_allows_runtime_use();
     let backend = start_backend(&app_data_dir, &resource_dir)?;
@@ -271,8 +282,8 @@ fn initial_window_url(
         // The dev URL is built here rather than read from tauri.conf.json's
         // devUrl, so a --config override cannot move it. GEOCHAT_DEV_URL lets a
         // second renderer be previewed in the shell without editing this file.
-        let dev_url = std::env::var("GEOCHAT_DEV_URL")
-            .unwrap_or_else(|_| DEFAULT_DEV_URL.to_string());
+        let dev_url =
+            std::env::var("GEOCHAT_DEV_URL").unwrap_or_else(|_| DEFAULT_DEV_URL.to_string());
         return Url::parse(&dev_url)
             .map(tauri::WebviewUrl::External)
             .map_err(|error| error.to_string());

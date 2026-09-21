@@ -72,6 +72,7 @@ export async function previewChoiceScenario(
     }) as { ok?: boolean; error?: string | null };
     return { ok: result.ok !== false, error: result.error ?? null };
   } catch (error) {
+    console.error("[ERROR] Caught exception at src/renderer-react/src/features/geogebra/choiceScenario.ts:74", error);
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
 }

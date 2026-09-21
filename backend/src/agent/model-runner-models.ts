@@ -84,5 +84,14 @@ export function createBackendLanguageModel(config: AgentModelConfig): LanguageMo
   if (config.provider === "anthropic") return createAnthropic({ apiKey, baseURL })(config.model as never);
   if (config.provider === "google") return createGoogleGenerativeAI({ apiKey, baseURL })(config.model as never);
   if (config.provider === "deepseek") return createDeepSeek({ apiKey, baseURL })(config.model as never);
+  if (config.provider === "custom") {
+    if (!baseURL) throw new Error("Custom model provider requires a base URL.");
+    if (config.protocol === "openai-compatible") {
+      return createOpenAI({ apiKey, baseURL }).chat(config.model as never);
+    }
+    if (config.protocol === "anthropic") return createAnthropic({ apiKey, baseURL })(config.model as never);
+    if (config.protocol === "google") return createGoogleGenerativeAI({ apiKey, baseURL })(config.model as never);
+    throw new Error("Custom model provider requires a supported protocol.");
+  }
   throw new Error(`Unsupported model provider: ${config.provider}`);
 }

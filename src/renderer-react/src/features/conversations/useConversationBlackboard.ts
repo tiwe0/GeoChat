@@ -40,6 +40,7 @@ export function useConversationBlackboard(options: {
       if (requestVersionRef.current !== requestVersion || !authSessionRef.current.isCurrent(session)) return;
       setEntries(loaded);
     } catch (caught) {
+      console.error("[ERROR] Caught exception at src/renderer-react/src/features/conversations/useConversationBlackboard.ts:42", caught);
       if (requestVersionRef.current !== requestVersion || !authSessionRef.current.isCurrent(session)) return;
       setError(caught instanceof Error && caught.message.trim() ? caught.message : loadFailedMessage);
     } finally {

@@ -40,7 +40,8 @@ export function useConversations(options: {
       if (!authSessionRef.current.isCurrent(session)) return;
       const localById = new Map(local.map((conversation) => [conversation.id, conversation]));
       setConversations([...local, ...loaded.filter((conversation) => !localById.has(conversation.id))]);
-    } catch (e) { setError(e instanceof Error && e.message.trim() ? e.message : t("history.loadFailed")); }
+      console.debug(`[DEBUG] Conversation index loaded local=${local.length} backend=${loaded.length}`);
+    } catch (e) { console.error("[ERROR] Caught exception at src/renderer-react/src/features/conversations/useConversations.ts:43", e); setError(e instanceof Error && e.message.trim() ? e.message : t("history.loadFailed")); }
     finally { if (!silent) setLoading(false); }
   }, [apiOrigin, authSessionRef, t]);
 
@@ -69,7 +70,9 @@ export function useConversations(options: {
       if (conversation.model) changeModel(conversation.model);
       const restoredMessages = local ? local.messages : restoreConversationMessages(stored?.messages ?? []);
       setMessages(restoredMessages); onSelect(conversation); window.requestAnimationFrame(followLatest);
+      console.info(`[INFO] Conversation selected conversationId=${conversation.id} source=${local ? "local" : "backend"}`);
     } catch (e) {
+      console.error("[ERROR] Caught exception at src/renderer-react/src/features/conversations/useConversations.ts:72", e);
       const fallback = t(restoringCanvas ? "history.replayFailed" : "history.loadConversationFailed");
       setError(e instanceof Error && e.message.trim() ? e.message : fallback);
     }
@@ -87,8 +90,10 @@ export function useConversations(options: {
       if (!authSessionRef.current.isCurrent(session)) return false;
       setConversations((current) => current.filter((item) => item.id !== conversation.id));
       onDelete(conversation);
+      console.info(`[INFO] Conversation deleted conversationId=${conversation.id}`);
       return true;
     } catch (e) {
+      console.error("[ERROR] Caught exception at src/renderer-react/src/features/conversations/useConversations.ts:91", e);
       setError(e instanceof Error && e.message.trim() ? e.message : t("history.deleteFailed"));
       return false;
     } finally {

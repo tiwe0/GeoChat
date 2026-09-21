@@ -26,7 +26,11 @@ const expectedCommandByMethod = {
   rollbackAppBundleUpdate: "rollback_app_bundle_update",
   getImprovementPlanPreferences: "get_improvement_plan_preferences",
   setImprovementPlanPreferences: "set_improvement_plan_preferences",
-  uploadImprovementPlanSamples: "upload_improvement_plan_samples"
+  uploadImprovementPlanSamples: "upload_improvement_plan_samples",
+  getLoggingPreferences: "get_logging_preferences",
+  setLoggingPreferences: "set_logging_preferences",
+  openLogDirectory: "open_log_directory",
+  writeAppLog: "write_app_log"
 } as const;
 
 describe("Tauri desktop bridge contract", () => {
@@ -62,6 +66,12 @@ describe("Tauri desktop bridge contract", () => {
         getImprovementPlanPreferences: "get_improvement_plan_preferences",
         setImprovementPlanPreferences: "set_improvement_plan_preferences",
         uploadImprovementPlanSamples: "upload_improvement_plan_samples"
+      },
+      logging: {
+        getLoggingPreferences: "get_logging_preferences",
+        setLoggingPreferences: "set_logging_preferences",
+        openLogDirectory: "open_log_directory",
+        writeAppLog: "write_app_log"
       }
     });
 
@@ -99,6 +109,10 @@ describe("Tauri desktop bridge contract", () => {
     await api.getImprovementPlanPreferences();
     await api.setImprovementPlanPreferences({ enabled: false });
     await api.uploadImprovementPlanSamples([{ ok: true }]);
+    await api.getLoggingPreferences();
+    await api.setLoggingPreferences({ enabled: true, level: "debug" });
+    await api.openLogDirectory();
+    await api.writeAppLog("warn", "Renderer warning");
 
     expect(calls.map((call) => call.command)).toEqual(Object.values(expectedCommandByMethod));
     expect(calls.find((call) => call.command === "set_mcp_enabled")?.args).toEqual({ enabled: true });
@@ -107,6 +121,13 @@ describe("Tauri desktop bridge contract", () => {
     });
     expect(calls.find((call) => call.command === "upload_improvement_plan_samples")?.args).toEqual({
       samples: [{ ok: true }]
+    });
+    expect(calls.find((call) => call.command === "set_logging_preferences")?.args).toEqual({
+      preferences: { enabled: true, level: "debug" }
+    });
+    expect(calls.find((call) => call.command === "write_app_log")?.args).toEqual({
+      level: "warn",
+      message: "Renderer warning"
     });
   });
 

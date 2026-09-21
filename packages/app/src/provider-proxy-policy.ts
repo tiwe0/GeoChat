@@ -137,7 +137,8 @@ export function validateProviderProxyMethodBody(input: {
 function safeUrl(value: string) {
   try {
     return new URL(value);
-  } catch {
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at packages/app/src/provider-proxy-policy.ts:140", caughtError);
     return undefined;
   }
 }

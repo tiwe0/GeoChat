@@ -65,7 +65,8 @@ function proxyStoredImageUrl(value: string, apiOrigin?: string) {
     if (!parsed.pathname.startsWith(prefix)) return value;
     const key = decodeURIComponent(parsed.pathname.slice(prefix.length));
     return `${apiOrigin.replace(/\/$/, "")}/api/media/images/${encodeURIComponent(key)}`;
-  } catch {
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at src/renderer-react/src/features/conversations/api.ts:68", caughtError);
     return value;
   }
 }

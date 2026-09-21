@@ -223,7 +223,8 @@ function parseConversationJsonPayload(value: unknown): DesktopConversationMessag
   if (typeof value !== "string") return value as DesktopConversationMessagePayload;
   try {
     return JSON.parse(value) as DesktopConversationMessagePayload;
-  } catch {
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at backend/src/db/conversation-repository.ts:226", caughtError);
     return {
       id: "",
       role: "assistant",

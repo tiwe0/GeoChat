@@ -24,7 +24,7 @@ function storageArea(): WebStorageArea {
 function readValue(key: string): unknown {
   const raw = localStorage.getItem(key);
   if (raw === null) return undefined;
-  try { return JSON.parse(raw); } catch { return raw; }
+  try { return JSON.parse(raw); } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/platform-web.ts:27", caughtError); return raw; }
 }
 
 export function installWebPlatform() {

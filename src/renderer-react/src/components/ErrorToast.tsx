@@ -32,7 +32,8 @@ export function ErrorToast({ message }: ErrorToastProps) {
       await navigator.clipboard.writeText(message);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1600);
-    } catch {
+    } catch (caughtError) {
+      console.error("[ERROR] Caught exception at src/renderer-react/src/components/ErrorToast.tsx:35", caughtError);
       // Clipboard access is permission-controlled; the error remains visible.
     }
   }

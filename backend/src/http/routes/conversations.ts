@@ -59,6 +59,7 @@ export async function handleConversationRoute(
         { status: 201 }
       );
     } catch (error) {
+      console.error("[ERROR] Caught exception at backend/src/http/routes/conversations.ts:61", error);
       if (error instanceof ConversationOwnershipError) {
         return json({ error: "conversation_scope_conflict", message: "Conversation belongs to another account or offline scope." }, { status: 409 });
       }

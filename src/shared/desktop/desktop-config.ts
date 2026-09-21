@@ -11,6 +11,7 @@ import {
 import type {
   DesktopConfig,
   DebugConfig,
+  CustomProviderConfig,
   ModelConfig,
   ProviderCredentialConfig,
   SkillConfig,
@@ -19,6 +20,15 @@ import type {
 import { detectPreferredLocale, type Locale } from "./locale";
 
 export const CONFIG_STORAGE_KEY = "geochat-desktop-ui-config";
+export const DESKTOP_CONFIG_CHANGED_EVENT = "geochat:desktop-config-changed";
+
+export const DEFAULT_CUSTOM_PROVIDER_CONFIG: CustomProviderConfig = {
+  name: "",
+  baseUrl: "",
+  apiKey: "",
+  protocol: "openai-compatible",
+  models: []
+};
 
 export const DEFAULT_MODEL_CONFIG: ModelConfig = {
   provider: "deepseek",
@@ -29,7 +39,7 @@ export const DEFAULT_MODEL_CONFIG: ModelConfig = {
 
 export const DEFAULT_VISION_MODEL_CONFIG: ModelConfig = {
   provider: "openrouter",
-  model: "openai/gpt-5.5",
+  model: "google/gemini-3.8-flash",
   apiKey: "",
   customBaseUrl: ""
 };
@@ -150,6 +160,7 @@ export function createDefaultDesktopConfig(locale: Locale = detectPreferredLocal
         customBaseUrl: DEFAULT_VISION_MODEL_CONFIG.customBaseUrl
       }
     },
+    customProvider: { ...DEFAULT_CUSTOM_PROVIDER_CONFIG, models: [] },
     skills: createDefaultSkillConfig(),
     debug: DEFAULT_DEBUG_CONFIG,
     locale
@@ -171,7 +182,12 @@ export function normalizeProviderCredentials(value: unknown, ...models: ModelCon
     }
   }
   for (const model of models) {
-    if (model.apiKey.trim() || model.customBaseUrl.trim() || !credentials[model.provider]) {
+    // `model.apiKey` and `model.customBaseUrl` are legacy mirrors retained for
+    // compatibility. They may seed a missing provider entry, but an explicit
+    // providerCredentials entry is the current source of truth. Overwriting it
+    // here made an edited key snap back to the previously saved value on the
+    // next read.
+    if (!credentials[model.provider]) {
       credentials[model.provider] = {
         apiKey: model.apiKey,
         customBaseUrl: model.customBaseUrl
@@ -181,8 +197,56 @@ export function normalizeProviderCredentials(value: unknown, ...models: ModelCon
   return credentials;
 }
 
+export function normalizeCustomProviderConfig(value: unknown): CustomProviderConfig {
+  const payload = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const protocol = payload.protocol === "anthropic" || payload.protocol === "google"
+    ? payload.protocol
+    : "openai-compatible";
+  const models = Array.isArray(payload.models) ? payload.models : [];
+  const seen = new Set<string>();
+  return {
+    name: typeof payload.name === "string" ? payload.name : "",
+    baseUrl: typeof payload.baseUrl === "string" ? payload.baseUrl : "",
+    apiKey: typeof payload.apiKey === "string" ? payload.apiKey : "",
+    protocol,
+    models: models.flatMap((entry) => {
+      if (!entry || typeof entry !== "object") return [];
+      const model = entry as Record<string, unknown>;
+      const name = typeof model.name === "string" ? model.name.trim() : "";
+      const callName = typeof model.callName === "string" ? model.callName.trim() : "";
+      if (!name || !callName || seen.has(callName)) return [];
+      seen.add(callName);
+      return [{
+        name,
+        callName,
+        supportsImages: model.supportsImages === true
+      }];
+    }).slice(0, 50)
+  };
+}
+
 export function credentialsForProvider(credentials: Record<string, ProviderCredentialConfig>, provider: string): ProviderCredentialConfig {
   return credentials[provider] ?? { apiKey: "", customBaseUrl: "" };
+}
+
+export function updateProviderCredentials(
+  config: DesktopConfig,
+  provider: string,
+  credentials: ProviderCredentialConfig,
+): DesktopConfig {
+  return {
+    ...config,
+    model: config.model.provider === provider
+      ? { ...config.model, ...credentials }
+      : config.model,
+    visionModel: config.visionModel.provider === provider
+      ? { ...config.visionModel, ...credentials }
+      : config.visionModel,
+    providerCredentials: {
+      ...config.providerCredentials,
+      [provider]: credentials,
+    },
+  };
 }
 
 function normalizeLocale(value: Partial<DesktopConfig> | undefined, fallbackLocale: Locale): Locale {
@@ -253,6 +317,7 @@ export function normalizeDesktopConfig(value: Partial<DesktopConfig> | undefined
       customBaseUrl: visionCredentials.customBaseUrl
     },
     providerCredentials,
+    customProvider: normalizeCustomProviderConfig(value?.customProvider),
     skills: normalizeSkillConfig(value?.skills),
     debug: normalizeDebugConfig(value?.debug),
     locale: normalizeLocale(value, fallbackLocale)
@@ -263,13 +328,17 @@ export function readDesktopConfig(): DesktopConfig {
   if (!globalThis.localStorage) return createDefaultDesktopConfig();
   try {
     return normalizeDesktopConfig(JSON.parse(globalThis.localStorage.getItem(CONFIG_STORAGE_KEY) ?? "{}") as Partial<DesktopConfig>);
-  } catch {
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at src/shared/desktop/desktop-config.ts:331", caughtError);
     return createDefaultDesktopConfig();
   }
 }
 
 export function persistDesktopConfig(config: DesktopConfig) {
   globalThis.localStorage?.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
+  if (typeof globalThis.dispatchEvent === "function" && typeof Event !== "undefined") {
+    globalThis.dispatchEvent(new Event(DESKTOP_CONFIG_CHANGED_EVENT));
+  }
 }
 
 export function hasConfiguredApiKey(config: AgentModelConfig) {

@@ -31,11 +31,14 @@ export function useMcpState(input: {
       setStatus(DEFAULT_MCP_STATUS);
       return;
     }
-    const next = await api.getMcpStatus().catch((error) => ({
-      ...DEFAULT_MCP_STATUS,
-      available: true,
-      error: error instanceof Error ? error.message : String(error)
-    }));
+    const next = await api.getMcpStatus().catch((error) => {
+      console.error("[ERROR] Failed to read desktop MCP status", error);
+      return {
+        ...DEFAULT_MCP_STATUS,
+        available: true,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    });
     setStatus({ ...next, available: next.available ?? true });
   }, []);
 
@@ -46,13 +49,16 @@ export function useMcpState(input: {
     if (!api?.setMcpEnabled) return refresh();
     setBusy(true);
     try {
-      const next = await api.setMcpEnabled(enabled).catch((error) => ({
-        ...DEFAULT_MCP_STATUS,
-        available: true,
-        enabled: false,
-        running: false,
-        error: error instanceof Error ? error.message : String(error)
-      }));
+      const next = await api.setMcpEnabled(enabled).catch((error) => {
+        console.error("[ERROR] Failed to change desktop MCP state", error);
+        return {
+          ...DEFAULT_MCP_STATUS,
+          available: true,
+          enabled: false,
+          running: false,
+          error: error instanceof Error ? error.message : String(error)
+        };
+      });
       setStatus({ ...next, available: next.available ?? true });
     } finally {
       setBusy(false);

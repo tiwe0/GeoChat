@@ -30,6 +30,7 @@ export type FunctionCallCard = {
 import type {
   FunctionCallToolName,
   AgentModelConfig,
+  AgentModelProtocol,
   DesktopConversationSummary
 } from "@geochat-ai/app";
 import type {
@@ -91,6 +92,20 @@ export type ProviderCredentialConfig = {
   customBaseUrl: string;
 };
 
+export type CustomModelDefinition = {
+  name: string;
+  callName: string;
+  supportsImages: boolean;
+};
+
+export type CustomProviderConfig = {
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  protocol: AgentModelProtocol;
+  models: CustomModelDefinition[];
+};
+
 export type SkillConfig = {
   enabled: boolean;
   autoActivate: boolean;
@@ -110,6 +125,7 @@ export type DesktopConfig = {
   model: ModelConfig;
   visionModel: ModelConfig;
   providerCredentials: Record<string, ProviderCredentialConfig>;
+  customProvider: CustomProviderConfig;
   skills: SkillConfig;
   debug: DebugConfig;
   locale: Locale;

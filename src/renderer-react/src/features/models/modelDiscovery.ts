@@ -2,6 +2,7 @@ import {
   agentModelListRequest,
   parseAgentModelListResponse
 } from "@geochat-ai/app/model-discovery";
+import type { AgentModelProtocol } from "@geochat-ai/app";
 
 /**
  * Ask a provider what it currently serves, through the backend's proxy.
@@ -21,8 +22,8 @@ export type DiscoveryOutcome =
   | { status: "unsupported" }
   | { status: "failed"; message: string };
 
-function cacheKey(provider: string, baseUrl: string) {
-  return `${CACHE_PREFIX}${provider}:${baseUrl}`;
+function cacheKey(provider: string, baseUrl: string, protocol?: AgentModelProtocol) {
+  return `${CACHE_PREFIX}${provider}:${protocol ?? "default"}:${baseUrl}`;
 }
 
 function readCache(key: string): CachedDiscovery | null {
@@ -35,7 +36,8 @@ function readCache(key: string): CachedDiscovery | null {
     if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string")) return null;
     if (typeof fetchedAt !== "number") return null;
     return { ids, fetchedAt };
-  } catch {
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at src/renderer-react/src/features/models/modelDiscovery.ts:39", caughtError);
     return null;
   }
 }
@@ -43,7 +45,8 @@ function readCache(key: string): CachedDiscovery | null {
 function writeCache(key: string, value: CachedDiscovery) {
   try {
     window.localStorage.setItem(key, JSON.stringify(value));
-  } catch {
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at src/renderer-react/src/features/models/modelDiscovery.ts:47", caughtError);
     // A full or blocked store costs freshness on the next launch, nothing more.
   }
 }
@@ -54,18 +57,20 @@ export async function discoverProviderModels(input: {
   provider: string;
   apiKey: string;
   customBaseUrl?: string;
+  protocol?: AgentModelProtocol;
   /** Skip the cache when the user asked for this explicitly. */
   force?: boolean;
 }): Promise<DiscoveryOutcome> {
   const request = agentModelListRequest({
     provider: input.provider,
     apiKey: input.apiKey,
-    customBaseUrl: input.customBaseUrl
+    customBaseUrl: input.customBaseUrl,
+    protocol: input.protocol
   });
   if (!request) return { status: "unsupported" };
 
   // The key is part of the Gemini URL, so it must never reach the cache key.
-  const key = cacheKey(input.provider, input.customBaseUrl?.trim() ?? "");
+  const key = cacheKey(input.provider, input.customBaseUrl?.trim() ?? "", input.protocol);
   if (!input.force) {
     const cached = readCache(key);
     if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
@@ -99,10 +104,11 @@ export async function discoverProviderModels(input: {
     }
     payload = JSON.parse(decodeBase64Utf8(proxied.bodyBase64 ?? ""));
   } catch (error) {
+    console.error("[ERROR] Caught exception at src/renderer-react/src/features/models/modelDiscovery.ts:104", error);
     return { status: "failed", message: error instanceof Error ? error.message : String(error) };
   }
 
-  const ids = parseAgentModelListResponse(input.provider, payload);
+  const ids = parseAgentModelListResponse(input.provider, payload, input.protocol);
   if (!ids.length) return { status: "failed", message: "The provider returned no models." };
   const fetchedAt = Date.now();
   writeCache(key, { ids, fetchedAt });

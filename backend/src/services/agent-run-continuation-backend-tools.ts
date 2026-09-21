@@ -38,6 +38,7 @@ export async function executeBackendToolAutoStep(input: {
       tool
     };
   } catch (error) {
+    console.error("[ERROR] Caught exception at backend/src/services/agent-run-continuation-backend-tools.ts:40", error);
     const tool = backendToolFailureRecord(input.request, error);
     const runWithTool = upsertAgentRunTool(input.run, tool);
     return {

@@ -1,6 +1,7 @@
 import {
   AGENT_PROVIDER_REGISTRY,
   getAgentProviderDefinition,
+  type AgentModelProtocol,
   type AgentModelProvider
 } from "./model-registry";
 
@@ -62,25 +63,63 @@ const PROVIDER_DISCOVERY: Record<AgentModelProvider, ProviderDiscovery> = {
   }
 };
 
+const CUSTOM_PROVIDER_DISCOVERY: Record<AgentModelProtocol, ProviderDiscovery> = {
+  "openai-compatible": { path: "/models", ...OPENAI_COMPATIBLE },
+  anthropic: {
+    path: "/v1/models",
+    auth: (apiKey) => ({ headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" } }),
+    parse: (payload) => readIds(payload, "data", (entry) => stringField(entry, "id"))
+  },
+  google: {
+    path: "/v1beta/models",
+    auth: (apiKey) => ({ query: { key: apiKey } }),
+    parse: (payload) => readIds(payload, "models", (entry) => {
+      const name = stringField(entry, "name");
+      return name ? name.replace(/^models\//, "") : null;
+    })
+  }
+};
+
 export function agentModelListRequest(input: {
   provider: string;
   apiKey: string;
   customBaseUrl?: string;
+  protocol?: AgentModelProtocol;
 }): AgentModelListRequest | null {
   const definition = getAgentProviderDefinition(input.provider);
-  const discovery = PROVIDER_DISCOVERY[input.provider as AgentModelProvider];
-  if (!definition || !discovery) return null;
+  const discovery = input.provider === "custom" && input.protocol
+    ? CUSTOM_PROVIDER_DISCOVERY[input.protocol]
+    : PROVIDER_DISCOVERY[input.provider as AgentModelProvider];
+  if (!discovery || (!definition && input.provider !== "custom")) return null;
   const apiKey = input.apiKey.trim();
   if (!apiKey) return null;
-  const base = (input.customBaseUrl?.trim() || definition.defaultBaseUrl).replace(/\/+$/, "");
+  const base = (input.customBaseUrl?.trim() || definition?.defaultBaseUrl || "").replace(/\/+$/, "");
+  if (!base) return null;
   const { headers = {}, query } = discovery.auth(apiKey);
-  const url = new URL(`${base}${discovery.path}`);
+  const url = appendProviderPath(base, discovery.path);
   for (const [key, value] of Object.entries(query ?? {})) url.searchParams.set(key, value);
   return { url: url.toString(), method: "GET", headers: { accept: "application/json", ...headers } };
 }
 
-export function parseAgentModelListResponse(provider: string, payload: unknown): string[] {
-  const discovery = PROVIDER_DISCOVERY[provider as AgentModelProvider];
+function appendProviderPath(base: string, path: string) {
+  const baseUrl = new URL(base);
+  const baseSegments = baseUrl.pathname.split("/").filter(Boolean);
+  const pathSegments = path.split("/").filter(Boolean);
+  let overlap = Math.min(baseSegments.length, pathSegments.length);
+  while (overlap > 0) {
+    const baseSuffix = baseSegments.slice(-overlap).join("/");
+    const pathPrefix = pathSegments.slice(0, overlap).join("/");
+    if (baseSuffix === pathPrefix) break;
+    overlap -= 1;
+  }
+  baseUrl.pathname = `/${[...baseSegments, ...pathSegments.slice(overlap)].join("/")}`;
+  return baseUrl;
+}
+
+export function parseAgentModelListResponse(provider: string, payload: unknown, protocol?: AgentModelProtocol): string[] {
+  const discovery = provider === "custom" && protocol
+    ? CUSTOM_PROVIDER_DISCOVERY[protocol]
+    : PROVIDER_DISCOVERY[provider as AgentModelProvider];
   if (!discovery) return [];
   return discovery.parse(payload);
 }

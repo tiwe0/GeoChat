@@ -2,6 +2,8 @@ import type {
   DesktopAccessState,
   DesktopAppBundleUpdateState,
   DesktopImprovementPlanPreferences,
+  DesktopLogLevel,
+  DesktopLoggingState,
   DesktopMcpStatus,
   DesktopUpdatePreferences,
   DesktopUpdateState,
@@ -43,6 +45,12 @@ export const TAURI_DESKTOP_COMMANDS = {
     getImprovementPlanPreferences: "get_improvement_plan_preferences",
     setImprovementPlanPreferences: "set_improvement_plan_preferences",
     uploadImprovementPlanSamples: "upload_improvement_plan_samples"
+  },
+  logging: {
+    getLoggingPreferences: "get_logging_preferences",
+    setLoggingPreferences: "set_logging_preferences",
+    openLogDirectory: "open_log_directory",
+    writeAppLog: "write_app_log"
   }
 } as const;
 
@@ -70,6 +78,10 @@ export async function installTauriDesktopBridge() {
   installTauriDragRegions(() => currentWindow.startDragging());
 }
 
+export function installedDesktopApi() {
+  return window.geochatDesktop;
+}
+
 function installTauriDragRegions(startDragging: () => Promise<void>) {
   document.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
@@ -78,7 +90,9 @@ function installTauriDragRegions(startDragging: () => Promise<void>) {
     if (!dragRegion) return;
     if (target?.closest("button, input, textarea, select, a, [role='button'], [data-tauri-no-drag]")) return;
     event.preventDefault();
-    void startDragging().catch(() => undefined);
+    void startDragging().catch((error) => {
+      console.error("[ERROR] Failed to start native window dragging", error);
+    });
   });
 }
 
@@ -92,7 +106,8 @@ export function createTauriDesktopApi(
     ...createAccessBridge(invoke),
     ...createShellUpdateBridge(invoke, listen),
     ...createAppBundleUpdateBridge(invoke, listen),
-    ...createImprovementBridge(invoke)
+    ...createImprovementBridge(invoke),
+    ...createLoggingBridge(invoke)
   };
 }
 
@@ -212,6 +227,22 @@ function createImprovementBridge(
     setImprovementPlanPreferences: (preferences: Partial<DesktopImprovementPlanPreferences>) =>
       invoke(commands.setImprovementPlanPreferences, { preferences }),
     uploadImprovementPlanSamples: (samples: unknown[]) => invoke(commands.uploadImprovementPlanSamples, { samples })
+  };
+}
+
+function createLoggingBridge(
+  invoke: TauriInvoke
+): BridgeSlice<
+  "getLoggingPreferences" | "setLoggingPreferences" | "openLogDirectory" | "writeAppLog"
+> {
+  const commands = TAURI_DESKTOP_COMMANDS.logging;
+  return {
+    getLoggingPreferences: () => invoke(commands.getLoggingPreferences),
+    setLoggingPreferences: (preferences: Partial<Pick<DesktopLoggingState, "enabled" | "level">>) =>
+      invoke(commands.setLoggingPreferences, { preferences }),
+    openLogDirectory: () => invoke(commands.openLogDirectory),
+    writeAppLog: (level: DesktopLogLevel, message: string) =>
+      invoke(commands.writeAppLog, { level, message })
   };
 }
 

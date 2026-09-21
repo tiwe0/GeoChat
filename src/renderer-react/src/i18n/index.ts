@@ -18,7 +18,8 @@ export async function initializeI18n(_apiOrigin?: string) {
   try {
     const stored = await browser.storage.local.get(LANGUAGE_STORAGE_KEY);
     storedLanguage = stored[LANGUAGE_STORAGE_KEY];
-  } catch {
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at src/renderer-react/src/i18n/index.ts:21", caughtError);
     // Browser language remains the fallback when extension storage is unavailable.
   }
 
@@ -47,7 +48,8 @@ export async function changeAppLanguage(language: AppLanguage) {
   await i18n.changeLanguage(language);
   try {
     await browser.storage.local.set({ [LANGUAGE_STORAGE_KEY]: language });
-  } catch {
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at src/renderer-react/src/i18n/index.ts:50", caughtError);
     // Keep the in-memory selection even if persistence is unavailable.
   }
 }

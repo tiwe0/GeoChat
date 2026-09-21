@@ -43,6 +43,7 @@ export async function proxyProviderFetch(payload: unknown, limits: ProviderProxy
       customBaseUrl: payload.customBaseUrl
     })
   ) {
+    console.warn(`[WARN] Provider proxy blocked provider=${payload.provider} host=${targetUrl.host}`);
     return providerProxyResult(403, {
       error: "provider_host_blocked",
       message: `Provider proxy blocked outbound host: ${targetUrl.host}`
@@ -75,6 +76,7 @@ export async function proxyProviderFetch(payload: unknown, limits: ProviderProxy
     return providerProxyResult(400, headersPolicyError);
   }
   const headers = new Headers(sanitizeProviderProxyHeaders((payload.headers ?? {}) as Record<string, string>));
+  console.debug(`[DEBUG] Provider proxy request provider=${payload.provider} method=${method} host=${targetUrl.host}`);
 
   let response: Response;
   try {
@@ -85,6 +87,7 @@ export async function proxyProviderFetch(payload: unknown, limits: ProviderProxy
       signal: AbortSignal.timeout(120_000)
     });
   } catch (error) {
+    console.error("[ERROR] Caught exception at backend/src/services/provider-proxy.ts:87", error);
     return providerProxyResult(502, {
       error: "provider_fetch_failed",
       message: `Provider proxy request failed: ${sanitizeRunnerModelError(error)}`
@@ -92,8 +95,10 @@ export async function proxyProviderFetch(payload: unknown, limits: ProviderProxy
   }
   const responseBuffer = await response.arrayBuffer();
   if (responseBuffer.byteLength > limits.maxProviderResponseBodyBytes) {
+    console.warn(`[WARN] Provider proxy response exceeded limit provider=${payload.provider} host=${targetUrl.host}`);
     return providerProxyResult(502, { error: "response_too_large", message: "Provider response body is too large." });
   }
+  console.debug(`[DEBUG] Provider proxy response provider=${payload.provider} status=${response.status} bytes=${responseBuffer.byteLength}`);
   return providerProxyResult(200, {
     status: response.status,
     statusText: response.statusText,

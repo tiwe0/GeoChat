@@ -9,6 +9,7 @@ import { mountGeoGebra } from "./geogebra/ggbdeploy-wrapper";
 import { setFrontendGeoGebraController } from "./geogebra/runtime";
 import { WindowTitleBar } from "./features/desktop/WindowTitleBar";
 import { backendOrigin, desktopRuntimeError } from "./features/desktop/runtime";
+import { desktopLogger } from "./features/desktop/desktopLogger";
 
 export default function App() {
   const { t } = useTranslation();
@@ -48,6 +49,7 @@ export default function App() {
       if (disposed) mounted.dispose();
       else mountedApplet = mounted;
     }).catch((error) => {
+        console.error("[ERROR] Failed to mount the GeoGebra applet", error);
         if (disposed) return;
         setCanvasState("error");
         setCanvasError(error instanceof Error ? error.message : String(error));
@@ -69,7 +71,9 @@ export default function App() {
         throw new Error("GeoGebra 画板重置失败。");
       }
     } catch (error) {
+      console.error("[ERROR] Caught exception at src/renderer-react/src/App.tsx:72", error);
       console.warn("Failed to reset GeoGebra canvas", error);
+      desktopLogger.warn(error);
     } finally {
       setResetting(false);
     }

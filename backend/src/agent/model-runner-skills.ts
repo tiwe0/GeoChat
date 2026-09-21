@@ -153,6 +153,7 @@ async function runSkillSelector(input: {
     const packet = normalizeSkillSelectionPacket(parseSkillSelectionJson(result.text), policy);
     return enrichSkillSelectionPacket(packet, policy, candidateContext, input.run.locale);
   } catch (error) {
+    console.error("[ERROR] Caught exception at backend/src/agent/model-runner-skills.ts:155", error);
     if (candidateContext) {
       return enrichSkillSelectionPacket(
         deterministicSkillSelectionPacket(candidateContext, policy, error),
@@ -224,7 +225,8 @@ async function buildSkillSelectorCandidateContext(
       try {
         const activated = await activateAgentSkill(skill.name);
         constraintsBrief = extractAgentSkillConstraintBrief(activated.markdown);
-      } catch {
+      } catch (caughtError) {
+        console.error("[ERROR] Caught exception at backend/src/agent/model-runner-skills.ts:227", caughtError);
         constraintsBrief = [];
       }
       return createAgentSkillBrief(skill, {
@@ -348,12 +350,14 @@ function parseSkillSelectionJson(text: string): unknown {
   if (!trimmed) return null;
   try {
     return JSON.parse(trimmed);
-  } catch {
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at backend/src/agent/model-runner-skills.ts:351", caughtError);
     const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim();
     if (fenced) {
       try {
         return JSON.parse(fenced);
-      } catch {
+      } catch (caughtError) {
+        console.error("[ERROR] Caught exception at backend/src/agent/model-runner-skills.ts:356", caughtError);
         // Fall through to object extraction.
       }
     }
@@ -444,7 +448,8 @@ async function enrichSkillSelectionPacket(
           visualProfiles: item.visualProfiles,
           reason: selected.reason
         };
-      } catch {
+      } catch (caughtError) {
+        console.error("[ERROR] Caught exception at backend/src/agent/model-runner-skills.ts:447", caughtError);
         return undefined;
       }
     })
@@ -471,7 +476,8 @@ async function enrichSkillSelectionPacket(
     selectedSkills.map(async (skill) => {
       try {
         return await activateAgentSkill(skill.name);
-      } catch {
+      } catch (caughtError) {
+        console.error("[ERROR] Caught exception at backend/src/agent/model-runner-skills.ts:474", caughtError);
         return undefined;
       }
     })

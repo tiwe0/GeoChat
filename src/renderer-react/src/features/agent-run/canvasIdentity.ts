@@ -10,7 +10,8 @@ export function getCanvasSessionId() {
     const created = crypto.randomUUID();
     window.sessionStorage.setItem(CANVAS_SESSION_ID_KEY, created);
     return (cachedCanvasSessionId = created);
-  } catch {
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at src/renderer-react/src/features/agent-run/canvasIdentity.ts:13", caughtError);
     return (cachedCanvasSessionId = crypto.randomUUID());
   }
 }

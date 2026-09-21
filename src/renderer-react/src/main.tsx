@@ -15,12 +15,14 @@ import { copilotTheme } from "./theme";
 import { installWebPlatform } from "./platform-web";
 import { installTauriDesktopBridge } from "../../shared/desktop/tauri-bridge";
 import { loadDesktopRuntime } from "./features/desktop/runtime";
+import { desktopLogger, installDesktopLogging } from "./features/desktop/desktopLogger";
 
 installWebPlatform();
 const emotionCache = createCache({ key: "geochatpro-web" });
 
 async function bootstrap() {
   await installTauriDesktopBridge();
+  installDesktopLogging();
   // Must precede the first render: the agent-run coordinator captures the
   // backend URL when it is constructed, and that happens on mount.
   await loadDesktopRuntime();
@@ -38,10 +40,10 @@ async function bootstrap() {
     </StrictMode>,
   );
   // Tells the shell the renderer painted, which releases its splash state.
-  void window.geochatDesktop?.markRendererReady().catch(() => undefined);
+  void window.geochatDesktop?.markRendererReady().catch((error) => console.error("[ERROR] Failed to mark the renderer ready", error));
 }
 
 void bootstrap().catch((error) => {
+  desktopLogger.error(error);
   document.getElementById("root")!.textContent = error instanceof Error ? error.message : String(error);
 });
-

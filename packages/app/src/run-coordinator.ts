@@ -118,7 +118,10 @@ export function createAgentRunCoordinator(options: AgentRunCoordinatorOptions) {
       const activeRuns = validAgentRuns(payload?.runs).filter((run) => run.status === "running");
       const snapshots = await Promise.all(
         activeRuns.map(async (run) => {
-          const snapshotPayload = await request(`/v1/agent-runs/${encodeURIComponent(run.runId)}/runner`).catch(() => undefined);
+          const snapshotPayload = await request(`/v1/agent-runs/${encodeURIComponent(run.runId)}/runner`).catch((error) => {
+            console.error("[ERROR] Failed to load an active runner snapshot", error);
+            return undefined;
+          });
           return snapshotPayload?.runner;
         })
       );
@@ -257,7 +260,8 @@ async function readResponsePayload(response: Response) {
   if (!contentType.includes("application/json")) return undefined;
   try {
     return await response.json();
-  } catch {
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at packages/app/src/run-coordinator.ts:260", caughtError);
     return undefined;
   }
 }
@@ -290,7 +294,8 @@ async function* readNdjsonEvents(body: ReadableStream<Uint8Array>) {
 function parseNdjsonEvent(line: string) {
   try {
     return JSON.parse(line);
-  } catch {
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at packages/app/src/run-coordinator.ts:293", caughtError);
     return undefined;
   }
 }

@@ -94,7 +94,8 @@ export function createImprovementPlanUploader(input: {
       const batch = queue.slice(0, UPLOAD_BATCH_SIZE);
       const result = await desktopApi.uploadImprovementPlanSamples(batch);
       if (result.ok) writeQueue(uploaderRuntime.queueStorage, queue.slice(batch.length));
-    } catch {
+    } catch (caughtError) {
+      console.error("[ERROR] Caught exception at src/shared/desktop/improvement-plan.ts:97", caughtError);
       // Best-effort telemetry: keep the queue for a later background retry.
     } finally {
       flushing = false;
@@ -172,7 +173,8 @@ function readQueue(storage: Pick<Storage, "getItem"> | undefined): ImprovementPl
   try {
     const parsed = JSON.parse(storage.getItem(QUEUE_KEY) ?? "[]");
     return Array.isArray(parsed) ? parsed.filter(isSample) : [];
-  } catch {
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at src/shared/desktop/improvement-plan.ts:175", caughtError);
     return [];
   }
 }
@@ -181,11 +183,13 @@ function writeQueue(storage: Pick<Storage, "setItem"> | undefined, queue: Improv
   if (!storage) return;
   try {
     storage.setItem(QUEUE_KEY, JSON.stringify(queue));
-  } catch {
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at src/shared/desktop/improvement-plan.ts:184", caughtError);
     // If local storage is full or unavailable, drop the oldest telemetry instead of affecting chat.
     try {
       storage.setItem(QUEUE_KEY, JSON.stringify(queue.slice(-Math.floor(MAX_QUEUE_ITEMS / 2))));
-    } catch {
+    } catch (caughtError) {
+      console.error("[ERROR] Caught exception at src/shared/desktop/improvement-plan.ts:188", caughtError);
       // Ignore storage failures; participation is best effort.
     }
   }
@@ -235,7 +239,8 @@ async function hashStableId(value: string): Promise<string> {
   try {
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
     return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  } catch {
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at src/shared/desktop/improvement-plan.ts:238", caughtError);
     let hash = 2166136261;
     for (let index = 0; index < value.length; index += 1) {
       hash ^= value.charCodeAt(index);

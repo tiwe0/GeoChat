@@ -56,6 +56,7 @@ export async function runRunnerContinuationModelTurn(input: {
       modelStep: completeRunnerModelStepSuccess(modelStep, action)
     };
   } catch (error) {
+    console.error("[ERROR] Caught exception at backend/src/services/agent-run-continuation-model-turns.ts:58", error);
     return {
       type: "failed",
       run: failAgentRunForModelError(input.run, error),

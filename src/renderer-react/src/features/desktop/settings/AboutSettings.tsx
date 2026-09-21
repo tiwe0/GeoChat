@@ -37,7 +37,8 @@ export function AboutSettings() {
       await navigator.clipboard.writeText(WECHAT_ID);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1400);
-    } catch {
+    } catch (caughtError) {
+      console.error("[ERROR] Caught exception at src/renderer-react/src/features/desktop/settings/AboutSettings.tsx:40", caughtError);
       // Clipboard access can be refused; the id is on screen either way.
     }
   };

@@ -23,4 +23,4 @@ const server = Effect.sync(() =>
 
 const instance = Effect.runSync(server);
 
-console.info(`GeoChat backend listening on http://${instance.hostname}:${instance.port}`);
+console.info(`[INFO] GeoChat backend listening on http://${instance.hostname}:${instance.port}`);

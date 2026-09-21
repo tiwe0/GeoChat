@@ -621,6 +621,7 @@ function ensureTableConstraints(
     sqlite.run(`DROP TABLE ${oldTable}`);
     sqlite.run("COMMIT");
   } catch (error) {
+    console.error("[ERROR] Caught exception at backend/src/db/client.ts:623", error);
     sqlite.run("ROLLBACK");
     throw error;
   }

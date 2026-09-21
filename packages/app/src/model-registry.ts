@@ -1,5 +1,8 @@
 export type AgentModelProvider = "deepseek" | "openai" | "anthropic" | "google" | "openrouter" | "qwen";
 
+export const CUSTOM_AGENT_PROVIDER_ID = "custom";
+export type AgentModelProtocol = "openai-compatible" | "anthropic" | "google";
+
 export type AgentModelCapability = "text" | "imageInput" | "toolCalling";
 export type AgentToolCallingMode = "native" | "assumed" | "unsupported";
 
@@ -8,6 +11,8 @@ export type AgentModelConfig = {
   model: string;
   apiKey: string;
   customBaseUrl: string;
+  protocol?: AgentModelProtocol;
+  supportsImages?: boolean;
   maxToolSteps?: number | null;
 };
 
@@ -25,6 +30,8 @@ export type AgentModelDefinition = {
   capabilities: readonly AgentModelCapability[];
   maxToolSteps: number;
   defaultTemperature: number;
+  /** Retained for saved configurations and run replay, but omitted from new model pickers. */
+  deprecated?: boolean;
 };
 
 export type AgentModelOption = {
@@ -114,7 +121,6 @@ export const AGENT_MODEL_REGISTRY = [
     provider: "deepseek",
     id: "deepseek-flash",
     label: "DeepSeek V4.1 Flash",
-    // Native multimodal understanding, confirmed against the live API.
     capabilities: ["text", "imageInput", "toolCalling"],
     maxToolSteps: 24,
     defaultTemperature: 0.2
@@ -129,11 +135,44 @@ export const AGENT_MODEL_REGISTRY = [
   },
   {
     provider: "openai",
+    id: "gpt-5.6-terra",
+    label: "GPT-5.6 Terra",
+    capabilities: ["text", "imageInput", "toolCalling"],
+    maxToolSteps: 16,
+    defaultTemperature: 0.2
+  },
+  {
+    provider: "openai",
+    id: "gpt-5.6-luna",
+    label: "GPT-5.6 Luna",
+    capabilities: ["text", "imageInput", "toolCalling"],
+    maxToolSteps: 12,
+    defaultTemperature: 0.2
+  },
+  {
+    provider: "openai",
+    id: "gpt-5.6-sol",
+    label: "GPT-5.6 Sol",
+    capabilities: ["text", "imageInput", "toolCalling"],
+    maxToolSteps: 20,
+    defaultTemperature: 0.2
+  },
+  {
+    provider: "openai",
+    id: "gpt-6-astra",
+    label: "GPT-6 Astra",
+    capabilities: ["text", "imageInput", "toolCalling"],
+    maxToolSteps: 24,
+    defaultTemperature: 0.2
+  },
+  {
+    provider: "openai",
     id: "gpt-5.5",
     label: "GPT-5.5",
     capabilities: ["text", "imageInput", "toolCalling"],
     maxToolSteps: 16,
-    defaultTemperature: 0.2
+    defaultTemperature: 0.2,
+    deprecated: true
   },
   {
     provider: "openai",
@@ -141,7 +180,8 @@ export const AGENT_MODEL_REGISTRY = [
     label: "GPT-5.4",
     capabilities: ["text", "imageInput", "toolCalling"],
     maxToolSteps: 16,
-    defaultTemperature: 0.2
+    defaultTemperature: 0.2,
+    deprecated: true
   },
   {
     provider: "openai",
@@ -149,7 +189,8 @@ export const AGENT_MODEL_REGISTRY = [
     label: "GPT-5.4 Mini",
     capabilities: ["text", "imageInput", "toolCalling"],
     maxToolSteps: 12,
-    defaultTemperature: 0.2
+    defaultTemperature: 0.2,
+    deprecated: true
   },
   {
     provider: "openai",
@@ -157,14 +198,31 @@ export const AGENT_MODEL_REGISTRY = [
     label: "GPT-4.1",
     capabilities: ["text", "imageInput", "toolCalling"],
     maxToolSteps: 12,
+    defaultTemperature: 0.2,
+    deprecated: true
+  },
+  {
+    provider: "anthropic",
+    id: "claude-sonnet-5",
+    label: "Claude Sonnet 5",
+    capabilities: ["text", "imageInput", "toolCalling"],
+    maxToolSteps: 16,
     defaultTemperature: 0.2
   },
   {
     provider: "anthropic",
-    id: "claude-sonnet-4-6",
-    label: "Claude Sonnet 4.6",
+    id: "claude-opus-5",
+    label: "Claude Opus 5",
     capabilities: ["text", "imageInput", "toolCalling"],
-    maxToolSteps: 16,
+    maxToolSteps: 20,
+    defaultTemperature: 0.2
+  },
+  {
+    provider: "anthropic",
+    id: "claude-fable-5-1",
+    label: "Claude Fable 5.1",
+    capabilities: ["text", "imageInput", "toolCalling"],
+    maxToolSteps: 20,
     defaultTemperature: 0.2
   },
   {
@@ -177,8 +235,42 @@ export const AGENT_MODEL_REGISTRY = [
   },
   {
     provider: "anthropic",
+    id: "claude-sonnet-4-6",
+    label: "Claude Sonnet 4.6",
+    capabilities: ["text", "imageInput", "toolCalling"],
+    maxToolSteps: 16,
+    defaultTemperature: 0.2,
+    deprecated: true
+  },
+  {
+    provider: "anthropic",
     id: "claude-opus-4-8",
     label: "Claude Opus 4.8",
+    capabilities: ["text", "imageInput", "toolCalling"],
+    maxToolSteps: 16,
+    defaultTemperature: 0.2,
+    deprecated: true
+  },
+  {
+    provider: "google",
+    id: "gemini-3.8-flash",
+    label: "Gemini 3.8 Flash",
+    capabilities: ["text", "imageInput", "toolCalling"],
+    maxToolSteps: 16,
+    defaultTemperature: 0.2
+  },
+  {
+    provider: "google",
+    id: "gemini-3.5-flash-lite",
+    label: "Gemini 3.5 Flash-Lite",
+    capabilities: ["text", "imageInput", "toolCalling"],
+    maxToolSteps: 12,
+    defaultTemperature: 0.2
+  },
+  {
+    provider: "google",
+    id: "gemini-3.1-pro-preview",
+    label: "Gemini 3.1 Pro Preview",
     capabilities: ["text", "imageInput", "toolCalling"],
     maxToolSteps: 16,
     defaultTemperature: 0.2
@@ -189,7 +281,8 @@ export const AGENT_MODEL_REGISTRY = [
     label: "Gemini 3.5 Flash",
     capabilities: ["text", "imageInput", "toolCalling"],
     maxToolSteps: 12,
-    defaultTemperature: 0.2
+    defaultTemperature: 0.2,
+    deprecated: true
   },
   {
     provider: "google",
@@ -197,7 +290,8 @@ export const AGENT_MODEL_REGISTRY = [
     label: "Gemini 3.1 Pro Preview",
     capabilities: ["text", "imageInput", "toolCalling"],
     maxToolSteps: 16,
-    defaultTemperature: 0.2
+    defaultTemperature: 0.2,
+    deprecated: true
   },
   {
     provider: "google",
@@ -205,6 +299,55 @@ export const AGENT_MODEL_REGISTRY = [
     label: "Gemini 2.5 Pro",
     capabilities: ["text", "imageInput", "toolCalling"],
     maxToolSteps: 16,
+    defaultTemperature: 0.2,
+    deprecated: true
+  },
+  {
+    provider: "openrouter",
+    id: "google/gemini-3.8-flash",
+    label: "Gemini 3.8 Flash",
+    capabilities: ["text", "imageInput", "toolCalling"],
+    maxToolSteps: 16,
+    defaultTemperature: 0.2
+  },
+  {
+    provider: "openrouter",
+    id: "openai/gpt-5.6-terra",
+    label: "GPT-5.6 Terra",
+    capabilities: ["text", "imageInput", "toolCalling"],
+    maxToolSteps: 16,
+    defaultTemperature: 0.2
+  },
+  {
+    provider: "openrouter",
+    id: "openai/gpt-6-astra",
+    label: "GPT-6 Astra",
+    capabilities: ["text", "imageInput", "toolCalling"],
+    maxToolSteps: 24,
+    defaultTemperature: 0.2
+  },
+  {
+    provider: "openrouter",
+    id: "anthropic/claude-sonnet-4.6",
+    label: "Claude Sonnet 4.6",
+    capabilities: ["text", "imageInput", "toolCalling"],
+    maxToolSteps: 16,
+    defaultTemperature: 0.2
+  },
+  {
+    provider: "openrouter",
+    id: "deepseek/deepseek-v4.1-flash",
+    label: "DeepSeek V4.1 Flash",
+    capabilities: ["text", "imageInput", "toolCalling"],
+    maxToolSteps: 24,
+    defaultTemperature: 0.2
+  },
+  {
+    provider: "openrouter",
+    id: "qwen/qwen3.8-flash",
+    label: "Qwen 3.8 Flash",
+    capabilities: ["text", "imageInput", "toolCalling"],
+    maxToolSteps: 12,
     defaultTemperature: 0.2
   },
   {
@@ -213,6 +356,31 @@ export const AGENT_MODEL_REGISTRY = [
     label: "OpenRouter GPT-5.5",
     capabilities: ["text", "imageInput", "toolCalling"],
     maxToolSteps: 16,
+    defaultTemperature: 0.2,
+    deprecated: true
+  },
+  {
+    provider: "qwen",
+    id: "qwen3.7-plus",
+    label: "Qwen 3.7 Plus",
+    capabilities: ["text", "imageInput", "toolCalling"],
+    maxToolSteps: 16,
+    defaultTemperature: 0.2
+  },
+  {
+    provider: "qwen",
+    id: "qwen3.8-flash",
+    label: "Qwen 3.8 Flash",
+    capabilities: ["text", "imageInput", "toolCalling"],
+    maxToolSteps: 12,
+    defaultTemperature: 0.2
+  },
+  {
+    provider: "qwen",
+    id: "qwen3.8-max",
+    label: "Qwen 3.8 Max",
+    capabilities: ["text", "imageInput", "toolCalling"],
+    maxToolSteps: 20,
     defaultTemperature: 0.2
   },
   {
@@ -221,30 +389,6 @@ export const AGENT_MODEL_REGISTRY = [
     label: "Qwen Plus",
     capabilities: ["text", "toolCalling"],
     maxToolSteps: 16,
-    defaultTemperature: 0.2
-  },
-  {
-    provider: "qwen",
-    id: "qwen3.7-max",
-    label: "Qwen 3.7 Max",
-    capabilities: ["text", "toolCalling"],
-    maxToolSteps: 16,
-    defaultTemperature: 0.2
-  },
-  {
-    provider: "qwen",
-    id: "qwen3.6-plus",
-    label: "Qwen 3.6 Plus",
-    capabilities: ["text", "toolCalling"],
-    maxToolSteps: 16,
-    defaultTemperature: 0.2
-  },
-  {
-    provider: "qwen",
-    id: "qwen3.6-flash",
-    label: "Qwen 3.6 Flash",
-    capabilities: ["text", "toolCalling"],
-    maxToolSteps: 12,
     defaultTemperature: 0.2
   },
   {
@@ -262,6 +406,33 @@ export const AGENT_MODEL_REGISTRY = [
     capabilities: ["text", "toolCalling"],
     maxToolSteps: 16,
     defaultTemperature: 0.2
+  },
+  {
+    provider: "qwen",
+    id: "qwen3.7-max",
+    label: "Qwen 3.7 Max",
+    capabilities: ["text", "toolCalling"],
+    maxToolSteps: 16,
+    defaultTemperature: 0.2,
+    deprecated: true
+  },
+  {
+    provider: "qwen",
+    id: "qwen3.6-plus",
+    label: "Qwen 3.6 Plus",
+    capabilities: ["text", "toolCalling"],
+    maxToolSteps: 16,
+    defaultTemperature: 0.2,
+    deprecated: true
+  },
+  {
+    provider: "qwen",
+    id: "qwen3.6-flash",
+    label: "Qwen 3.6 Flash",
+    capabilities: ["text", "toolCalling"],
+    maxToolSteps: 12,
+    defaultTemperature: 0.2,
+    deprecated: true
   }
 ] as const satisfies readonly AgentModelDefinition[];
 
@@ -286,7 +457,8 @@ function cloneModelDefinition(model: AgentModelDefinition): AgentModelDefinition
     label: model.label,
     capabilities: [...model.capabilities],
     maxToolSteps: model.maxToolSteps,
-    defaultTemperature: model.defaultTemperature
+    defaultTemperature: model.defaultTemperature,
+    ...(model.deprecated === true ? { deprecated: true } : {})
   };
 }
 
@@ -330,7 +502,8 @@ function isAgentModelDefinition(value: unknown): value is AgentModelDefinition {
     Boolean(value.label.trim()) &&
     isAgentModelCapabilityArray(value.capabilities) &&
     isFiniteNumberInRange(value.maxToolSteps, 0, 64) &&
-    isFiniteNumberInRange(value.defaultTemperature, 0, 2)
+    isFiniteNumberInRange(value.defaultTemperature, 0, 2) &&
+    (value.deprecated === undefined || typeof value.deprecated === "boolean")
   );
 }
 
@@ -414,6 +587,13 @@ export function getAgentProviderDefinition(provider: string): AgentProviderDefin
 }
 
 export function getAgentProviderProxyPolicy(provider: string) {
+  if (provider === CUSTOM_AGENT_PROVIDER_ID) {
+    return {
+      provider,
+      defaultBaseUrl: "",
+      allowedHosts: [] as readonly string[]
+    };
+  }
   const definition = getAgentProviderDefinition(provider);
   return definition
     ? {
@@ -433,7 +613,7 @@ export function getAgentModelDefinition(provider: string, model: string): AgentM
 }
 
 export function getAgentModelOptionsForSchema(provider: string, schema?: AgentModelRegistrySchema): AgentModelOption[] {
-  return registryModels(schema).filter((entry) => entry.provider === provider).map((entry) => ({
+  return registryModels(schema).filter((entry) => entry.provider === provider && !("deprecated" in entry && entry.deprecated === true)).map((entry) => ({
     value: entry.id,
     label: entry.label,
     supportsImages: modelHasCapability(entry, "imageInput"),
@@ -457,17 +637,20 @@ export function getDefaultAgentProvider() {
 export function normalizeAgentModelConfig(value: Partial<AgentModelConfig> | undefined): AgentModelConfig {
   const defaultProvider = getDefaultAgentProvider();
   const hasKnownProvider = AGENT_PROVIDER_REGISTRY.some((entry) => entry.id === value?.provider);
-  const provider = hasKnownProvider ? value!.provider! : defaultProvider.id;
+  const hasCustomProvider = value?.provider === CUSTOM_AGENT_PROVIDER_ID && Boolean(value.model?.trim());
+  const provider = hasKnownProvider || hasCustomProvider ? value!.provider! : defaultProvider.id;
   const modelOptions = getAgentModelOptions(provider);
   const defaultModel = modelOptions[0];
   const requestedModel = value?.model?.trim();
-  const model = hasKnownProvider && requestedModel ? requestedModel : defaultModel.value;
+  const model = (hasKnownProvider || hasCustomProvider) && requestedModel ? requestedModel : defaultModel.value;
 
   return {
     provider,
     model,
     apiKey: value?.apiKey ?? "",
     customBaseUrl: value?.customBaseUrl ?? "",
+    ...(isAgentModelProtocol(value?.protocol) ? { protocol: value.protocol } : {}),
+    ...(typeof value?.supportsImages === "boolean" ? { supportsImages: value.supportsImages } : {}),
     maxToolSteps: normalizeAgentRunnerMaxToolSteps(value?.maxToolSteps)
   };
 }
@@ -480,6 +663,8 @@ export function isAgentModelConfig(value: unknown): value is AgentModelConfig {
     typeof payload.model === "string" &&
     typeof payload.apiKey === "string" &&
     typeof payload.customBaseUrl === "string" &&
+    (payload.protocol === undefined || isAgentModelProtocol(payload.protocol)) &&
+    (payload.supportsImages === undefined || typeof payload.supportsImages === "boolean") &&
     isOptionalAgentRunnerMaxToolSteps(payload.maxToolSteps)
   );
 }
@@ -508,6 +693,7 @@ export function agentModelSupportsTools(provider: string, model: string) {
  * thinking parameter used by the other DeepSeek models.
  */
 export function agentModelSupportsReasoning(provider: string, model: string) {
+  if (provider === CUSTOM_AGENT_PROVIDER_ID) return true;
   const policy = getAgentModelPolicy({ provider, model });
   if (!policy.isKnownModel) return false;
   return !(provider === "deepseek" && /flash/i.test(model));
@@ -537,7 +723,7 @@ function modelPolicyMaxToolSteps(defaultMaxToolSteps: number, config: Pick<Agent
   return normalizeAgentRunnerMaxToolSteps(config.maxToolSteps) ?? defaultMaxToolSteps;
 }
 
-export function getAgentModelPolicyForSchema(config: Pick<AgentModelConfig, "provider" | "model"> & Partial<Pick<AgentModelConfig, "maxToolSteps">>, schema?: AgentModelRegistrySchema): AgentModelPolicy {
+export function getAgentModelPolicyForSchema(config: Pick<AgentModelConfig, "provider" | "model"> & Partial<Pick<AgentModelConfig, "maxToolSteps" | "supportsImages">>, schema?: AgentModelRegistrySchema): AgentModelPolicy {
   const provider = getAgentProviderDefinitionForSchema(config.provider, schema);
   const definition = getAgentModelDefinitionForSchema(config.provider, config.model, schema);
   if (definition) {
@@ -554,10 +740,10 @@ export function getAgentModelPolicyForSchema(config: Pick<AgentModelConfig, "pro
     };
   }
 
-  if (provider && config.model.trim()) {
+  if ((provider || config.provider === CUSTOM_AGENT_PROVIDER_ID) && config.model.trim()) {
     return {
       definition: undefined,
-      supportsImages: false,
+      supportsImages: config.provider === CUSTOM_AGENT_PROVIDER_ID ? config.supportsImages === true : false,
       supportsTools: true,
       toolCallingMode: "assumed",
       maxToolSteps: modelPolicyMaxToolSteps(CUSTOM_MODEL_MAX_TOOL_STEPS, config),
@@ -579,8 +765,12 @@ export function getAgentModelPolicyForSchema(config: Pick<AgentModelConfig, "pro
   };
 }
 
-export function getAgentModelPolicy(config: Pick<AgentModelConfig, "provider" | "model"> & Partial<Pick<AgentModelConfig, "maxToolSteps">>): AgentModelPolicy {
+export function getAgentModelPolicy(config: Pick<AgentModelConfig, "provider" | "model"> & Partial<Pick<AgentModelConfig, "maxToolSteps" | "supportsImages">>): AgentModelPolicy {
   return getAgentModelPolicyForSchema(config);
+}
+
+export function isAgentModelProtocol(value: unknown): value is AgentModelProtocol {
+  return value === "openai-compatible" || value === "anthropic" || value === "google";
 }
 
 export function agentModelPolicySnapshotFor(config: Pick<AgentModelConfig, "provider" | "model"> & Partial<Pick<AgentModelConfig, "maxToolSteps">>): AgentModelPolicySnapshot {

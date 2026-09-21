@@ -59,13 +59,16 @@ export function useAccessState(input: {
   const refreshAccessState = useCallback(async () => {
     const desktopApi = runtimeRef.current.desktopApi();
     if (!desktopApi?.getAccessState) return applyState(DEFAULT_ACCESS_STATE);
-    const state = await desktopApi.getAccessState().catch((error) => ({
-      ...DEFAULT_ACCESS_STATE,
-      available: true,
-      status: "error" as const,
-      errorCode: "unknown" as const,
-      error: error instanceof Error ? error.message : String(error)
-    }));
+    const state = await desktopApi.getAccessState().catch((error) => {
+      console.error("[ERROR] Failed to read desktop access state", error);
+      return {
+        ...DEFAULT_ACCESS_STATE,
+        available: true,
+        status: "error" as const,
+        errorCode: "unknown" as const,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    });
     return applyState({ ...state, available: true });
   }, [applyState]);
 
@@ -74,12 +77,15 @@ export function useAccessState(input: {
     if (!desktopApi?.checkAccess) return refreshAccessState();
     setAccessBusy(true);
     try {
-      const state = await desktopApi.checkAccess().catch((error) => ({
-        ...stateRef.current,
-        status: "error" as const,
-        errorCode: "unknown" as const,
-        error: error instanceof Error ? error.message : String(error)
-      }));
+      const state = await desktopApi.checkAccess().catch((error) => {
+        console.error("[ERROR] Failed to check desktop access", error);
+        return {
+          ...stateRef.current,
+          status: "error" as const,
+          errorCode: "unknown" as const,
+          error: error instanceof Error ? error.message : String(error)
+        };
+      });
       const next = applyState({ ...state, available: true });
       refetchRuntimeRef.current();
       return next;

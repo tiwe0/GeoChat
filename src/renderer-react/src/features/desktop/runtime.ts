@@ -1,4 +1,5 @@
 import type { RuntimeInfo } from "@geochat-ai/app";
+import { desktopLogger } from "./desktopLogger";
 
 /**
  * Where the backend actually is.
@@ -22,7 +23,10 @@ export async function loadDesktopRuntime() {
   try {
     runtime = await api.getRuntimeInfo();
     loadError = null;
+    console.info("[INFO] Desktop runtime information loaded");
+    console.debug(`[DEBUG] Desktop backend origin resolved to ${new URL(runtime.backendBaseUrl).origin}`);
   } catch (error) {
+    console.error("[ERROR] Caught exception at src/renderer-react/src/features/desktop/runtime.ts:25", error);
     runtime = null;
     loadError = error instanceof Error ? error.message : String(error);
   }
@@ -52,9 +56,14 @@ export function backendOrigin() {
   // correct by luck. It exists for `bun run react:dev` in a plain browser.
   const fallback = import.meta.env.VITE_API_ORIGIN ?? "http://127.0.0.1:17365";
   try {
-    return new URL(reported || fallback).origin;
-  } catch {
-    return new URL(fallback).origin;
+    const origin = new URL(reported || fallback).origin;
+    desktopLogger.trace(`Using backend origin ${origin}`);
+    return origin;
+  } catch (caughtError) {
+    console.error("[ERROR] Caught exception at src/renderer-react/src/features/desktop/runtime.ts:56", caughtError);
+    const fallbackOrigin = new URL(fallback).origin;
+    console.warn(`[WARN] Invalid reported backend URL; using fallback origin ${fallbackOrigin}`);
+    return fallbackOrigin;
   }
 }
 

@@ -63,7 +63,6 @@ const FUNCTION_CALL_INPUT_JSON_SCHEMA_ENGLISH_OVERRIDES = {
   },
   resetCanvas: {
     perspective: "Optional GeoGebra SetPerspective view or layout to switch to after reset. Defaults to G for Graphics; use T for 3D Graphics.",
-    authorization: "Internal runner policy provenance marker; it never substitutes for explicit user confirmation."
   },
   showChoiceAnalysis: {
     title: "Choice analysis card title.",
@@ -178,7 +177,6 @@ function localizedFunctionCallInputJsonSchema<TToolName extends FunctionCallTool
   }
   if (toolName === "resetCanvas") {
     schema.properties.perspective = { ...schema.properties.perspective, description: overrides.resetCanvas.perspective };
-    schema.properties.authorization = { ...schema.properties.authorization, description: overrides.resetCanvas.authorization };
   }
   if (toolName === "showSolutionSteps" || toolName === "showTeachingHint" || toolName === "showAnimationGuide") {
     schema.properties.auxiliaryElementReview = {

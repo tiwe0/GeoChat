@@ -1,7 +1,7 @@
 import {
   findForbiddenTwoDimensionalStyleCommands,
   twoDimensionalStylePolicyMessage
-} from "@geochat-ai/app";
+} from "@geochat-ai/app/geogebra-style-policy";
 import type { Locale } from "../../../../shared/desktop/locale";
 import { getFrontendGeoGebraController } from "../../geogebra/runtime";
 

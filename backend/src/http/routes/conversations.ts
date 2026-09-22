@@ -137,6 +137,7 @@ function isDesktopConversationMessageSnapshot(value: unknown): value is UpsertDe
     (payload.attachments === undefined || Array.isArray(payload.attachments)) &&
     (payload.toolCalls === undefined || Array.isArray(payload.toolCalls)) &&
     (payload.cards === undefined || Array.isArray(payload.cards)) &&
+    (payload.parts === undefined || Array.isArray(payload.parts)) &&
     (payload.usage === undefined || isDesktopConversationMessageUsage(payload.usage))
   );
 }

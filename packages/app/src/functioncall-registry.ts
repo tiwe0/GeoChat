@@ -328,7 +328,7 @@ export const FUNCTION_CALL_REGISTRY = {
   setFinished: {
     name: "setFinished",
     label: "结束本轮 Agent",
-    description: "当本轮题目已经完成、画布和说明都不需要继续修改时调用。调用后后端 runner 会立即把本轮标记为成功结束，不再请求新的工具。",
+    description: "当本轮题目已经完成、画布和说明都不需要继续修改时调用。调用后AI SDK Agent 会立即把本轮标记为成功结束，不再请求新的工具。",
     executor: "backend",
     sideEffectLevel: "write",
     timeoutMs: 1_000,
@@ -587,7 +587,7 @@ const FUNCTION_CALL_ENGLISH_OVERRIDES = {
   },
   setFinished: {
     label: "Finish this agent run",
-    description: "Call this when the current problem is complete and no further canvas or explanation changes are needed. The backend runner will immediately mark this run as succeeded and will not request more tools.",
+    description: "Call this when the current problem is complete and no further canvas or explanation changes are needed. The AI SDK agent will immediately mark this run as succeeded and will not request more tools.",
     display: {
       label: "Finish run",
       running: "Finishing",

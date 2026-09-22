@@ -184,12 +184,11 @@ describe("desktop-only renderer and backend boundaries", () => {
   }, 20_000);
 
   test("serves agent run command usage through the desktop backend", async () => {
-    const { request } = await createHttpHarness();
+    const { context, request } = await createHttpHarness();
     const runId = `command-usage-route-${crypto.randomUUID()}`;
     const run = createAgentRunLedger({
       runId,
       conversationId: `conversation-${runId}`,
-      mode: "ai-sdk",
       model: { provider: "openai", model: "gpt-5.5", apiKey: "", customBaseUrl: "" },
       prompt: "画一个圆。",
       attachmentCount: 0,
@@ -238,12 +237,7 @@ describe("desktop-only renderer and backend boundaries", () => {
       completedAt: "2026-06-06T04:04:07.000Z"
     });
 
-    const saved = await request("/v1/agent-runs", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(finished)
-    });
-    expect(saved.status).toBe(201);
+    await context.repositories.agentRuns.saveLedger(finished);
 
     const runsResponse = await request("/v1/agent-runs");
     const runsPayload = runsResponse.json as {
@@ -265,5 +259,25 @@ describe("desktop-only renderer and backend boundaries", () => {
 
     expect(response.status).toBe(200);
     expect(payload.stats?.commands).toContainEqual(expect.objectContaining({ commandName: "Circle", runCount: 1 }));
+  });
+
+  test("cancels an in-flight native AI SDK run idempotently", async () => {
+    const { context, request } = await createHttpHarness();
+    const run = createAgentRunLedger({
+      runId: `cancel-route-${crypto.randomUUID()}`,
+      conversationId: `cancel-conversation-${crypto.randomUUID()}`,
+      model: { provider: "deepseek", model: "deepseek-chat", apiKey: "test", customBaseUrl: "" },
+      prompt: "读取画板。",
+      attachmentCount: 0,
+    });
+    await context.repositories.agentRuns.saveLedger(run);
+
+    const first = await request(`/v1/agent-runs/${encodeURIComponent(run.runId)}/cancel`, { method: "POST" });
+    expect(first.status).toBe(200);
+    expect(first.json.run).toMatchObject({ status: "cancelled", error: "Stopped by user." });
+
+    const second = await request(`/v1/agent-runs/${encodeURIComponent(run.runId)}/cancel`, { method: "POST" });
+    expect(second.status).toBe(200);
+    expect(second.json.run).toEqual(first.json.run);
   });
 });

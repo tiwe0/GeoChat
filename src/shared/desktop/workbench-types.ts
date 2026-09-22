@@ -28,11 +28,11 @@ export type FunctionCallCard = {
 };
 
 import type {
-  FunctionCallToolName,
   AgentModelConfig,
-  AgentModelProtocol,
-  DesktopConversationSummary
-} from "@geochat-ai/app";
+  AgentModelProtocol
+} from "@geochat-ai/app/model-registry";
+import type { DesktopConversationSummary } from "@geochat-ai/app/desktop-contracts";
+import type { DesktopFunctionCall, FunctionCallToolName } from "@geochat-ai/app/functioncalls";
 import type {
   DesktopAppBundleUpdateState,
   DesktopImprovementPlanPreferences,
@@ -51,7 +51,7 @@ export type DesktopChatMessage = {
   createdAtIso?: string;
   activity?: DesktopChatActivity;
   attachments?: ImageAttachment[];
-  toolCalls?: import("@geochat-ai/app").DesktopFunctionCall[];
+  toolCalls?: DesktopFunctionCall[];
   cards?: FunctionCallCard[];
   usage?: {
     inputTokens?: number;

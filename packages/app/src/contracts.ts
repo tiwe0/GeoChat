@@ -25,10 +25,3 @@ export type { ChatMessageMetadata, ChatTokenUsage } from "./chat";
 export type { AgentModelCapability, AgentModelDefinition } from "./model-registry";
 export type { AgentRunThinkingEffort } from "./run-ledger";
 export { AGENT_RUN_THINKING_EFFORTS, normalizeAgentRunThinkingEffort } from "./run-ledger";
-export {
-  AGENT_RUNNER_CLAIM_OWNER_CHANNELS,
-  createAgentRunRunnerClaimOwner,
-  parseAgentRunRunnerClaimOwner,
-  type AgentRunRunnerClaimOwner,
-  type AgentRunRunnerClaimOwnerChannel
-} from "./agent-run-runner-claim";

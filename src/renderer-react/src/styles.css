@@ -104,9 +104,9 @@ h2 { font-size: 18px; }
 .frontend-canvas-host { position: relative; z-index: 0; display: block; width: 100%; height: 100%; visibility: visible; opacity: 1; }
 .frontend-canvas-host > * { width: 100%; height: 100%; }
 .frontend-canvas-host .applet_scaler, .frontend-canvas-host .GeoGebraFrame { width: 100% !important; height: 100% !important; }
-.frontend-canvas-host .applet_scaler, .frontend-canvas-host .GeoGebraFrame, .frontend-canvas-host canvas { display: block !important; visibility: visible !important; opacity: 1 !important; }
+.frontend-canvas-host .applet_scaler, .frontend-canvas-host .GeoGebraFrame { display: block !important; visibility: visible !important; opacity: 1 !important; }
 .frontend-canvas-host .GeoGebraFrame { position: relative !important; z-index: 0; overflow: hidden; }
-.frontend-canvas-host canvas { width: 100% !important; height: 100% !important; max-width: none; }
+.frontend-canvas-host canvas { display: block !important; visibility: visible !important; opacity: 1 !important; max-width: none; }
 .frontend-canvas-intro {
   position: absolute;
   top: 72px;
@@ -333,6 +333,79 @@ h2 { font-size: 18px; }
   background: rgba(255, 255, 255, .76);
   box-shadow: 0 1px 2px rgba(24, 41, 34, .025);
 }
+.geochat-settings .settings-problem-bank-card {
+  overflow: hidden;
+  border: 1px solid rgba(185, 201, 191, .58);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .76);
+  box-shadow: 0 1px 2px rgba(24, 41, 34, .025);
+}
+.geochat-settings .settings-problem-bank-header {
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 18px;
+}
+.geochat-settings .settings-problem-bank-heading { min-width: 0; align-items: center; }
+.geochat-settings .settings-problem-bank-mark {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--app-accent-dark);
+  background: var(--app-accent-soft);
+}
+.geochat-settings .settings-problem-bank-actions { flex: 0 0 auto; }
+.geochat-settings .settings-problem-bank-notice,
+.geochat-settings .settings-problem-bank-empty {
+  padding: 13px 18px;
+  border-top: 1px solid rgba(185, 201, 191, .42);
+  background: rgba(247, 250, 248, .72);
+}
+.geochat-settings .settings-problem-bank-empty {
+  min-height: 112px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  text-align: center;
+}
+.geochat-settings .settings-problem-set-list {
+  border-top: 1px solid rgba(185, 201, 191, .42);
+}
+.geochat-settings .settings-problem-set-row {
+  min-height: 64px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 18px;
+  border-bottom: 1px solid rgba(185, 201, 191, .36);
+}
+.geochat-settings .settings-problem-set-row:last-child { border-bottom: 0; }
+.geochat-settings .settings-problem-set-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.geochat-settings .settings-problem-set-kind {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: var(--app-accent-dark);
+  background: var(--app-accent-soft);
+}
+.geochat-settings .settings-problem-set-count {
+  white-space: nowrap;
+  color: #526079;
+  font-variant-numeric: tabular-nums;
+}
 .geochat-settings .settings-general-page > .settings-section {
   grid-template-columns: 138px minmax(0, 1fr);
   gap: 20px;
@@ -502,6 +575,8 @@ h2 { font-size: 18px; }
   .geochat-settings .settings-custom-model-fields .MuiIconButton-root { align-self: flex-start; }
   .geochat-settings .settings-about-grid { grid-template-columns: minmax(0, 1fr); }
   .geochat-settings .settings-about-wide { grid-column: auto; }
+  .geochat-settings .settings-problem-bank-header { padding: 14px; }
+  .geochat-settings .settings-problem-set-row { padding-inline: 14px; }
 }
 .geochat-blackboard {
   background: rgba(23, 63, 53, .84) !important;

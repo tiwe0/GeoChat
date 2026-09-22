@@ -2,6 +2,9 @@ import { useState } from "react";
 import { Box, Button, Link, Stack, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { APP_VERSION } from "../../../../../shared/desktop/platform";
+import aboutBannerUrl from "../../../assets/settings/geochat-about-banner.png";
+import authorImageUrl from "../../../assets/settings/thanks/author.jpg";
+import sponsorImageUrl from "../../../assets/settings/thanks/wechat.png";
 
 /**
  * Who made this, under what licence, and standing on whose shoulders.
@@ -23,7 +26,8 @@ const PEOPLE_CREDITS = [
   { name: "桢桢老师" },
   { name: "Zgy 老师" },
   { name: "喵喵", note: "爱猫" },
-  { name: "fzm 老师" }
+  { name: "fzm 老师" },
+  { name: "cortexsat" }
 ] as const;
 
 const WECHAT_ID = "I0v0ry";
@@ -47,7 +51,7 @@ export function AboutSettings() {
     <Stack className="settings-page" spacing={2.5}>
       <Box
         component="img"
-        src="/images/geochat-about-banner.png"
+        src={aboutBannerUrl}
         alt={t("about.bannerAlt")}
         sx={{
           display: "block",
@@ -73,7 +77,7 @@ export function AboutSettings() {
           <Stack className="settings-about-author" direction="row" spacing={1.5}>
             <Box
               component="img"
-              src="/images/thanks/author.jpg"
+              src={authorImageUrl}
               alt={t("about.authorImageAlt")}
               sx={{ width: 64, height: 64, borderRadius: 2, objectFit: "cover", flexShrink: 0, border: "1px solid", borderColor: "divider" }}
             />
@@ -117,7 +121,7 @@ export function AboutSettings() {
           <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t("about.sponsorTitle")}</Typography>
           <Box
             component="img"
-            src="/images/thanks/wechat.png"
+            src={sponsorImageUrl}
             alt={t("about.sponsorImageAlt")}
             sx={{ display: "block", width: "min(100%, 200px)", height: "auto", borderRadius: 2, border: "1px solid", borderColor: "divider" }}
           />

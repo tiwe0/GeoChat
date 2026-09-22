@@ -1,7 +1,8 @@
 import type { ChatMessage } from "./messageAdapter";
-import { parseConversationSummaries, type ConversationSummary } from "./api";
+import { parseConversationParts, parseConversationSummaries, type ConversationSummary } from "./api";
 
 const LOCAL_CONVERSATIONS_KEY = "geochatDesktopConversations";
+const LOCAL_CONVERSATIONS_VERSION = 1;
 
 type LocalConversation = {
   summary: ConversationSummary;
@@ -13,13 +14,20 @@ function readAll(): LocalConversation[] {
     const raw = globalThis.localStorage?.getItem(LOCAL_CONVERSATIONS_KEY);
     if (!raw) return [];
     const value: unknown = JSON.parse(raw);
-    if (!Array.isArray(value)) return [];
-    return value.flatMap((item) => {
+    const records = Array.isArray(value)
+      ? value
+      : value && typeof value === "object" && !Array.isArray(value)
+        && (value as Record<string, unknown>).version === LOCAL_CONVERSATIONS_VERSION
+        && Array.isArray((value as Record<string, unknown>).conversations)
+        ? (value as { conversations: unknown[] }).conversations
+        : [];
+    return records.flatMap((item) => {
       if (!item || typeof item !== "object" || Array.isArray(item)) return [];
       const data = item as Record<string, unknown>;
       const summary = parseConversationSummaries([data.summary])[0];
-      if (!summary || !Array.isArray(data.messages)) return [];
-      return [{ summary, messages: data.messages as ChatMessage[] }];
+      const messages = parseLocalMessages(data.messages);
+      if (!summary || !messages) return [];
+      return [{ summary, messages }];
     });
   } catch (caughtError) {
     console.error("[ERROR] Caught exception at src/renderer-react/src/features/conversations/localStore.ts:24", caughtError);
@@ -29,10 +37,13 @@ function readAll(): LocalConversation[] {
 
 function writeAll(conversations: LocalConversation[]) {
   try {
-    globalThis.localStorage?.setItem(LOCAL_CONVERSATIONS_KEY, JSON.stringify(conversations));
+    globalThis.localStorage?.setItem(LOCAL_CONVERSATIONS_KEY, JSON.stringify({
+      version: LOCAL_CONVERSATIONS_VERSION,
+      conversations,
+    }));
   } catch (caughtError) {
     console.error("[ERROR] Caught exception at src/renderer-react/src/features/conversations/localStore.ts:32", caughtError);
-    // Storage can be unavailable or full; the in-memory chat remains usable.
+    throw caughtError;
   }
 }
 
@@ -69,4 +80,22 @@ export function saveLocalConversation(input: {
 
 export function deleteLocalConversation(id: string) {
   writeAll(readAll().filter((conversation) => conversation.summary.id !== id));
+}
+
+function parseLocalMessages(value: unknown): ChatMessage[] | null {
+  if (!Array.isArray(value)) return null;
+  const messages: ChatMessage[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+    const message = item as Record<string, unknown>;
+    if (
+      typeof message.id !== "string"
+      || (message.role !== "user" && message.role !== "assistant")
+      || !Array.isArray(message.parts)
+    ) return null;
+    const parts = parseConversationParts(message.parts);
+    if (parts.length !== message.parts.length) return null;
+    messages.push({ id: message.id, role: message.role, parts } as ChatMessage);
+  }
+  return messages;
 }

@@ -365,41 +365,64 @@ export function registerDesktopDebugTools(server: McpServer, { config, actions }
     async (input) => {
       const timeoutMs = input.timeoutMs ?? 300_000;
       const pollIntervalMs = input.pollIntervalMs ?? 1_000;
+      const testStartedAt = Date.now();
       try {
+        const readyWait = await waitForDesktopRendererReady(actions, timeoutMs, pollIntervalMs);
+        if (!readyWait.ready) {
+          return blockedResult(
+            readyWait.message,
+            { action: readyWait.action, waitedMs: Date.now() - testStartedAt }
+          );
+        }
         const launch = await enqueueSingleProblemTestAction({ config, actions, input });
         if (!launch.ok) return blockedResult(launch.message, launch.details);
 
         const action = await waitForDesktopDebugAction(actions, launch.action.id, timeoutMs, pollIntervalMs);
         const conversationId = resultConversationId(action.result) ?? launch.conversationId ?? input.conversationId ?? null;
+        const remainingAfterAction = Math.max(0, timeoutMs - (Date.now() - testStartedAt));
+        const runWait = action.status === "succeeded" && conversationId && remainingAfterAction > 0
+          ? await waitForConversationRun(config, conversationId, testStartedAt, remainingAfterAction, pollIntervalMs)
+          : { run: null, timedOut: action.status === "succeeded" };
         const redact = redactionContext(config, { includeSensitive: input.includeSensitive });
         const runSummary = conversationId
           ? readLatestRunSummaryForConversation(config, conversationId, redact)
           : null;
+        const runStatus = runWait.run?.status ?? null;
+        const runCompleted = runStatus !== null && isTerminalAgentRunStatus(runStatus);
 
         let pngAction: Awaited<ReturnType<typeof waitForDesktopDebugAction>> | null = null;
-        if (input.exportPng && action.status === "succeeded") {
-          const exportAction = actions.enqueue({
-            type: "export_png",
-            exportScale: input.exportScale,
-            transparent: input.transparent,
-            dpi: input.dpi
-          });
-          pngAction = await waitForDesktopDebugAction(actions, exportAction.id, Math.min(timeoutMs, 60_000), pollIntervalMs);
+        let pngReadyWait: Awaited<ReturnType<typeof waitForDesktopRendererReady>> | null = null;
+        if (input.exportPng && runCompleted) {
+          const remainingBeforeExport = Math.max(0, timeoutMs - (Date.now() - testStartedAt));
+          pngReadyWait = await waitForDesktopRendererReady(actions, Math.min(remainingBeforeExport, 60_000), pollIntervalMs);
+          if (pngReadyWait.ready) {
+            const exportAction = actions.enqueue({
+              type: "export_png",
+              exportScale: input.exportScale,
+              transparent: input.transparent,
+              dpi: input.dpi
+            });
+            pngAction = await waitForDesktopDebugAction(actions, exportAction.id, Math.min(remainingBeforeExport, 60_000), pollIntervalMs);
+          }
         }
 
         return toolResult({
-          ok: action.status === "succeeded",
-          completed: action.status === "succeeded",
-          timedOut: action.status === "queued" || action.status === "claimed",
+          ok: action.status === "succeeded" && runStatus === "succeeded",
+          completed: action.status === "succeeded" && runCompleted,
+          timedOut: action.status === "queued" || action.status === "claimed" || runWait.timedOut,
           mode: launch.mode,
           problem: launch.problem ?? null,
           action,
           conversationId,
+          runWait,
           runSummary,
+          pngReadyWait,
           pngAction,
-          note: action.status === "succeeded"
-            ? "Single problem test finished. Inspect runSummary and pngAction.result when exportPng is enabled."
-            : "Desktop renderer did not finish the action before timeout, or the action failed."
+          note: action.status !== "succeeded"
+            ? "Desktop renderer did not finish the action before timeout, or the action failed."
+            : runWait.timedOut
+              ? "The message was sent, but its Agent run did not reach a terminal state before timeout."
+              : "Single problem test finished. Inspect runSummary and pngAction.result when exportPng is enabled."
         });
       } catch (error) {
         return blockedResult(error instanceof Error ? error.message : "Single problem test failed.", { backendBaseUrl: config.backendBaseUrl });
@@ -789,7 +812,7 @@ export function registerDesktopDebugTools(server: McpServer, { config, actions }
               l.run_id,
               l.conversation_id,
               l.status,
-              l.mode,
+              coalesce(json_extract(l.payload, '$.mode'), 'ai-sdk') as mode,
               l.model_provider,
               l.model_id,
               l.started_at,
@@ -1180,6 +1203,48 @@ async function waitForDesktopDebugAction(
   return action;
 }
 
+type DesktopRendererStatus = {
+  geogebra?: { ready?: boolean };
+  running?: boolean;
+};
+
+export async function waitForDesktopRendererReady(
+  actions: DesktopDebugActionQueue,
+  timeoutMs: number,
+  pollIntervalMs: number
+): Promise<
+  | { ready: true; action: Awaited<ReturnType<typeof waitForDesktopDebugAction>> }
+  | { ready: false; message: string; action: Awaited<ReturnType<typeof waitForDesktopDebugAction>> | null }
+> {
+  const startedAt = Date.now();
+  let latest: Awaited<ReturnType<typeof waitForDesktopDebugAction>> | null = null;
+  while (Date.now() - startedAt < timeoutMs) {
+    const statusAction = actions.enqueue({ type: "get_ui_status" });
+    const remaining = Math.max(1, timeoutMs - (Date.now() - startedAt));
+    latest = await waitForDesktopDebugAction(
+      actions,
+      statusAction.id,
+      Math.min(remaining, 10_000),
+      Math.min(pollIntervalMs, remaining)
+    );
+    if (latest.status === "succeeded") {
+      const status = latest.result as DesktopRendererStatus | undefined;
+      if (status?.geogebra?.ready === true && status.running !== true) {
+        return { ready: true, action: latest };
+      }
+    }
+    const sleepMs = Math.min(pollIntervalMs, Math.max(0, timeoutMs - (Date.now() - startedAt)));
+    if (sleepMs > 0) await sleep(sleepMs);
+  }
+  return {
+    ready: false,
+    message: latest?.status === "failed"
+      ? latest.error ?? "Desktop renderer readiness check failed."
+      : "The desktop renderer did not report a ready GeoGebra canvas before timeout.",
+    action: latest
+  };
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -1188,6 +1253,72 @@ function resultConversationId(result: unknown) {
   if (!result || typeof result !== "object" || Array.isArray(result)) return null;
   const value = (result as Record<string, unknown>).conversationId;
   return typeof value === "string" && value.trim() ? value : null;
+}
+
+type ConversationRunState = {
+  runId: string;
+  status: string;
+  startedAt: number;
+  completedAt: number | null;
+};
+
+export function isTerminalAgentRunStatus(status: string) {
+  return status === "succeeded" || status === "failed" || status === "cancelled";
+}
+
+export async function waitForConversationRun(
+  config: DesktopDebugMcpConfig,
+  conversationId: string,
+  notBeforeMs: number,
+  timeoutMs: number,
+  pollIntervalMs: number
+): Promise<{ run: ConversationRunState | null; timedOut: boolean }> {
+  const startedAt = Date.now();
+  let latest: ConversationRunState | null = null;
+  while (Date.now() - startedAt < timeoutMs) {
+    latest = readConversationRunState(config, conversationId, notBeforeMs);
+    if (latest && isTerminalAgentRunStatus(latest.status)) {
+      return { run: latest, timedOut: false };
+    }
+    await sleep(Math.min(pollIntervalMs, Math.max(1, timeoutMs - (Date.now() - startedAt))));
+  }
+  latest = readConversationRunState(config, conversationId, notBeforeMs) ?? latest;
+  return {
+    run: latest,
+    timedOut: !latest || !isTerminalAgentRunStatus(latest.status)
+  };
+}
+
+function readConversationRunState(
+  config: DesktopDebugMcpConfig,
+  conversationId: string,
+  notBeforeMs: number
+): ConversationRunState | null {
+  return withReadonlyDatabase(config, (db) => {
+    if (!tableExists(db, "agent_run_ledgers")) return null;
+    const row = get(
+      db,
+      `
+        select run_id, status, started_at, completed_at
+        from agent_run_ledgers
+        where conversation_id = ? and started_at >= ?
+        order by started_at desc
+        limit 1
+      `,
+      [conversationId, notBeforeMs]
+    );
+    if (
+      typeof row?.run_id !== "string"
+      || typeof row.status !== "string"
+      || typeof row.started_at !== "number"
+    ) return null;
+    return {
+      runId: row.run_id,
+      status: row.status,
+      startedAt: row.started_at,
+      completedAt: typeof row.completed_at === "number" ? row.completed_at : null
+    };
+  });
 }
 
 function readLatestRunSummaryForConversation(

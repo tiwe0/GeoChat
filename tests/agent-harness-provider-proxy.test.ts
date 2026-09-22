@@ -11,12 +11,12 @@ import {
   validateProviderProxyHeaders,
   validateProviderProxyMethodBody
 } from "@geochat-ai/app";
-import { sanitizeRunnerModelError } from "../backend/src/agent/model-error";
+import { sanitizeProviderError } from "../backend/src/agent/provider-error";
 import { createHttpHarness } from "./agent-harness-http-utils";
 
 describe("provider proxy policy", () => {
-  test("redacts provider secrets before model errors are stored in the runner ledger", () => {
-    const message = sanitizeRunnerModelError(
+  test("redacts provider secrets before model errors are stored in the AI SDK ledger", () => {
+    const message = sanitizeProviderError(
       new Error(
         `401 Bearer sk-proj-abcdefghijklmnopqrstuvwxyz123456 api_key=sk-ant-abcdefghijklmnopqrstuvwxyz123456 google=AIzaabcdefghijklmnopqrstuvwxyz123456 ${"x".repeat(700)}`
       )

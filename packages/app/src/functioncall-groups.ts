@@ -7,7 +7,7 @@ export type FunctionCallGroupId =
   | "skillDiscovery"
   | "presentationCards"
   | "choiceAnalysis"
-  | "runnerControl";
+  | "agentControl";
 
 export type FunctionCallGroup = {
   id: FunctionCallGroupId;
@@ -61,9 +61,9 @@ export const FUNCTION_CALL_GROUPS = {
     reviewScope: "Option-level reasoning and choice-specific canvas scenario contracts.",
     toolNames: ["showChoiceAnalysis"]
   },
-  runnerControl: {
-    id: "runnerControl",
-    label: "Runner control",
+  agentControl: {
+    id: "agentControl",
+    label: "Agent control",
     reviewScope: "Run completion and orchestration control signals.",
     toolNames: ["setFinished"]
   }

@@ -17,6 +17,6 @@ export function getFunctionCallPlanningToolNames() {
   return getFunctionCallToolNames();
 }
 
-export function getFunctionCallRemoteBridgeToolNames() {
+export function getFunctionCallClientExecutableToolNames() {
   return getFunctionCallToolNames().filter(isFunctionCallRendererExecutable);
 }

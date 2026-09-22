@@ -52,7 +52,7 @@ export function normalizeGeoGebraFreeParameterCommands(commands: string[], optio
   return normalizedCommands;
 }
 
-function normalizeGeoGebraCommandSyntax(command: string): string[] {
+export function normalizeGeoGebraCommandSyntax(command: string): string[] {
   const aliasedCommand = normalizeGeoGebraCommandAliases(command);
   const call = parseGeoGebraCommandCall(aliasedCommand);
   if (!call) return [aliasedCommand];
@@ -114,14 +114,44 @@ function normalizeSetColorCommand(call: NonNullable<ReturnType<typeof parseGeoGe
   const objectName = call.args[0];
   const color = colorTupleFromGeoGebraArgument(call.args[1]);
   if (color) {
-    return [`${call.prefix}SetColor(${objectName}, ${color.join(", ")})${call.trailing}`];
+    const rgb = normalizeRgbChannels(color);
+    return rgb
+      ? [`${call.prefix}SetColor(${objectName}, ${rgb.join(", ")})${call.trailing}`]
+      : [`${call.prefix}SetColor(${call.args.join(", ")})${call.trailing}`];
   }
-  if (call.args.length >= 5) {
+  const rgb = normalizeRgbChannels(call.args.slice(1, 4));
+  if (call.args.length >= 5 && rgb) {
     const alpha = normalizeOpacityArgument(call.args[4]);
-    const colorCommand = `${call.prefix}SetColor(${call.args.slice(0, 4).join(", ")})${call.trailing}`;
+    const colorCommand = `${call.prefix}SetColor(${objectName}, ${rgb.join(", ")})${call.trailing}`;
     return alpha === null ? [colorCommand] : [colorCommand, `SetFilling(${objectName}, ${alpha})`];
   }
+  if (call.args.length === 4 && rgb) {
+    return [`${call.prefix}SetColor(${objectName}, ${rgb.join(", ")})${call.trailing}`];
+  }
   return [`${call.prefix}SetColor(${call.args.join(", ")})${call.trailing}`];
+}
+
+function normalizeRgbChannels(values: readonly (string | number)[]) {
+  if (values.length !== 3) return null;
+  const channels = values.map((value) => Number(String(value).trim()));
+  if (channels.some((value) => !Number.isFinite(value) || value < 0 || value > 255)) return null;
+  if (channels.every((value) => value <= 1)) return channels.map(formatGeoGebraNumber);
+  return channels.map(formatGeoGebraRgbByte);
+}
+
+function formatGeoGebraNumber(value: number) {
+  return Number(value.toFixed(6)).toString();
+}
+
+function formatGeoGebraRgbByte(value: number) {
+  if (value <= 0) return "0";
+  if (value >= 255) return "1";
+  // GeoGebra converts unit-range channels back to bytes by truncating. A
+  // conventional decimal rounding can therefore turn e.g. 120/255 into 119.
+  // Ceiling at eight decimal places preserves the requested byte without a
+  // visually meaningful overshoot.
+  const scale = 100_000_000;
+  return (Math.ceil((value * scale) / 255) / scale).toString();
 }
 
 function normalizeSliderCommand(call: NonNullable<ReturnType<typeof parseGeoGebraCommandCall>>) {

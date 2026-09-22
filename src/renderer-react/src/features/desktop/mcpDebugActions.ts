@@ -16,12 +16,11 @@ export function createDesktopDebugActionExecutor(input: {
   getModelConfig: () => ModelConfig;
   getMcpStatus: () => RendererMcpStatus;
   isRunning: () => boolean;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, conversationId?: string) => string;
   activateConversation: (conversationId: string | undefined) => Promise<void>;
   showChat: () => void;
 }) {
   return async function executeDesktopDebugAction(action: DesktopDebugAction) {
-    if (input.isRunning()) throw new Error("Agent is already running; wait for the current message to finish.");
     const controller = getFrontendGeoGebraController();
 
     if (action.type === "get_ui_status") {
@@ -43,6 +42,8 @@ export function createDesktopDebugActionExecutor(input: {
       };
     }
 
+    if (input.isRunning()) throw new Error("Agent is already running; wait for the current message to finish.");
+
     if (action.type === "export_png") {
       if (!controller?.ready) throw new Error("The GeoGebra canvas is not ready.");
       return controller.executeTool("getPNGBase64", {
@@ -61,10 +62,11 @@ export function createDesktopDebugActionExecutor(input: {
       const content = action.content.trim();
       if (!content) throw new Error("send_message needs non-empty content.");
       if (!hasConfiguredApiKey(input.getModelConfig())) throw new Error("No API key is configured; set one in Settings first.");
+      if (!controller?.ready) throw new Error("The GeoGebra canvas is not ready.");
       await input.activateConversation(action.conversationId);
       input.showChat();
-      await input.sendMessage(content);
-      return { type: action.type, conversationId: input.getConversationId(), sent: true };
+      const conversationId = input.sendMessage(content, action.conversationId);
+      return { type: action.type, conversationId, sent: true };
     }
 
     throw new Error(`The problem bank is not available in this desktop, so ${action.type} is unsupported.`);

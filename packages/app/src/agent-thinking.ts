@@ -8,7 +8,7 @@ import type { AgentRunThinkingEffort } from "./run-ledger";
  * decide. Providers disagree on both the vocabulary and the unit — Anthropic
  * and Qwen want a token budget, OpenAI and OpenRouter want a named effort,
  * Google takes either, DeepSeek takes a mode plus an effort. Mapping in one
- * place keeps that disagreement out of the runner.
+ * place keeps that disagreement out of the native agent.
  *
  * Shapes here are written against the installed provider packages, not from
  * memory: an unrecognised key is silently dropped by the SDK, so a plausible

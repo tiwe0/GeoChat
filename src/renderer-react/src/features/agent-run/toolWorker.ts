@@ -1,56 +1,6 @@
-import type { AgentRunRemoteToolRequest, AgentRunToolRecord } from "@geochat-ai/app/client";
+import type { FunctionCallToolName } from "@geochat-ai/app/functioncalls";
 import type { ToolExecutionResult } from "@geochat-ai/app/geogebra-protocol";
 import { getFrontendGeoGebraController } from "../../geogebra/runtime";
-import { readCachedToolResult, saveCachedToolResult } from "./activeRunStorage";
-
-export async function executeRemoteToolRequest(request: AgentRunRemoteToolRequest): Promise<AgentRunToolRecord> {
-  const startedAt = new Date().toISOString();
-  const cached = await readCachedToolResult(request);
-  if (cached) return cached;
-  let tool: AgentRunToolRecord;
-  try {
-    const result = await executeRendererTool(request.toolName, request.args);
-    const completedAt = new Date().toISOString();
-    tool = {
-      toolCallId: request.toolCallId,
-      toolName: request.toolName,
-      status: result.ok ? "succeeded" : "failed",
-      args: request.args,
-      result,
-      canvasBefore: result.canvasBefore,
-      canvasAfter: result.canvasAfter ?? result.canvasContext,
-      error: result.ok ? null : result.error ?? "Renderer tool failed.",
-      startedAt,
-      completedAt,
-      durationMs: new Date(completedAt).getTime() - new Date(startedAt).getTime(),
-    };
-  } catch (error) {
-    console.error("[ERROR] Caught exception at src/renderer-react/src/features/agent-run/toolWorker.ts:27", error);
-    const completedAt = new Date().toISOString();
-    tool = {
-      toolCallId: request.toolCallId,
-      toolName: request.toolName,
-      status: "failed",
-      args: request.args,
-      error: error instanceof Error ? error.message : "Renderer tool failed.",
-      startedAt,
-      completedAt,
-      durationMs: new Date(completedAt).getTime() - new Date(startedAt).getTime(),
-    };
-  }
-  tool = redactLargeImagePayloads(tool);
-  await saveCachedToolResult(request, tool);
-  return tool;
-}
-
-function redactLargeImagePayloads(tool: AgentRunToolRecord): AgentRunToolRecord {
-  return {
-    ...tool,
-    result: redactValue(tool.result),
-    canvasBefore: redactValue(tool.canvasBefore),
-    canvasAfter: redactValue(tool.canvasAfter),
-  };
-}
 
 function redactValue(value: unknown, key = ""): unknown {
   if (typeof value === "string") {
@@ -64,7 +14,7 @@ function redactValue(value: unknown, key = ""): unknown {
   return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([childKey, childValue]) => [childKey, redactValue(childValue, childKey)]));
 }
 
-export async function executeRendererTool(toolName: AgentRunRemoteToolRequest["toolName"], args: unknown): Promise<ToolExecutionResult> {
+export async function executeRendererTool(toolName: FunctionCallToolName, args: unknown): Promise<ToolExecutionResult> {
   // The web build routed renderer tools through an extension native host
   // and gated on that mapping. This build executes them in-process.
   const controller = getFrontendGeoGebraController();
@@ -73,7 +23,7 @@ export async function executeRendererTool(toolName: AgentRunRemoteToolRequest["t
   const payload = asRecord(value);
   const ok = payload.ok !== false && payload.success !== false;
   const error = typeof payload.error === "string" && payload.error.trim() ? payload.error : undefined;
-  return {
+  return redactToolExecutionResult({
     ok,
     results: Array.isArray(payload.results) ? payload.results as ToolExecutionResult["results"] : [],
     result: payload,
@@ -82,7 +32,11 @@ export async function executeRendererTool(toolName: AgentRunRemoteToolRequest["t
     canvasAfter: payload.canvasAfter ?? payload.canvasContext,
     clientMeta: optionalRecord(payload.clientMeta) ?? { source: "geogebra-applet", ready: controller.ready },
     error,
-  };
+  });
+}
+
+function redactToolExecutionResult(result: ToolExecutionResult): ToolExecutionResult {
+  return redactValue(result) as ToolExecutionResult;
 }
 
 function asRecord(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }

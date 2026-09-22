@@ -1,9 +1,6 @@
 import { createHash } from "node:crypto";
 import type {
-  AgentRunLedgerRecord,
-  AgentRunModelStepRecord,
-  AgentRunPolicyDecisionRecord,
-  AgentRunRemoteToolRequest
+  AgentRunLedgerRecord
 } from "@geochat-ai/app";
 import type { AgentErrorEventInput, AgentRunRepository } from "../db/agent-run-repository";
 
@@ -51,90 +48,16 @@ export function createAgentRunEventService(agentRunRepository: AgentRunRepositor
     }
   }
 
-  async function saveRemoteToolRequestFailureEvent(request: AgentRunRemoteToolRequest) {
-    if (request.status !== "failed") return;
-    const run = await agentRunRepository.getLedger(request.runId);
-    const message = request.error ?? `${request.toolName} remote request failed.`;
-    await saveAgentErrorEvent({
-      eventId: `remote-tool-request:${request.runId}:${request.toolCallId}:failed`,
-      runId: request.runId,
-      conversationId: run?.conversationId ?? null,
-      source: "remote_tool_request",
-      code: "remote_tool_request_failed",
-      severity: "error",
-      message,
-      modelProvider: run?.modelProvider ?? null,
-      modelId: run?.modelId ?? null,
-      toolCallId: request.toolCallId,
-      toolName: request.toolName,
-      createdAt: request.completedAt ?? request.requestedAt,
-      payload: { request, run: run ? summarizeRunForErrorEvent(run) : null }
-    });
-  }
-
-  async function savePolicyDecisionErrorEvent(decision: AgentRunPolicyDecisionRecord) {
-    if (decision.allowed) return;
-    const run = await agentRunRepository.getLedger(decision.runId);
-    const message = decision.message ?? `${decision.kind} was rejected.`;
-    await saveAgentErrorEvent({
-      eventId: `policy:${decision.decisionId}`,
-      runId: decision.runId,
-      conversationId: run?.conversationId ?? null,
-      source: "policy",
-      code: `policy_${decision.kind}`,
-      severity: "warning",
-      message,
-      modelProvider: run?.modelProvider ?? null,
-      modelId: run?.modelId ?? null,
-      toolCallId: decision.toolCallId ?? null,
-      toolName: decision.toolName ?? null,
-      createdAt: decision.createdAt,
-      payload: { decision, run: run ? summarizeRunForErrorEvent(run) : null }
-    });
-  }
-
-  async function saveModelStepFailureEvent(step: AgentRunModelStepRecord) {
-    if (step.status !== "failed") return;
-    const run = await agentRunRepository.getLedger(step.runId);
-    const message = step.error ?? "Model step failed.";
-    await saveAgentErrorEvent({
-      eventId: `model-step:${step.stepId}:failed`,
-      runId: step.runId,
-      conversationId: run?.conversationId ?? null,
-      source: "model_step",
-      code: "model_step_failed",
-      severity: "error",
-      message,
-      modelProvider: step.modelProvider,
-      modelId: step.modelId,
-      toolCallId: step.outputToolCallId ?? null,
-      toolName: step.outputToolName ?? null,
-      createdAt: step.completedAt ?? step.startedAt,
-      payload: { step, run: run ? summarizeRunForErrorEvent(run) : null }
-    });
-  }
-
   async function backfillPersistedAgentErrorEvents() {
     for (const run of await agentRunRepository.listAllLedgers()) {
       await saveAgentRunFailureEvents(run);
     }
-    for (const request of await agentRunRepository.listAllRemoteToolRequests()) {
-      await saveRemoteToolRequestFailureEvent(request);
-    }
-    for (const decision of await agentRunRepository.listAllPolicyDecisions()) {
-      await savePolicyDecisionErrorEvent(decision);
-    }
-    for (const step of await agentRunRepository.listAllModelSteps()) {
-      await saveModelStepFailureEvent(step);
-    }
   }
+
 
   return {
     backfillPersistedAgentErrorEvents,
     saveAgentRunFailureEvents,
-    saveRemoteToolRequestFailureEvent,
-    savePolicyDecisionErrorEvent,
-    saveModelStepFailureEvent
   };
 }
 
@@ -145,7 +68,6 @@ function summarizeRunForErrorEvent(run: AgentRunLedgerRecord) {
     runId: run.runId,
     conversationId: run.conversationId,
     status: run.status,
-    mode: run.mode,
     modelProvider: run.modelProvider,
     modelId: run.modelId,
     prompt: run.prompt,

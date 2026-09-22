@@ -11,7 +11,7 @@ import {
   validateProviderProxyHeaders,
   validateProviderProxyMethodBody
 } from "@geochat-ai/app";
-import { sanitizeRunnerModelError } from "../agent/model-error";
+import { sanitizeProviderError } from "../agent/provider-error";
 
 export type ProviderProxyLimits = {
   maxProviderRequestBodyBytes: number;
@@ -90,7 +90,7 @@ export async function proxyProviderFetch(payload: unknown, limits: ProviderProxy
     console.error("[ERROR] Caught exception at backend/src/services/provider-proxy.ts:87", error);
     return providerProxyResult(502, {
       error: "provider_fetch_failed",
-      message: `Provider proxy request failed: ${sanitizeRunnerModelError(error)}`
+      message: `Provider proxy request failed: ${sanitizeProviderError(error)}`
     });
   }
   const responseBuffer = await response.arrayBuffer();

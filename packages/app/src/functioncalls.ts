@@ -22,7 +22,7 @@ export {
 export {
   getFunctionCallBackendExecutableToolNames,
   getFunctionCallPlanningToolNames,
-  getFunctionCallRemoteBridgeToolNames,
+  getFunctionCallClientExecutableToolNames,
   isFunctionCallBackendExecutable,
   isFunctionCallRendererExecutable
 } from "./functioncall-executors";
@@ -51,8 +51,6 @@ export type ResetCanvasArgs = FunctionCallAuditFields & {
   perspective?: string | null;
   /** Required only for manual/remote destructive requests. */
   confirmed?: boolean | null;
-  /** Internal runner provenance marker; never substitutes for user confirmation. */
-  authorization?: "runner-policy" | null;
 };
 
 export type CreateGeometryPlanArgs = FunctionCallAuditFields & {
@@ -158,6 +156,7 @@ export type SetPerspectiveArgs = FunctionCallAuditFields & {
 
 export {
   normalizeGeoGebraFreeParameterCommands,
+  normalizeGeoGebraCommandSyntax,
   normalizeGeoGebraPerspectiveMode,
   type NormalizedGeoGebraPerspectiveMode
 } from "./geogebra-command-normalization";

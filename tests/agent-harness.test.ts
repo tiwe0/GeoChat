@@ -1,16 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { Database } from "bun:sqlite";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
-import { eq, sql } from "drizzle-orm";
 import {
-  DEFAULT_AGENT_RUN_REMOTE_TOOL_MAX_ATTEMPTS,
-  agentRunToolArgsMatch,
   agentModelPolicySnapshotFor,
   advanceAgentWorkflowState,
   agentModelSupportsImages,
-  agentRunRunnerModelPolicyFor,
   deriveAgentWorkflowStateFromTools,
   evaluateAgentWorkflowToolCall,
   evaluateAgentWorkflowToolRecord,
@@ -21,9 +16,10 @@ import {
   getFunctionCallBackendExecutableToolNames,
   getFunctionCallToolNames,
   getFunctionCallPlanningToolNames,
-  getFunctionCallRemoteBridgeToolNames,
+  getFunctionCallClientExecutableToolNames,
   compileGeometryPlanToExecuteArgs,
   compileGeometryPlanToGeoGebra,
+  normalizeGeoGebraCommandSyntax,
   createGeometryPlanFromRecipe,
   normalizeGeoGebraFreeParameterCommands,
   normalizeGeoGebraPerspectiveMode,
@@ -49,53 +45,15 @@ import {
   validateProviderProxyHeaders,
   validateProviderProxyMethodBody,
   createInitialAgentWorkflowState,
-  agentRunStartPayload,
-  canTransitionAgentRunStatus,
-  cancelAgentRunRemoteToolRequest,
-  claimAgentRunRemoteToolRequest,
-  completeAgentRunRemoteToolRequest,
-  createAgentRunInitialCanvasReadRequest,
-  createAgentRunCoordinator,
   createAgentRunLedger,
-  createAgentRunLedgerFromStart,
-  createAgentRunRemoteToolRequest,
-  failAgentRunRemoteToolRequestForAttemptLimit,
-  findAgentRunToolCallConflict,
-  findAgentRunToolCallIdReuseConflict,
   finishAgentRunLedger,
   reviewAgentRunLedger,
-  AgentRunCoordinatorError,
-  agentRunRunnerBudgetFor,
-  decideAgentRunRunnerStart,
-  decideAgentRunRunnerContinuation,
-  agentRunRunnerPhaseFor,
-  agentRunRunnerStatusFor,
   isAgentRunFinishInput,
   isAgentRunLedgerRecord,
-  isAgentRunModelStepRecord,
-  isAgentRunPolicyDecisionRecord,
-  isAgentRunRemoteToolRequest,
-  isAgentRunRemoteToolRequestAttemptLimitReached,
-  isAgentRunRemoteToolRequestClaimable,
-  agentRunRemoteToolExecutionCacheKey,
-  cachedRemoteToolExecutionMatchesRequest,
-  isAgentRunRemoteToolRequestInput,
-  isAgentRunRemoteToolRequestLeaseExpired,
-  isAgentRunRemoteToolRequestTerminal,
-  isAgentRunRemoteToolResultInput,
   isAgentRunToolCallId,
-  createAgentRunRemoteToolExecutionCacheEntry,
-  findAgentRunRemoteToolRequestConflict,
-  isAgentRunRemoteToolExecutionCacheEntry,
-  isAgentRunRunnerStartInput,
-  isAgentRunRunnerSnapshot,
-  isAgentRunRawGeoGebraCommandFallback,
-  requiredGeometryPlanRecipeIdsBeforeRawCommands,
   isAgentModelPolicySnapshot,
-  isAgentRunStartInput,
   isAgentRunToolRecord,
   isAgentRunUsage,
-  isTerminalAgentRunStatus,
   upsertAgentRunTool,
   enrichCanvasReadToolWithGeometryVerification,
   verifyGeometryPlanAgainstCanvas,
@@ -117,32 +75,19 @@ import {
   GEOCHAT_SYSTEM_PROMPT,
   GEOCHAT_SYSTEM_PROMPT_EN
 } from "@geochat-ai/app";
-import { sanitizeRunnerModelError } from "../backend/src/agent/model-error";
+import { sanitizeProviderError } from "../backend/src/agent/provider-error";
 import {
-  createBackendModelNextAction,
   formatSkillSelectionPacketPrompt,
-  remoteToolRequestInputFromToolCall,
   skillSelectorSystemPrompt,
   skillRuntimePolicyFromPrompt
-} from "../backend/src/agent/model-runner";
-import { createBackendPlanningTools } from "../backend/src/agent/model-runner-planning-tools";
+} from "../backend/src/agent/skill-selector";
+import { createBackendPlanningTools } from "../backend/src/agent/ai-sdk-tools";
 import {
   buildCommandReferencePacketForRun,
   formatCommandReferencePacketPrompt
 } from "../backend/src/agent/command-searcher";
 import { canExecuteBackendToolRequest, executeBackendToolRequest } from "../backend/src/agent/backend-tools";
 import { activateAgentSkill, listAvailableAgentSkills, parseAgentSkillPathList } from "../backend/src/agent/skills";
-import { createDatabase } from "../backend/src/db/client";
-import { createAgentRunRepository } from "../backend/src/db/agent-run-repository";
-import {
-  agentRunLedgers,
-  agentRunModelSteps,
-  agentRunPolicyDecisions,
-  agentRunRemoteToolRequests
-} from "../backend/src/db/schema";
-
-const sharedHttpDatabasePath = `/tmp/geochat-agent-harness-http-${crypto.randomUUID()}.sqlite`;
-
 describe("agent model registry", () => {
   test("normalizes unknown providers but keeps explicit custom model ids for known providers", () => {
     expect(
@@ -231,7 +176,7 @@ describe("agent model registry", () => {
     });
   });
 
-  test("creates a safe model policy snapshot for runner diagnostics", () => {
+  test("creates a safe model policy snapshot for agent diagnostics", () => {
     expect(agentModelPolicySnapshotFor({ provider: "openai", model: "gpt-5.5" })).toEqual({
       provider: "openai",
       model: "gpt-5.5",
@@ -444,7 +389,7 @@ describe("function call registry", () => {
     expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("selectedObjects");
   });
 
-  test("derives planning, renderer executable, and remote bridge tool sets from the shared registry", () => {
+  test("derives planning, renderer executable, and client-executable tool sets from the shared registry", () => {
     expect(getFunctionCallToolNames()).toEqual([
       "searchGeoGebraCommands",
       "readBlackboard",
@@ -508,7 +453,7 @@ describe("function call registry", () => {
       "getPNGBase64",
       "setPerspective"
     ]);
-    expect(getFunctionCallRemoteBridgeToolNames()).toEqual([
+    expect(getFunctionCallClientExecutableToolNames()).toEqual([
       "executeGeoGebraCommands",
       "resetCanvas",
       "getCanvasContext",
@@ -576,30 +521,6 @@ describe("function call registry", () => {
     })).toBe(false);
   });
 
-  test("accepts every registered tool name in model step output records", () => {
-    for (const toolName of getFunctionCallToolNames()) {
-      expect(isAgentRunModelStepRecord({
-        stepId: `step-${toolName}`,
-        runId: "run-model-step-tools",
-        stage: "runner_continuation",
-        source: "model",
-        status: "succeeded",
-        modelProvider: "openai",
-        modelId: "gpt-5.5",
-        startedAt: "2026-06-06T00:00:00.000Z",
-        completedAt: "2026-06-06T00:00:01.000Z",
-        durationMs: 1000,
-        inputToolCount: 1,
-        attachmentCount: 0,
-        outputType: "tool",
-        outputToolCallId: `call-${toolName}`,
-        outputToolName: toolName,
-        outputTextLength: null,
-        usage: null,
-        error: null
-      })).toBe(true);
-    }
-  });
 
   test("discovers built-in skills and remote manifest skills", async () => {
     const baseEnv = {
@@ -1093,7 +1014,7 @@ describe("function call registry", () => {
     ]);
     expect(normalizeGeoGebraFreeParameterCommands(["symAxis: x = 0", "SetColor(symAxis, 0, 0, 255)"])).toEqual([
       "symAxis: x = 0",
-      "SetColor(symAxis, 0, 0, 255)"
+      "SetColor(symAxis, 0, 0, 1)"
     ]);
     expect(normalizeGeoGebraFreeParameterCommands([
       "f(x) = 2^(abs(x)) - 4",
@@ -1120,15 +1041,21 @@ describe("function call registry", () => {
         "solid = 棱锥(base, Apex)"
       ], { declaredNames: ["c", "poly", "aux", "f", "face", "base", "Apex"] })
     ).toEqual([
-      "SetColor(c, 42, 111, 219)",
+      "SetColor(c, 0.16470589, 0.43529412, 0.85882353)",
       "SetFilling(poly, 0.25)",
       "ShowLabel(aux, false)",
       "E = Extremum(f)",
-      "SetColor(face, 10, 20, 30)",
+      "SetColor(face, 0.03921569, 0.07843138, 0.11764706)",
       "SetFilling(face, 0.4)",
       "a = Slider(0, 10, 1, 1, 120, false, true, false, false)",
       "v = Vector((0, 0), (2, 3))",
       "solid = Pyramid(base, Apex)"
+    ]);
+    expect(normalizeGeoGebraCommandSyntax("SetColor(c, 52, 120, 246)")).toEqual([
+      "SetColor(c, 0.20392157, 0.47058824, 0.96470589)"
+    ]);
+    expect(normalizeGeoGebraCommandSyntax("SetColor(c, 0.2, 0.5, 1)")).toEqual([
+      "SetColor(c, 0.2, 0.5, 1)"
     ]);
   });
 
@@ -1155,7 +1082,7 @@ describe("function call registry", () => {
     expect(searchGeoGebraCommandReference("slider animation", 8, "en-US").map((item) => item.command)).toContain("StartAnimation");
     expect(searchGeoGebraCommandReference("center radius circle", 3, "en-US", "dsl_geometry")[0]).toMatchObject({
       command: "Circle",
-      syntax: expect.stringContaining("<radius length>")
+      syntax: expect.stringContaining("<Radius Number>")
     });
     expect(searchGeoGebraCommandReference("perpendicular bisector plane between two points", 3, "en-US", "dsl_3d")[0]).toMatchObject(
       { command: "PlaneBisector" }
@@ -1172,7 +1099,7 @@ describe("function call registry", () => {
     expect(searchGeoGebraCommandReference("", 2)).toHaveLength(2);
   });
 
-  test("collects GeoGebra command usage stats from persisted runner ledgers", () => {
+  test("collects GeoGebra command usage stats from persisted AI SDK ledgers", () => {
     expect(extractGeoGebraCommandName("A = (0, 0)")).toBe("Point");
     expect(extractGeoGebraCommandName("f(x) = x^2")).toBe("Function");
     expect(extractGeoGebraCommandName("c = Circle(O, 3)")).toBe("Circle");
@@ -1181,7 +1108,6 @@ describe("function call registry", () => {
     const run = createAgentRunLedger({
       runId: "command-usage-run",
       conversationId: "conversation-usage",
-      mode: "ai-sdk",
       model: { provider: "openai", model: "gpt-5.5", apiKey: "", customBaseUrl: "" },
       prompt: "画圆并标出圆心",
       attachmentCount: 0,
@@ -1240,7 +1166,6 @@ describe("function call registry", () => {
     const baseRun = (runId: string) => createAgentRunLedger({
       runId,
       conversationId: `conversation-${runId}`,
-      mode: "ai-sdk",
       model: { provider: "openai", model: "gpt-5.5", apiKey: "", customBaseUrl: "" },
       prompt: "画一个教学图",
       attachmentCount: 0,
@@ -1338,7 +1263,7 @@ describe("function call registry", () => {
 
     const modelFailedRun = finishAgentRunLedger(baseRun("model-failed-run"), {
       status: "failed",
-      error: "Backend runner exceeded the automatic backend tool execution limit.",
+      error: "AI SDK agent exceeded the automatic backend tool execution limit.",
       usage: null,
       completedAt: "2026-06-06T00:00:05.000Z"
     });
@@ -2406,7 +2331,6 @@ describe("agent run review", () => {
     return createAgentRunLedger({
       runId,
       conversationId: `conversation-${runId}`,
-      mode: "ai-sdk",
       model: { provider: "openai", model: "gpt-5.5", apiKey: "", customBaseUrl: "" },
       prompt: "构造一个椭圆并解释。",
       attachmentCount: 0,
@@ -2541,10 +2465,6 @@ describe("agent run review", () => {
       verdict: "fail",
       findings: [
         expect.objectContaining({
-          role: "planner",
-          code: "workflow_order_violation"
-        }),
-        expect.objectContaining({
           role: "verifier",
           code: "terminal_verification_missing"
         })
@@ -2641,6 +2561,8 @@ describe("workflow policy", () => {
       allowed: false
     });
     expect(evaluateAgentWorkflowToolCall(state, "listSkills")).toEqual({ allowed: true });
+    expect(evaluateAgentWorkflowToolCall(state, "readBlackboard")).toEqual({ allowed: true });
+    expect(evaluateAgentWorkflowToolCall(state, "patchBlackboard")).toEqual({ allowed: true });
     expect(evaluateAgentWorkflowToolCall(state, "searchSkills")).toEqual({ allowed: true });
     expect(evaluateAgentWorkflowToolCall(state, "loadSkill")).toEqual({ allowed: true });
     expect(evaluateAgentWorkflowToolCall(state, "activateSkill")).toEqual({ allowed: true });
@@ -2651,15 +2573,13 @@ describe("workflow policy", () => {
     expect(evaluateAgentWorkflowToolCall(state, "getCanvasContext")).toEqual({ allowed: true });
   });
 
-  test("requires command reference search or geometry plan before construction commands", () => {
+  test("allows native construction after the initial canvas read", () => {
     let state = createInitialAgentWorkflowState();
     state = advanceAgentWorkflowState(state, "getCanvasContext", true);
     expect(evaluateAgentWorkflowToolCall(state, "createGeometryPlan")).toEqual({ allowed: true });
     expect(evaluateAgentWorkflowToolCall(state, "searchGeoGebraCommands")).toEqual({ allowed: true });
-    expect(evaluateAgentWorkflowToolCall(state, "executeGeoGebraCommands")).toMatchObject({
-      allowed: false,
-      reason: expect.stringContaining("searchGeoGebraCommands")
-    });
+    expect(evaluateAgentWorkflowToolCall(state, "executeGeoGebraCommands")).toEqual({ allowed: true });
+    expect(evaluateAgentWorkflowToolCall(state, "setFinished")).toEqual({ allowed: true });
 
     const searchedState = advanceAgentWorkflowState(state, "searchGeoGebraCommands", true);
     expect(searchedState).toMatchObject({ hasCommandReferenceSearch: true });
@@ -2748,565 +2668,4 @@ describe("workflow policy", () => {
     expect(evaluateAgentWorkflowToolRecord(tools, { toolCallId: "verify-1", toolName: "getPNGBase64" })).toEqual({ allowed: true });
   });
 
-  test("blocks model-supplied visual style commands in 2D GeoGebra drawing", () => {
-    const run = upsertAgentRunTool(
-      upsertAgentRunTool(
-        createAgentRunLedger({
-          runId: "runner-block-2d-style",
-          conversationId: "conversation-1",
-          mode: "ai-sdk",
-          model: {
-            provider: "openai",
-            model: "gpt-5.5",
-            apiKey: "",
-            customBaseUrl: ""
-          },
-          prompt: "画一个二维圆并标出圆心。",
-          attachmentCount: 0,
-          startedAt: "2026-06-06T00:00:00.000Z"
-        }),
-        {
-          toolCallId: "read-before-style",
-          toolName: "getCanvasContext",
-          status: "succeeded",
-          args: { includeXml: false },
-          startedAt: "2026-06-06T00:00:01.000Z",
-          completedAt: "2026-06-06T00:00:02.000Z"
-        }
-      ),
-      {
-        toolCallId: "search-before-style",
-        toolName: "searchGeoGebraCommands",
-        status: "succeeded",
-        args: { query: "Circle Point GeoGebra command syntax", scope: "conic" },
-        startedAt: "2026-06-06T00:00:03.000Z",
-        completedAt: "2026-06-06T00:00:04.000Z"
-      }
-    );
-
-    const args = {
-      commands: [
-        "O = (0, 0)",
-        "c = Circle(O, 3)",
-        "SetColor(c, 220, 60, 60)",
-        "SetPointSize(O, 6)",
-        "setlinethickness(c, 3)"
-      ]
-    };
-    expect(findForbiddenTwoDimensionalStyleCommands(args).map((item) => item.commandName)).toEqual([
-      "SetColor",
-      "SetPointSize",
-      "SetLineThickness"
-    ]);
-    expect(decideAgentRunRunnerContinuation({
-      run,
-      action: {
-        type: "tool",
-        tool: {
-          toolCallId: "styled-2d-execute",
-          toolName: "executeGeoGebraCommands",
-          args
-        }
-      }
-    })).toMatchObject({
-      type: "enqueue_tool",
-      nextRequest: {
-        toolName: "executeGeoGebraCommands",
-        args: {
-          commands: [
-            "O = (0, 0)",
-            "c = Circle(O, 3)"
-          ],
-          reason: expect.stringContaining("违规命令：SetColor, SetPointSize, SetLineThickness")
-        }
-      }
-    });
-  });
-
-  test("allows 2D style commands when the user explicitly asks for appearance edits", () => {
-    const run = upsertAgentRunTool(
-      upsertAgentRunTool(
-        createAgentRunLedger({
-          runId: "runner-allow-explicit-2d-style",
-          conversationId: "conversation-1",
-          mode: "ai-sdk",
-          model: {
-            provider: "openai",
-            model: "gpt-5.5",
-            apiKey: "",
-            customBaseUrl: ""
-          },
-          prompt: "把当前图形填充粉色，并高亮边界。",
-          attachmentCount: 0,
-          startedAt: "2026-06-06T00:00:00.000Z"
-        }),
-        {
-          toolCallId: "read-before-explicit-style",
-          toolName: "getCanvasContext",
-          status: "succeeded",
-          args: { includeXml: false },
-          startedAt: "2026-06-06T00:00:01.000Z",
-          completedAt: "2026-06-06T00:00:02.000Z"
-        }
-      ),
-      {
-        toolCallId: "search-before-explicit-style",
-        toolName: "searchGeoGebraCommands",
-        status: "succeeded",
-        args: { query: "SetColor SetFilling GeoGebra command syntax", scope: "style" },
-        startedAt: "2026-06-06T00:00:03.000Z",
-        completedAt: "2026-06-06T00:00:04.000Z"
-      }
-    );
-
-    const args = {
-      commands: [
-        "SetColor(poly, 255, 105, 180)",
-        "SetFilling(poly, 0.55)",
-        "SetLineThickness(poly, 4)"
-      ]
-    };
-
-    expect(hasExplicitTwoDimensionalStyleIntent("把当前图形填充粉色，并高亮边界。")).toBe(true);
-    expect(hasExplicitTwoDimensionalStyleIntent("不要改颜色，保持默认样式。")).toBe(false);
-    expect(findForbiddenTwoDimensionalStyleCommands(args).map((item) => item.commandName)).toEqual([
-      "SetColor",
-      "SetFilling",
-      "SetLineThickness"
-    ]);
-    expect(findForbiddenTwoDimensionalStyleCommands(args, { userPrompt: run.prompt })).toEqual([]);
-    expect(decideAgentRunRunnerContinuation({
-      run,
-      action: {
-        type: "tool",
-        tool: {
-          toolCallId: "explicit-styled-2d-execute",
-          toolName: "executeGeoGebraCommands",
-          args
-        }
-      }
-    })).toMatchObject({
-      type: "enqueue_tool",
-      nextRequest: {
-        toolName: "executeGeoGebraCommands"
-      }
-    });
-  });
-
-  test("allows limited 2D style commands for semantic mathematical highlighting", () => {
-    const run = upsertAgentRunTool(
-      upsertAgentRunTool(
-        createAgentRunLedger({
-          runId: "runner-allow-semantic-2d-highlight",
-          conversationId: "conversation-1",
-          mode: "ai-sdk",
-          model: {
-            provider: "openai",
-            model: "gpt-5.5",
-            apiKey: "",
-            customBaseUrl: ""
-          },
-          prompt: "画两个骰子的 6x6 样本空间网格，突出显示点数和为 7 的格子。",
-          attachmentCount: 0,
-          startedAt: "2026-06-06T00:00:00.000Z"
-        }),
-        {
-          toolCallId: "read-before-semantic-highlight",
-          toolName: "getCanvasContext",
-          status: "succeeded",
-          args: { includeXml: false },
-          startedAt: "2026-06-06T00:00:01.000Z",
-          completedAt: "2026-06-06T00:00:02.000Z"
-        }
-      ),
-      {
-        toolCallId: "search-before-semantic-highlight",
-        toolName: "searchGeoGebraCommands",
-        status: "succeeded",
-        args: { query: "Polygon SetColor SetFilling GeoGebra command syntax", scope: "style" },
-        startedAt: "2026-06-06T00:00:03.000Z",
-        completedAt: "2026-06-06T00:00:04.000Z"
-      }
-    );
-
-    const semanticArgs = {
-      commands: [
-        "E7 = Polygon((1, 6), (2, 6), (2, 7), (1, 7))",
-        "SetColor(E7, 0, 114, 178)",
-        "SetFilling(E7, 0.35)"
-      ]
-    };
-    const decorativeArgs = {
-      commands: [
-        ...semanticArgs.commands,
-        "SetFontSize(txt, 24)"
-      ]
-    };
-    const lineThicknessArgs = {
-      commands: [
-        ...semanticArgs.commands,
-        "SetLineThickness(E7, 3)"
-      ]
-    };
-
-    expect(hasSemanticTwoDimensionalHighlightIntent(run.prompt)).toBe(true);
-    expect(hasSemanticTwoDimensionalHighlightIntent("画单位圆，标出 30°、45°、60° 三个角对应的点，并用投影展示 sin 和 cos 的几何意义。")).toBe(true);
-    expect(hasExplicitTwoDimensionalStyleIntent(run.prompt)).toBe(false);
-    expect(hasSemanticTwoDimensionalHighlightIntent("不要高亮，保持默认样式。")).toBe(false);
-    expect(findForbiddenTwoDimensionalStyleCommands(semanticArgs, { userPrompt: run.prompt })).toEqual([]);
-    expect(findForbiddenTwoDimensionalStyleCommands(decorativeArgs, { userPrompt: run.prompt }).map((item) => item.commandName)).toEqual([
-      "SetFontSize"
-    ]);
-    expect(findForbiddenTwoDimensionalStyleCommands(lineThicknessArgs, { userPrompt: run.prompt }).map((item) => item.commandName)).toEqual([
-      "SetLineThickness"
-    ]);
-    expect(decideAgentRunRunnerContinuation({
-      run,
-      action: {
-        type: "tool",
-        tool: {
-          toolCallId: "semantic-highlight-execute",
-          toolName: "executeGeoGebraCommands",
-          args: semanticArgs
-        }
-      }
-    })).toMatchObject({
-      type: "enqueue_tool",
-      nextRequest: {
-        toolName: "executeGeoGebraCommands"
-      }
-    });
-  });
-
-  test("allows style commands for explicit 3D GeoGebra drawing requests", () => {
-    const run = upsertAgentRunTool(
-      upsertAgentRunTool(
-        createAgentRunLedger({
-          runId: "runner-allow-3d-style",
-          conversationId: "conversation-1",
-          mode: "ai-sdk",
-          model: {
-            provider: "openai",
-            model: "gpt-5.5",
-            apiKey: "",
-            customBaseUrl: ""
-          },
-          prompt: "在 3D 画一个棱锥。",
-          attachmentCount: 0,
-          startedAt: "2026-06-06T00:00:00.000Z"
-        }),
-        {
-          toolCallId: "read-before-3d",
-          toolName: "getCanvasContext",
-          status: "succeeded",
-          args: { includeXml: false },
-          startedAt: "2026-06-06T00:00:01.000Z",
-          completedAt: "2026-06-06T00:00:02.000Z"
-        }
-      ),
-      {
-        toolCallId: "search-before-3d",
-        toolName: "searchGeoGebraCommands",
-        status: "succeeded",
-        args: { query: "Pyramid Polygon SetFilling GeoGebra command syntax", scope: "geometry-3d" },
-        startedAt: "2026-06-06T00:00:03.000Z",
-        completedAt: "2026-06-06T00:00:04.000Z"
-      }
-    );
-    const args = {
-      perspective: "T",
-      commands: [
-        "A = (0, 0, 0)",
-        "B = (2, 0, 0)",
-        "C = (0, 2, 0)",
-        "base = Polygon(A, B, C)",
-        "P = (0, 0, 3)",
-        "pyr = Pyramid(base, P)",
-        "SetFilling(base, 0.25)"
-      ]
-    };
-
-    expect(findForbiddenTwoDimensionalStyleCommands(args)).toEqual([]);
-    expect(decideAgentRunRunnerContinuation({
-      run,
-      action: {
-        type: "tool",
-        tool: {
-          toolCallId: "styled-3d-execute",
-          toolName: "executeGeoGebraCommands",
-          args
-        }
-      }
-    })).toMatchObject({
-      type: "enqueue_tool",
-      nextRequest: {
-        toolCallId: "styled-3d-execute",
-        toolName: "executeGeoGebraCommands"
-      }
-    });
-  });
-
-  test("repairs viewport commands that distort GeoGebra axis scale", () => {
-    const run = upsertAgentRunTool(
-      upsertAgentRunTool(
-        createAgentRunLedger({
-          runId: "runner-block-distorted-zoom",
-          conversationId: "conversation-1",
-          mode: "ai-sdk",
-          model: {
-            provider: "openai",
-            model: "gpt-5.5",
-            apiKey: "",
-            customBaseUrl: ""
-          },
-          prompt: "把当前构造调整到正常视野。",
-          attachmentCount: 0,
-          startedAt: "2026-06-06T00:00:00.000Z"
-        }),
-        {
-          toolCallId: "read-before-zoom",
-          toolName: "getCanvasContext",
-          status: "succeeded",
-          args: { includeXml: false },
-          startedAt: "2026-06-06T00:00:01.000Z",
-          completedAt: "2026-06-06T00:00:02.000Z"
-        }
-      ),
-      {
-        toolCallId: "search-before-zoom",
-        toolName: "searchGeoGebraCommands",
-        status: "succeeded",
-        args: { query: "ZoomIn SetAxesRatio GeoGebra", scope: "global" },
-        startedAt: "2026-06-06T00:00:03.000Z",
-        completedAt: "2026-06-06T00:00:04.000Z"
-      }
-    );
-
-    expect(findForbiddenViewportScaleCommands({ commands: ["ZoomIn(-3, -1.2, 3, 3.4)"] })).toEqual([
-      {
-        command: "ZoomIn(-3, -1.2, 3, 3.4)",
-        commandName: "ZoomIn",
-        reason: "non_uniform_zoom_bounds"
-      }
-    ]);
-    expect(findForbiddenViewportScaleCommands({ commands: ["ZoomIn(-3, -3, 3, 3)", "SetAxesRatio(1, 1)"] })).toEqual([]);
-    expect(findForbiddenViewportScaleCommands({ commands: ["SetAxesRatio(2, 1)"] })).toEqual([
-      {
-        command: "SetAxesRatio(2, 1)",
-        commandName: "SetAxesRatio",
-        reason: "non_unit_axis_ratio"
-      }
-    ]);
-
-    expect(decideAgentRunRunnerContinuation({
-      run,
-      action: {
-        type: "tool",
-        tool: {
-          toolCallId: "distorted-zoom",
-          toolName: "executeGeoGebraCommands",
-          args: { commands: ["ZoomIn(-3, -1.2, 3, 3.4)"] }
-        }
-      }
-    })).toMatchObject({
-      type: "enqueue_tool",
-      nextRequest: {
-        toolName: "executeGeoGebraCommands",
-        args: {
-          commands: ["ZoomIn(-3, -1.9, 3, 4.1)"],
-          reason: expect.stringContaining("1:1 比例")
-        }
-      }
-    });
-  });
-
-  test("blocks oversized GeoGebra batches and dynamic coordinate text labels", () => {
-    const run = upsertAgentRunTool(
-      upsertAgentRunTool(
-        createAgentRunLedger({
-          runId: "runner-block-command-batch",
-          conversationId: "conversation-1",
-          mode: "ai-sdk",
-          model: {
-            provider: "openai",
-            model: "gpt-5.5",
-            apiKey: "",
-            customBaseUrl: ""
-          },
-          prompt: "画单位圆并展示 sin 和 cos 的投影。",
-          attachmentCount: 0,
-          startedAt: "2026-06-06T00:00:00.000Z"
-        }),
-        {
-          toolCallId: "read-before-command-batch",
-          toolName: "getCanvasContext",
-          status: "succeeded",
-          args: { includeXml: false },
-          startedAt: "2026-06-06T00:00:01.000Z",
-          completedAt: "2026-06-06T00:00:02.000Z"
-        }
-      ),
-      {
-        toolCallId: "search-before-command-batch",
-        toolName: "searchGeoGebraCommands",
-        status: "succeeded",
-        args: { query: "Circle Segment Text GeoGebra command syntax", scope: "geometry-2d" },
-        startedAt: "2026-06-06T00:00:03.000Z",
-        completedAt: "2026-06-06T00:00:04.000Z"
-      }
-    );
-    const oversizedArgs = {
-      commands: Array.from({ length: 101 }, (_, index) => `P${index} = (${index}, 0)`)
-    };
-    const dynamicTextArgs = {
-      commands: [
-        "P30 = (cos(30°), sin(30°))",
-        "txt30 = Text(\"cos30°=\"+x(P30)+\" sin30°=\"+y(P30), (0.2, -0.4))"
-      ]
-    };
-
-    expect(findGeoGebraCommandBatchPolicyViolations(oversizedArgs)).toEqual([
-      {
-        reason: "too_many_commands",
-        commandCount: 101,
-        maxCommands: 100
-      }
-    ]);
-    expect(geogebraCommandBatchPolicyMessage(findGeoGebraCommandBatchPolicyViolations(dynamicTextArgs))).toContain("不要在 Text");
-    expect(decideAgentRunRunnerContinuation({
-      run,
-      action: {
-        type: "tool",
-        tool: {
-          toolCallId: "oversized-execute",
-          toolName: "executeGeoGebraCommands",
-          args: oversizedArgs
-        }
-      }
-    })).toMatchObject({
-      type: "workflow_blocked",
-      message: expect.stringContaining("超过 100 条上限")
-    });
-    expect(decideAgentRunRunnerContinuation({
-      run,
-      action: {
-        type: "tool",
-        tool: {
-          toolCallId: "dynamic-text-execute",
-          toolName: "executeGeoGebraCommands",
-          args: dynamicTextArgs
-        }
-      }
-    })).toMatchObject({
-      type: "workflow_blocked",
-      message: expect.stringContaining("不要在 Text")
-    });
-  });
-
-  test("blocks built-in fixed axis assignments but allows axis references", () => {
-    const run = upsertAgentRunTool(
-      upsertAgentRunTool(
-        createAgentRunLedger({
-          runId: "runner-block-fixed-axis",
-          conversationId: "conversation-1",
-          mode: "ai-sdk",
-          model: {
-            provider: "openai",
-            model: "gpt-5.5",
-            apiKey: "",
-            customBaseUrl: ""
-          },
-          prompt: "画出函数并求它与 x 轴的交点。",
-          attachmentCount: 0,
-          startedAt: "2026-06-06T00:00:00.000Z"
-        }),
-        {
-          toolCallId: "read-before-axis-reference",
-          toolName: "getCanvasContext",
-          status: "succeeded",
-          args: { includeXml: false },
-          startedAt: "2026-06-06T00:00:01.000Z",
-          completedAt: "2026-06-06T00:00:02.000Z"
-        }
-      ),
-      {
-        toolCallId: "search-before-axis-reference",
-        toolName: "searchGeoGebraCommands",
-        status: "succeeded",
-        args: { query: "function root x axis", scope: "function-graph" },
-        startedAt: "2026-06-06T00:00:03.000Z",
-        completedAt: "2026-06-06T00:00:04.000Z"
-      }
-    );
-
-    expect(findForbiddenFixedAxisObjectCommands({
-      commands: ["f(x) = 2^(abs(x)) - 4", "Intersect(f, xAxis, -5, 0)"]
-    })).toEqual([]);
-    expect(findForbiddenFixedAxisObjectCommands({
-      commands: ["xAxis = 0.5", "y轴: x = 0", "zAxis = 3", "z轴 = 2"]
-    })).toEqual([
-      {
-        command: "xAxis = 0.5",
-        objectName: "xAxis"
-      },
-      {
-        command: "y轴: x = 0",
-        objectName: "y轴"
-      },
-      {
-        command: "zAxis = 3",
-        objectName: "zAxis"
-      },
-      {
-        command: "z轴 = 2",
-        objectName: "z轴"
-      }
-    ]);
-    expect(findForbiddenFixedAxisObjectCommands({
-      commands: ["txt = Text(\"xAxis is fixed\", (0, 0))", "Z = Root(f, -5, 0)", "xRef: y = 0"]
-    })).toEqual([]);
-
-    expect(decideAgentRunRunnerContinuation({
-      run,
-      action: {
-        type: "tool",
-        tool: {
-          toolCallId: "fixed-axis-intersect",
-          toolName: "executeGeoGebraCommands",
-          args: { commands: ["f(x) = 2^(abs(x)) - 4", "Intersect(f, xAxis, -5, 0)"] }
-        }
-      }
-    })).toMatchObject({
-      type: "enqueue_tool"
-    });
-
-    expect(decideAgentRunRunnerContinuation({
-      run,
-      action: {
-        type: "tool",
-        tool: {
-          toolCallId: "fixed-axis-assignment",
-          toolName: "executeGeoGebraCommands",
-          args: { commands: ["f(x) = 2^(abs(x)) - 4", "xAxis = 0.5"] }
-        }
-      }
-    })).toMatchObject({
-      type: "workflow_blocked",
-      message: expect.stringContaining("赋值")
-    });
-
-    expect(decideAgentRunRunnerContinuation({
-      run,
-      action: {
-        type: "tool",
-        tool: {
-          toolCallId: "root-command",
-          toolName: "executeGeoGebraCommands",
-          args: { commands: ["f(x) = 2^(abs(x)) - 4", "Z = Root(f, -5, 0)"] }
-        }
-      }
-    })).toMatchObject({
-      type: "enqueue_tool"
-    });
-  });
 });

@@ -25,7 +25,7 @@ describe("@geochat-ai/app export policy", () => {
     expect(readme).toContain("bun run typecheck");
     expect(readme).toContain("tests/model-registry-schema.test.ts");
     expect(readme).toContain("tests/agent-harness.test.ts");
-    expect(readme).toContain("tests/agent-harness-runner-policy.test.ts");
+    expect(readme).toContain("tests/ai-sdk-native-boundaries.test.ts");
   });
 
   test("classifies current public exports from the package barrel", () => {

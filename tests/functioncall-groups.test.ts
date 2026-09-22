@@ -20,6 +20,6 @@ describe("function-call review groups", () => {
     expect(FUNCTION_CALL_GROUPS.advancedDrawing.toolNames).toContain("executeAdvancedDrawingCommand");
     expect(FUNCTION_CALL_GROUPS.blackboardMemory.toolNames).toEqual(["readBlackboard", "patchBlackboard"]);
     expect(FUNCTION_CALL_GROUPS.choiceAnalysis.toolNames).toContain("showChoiceAnalysis");
-    expect(getFunctionCallGroupForTool("setFinished")?.id).toBe("runnerControl");
+    expect(getFunctionCallGroupForTool("setFinished")?.id).toBe("agentControl");
   });
 });

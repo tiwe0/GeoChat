@@ -1,4 +1,6 @@
 import type { ChatMessageMetadata } from "@geochat-ai/app/contracts";
+import type { UIMessage } from "ai";
+import { isFunctionCallArgs, isFunctionCallToolName } from "@geochat-ai/app";
 import {
   isBlackboardCategory,
   isBlackboardEntryStatus,
@@ -6,11 +8,9 @@ import {
 } from "@geochat-ai/app/blackboard";
 
 export type ConversationSummary = { id: string; model: string; title: string | null; createdAt: string; updatedAt: string; messageCount: number };
-export type StoredConversationPart =
-  | { type: "text"; text: string }
-  | { type: "file"; url: string; mediaType: string; filename?: string };
+export type StoredConversationPart = UIMessage["parts"][number];
 export type StoredConversationMessage = { id: string; clientMessageId: string | null; role: string; content: string; parts: StoredConversationPart[]; usage: ChatMessageMetadata["tokenUsage"] | null };
-export type ConversationRestore = { messages: StoredConversationMessage[]; replayCommands: string[] };
+export type ConversationRestore = { messages: StoredConversationMessage[]; updatedAt: string };
 
 function responseError(data: unknown, fallback: string) {
   return data && typeof data === "object" && "error" in data && typeof data.error === "string" ? data.error : fallback;
@@ -32,25 +32,46 @@ export function parseConversationMessages(value: unknown, apiOrigin?: string): S
     if (!item || typeof item !== "object" || Array.isArray(item)) return [];
     const data = item as Record<string, unknown>;
     if (typeof data.id !== "string" || typeof data.role !== "string" || typeof data.content !== "string") return [];
-    const parts = parseConversationParts(data.parts, apiOrigin);
-    const usage = data.usage && typeof data.usage === "object" && !Array.isArray(data.usage) ? data.usage as ChatMessageMetadata["tokenUsage"] : null;
+    const payload = data.payload && typeof data.payload === "object" && !Array.isArray(data.payload)
+      ? data.payload as Record<string, unknown>
+      : {};
+    const parts = parseConversationParts(payload.parts ?? data.parts, apiOrigin);
+    const usageValue = payload.usage ?? data.usage;
+    const usage = isTokenUsage(usageValue) ? usageValue : null;
     return [{ id: data.id, clientMessageId: typeof data.clientMessageId === "string" ? data.clientMessageId : null, role: data.role, content: data.content, parts, usage }];
   });
 }
 
-function parseConversationParts(value: unknown, apiOrigin?: string): StoredConversationPart[] {
+function isTokenUsage(value: unknown): value is NonNullable<ChatMessageMetadata["tokenUsage"]> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const usage = value as Record<string, unknown>;
+  return [usage.inputTokens, usage.outputTokens, usage.totalTokens].every((token) =>
+    token === undefined || (typeof token === "number" && Number.isInteger(token) && token >= 0));
+}
+
+export function parseConversationParts(value: unknown, apiOrigin?: string): StoredConversationPart[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((part): StoredConversationPart[] => {
     if (!part || typeof part !== "object" || Array.isArray(part)) return [];
     const data = part as Record<string, unknown>;
-    if (data.type === "text" && typeof data.text === "string") return [{ type: "text", text: data.text }];
+    if (data.type === "text" && typeof data.text === "string") return [{ ...data, type: "text", text: data.text } as StoredConversationPart];
+    if (data.type === "reasoning" && typeof data.text === "string") return [{ ...data, type: "reasoning", text: data.text } as StoredConversationPart];
+    if (data.type === "step-start") return [{ ...data, type: "step-start" } as StoredConversationPart];
     if (
       data.type === "file"
       && typeof data.url === "string"
       && /^(?:https?:|data:)/i.test(data.url)
       && typeof data.mediaType === "string"
     ) {
-      return [{ type: "file", url: proxyStoredImageUrl(data.url, apiOrigin), mediaType: data.mediaType, ...(typeof data.filename === "string" ? { filename: data.filename } : {}) }];
+      return [{ ...data, type: "file", url: proxyStoredImageUrl(data.url, apiOrigin), mediaType: data.mediaType, ...(typeof data.filename === "string" ? { filename: data.filename } : {}) } as StoredConversationPart];
+    }
+    if (typeof data.type === "string" && data.type.startsWith("tool-") && typeof data.toolCallId === "string") {
+      const toolName = data.type.slice("tool-".length);
+      const allowedStates = new Set(["input-streaming", "input-available", "approval-requested", "approval-responded", "output-available", "output-error", "output-denied"]);
+      if (!isFunctionCallToolName(toolName) || !allowedStates.has(String(data.state))) return [];
+      if ("input" in data && !isFunctionCallArgs(toolName, data.input)) return [];
+      if (data.state === "output-error" && typeof data.errorText !== "string") return [];
+      return [data as StoredConversationPart];
     }
     return [];
   });
@@ -68,11 +89,6 @@ function proxyStoredImageUrl(value: string, apiOrigin?: string) {
     console.error("[ERROR] Caught exception at src/renderer-react/src/features/conversations/api.ts:68", caughtError);
     return value;
   }
-}
-
-export function parseReplayCommands(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((command): command is string => typeof command === "string" && command.trim().length > 0);
 }
 
 export function parseBlackboardEntries(value: unknown): BlackboardEntry[] {
@@ -122,7 +138,9 @@ export async function fetchConversationMessages(apiOrigin: string, token: string
   }
   return {
     messages: parseConversationMessages(data.conversation.messages, apiOrigin),
-    replayCommands: [],
+    updatedAt: typeof (data.conversation as Record<string, unknown>).updatedAt === "string"
+      ? (data.conversation as Record<string, unknown>).updatedAt as string
+      : "",
   } satisfies ConversationRestore;
 }
 

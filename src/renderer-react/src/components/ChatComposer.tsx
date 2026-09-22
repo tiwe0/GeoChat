@@ -41,6 +41,7 @@ type ChatComposerProps = {
   model: string;
   models: readonly RuntimeModelOption[];
   thinkingEnabled: boolean;
+  thinkingSupported: boolean;
   thinkingEffort: ThinkingEffort;
   sendDisabled: boolean;
   error?: string | null;
@@ -82,6 +83,7 @@ export function ChatComposer({
   model,
   models,
   thinkingEnabled,
+  thinkingSupported,
   thinkingEffort,
   sendDisabled,
   error: submissionError,
@@ -365,6 +367,7 @@ export function ChatComposer({
           models={models}
           disabled={busy}
           thinkingEnabled={thinkingEnabled}
+          thinkingSupported={thinkingSupported}
           thinkingEffort={thinkingEffort}
           portalContainer={modelPortalContainer}
           onChange={onModelChange}

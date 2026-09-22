@@ -192,7 +192,7 @@ bun run package:backend-smoke
 - Provider API keys should be supplied by users at runtime. Do not commit local
   credentials, `.env`, `.dev.vars`, SQLite databases, or generated build output.
 - See `docs/geogebra-applet.md` for GeoGebra integration notes.
-- See `docs/agent-harness-roadmap.md` for the agent runner architecture.
+- See `docs/ai-sdk-native-migration.md` for the native AI SDK agent architecture.
 - See `docs/tauri2-shell-migration-plan.md` for Tauri shell notes.
 
 ## Verification Before Publishing

@@ -1,13 +1,15 @@
 import {
   DEFAULT_AGENT_MODEL_STEP_TIMEOUT_MS,
   MAX_AGENT_MODEL_STEP_TIMEOUT_MS,
-  MIN_AGENT_MODEL_STEP_TIMEOUT_MS,
+  MIN_AGENT_MODEL_STEP_TIMEOUT_MS
+} from "@geochat-ai/app/agent-run-config";
+import {
   agentModelSupportsImagesForSchema,
   getAgentModelPolicyForSchema,
   normalizeAgentModelConfig,
   type AgentModelConfig,
   type AgentModelRegistrySchema
-} from "@geochat-ai/app";
+} from "@geochat-ai/app/model-registry";
 import type {
   DesktopConfig,
   DebugConfig,

@@ -4,6 +4,7 @@
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./src/index.ts",
@@ -13,9 +14,25 @@
       "types": "./src/contracts.ts",
       "default": "./src/contracts.ts"
     },
-    "./client": {
-      "types": "./src/client.ts",
-      "default": "./src/client.ts"
+    "./desktop-contracts": {
+      "types": "./src/desktop-contracts.ts",
+      "default": "./src/desktop-contracts.ts"
+    },
+    "./functioncalls": {
+      "types": "./src/functioncalls.ts",
+      "default": "./src/functioncalls.ts"
+    },
+    "./geogebra-style-policy": {
+      "types": "./src/geogebra-style-policy.ts",
+      "default": "./src/geogebra-style-policy.ts"
+    },
+    "./agent-thinking": {
+      "types": "./src/agent-thinking.ts",
+      "default": "./src/agent-thinking.ts"
+    },
+    "./agent-run-config": {
+      "types": "./src/agent-run-config.ts",
+      "default": "./src/agent-run-config.ts"
     },
     "./blackboard": {
       "types": "./src/blackboard.ts",

@@ -74,8 +74,8 @@ export type AgentModelRegistrySchema = {
 };
 
 const CUSTOM_MODEL_MAX_TOOL_STEPS = 8;
-export const MIN_AGENT_RUNNER_MAX_TOOL_STEPS = 1;
-export const MAX_AGENT_RUNNER_MAX_TOOL_STEPS = 64;
+export const MIN_AGENT_MAX_TOOL_STEPS = 1;
+export const MAX_AGENT_MAX_TOOL_STEPS = 64;
 
 export const AGENT_PROVIDER_REGISTRY = [
   {
@@ -651,7 +651,7 @@ export function normalizeAgentModelConfig(value: Partial<AgentModelConfig> | und
     customBaseUrl: value?.customBaseUrl ?? "",
     ...(isAgentModelProtocol(value?.protocol) ? { protocol: value.protocol } : {}),
     ...(typeof value?.supportsImages === "boolean" ? { supportsImages: value.supportsImages } : {}),
-    maxToolSteps: normalizeAgentRunnerMaxToolSteps(value?.maxToolSteps)
+    maxToolSteps: normalizeAgentMaxToolSteps(value?.maxToolSteps)
   };
 }
 
@@ -665,7 +665,7 @@ export function isAgentModelConfig(value: unknown): value is AgentModelConfig {
     typeof payload.customBaseUrl === "string" &&
     (payload.protocol === undefined || isAgentModelProtocol(payload.protocol)) &&
     (payload.supportsImages === undefined || typeof payload.supportsImages === "boolean") &&
-    isOptionalAgentRunnerMaxToolSteps(payload.maxToolSteps)
+    isOptionalAgentMaxToolSteps(payload.maxToolSteps)
   );
 }
 
@@ -707,20 +707,20 @@ export function toolCallingModeForDefinition(model: AgentModelDefinition): Agent
   return modelHasCapability(model, "toolCalling") ? "native" : "unsupported";
 }
 
-export function normalizeAgentRunnerMaxToolSteps(value: unknown): number | null {
+export function normalizeAgentMaxToolSteps(value: unknown): number | null {
   if (value === undefined || value === null || value === "") return null;
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
   const normalized = Math.trunc(value);
-  if (normalized < MIN_AGENT_RUNNER_MAX_TOOL_STEPS || normalized > MAX_AGENT_RUNNER_MAX_TOOL_STEPS) return null;
+  if (normalized < MIN_AGENT_MAX_TOOL_STEPS || normalized > MAX_AGENT_MAX_TOOL_STEPS) return null;
   return normalized;
 }
 
-function isOptionalAgentRunnerMaxToolSteps(value: unknown) {
-  return value === undefined || value === null || normalizeAgentRunnerMaxToolSteps(value) === value;
+function isOptionalAgentMaxToolSteps(value: unknown) {
+  return value === undefined || value === null || normalizeAgentMaxToolSteps(value) === value;
 }
 
 function modelPolicyMaxToolSteps(defaultMaxToolSteps: number, config: Pick<AgentModelConfig, "maxToolSteps">) {
-  return normalizeAgentRunnerMaxToolSteps(config.maxToolSteps) ?? defaultMaxToolSteps;
+  return normalizeAgentMaxToolSteps(config.maxToolSteps) ?? defaultMaxToolSteps;
 }
 
 export function getAgentModelPolicyForSchema(config: Pick<AgentModelConfig, "provider" | "model"> & Partial<Pick<AgentModelConfig, "maxToolSteps" | "supportsImages">>, schema?: AgentModelRegistrySchema): AgentModelPolicy {

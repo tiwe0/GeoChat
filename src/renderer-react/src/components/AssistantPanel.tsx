@@ -14,7 +14,6 @@ import {
 import AddCircleOutlineRounded from "@mui/icons-material/AddCircleOutlineRounded";
 import ArrowBackRounded from "@mui/icons-material/ArrowBackRounded";
 import CalculateRounded from "@mui/icons-material/CalculateRounded";
-import ConstructionRounded from "@mui/icons-material/ConstructionRounded";
 import CropSquareRounded from "@mui/icons-material/CropSquareRounded";
 import FactCheckRounded from "@mui/icons-material/FactCheckRounded";
 import HelpOutlineRounded from "@mui/icons-material/HelpOutlineRounded";
@@ -22,7 +21,6 @@ import AddCommentRounded from "@mui/icons-material/AddCommentRounded";
 import MinimizeRounded from "@mui/icons-material/MinimizeRounded";
 import SettingsRounded from "@mui/icons-material/SettingsRounded";
 import KeyboardArrowDownRounded from "@mui/icons-material/KeyboardArrowDownRounded";
-import PsychologyRounded from "@mui/icons-material/PsychologyRounded";
 import { Joyride, STATUS, type Step } from "react-joyride";
 import {
   useLayoutEffect,
@@ -33,10 +31,12 @@ import {
 import { useTranslation } from "react-i18next";
 import { Streamdown } from "streamdown";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { summarizeAgentReasoning } from "@geochat-ai/app";
+import { agentModelSupportsReasoning } from "@geochat-ai/app/model-registry";
 import { useAgentRunChat } from "../hooks/useAgentRunChat";
 import { formatAgentRunError } from "../features/agent-run/errorMessage";
 import { STREAMDOWN_PLUGINS } from "../features/chat/streamdownPlugins";
+import { isInternalToolResultEcho } from "../features/chat/toolResultEcho";
+import { collectAssistantProcess } from "../features/chat/assistantProcess";
 import { useLocalSession } from "../features/local-session/useLocalSession";
 import { SettingsPanel } from "../features/desktop/SettingsPanel";
 import { saveStoredModel } from "../features/local-session/storage";
@@ -61,6 +61,7 @@ import { ConversationDrawer } from "./ConversationDrawer";
 import { LanguageButton } from "./LanguageButton";
 import { MessageAttachment } from "./MessageAttachment";
 import { AgentToolResult, isAgentDisplayToolPart } from "./AgentToolResult";
+import { AssistantProcess } from "./AssistantProcess";
 import { BlackboardDrawer } from "./BlackboardDrawer";
 import { OnboardingTooltip } from "./OnboardingTooltip";
 import { ErrorToast } from "./ErrorToast";
@@ -177,140 +178,6 @@ function TypewriterText({ text }: { text: string }) {
   );
 }
 
-function ThinkingBlock({
-  active,
-  collapseLabel,
-  completeLabel,
-  expandLabel,
-  label,
-  text,
-}: {
-  active: boolean;
-  collapseLabel: string;
-  completeLabel: string;
-  expandLabel: string;
-  label: string;
-  text: string;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const summaryRef = useRef<HTMLDivElement>(null);
-
-  const reasoningLines = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const firstLine = reasoningLines[0] ?? "";
-  const latestLine = reasoningLines[reasoningLines.length - 1] ?? firstLine;
-  const summary = summarizeAgentReasoning(text) || (active ? latestLine : firstLine) || label;
-
-  useEffect(() => {
-    if (!active) setExpanded(false);
-  }, [active]);
-
-  // DeepSeek's web UI follows the actual streamed text rather than running a
-  // timer-driven marquee: while reasoning is active, keep the single-line
-  // viewport pinned to the newest content. Once settled, restore the stable
-  // first line and the scroll position at the start.
-  useLayoutEffect(() => {
-    const node = summaryRef.current;
-    if (!node) return;
-
-    if (active && !expanded) {
-      node.scrollLeft = Math.max(0, node.scrollWidth - node.clientWidth);
-    } else {
-      node.scrollLeft = 0;
-    }
-  }, [active, expanded, text, summary]);
-
-  return (
-    <Box
-      sx={{
-        mb: 0.75,
-        px: 1,
-        py: 0.5,
-        borderRadius: 1,
-        bgcolor: "action.hover",
-        color: "text.secondary",
-        border: 1,
-        borderColor: "divider",
-      }}
-    >
-      <ButtonBase
-        component="button"
-        type="button"
-        onClick={() => setExpanded((current) => !current)}
-        aria-expanded={expanded}
-        aria-label={expanded ? collapseLabel : expandLabel}
-        sx={{
-          width: "100%",
-          minHeight: 28,
-          justifyContent: "space-between",
-          borderRadius: 0.75,
-          textAlign: "left",
-          "&:focus-visible": { outline: "2px solid", outlineColor: "primary.main", outlineOffset: 1 },
-        }}
-      >
-        <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", minWidth: 0 }}>
-          {active ? <CircularProgress size={14} thickness={5} color="inherit" /> : <PsychologyRounded sx={{ fontSize: 15 }} />}
-          <Typography variant="caption" sx={{ fontWeight: 700 }}>{active ? label : completeLabel}</Typography>
-        </Stack>
-        <KeyboardArrowDownRounded
-          sx={{
-            fontSize: 18,
-            transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
-            transition: "transform 180ms ease",
-          }}
-        />
-      </ButtonBase>
-      <AnimatePresence initial={false}>
-        {expanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
-            style={{ overflow: "hidden" }}
-          >
-            <Typography
-              variant="caption"
-              component="div"
-              sx={{ pt: 0.5, pb: 0.25, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
-            >
-              {text}
-            </Typography>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      {!expanded && (
-        <Box
-          ref={summaryRef}
-          sx={{
-            minWidth: 0,
-            overflowX: "auto",
-            overflowY: "hidden",
-            scrollbarWidth: "none",
-            "&::-webkit-scrollbar": { display: "none" },
-            whiteSpace: "nowrap",
-          }}
-        >
-          <Typography
-            component="div"
-            variant="caption"
-            sx={{
-              display: "inline-block",
-              px: 0.5,
-              pt: 0.35,
-              pb: 0.15,
-            }}
-          >
-            {summary}
-          </Typography>
-        </Box>
-      )}
-    </Box>
-  );
-}
-
 export function AssistantPanel({
   canvasReady = true,
   onConversationStarted,
@@ -340,6 +207,10 @@ export function AssistantPanel({
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [currentConversationTitle, setCurrentConversationTitle] = useState<string | null>(null);
   const panelChatRef = useRef(new PanelChatState());
+  const selectedModelOption = modelOptions.find((option) => option.id === selectedModel);
+  const thinkingSupported = selectedModelOption
+    ? agentModelSupportsReasoning(selectedModelOption.provider, selectedModelOption.id)
+    : true;
   // Resolved during bootstrap, so this is stable for the life of the renderer.
   const API_ORIGIN = backendOrigin();
   const { authSessionRef } = useLocalSession({
@@ -374,7 +245,8 @@ export function AssistantPanel({
       panelChatRef.current.setConversationId(run.conversationId);
       setCurrentConversationId(run.conversationId);
       setCurrentConversationTitle(run.prompt.replace(/\s+/g, " ").trim().slice(0, 80));
-      changeModel(run.modelId);
+      changeModel(run.modelId, run.modelProvider);
+      setInput(run.prompt);
       // A recovered run keeps the reasoning setting it started with, not
       // whatever the composer happens to show now.
       setThinkingEnabled(run.thinking === true);
@@ -399,11 +271,25 @@ export function AssistantPanel({
       getModelConfig: getSelectedModelConfig,
       getMcpStatus: () => mcpStatusRef.current,
       isRunning: () => debugStateRef.current.isStreaming,
-      sendMessage: (content) => submit(content),
+      sendMessage: (content, requestedConversationId) => {
+        const conversationId = requestedConversationId
+          ?? debugStateRef.current.conversationId
+          ?? `conv_${crypto.randomUUID().replaceAll("-", "")}`;
+        void submit(content, conversationId).catch((error) => {
+          console.error(`[ERROR] Desktop MCP message submission failed: ${error instanceof Error ? error.message : String(error)}`, error);
+        });
+        return conversationId;
+      },
       activateConversation: async (conversationId) => {
         if (!conversationId || conversationId === debugStateRef.current.conversationId) return;
+        // MCP E2E actions may target an isolated conversation. Never carry UI
+        // messages from the previously open conversation into that run; doing
+        // so can leak dangling tool calls and make AI SDK reject the prompt as
+        // missing a tool result.
+        setMessages([]);
         panelChatRef.current.setConversationId(conversationId);
         setCurrentConversationId(conversationId);
+        setCurrentConversationTitle(null);
       },
       showChat: () => setPanelView("chat")
     });
@@ -431,6 +317,12 @@ export function AssistantPanel({
     globalThis.addEventListener(DESKTOP_CONFIG_CHANGED_EVENT, refreshCatalog);
     return () => globalThis.removeEventListener(DESKTOP_CONFIG_CHANGED_EVENT, refreshCatalog);
   }, []);
+  useEffect(() => {
+    if (!selectedModel || thinkingSupported || !thinkingEnabled) return;
+    setThinkingEnabled(false);
+    panelChatRef.current.setThinkingEnabled(false);
+    void browser.storage.local.set({ [THINKING_ENABLED_STORAGE_KEY]: false });
+  }, [selectedModel, thinkingEnabled, thinkingSupported]);
   // Show the tour once on first launch. Completion and skipping are persisted
   // locally so returning users are not interrupted.
   useEffect(() => {
@@ -570,7 +462,7 @@ export function AssistantPanel({
     void blackboard.load();
   }
 
-  async function submit(exampleText?: string) {
+  async function submit(exampleText?: string, requestedConversationId?: string) {
     const text = (exampleText ?? input).trim();
     const pendingAttachments = exampleText === undefined ? attachments : [];
     if ((!text && pendingAttachments.length === 0) || isStreaming) return;
@@ -580,8 +472,8 @@ export function AssistantPanel({
       setSubmissionError(t("composer.unsupportedFile", { name: unsupported?.part.filename ?? t("common.attachment") }));
       return;
     }
-    const conversationId = currentConversationId ?? `conv_${crypto.randomUUID().replaceAll("-", "")}`;
-    if (!currentConversationId) {
+    const conversationId = requestedConversationId ?? currentConversationId ?? `conv_${crypto.randomUUID().replaceAll("-", "")}`;
+    if (conversationId !== currentConversationId) {
       panelChatRef.current.setConversationId(conversationId);
       setCurrentConversationId(conversationId);
       const attachmentTitle = pendingAttachments.find((attachment) => attachment.part.filename)?.part.filename ?? "";
@@ -599,11 +491,16 @@ export function AssistantPanel({
     }
   }
 
-  function changeModel(value: string) {
-    const selected = modelOptionsRef.current.find((option) => option.id === value);
+  function changeModel(value: string, provider?: string) {
+    const selected = modelOptionsRef.current.find((option) => option.id === value && (!provider || option.provider === provider));
     if (!selected) return;
     panelChatRef.current.setModel(selected.id);
     setSelectedModel(selected.id);
+    if (!agentModelSupportsReasoning(selected.provider, selected.id)) {
+      setThinkingEnabled(false);
+      panelChatRef.current.setThinkingEnabled(false);
+      void browser.storage.local.set({ [THINKING_ENABLED_STORAGE_KEY]: false });
+    }
     void saveStoredModel(value);
   }
 
@@ -1083,8 +980,16 @@ export function AssistantPanel({
                   </Stack>
                 </Box>
               )}
-              {messages.map((message) => (
-                <Box
+              {messages.map((message) => {
+                const process = message.role === "assistant"
+                  ? collectAssistantProcess(message.parts, isAgentDisplayToolPart)
+                  : null;
+                const processIndexes = new Set(process?.entries.map(({ index }) => index) ?? []);
+                const processActive = Boolean(
+                  process && isStreaming && message.id === messages.at(-1)?.id,
+                );
+                return (
+                  <Box
                   key={message.id}
                   sx={{
                     maxWidth: message.role === "user" ? "88%" : "100%",
@@ -1097,34 +1002,40 @@ export function AssistantPanel({
                     overflowWrap: "anywhere",
                   }}
                 >
-                  {message.parts.map((part, index) => {
-                    if (part.type === "reasoning") {
-                      const answerStarted = message.parts.some((candidate) =>
-                        candidate.type === "text" && candidate.text.trim().length > 0
-                      );
+                    {message.parts.map((part, index) => {
+                    if (process && index === process.firstIndex) {
                       return (
-                        <ThinkingBlock
+                        <AssistantProcess
                           key={index}
-                          active={
-                            isStreaming &&
-                            !answerStarted &&
-                            message.role === "assistant" &&
-                            message.id === messages.at(-1)?.id
-                          }
-                          label={t("panel.thinking")}
-                          completeLabel={t("panel.thinkingComplete")}
-                          expandLabel={t("panel.expandThinking")}
-                          collapseLabel={t("panel.collapseThinking")}
-                          text={part.text}
+                          active={processActive}
+                          process={process}
+                          labels={{
+                            active: t("panel.process.active"),
+                            complete: t("panel.process.complete"),
+                            toolsOnly: t("panel.process.toolsOnly"),
+                            toolCount: (count) => t(
+                              count === 1 ? "panel.process.toolCountOne" : "panel.process.toolCountMany",
+                              { count },
+                            ),
+                            expand: t("panel.process.expand"),
+                            collapse: t("panel.process.collapse"),
+                            reasoning: t("panel.process.reasoning"),
+                            input: t("panel.process.input"),
+                            output: t("panel.process.output"),
+                            error: t("panel.process.error"),
+                            status: (toolStatus) => t(`tools.${toolStatus}`),
+                          }}
                         />
                       );
                     }
+                    if (processIndexes.has(index)) return null;
                     if (part.type === "text") {
+                      if (message.role === "assistant" && isInternalToolResultEcho(message.parts, index)) return null;
                       if (message.role === "assistant") {
                         return (
                           <Streamdown
                             key={index}
-                            animated={{ animation: "fadeIn", sep: "char", stagger: 14, duration: 90 }}
+                            animated={false}
                             isAnimating={status === "streaming"}
                             caret="block"
                             className="copilot-markdown"
@@ -1148,16 +1059,11 @@ export function AssistantPanel({
                         />
                       );
                     }
-                    if (part.type.startsWith("tool-")) return (
-                      <Stack direction="row" spacing={0.5} key={index} sx={{ alignItems: "center", color: "text.secondary" }}>
-                        <ConstructionRounded sx={{ fontSize: 14 }} />
-                        <Typography variant="caption">{part.type.slice(5)}: {t(`tools.${toolPartStatus(part)}`)}</Typography>
-                      </Stack>
-                    );
                     return null;
                   })}
-                </Box>
-              ))}
+                  </Box>
+                );
+              })}
               {status === "submitted" && (
                 <Stack
                   direction="row"
@@ -1195,6 +1101,7 @@ export function AssistantPanel({
             model={selectedModel}
             models={modelOptions}
             thinkingEnabled={thinkingEnabled}
+            thinkingSupported={thinkingSupported}
             thinkingEffort={thinkingEffort}
             sendDisabled={
               (!input.trim() && attachments.length === 0)

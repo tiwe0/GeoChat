@@ -35,65 +35,11 @@ export function json(data: unknown, init?: ResponseInit) {
   });
 }
 
-export function ndjsonStream(run: (emit: (event: unknown) => void) => Promise<void>) {
-  const encoder = new TextEncoder();
-  let close: (() => void) | undefined;
-  return new Response(
-    new ReadableStream({
-      start(controller) {
-        let closed = false;
-        const emit = (event: unknown) => {
-          if (closed) return;
-          try {
-            controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
-          } catch (caughtError) {
-            console.error("[ERROR] Caught exception at backend/src/http/response.ts:49", caughtError);
-            closed = true;
-          }
-        };
-        emit({ type: "start" });
-        const heartbeat = globalThis.setInterval(() => emit({ type: "heartbeat", at: new Date().toISOString() }), 5_000);
-        close = () => {
-          if (closed) return;
-          closed = true;
-          globalThis.clearInterval(heartbeat);
-          try {
-            controller.close();
-          } catch (caughtError) {
-            console.error("[ERROR] Caught exception at backend/src/http/response.ts:61", caughtError);
-            // The client may already have disconnected.
-          }
-        };
-        void run(emit)
-          .catch((error) => {
-            console.error("[ERROR] Failed while producing the NDJSON stream", error);
-            emit({
-              type: "error",
-              status: 500,
-              message: error instanceof Error ? error.message : "Unexpected stream error"
-            });
-          })
-          .finally(close);
-      },
-      cancel() {
-        close?.();
-      }
-    }),
-    {
-      headers: {
-        "content-type": "application/x-ndjson; charset=utf-8",
-        "cache-control": "no-cache, no-transform",
-        "x-accel-buffering": "no"
-      }
-    }
-  );
-}
-
 export async function readJson(request: Request) {
   try {
     return await request.json();
   } catch (caughtError) {
-    console.error("[ERROR] Caught exception at backend/src/http/response.ts:92", caughtError);
+    console.error("[ERROR] Caught exception at backend/src/http/response.ts:43", caughtError);
     return undefined;
   }
 }

@@ -10,7 +10,8 @@ export async function createHttpHarness(input: {
     Bun.env.GEOCHAT_DESKTOP_DB_PATH = databasePath;
     const { createBackendHttpContext } = await import("../backend/src/http/context");
     const { createBackendHttpHandler } = await import("../backend/src/http/handler");
-    const handler = createBackendHttpHandler(createBackendHttpContext(), {
+    const context = createBackendHttpContext();
+    const handler = createBackendHttpHandler(context, {
       backfillPersistedAgentErrorEvents: input.backfillPersistedAgentErrorEvents ?? false
     });
 
@@ -28,6 +29,7 @@ export async function createHttpHarness(input: {
 
     return {
       databasePath,
+      context,
       handler,
       handleRequest: handler.handleRequest,
       request

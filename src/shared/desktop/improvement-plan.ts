@@ -1,4 +1,4 @@
-import type { RuntimeInfo } from "@geochat-ai/app";
+import type { RuntimeInfo } from "@geochat-ai/app/desktop-contracts";
 import type { DesktopChatMessage, DesktopConfig } from "./workbench-types";
 import type { Locale } from "./locale";
 import {

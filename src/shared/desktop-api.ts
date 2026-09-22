@@ -1,4 +1,4 @@
-import type { RuntimeInfo } from "@geochat-ai/app";
+import type { RuntimeInfo } from "@geochat-ai/app/desktop-contracts";
 
 export type DesktopMcpStatus = {
   available: boolean;

@@ -11,9 +11,6 @@ import type { createDatabase } from "./client";
 import {
   agentErrorEvents as sqliteAgentErrorEvents,
   agentRunLedgers as sqliteAgentRunLedgers,
-  agentRunModelSteps as sqliteAgentRunModelSteps,
-  agentRunPolicyDecisions as sqliteAgentRunPolicyDecisions,
-  agentRunRemoteToolRequests as sqliteAgentRunRemoteToolRequests,
   conversationBlackboardEntries as sqliteConversationBlackboardEntries,
   conversationMessages as sqliteConversationMessages,
   conversations as sqliteConversations,
@@ -131,9 +128,6 @@ function createSqliteConversationRepository(db: SqliteDatabase): ConversationRep
       db.transaction((tx) => {
         if (runIds.length) {
           tx.delete(sqliteAgentErrorEvents).where(inArray(sqliteAgentErrorEvents.runId, runIds)).run();
-          tx.delete(sqliteAgentRunModelSteps).where(inArray(sqliteAgentRunModelSteps.runId, runIds)).run();
-          tx.delete(sqliteAgentRunPolicyDecisions).where(inArray(sqliteAgentRunPolicyDecisions.runId, runIds)).run();
-          tx.delete(sqliteAgentRunRemoteToolRequests).where(inArray(sqliteAgentRunRemoteToolRequests.runId, runIds)).run();
           tx.delete(sqliteAgentRunLedgers).where(inArray(sqliteAgentRunLedgers.runId, runIds)).run();
         }
         tx.delete(sqliteProblemAttempts).where(eq(sqliteProblemAttempts.conversationId, conversationId)).run();

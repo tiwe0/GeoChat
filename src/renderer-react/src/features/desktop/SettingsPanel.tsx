@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import InfoOutlined from "@mui/icons-material/InfoOutlined";
+import LibraryBooksOutlined from "@mui/icons-material/LibraryBooksOutlined";
 import SettingsOutlined from "@mui/icons-material/SettingsOutlined";
 import TuneRounded from "@mui/icons-material/TuneRounded";
 import { Box, Stack, Tab, Tabs } from "@mui/material";
@@ -7,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import { ModelSettings } from "./settings/ModelSettings";
 import { GeneralSettings } from "./settings/GeneralSettings";
 import { AboutSettings } from "./settings/AboutSettings";
+import { ProblemBankSettings } from "./settings/ProblemBankSettings";
 import type { McpController } from "./useMcpState";
 
 /**
@@ -21,7 +23,7 @@ import type { McpController } from "./useMcpState";
  * implementation structure. These sections instead represent user-facing
  * concerns: model setup, app behaviour, and project info.
  */
-const TABS = ["model", "general", "about"] as const;
+const TABS = ["model", "problemBank", "general", "about"] as const;
 type SettingsTab = (typeof TABS)[number];
 
 export function SettingsPanel(props: { mcp: McpController; onRestartTour: () => void }) {
@@ -32,6 +34,7 @@ export function SettingsPanel(props: { mcp: McpController; onRestartTour: () => 
   const [verticalNavigation, setVerticalNavigation] = useState(true);
   const tabIcons = {
     model: <TuneRounded fontSize="small" />,
+    problemBank: <LibraryBooksOutlined fontSize="small" />,
     general: <SettingsOutlined fontSize="small" />,
     about: <InfoOutlined fontSize="small" />,
   } as const;
@@ -90,6 +93,15 @@ export function SettingsPanel(props: { mcp: McpController; onRestartTour: () => 
             hidden={tab !== "model"}
           >
             <ModelSettings />
+          </Box>
+          <Box
+            id="settings-panel-problemBank"
+            className="settings-tab-panel"
+            role="tabpanel"
+            aria-labelledby="settings-tab-problemBank"
+            hidden={tab !== "problemBank"}
+          >
+            <ProblemBankSettings />
           </Box>
           <Box
             id="settings-panel-general"

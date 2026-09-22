@@ -1,7 +1,7 @@
 import { CARD_FUNCTION_CALL_INPUT_JSON_SCHEMAS } from "./cards";
 import { GEOGEBRA_FUNCTION_CALL_INPUT_JSON_SCHEMAS } from "./geogebra";
 import { MEMORY_FUNCTION_CALL_INPUT_JSON_SCHEMAS } from "./memory";
-import { RUNNER_FUNCTION_CALL_INPUT_JSON_SCHEMAS } from "./runner";
+import { AGENT_CONTROL_FUNCTION_CALL_INPUT_JSON_SCHEMAS } from "./control";
 import { SKILL_FUNCTION_CALL_INPUT_JSON_SCHEMAS } from "./skills";
 import type { FunctionCallInputJsonSchemaMap } from "./types";
 
@@ -24,6 +24,6 @@ export const FUNCTION_CALL_INPUT_JSON_SCHEMAS = {
   showAnimationGuide: CARD_FUNCTION_CALL_INPUT_JSON_SCHEMAS.showAnimationGuide,
   showChoiceAnalysis: CARD_FUNCTION_CALL_INPUT_JSON_SCHEMAS.showChoiceAnalysis,
   showSelectedElements: CARD_FUNCTION_CALL_INPUT_JSON_SCHEMAS.showSelectedElements,
-  setFinished: RUNNER_FUNCTION_CALL_INPUT_JSON_SCHEMAS.setFinished,
+  setFinished: AGENT_CONTROL_FUNCTION_CALL_INPUT_JSON_SCHEMAS.setFinished,
   setPerspective: GEOGEBRA_FUNCTION_CALL_INPUT_JSON_SCHEMAS.setPerspective
 } as const satisfies FunctionCallInputJsonSchemaMap;

@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  agentRunStartPayload,
   createAgentRunLedger
 } from "@geochat-ai/app";
 import { conversationBlackboardEntries } from "../backend/src/db/schema";
@@ -107,6 +106,17 @@ describe("conversation history", () => {
         createdAt: "12:00:01",
         cards: [{ title: "构造画布", status: "done" }],
         toolCalls: [{ callId: "tool-1", toolName: "executeGeoGebraCommands", status: "done" }],
+        parts: [
+          { type: "reasoning", text: "先确定椭圆焦点。" },
+          {
+            type: "tool-executeGeoGebraCommands",
+            toolCallId: "tool-1",
+            state: "output-available",
+            input: { commands: ["A=(-2,0)", "B=(2,0)"] },
+            output: { ok: true }
+          },
+          { type: "text", text: "椭圆已经绘制完成。" }
+        ],
         usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 }
       }
     };
@@ -166,6 +176,11 @@ describe("conversation history", () => {
     expect(detail.json.conversation.messages[1].content).toBe("椭圆已经绘制完成。");
     expect(detail.json.conversation.messages[1].payload.cards).toHaveLength(1);
     expect(detail.json.conversation.messages[1].payload.toolCalls[0].status).toBe("done");
+    expect(detail.json.conversation.messages[1].payload.parts.map((part: { type: string }) => part.type)).toEqual([
+      "reasoning",
+      "tool-executeGeoGebraCommands",
+      "text"
+    ]);
     expect(detail.json.conversation.messages[1].payload.usage.totalTokens).toBe(15);
     expect(detail.json.conversation.blackboardEntries).toContainEqual(
       expect.objectContaining({
@@ -399,8 +414,8 @@ describe("conversation history", () => {
     expect((await request(`/v1/conversations/${encodeURIComponent(secondConversationId)}`)).status).toBe(404);
   });
 
-  test("deletes the whole conversation including runner ledger state", async () => {
-    const { handler, request } = await createHttpHarness();
+  test("deletes the whole conversation including AI SDK ledger state", async () => {
+    const { context, handler, request } = await createHttpHarness();
     const getConversationPersistenceDiagnostics = handler.getConversationPersistenceDiagnostics;
     const conversationId = `history-cascade-${crypto.randomUUID()}`;
     const runId = `${conversationId}-run`;
@@ -430,7 +445,6 @@ describe("conversation history", () => {
       conversationId,
       userMessageId: `${conversationId}-user`,
       assistantMessageId: `${conversationId}-assistant`,
-      mode: "ai-sdk",
       model: {
         provider: "openai",
         model: "gpt-5.5",
@@ -441,24 +455,38 @@ describe("conversation history", () => {
       attachmentCount: 0,
       startedAt: "2026-06-06T04:10:01.000Z"
     });
-    const start = await request("/v1/agent-runs/runner/start", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        run: agentRunStartPayload(run),
-        model: {
-          provider: "openai",
-          model: "gpt-5.5",
-          apiKey: "",
-          customBaseUrl: ""
+    await context.repositories.agentRuns.saveLedger(run);
+    await context.repositories.blackboard.patchEntries(conversationId, {
+      ops: [
+        {
+          op: "upsert",
+          key: "original_problem",
+          category: "original_problem",
+          value: run.prompt,
+          confidence: 0.95,
+          reason: "Seed native AI SDK run context.",
+          sourceMessageId: run.userMessageId,
+          sourceRunId: run.runId,
+          sourceToolCallId: "native-chat-blackboard-seed"
+        },
+        {
+          op: "upsert",
+          key: "current_goal",
+          category: "goal",
+          value: `完成当前用户请求：${run.prompt}`,
+          confidence: 0.86,
+          reason: "Seed native AI SDK run goal.",
+          sourceMessageId: run.userMessageId,
+          sourceRunId: run.runId,
+          sourceToolCallId: "native-chat-blackboard-seed"
         }
-      })
+      ],
+      reason: "Create baseline working memory for this native AI SDK run."
+    }, {
+      runId: run.runId,
+      toolCallId: "native-chat-blackboard-seed"
     });
 
-    expect(start.status).toBe(201);
-    expect(start.json.runner.run.runId).toBe(runId);
-    expect(start.json.runner.pendingToolRequests).toHaveLength(1);
-    expect(start.json.runner.policyDecisions).toHaveLength(1);
     const seededBlackboard = await request(`/v1/conversations/${encodeURIComponent(conversationId)}/blackboard`);
     expect(seededBlackboard.status).toBe(200);
     expect(seededBlackboard.json.entries).toEqual(
@@ -480,27 +508,20 @@ describe("conversation history", () => {
         })
       ])
     );
-    expect((await request(`/v1/agent-runs/${encodeURIComponent(runId)}/runner`)).status).toBe(200);
     await expect(getConversationPersistenceDiagnostics(conversationId, [runId])).resolves.toMatchObject({
       conversations: 1,
       conversationMessages: 1,
       agentRunLedgers: 1,
-      agentRunRemoteToolRequests: 1,
-      agentRunPolicyDecisions: 1,
-      agentRunModelSteps: 0,
       agentErrorEvents: 0
     });
 
     expect((await request(`/v1/conversations/${encodeURIComponent(conversationId)}`, { method: "DELETE" })).status).toBe(204);
     expect((await request(`/v1/conversations/${encodeURIComponent(conversationId)}`)).status).toBe(404);
-    expect((await request(`/v1/agent-runs/${encodeURIComponent(runId)}/runner`)).status).toBe(404);
+    expect(await context.repositories.agentRuns.getLedger(runId)).toBeUndefined();
     await expect(getConversationPersistenceDiagnostics(conversationId, [runId])).resolves.toEqual({
       conversations: 0,
       conversationMessages: 0,
       agentRunLedgers: 0,
-      agentRunRemoteToolRequests: 0,
-      agentRunPolicyDecisions: 0,
-      agentRunModelSteps: 0,
       agentErrorEvents: 0
     });
     const runList = await request("/v1/agent-runs");

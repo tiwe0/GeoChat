@@ -1,6 +1,6 @@
 import type { GeoGebraApi } from "./ggbdeploy-wrapper";
 import { canvasLabels, getAppletXml, readCanvasContext, tryReadCanvasContext, type CanvasContext } from "./canvas-context";
-import { normalizeGeoGebraFreeParameterCommands } from "@geochat-ai/app";
+import { normalizeGeoGebraCommandSyntax, normalizeGeoGebraFreeParameterCommands } from "@geochat-ai/app/functioncalls";
 import { evaluateCommand, type CommandResult } from "./command-executor";
 
 const COMMAND_DELAY_MS = 80;
@@ -85,6 +85,14 @@ export class GeoGebraController {
       commands = normalizeGeoGebraFreeParameterCommands(commands, {
         declaredNames: canvasBefore ? canvasLabels(canvasBefore) : [],
       });
+    } else {
+      // GeoGebra's runtime command syntax is the final execution boundary.
+      // Normalize aliases, unsupported legacy spellings, and 0-255 RGB values
+      // here so direct MCP calls, model tool calls, and macro output behave the
+      // same way. In particular, SetColor expects channels in the 0-1 range;
+      // passing the palette's 0-255 values directly turns every channel into 1
+      // and silently renders the object white.
+      commands = commands.flatMap(normalizeGeoGebraCommandSyntax);
     }
 
     let perspectiveResult: PerspectiveResult | null = null;
@@ -186,7 +194,10 @@ export class GeoGebraController {
     const exportScale = boundedNumber(input.exportScale, 1, 0.25, 4);
     const transparent = typeof input.transparent === "boolean" ? input.transparent : true;
     const dpi = input.dpi === undefined ? undefined : boundedNumber(input.dpi, 96, 1, 600);
-    const raw = await Promise.resolve(this.call("getPNGBase64", exportScale, transparent, dpi, false));
+    // The public GeoGebra Apps API accepts exactly three arguments. Passing a
+    // fourth flag happens to work in some builds, but crashes the bundled
+    // HTML5 applet's Java bridge with an internal index error.
+    const raw = await Promise.resolve(this.call("getPNGBase64", exportScale, transparent, dpi));
     const value = String(raw ?? "");
     const base64 = value.includes(",") ? value.split(",").pop() ?? "" : value;
     if (!base64) throw new Error("GeoGebra 返回了空 PNG。");

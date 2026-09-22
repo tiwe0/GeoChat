@@ -2,9 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { agentThinkingProviderOptions } from "../packages/app/src/agent-thinking";
 import {
   createAgentRunLedger,
-  createAgentRunLedgerFromStart,
   isAgentRunLedgerRecord,
-  isAgentRunStartInput,
   normalizeAgentRunThinkingEffort
 } from "../packages/app/src/run-ledger";
 import { AGENT_PROVIDER_REGISTRY } from "../packages/app/src/model-registry";
@@ -85,7 +83,6 @@ describe("thinking on the run ledger", () => {
   const base = {
     runId: "run_abc",
     conversationId: "conv_abc",
-    mode: "ai-sdk" as const,
     prompt: "draw a square",
     attachmentCount: 0
   };
@@ -103,38 +100,13 @@ describe("thinking on the run ledger", () => {
   });
 
   test("defaults to off, and drops an effort it does not recognise", () => {
-    const record = createAgentRunLedgerFromStart({
+    const record = createAgentRunLedger({
       ...base,
-      modelProvider: "deepseek",
-      modelId: "deepseek-flash",
+      model: { provider: "deepseek", model: "deepseek-flash", apiKey: "k", customBaseUrl: "" },
       thinkingEffort: "medium" as never
     });
     expect(record.thinking).toBeNull();
     expect(record.thinkingEffort).toBeNull();
   });
 
-  test("a ledger written before thinking existed still validates", () => {
-    const record = createAgentRunLedger({
-      ...base,
-      model: { provider: "deepseek", model: "deepseek-flash", apiKey: "k", customBaseUrl: "" }
-    });
-    const legacy = { ...record };
-    delete (legacy as Record<string, unknown>).thinking;
-    delete (legacy as Record<string, unknown>).thinkingEffort;
-    expect(isAgentRunLedgerRecord(legacy)).toBe(true);
-  });
-
-  test("the start payload rejects an effort the providers cannot be given", () => {
-    const payload = {
-      ...base,
-      modelProvider: "deepseek",
-      modelId: "deepseek-flash",
-      thinking: true
-    };
-    expect(isAgentRunStartInput({ ...payload, thinkingEffort: "standard" })).toBe(true);
-    expect(isAgentRunStartInput({ ...payload, thinkingEffort: null })).toBe(true);
-    expect(isAgentRunStartInput({ ...payload })).toBe(true);
-    expect(isAgentRunStartInput({ ...payload, thinkingEffort: "medium" })).toBe(false);
-    expect(isAgentRunStartInput({ ...payload, thinking: "yes" })).toBe(false);
-  });
 });

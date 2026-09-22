@@ -89,7 +89,7 @@ export const agentRunLedgers = sqliteTable(
     runId: text("run_id").primaryKey(),
     conversationId: text("conversation_id").notNull(),
     status: text("status", { enum: ["running", "succeeded", "failed", "cancelled"] }).notNull(),
-    mode: text("mode", { enum: ["ai-sdk", "local-planner"] }).notNull(),
+    revision: integer("revision").notNull().default(0),
     modelProvider: text("model_provider").notNull(),
     modelId: text("model_id").notNull(),
     startedAt: integer("started_at", { mode: "timestamp_ms" }).notNull(),
@@ -105,102 +105,13 @@ export const agentRunLedgers = sqliteTable(
   ]
 );
 
-export const agentRunRemoteToolRequests = sqliteTable(
-  "agent_run_remote_tool_requests",
-  {
-    requestId: text("request_id").primaryKey(),
-    runId: text("run_id").notNull(),
-    toolCallId: text("tool_call_id").notNull(),
-    toolName: text("tool_name").notNull(),
-    status: text("status", { enum: ["pending", "running", "succeeded", "failed", "cancelled"] }).notNull(),
-    requestedAt: integer("requested_at", { mode: "timestamp_ms" }).notNull(),
-    claimedAt: integer("claimed_at", { mode: "timestamp_ms" }),
-    claimedBy: text("claimed_by"),
-    leaseExpiresAt: integer("lease_expires_at", { mode: "timestamp_ms" }),
-    attemptCount: integer("attempt_count").notNull().default(0),
-    completedAt: integer("completed_at", { mode: "timestamp_ms" }),
-    payload: text("payload", { mode: "json" }).notNull()
-  },
-  (table) => [
-    uniqueIndex("agent_run_remote_tool_requests_run_tool_call_uidx").on(table.runId, table.toolCallId),
-    index("agent_run_remote_tool_requests_run_id_idx").on(table.runId, table.status, table.requestedAt),
-    check("agent_run_remote_tool_requests_attempt_count_ck", sql`${table.attemptCount} >= 0`),
-    check("agent_run_remote_tool_requests_lifecycle_ck", sql`
-      (${table.status} = 'pending' AND ${table.claimedAt} IS NULL AND ${table.leaseExpiresAt} IS NULL AND ${table.completedAt} IS NULL) OR
-      (${table.status} = 'running' AND ${table.claimedAt} IS NOT NULL AND ${table.leaseExpiresAt} IS NOT NULL AND ${table.completedAt} IS NULL) OR
-      (${table.status} IN ('succeeded', 'failed', 'cancelled') AND ${table.completedAt} IS NOT NULL)
-    `),
-    check("agent_run_remote_tool_requests_claim_state_ck", sql`
-      (${table.claimedBy} IS NULL AND ${table.leaseExpiresAt} IS NULL) OR ${table.claimedAt} IS NOT NULL
-    `),
-    check("agent_run_remote_tool_requests_timeline_ck", sql`${table.claimedAt} IS NULL OR ${table.claimedAt} >= ${table.requestedAt}`),
-    check("agent_run_remote_tool_requests_lease_timeline_ck", sql`${table.leaseExpiresAt} IS NULL OR ${table.leaseExpiresAt} >= ${table.claimedAt}`),
-    check("agent_run_remote_tool_requests_completion_timeline_ck", sql`
-      ${table.completedAt} IS NULL OR (
-        ${table.completedAt} >= ${table.requestedAt} AND
-        (${table.claimedAt} IS NULL OR ${table.completedAt} >= ${table.claimedAt})
-      )
-    `)
-  ]
-);
-
-export const agentRunPolicyDecisions = sqliteTable(
-  "agent_run_policy_decisions",
-  {
-    decisionId: text("decision_id").primaryKey(),
-    runId: text("run_id").notNull(),
-    stage: text("stage", { enum: ["runner_start", "runner_continuation", "ledger_tool_event", "remote_tool_request"] }).notNull(),
-    kind: text("kind").notNull(),
-    allowed: integer("allowed", { mode: "boolean" }).notNull(),
-    toolCallId: text("tool_call_id"),
-    toolName: text("tool_name"),
-    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
-    payload: text("payload", { mode: "json" }).notNull()
-  },
-  (table) => [
-    index("agent_run_policy_decisions_run_id_idx").on(table.runId, table.createdAt),
-    check("agent_run_policy_decisions_allowed_ck", sql`${table.allowed} IN (0, 1)`)
-  ]
-);
-
-export const agentRunModelSteps = sqliteTable(
-  "agent_run_model_steps",
-  {
-    stepId: text("step_id").primaryKey(),
-    runId: text("run_id").notNull(),
-    stage: text("stage", { enum: ["runner_start", "runner_continuation"] }).notNull(),
-    source: text("source", { enum: ["model", "policy"] }).notNull(),
-    status: text("status", { enum: ["running", "succeeded", "failed", "cancelled"] }).notNull(),
-    modelProvider: text("model_provider").notNull(),
-    modelId: text("model_id").notNull(),
-    startedAt: integer("started_at", { mode: "timestamp_ms" }).notNull(),
-    completedAt: integer("completed_at", { mode: "timestamp_ms" }),
-    inputToolCount: integer("input_tool_count").notNull(),
-    attachmentCount: integer("attachment_count").notNull(),
-    outputType: text("output_type", { enum: ["tool", "finish"] }),
-    outputToolCallId: text("output_tool_call_id"),
-    outputToolName: text("output_tool_name"),
-    payload: text("payload", { mode: "json" }).notNull()
-  },
-  (table) => [
-    index("agent_run_model_steps_run_id_idx").on(table.runId, table.startedAt),
-    check("agent_run_model_steps_input_tool_count_ck", sql`${table.inputToolCount} >= 0`),
-    check("agent_run_model_steps_attachment_count_ck", sql`${table.attachmentCount} >= 0`),
-    check("agent_run_model_steps_lifecycle_ck", sql`
-      (${table.status} = 'running' AND ${table.completedAt} IS NULL) OR
-      (${table.status} IN ('succeeded', 'failed', 'cancelled') AND ${table.completedAt} IS NOT NULL)
-    `),
-    check("agent_run_model_steps_timeline_ck", sql`${table.completedAt} IS NULL OR ${table.completedAt} >= ${table.startedAt}`)
-  ]
-);
-
 export const agentErrorEvents = sqliteTable(
   "agent_error_events",
   {
     eventId: text("event_id").primaryKey(),
     runId: text("run_id").notNull(),
     conversationId: text("conversation_id"),
-    source: text("source", { enum: ["run", "tool", "remote_tool_request", "policy", "model_step"] }).notNull(),
+    source: text("source", { enum: ["run", "tool"] }).notNull(),
     code: text("code").notNull(),
     severity: text("severity", { enum: ["warning", "error"] }).notNull(),
     message: text("message").notNull(),

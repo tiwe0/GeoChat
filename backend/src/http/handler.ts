@@ -4,12 +4,12 @@ import { createAgentRunDiagnosticsService } from "../services/agent-run-diagnost
 import { createAgentRunEventService } from "../services/agent-run-events";
 import type { BackendHttpContext } from "./context";
 import { json, withCors } from "./response";
-import { handleAgentRunWriteRoute } from "./routes/agent-run-write";
 import { handleAgentRunObservabilityRoute } from "./routes/agent-run-observability";
 import { handleHealthAndAssetRoute } from "./routes/health-assets";
 import { handleConversationRoute } from "./routes/conversations";
 import { handleMessageRoute } from "./routes/messages";
 import { handleMigrationRoute } from "./routes/migration";
+import { handleNativeChatRoute } from "./routes/native-chat";
 import { handleProblemBankRoute } from "./routes/problem-bank";
 import { handleProviderProxyRoute } from "./routes/provider-proxy";
 
@@ -96,11 +96,11 @@ async function routeRequest(
   const problemBankResponse = await handleProblemBankRoute(request, url, context, authenticateDataScope);
   if (problemBankResponse) return problemBankResponse;
 
+  const nativeChatResponse = await handleNativeChatRoute(request, url, context, authenticateDataScope);
+  if (nativeChatResponse) return nativeChatResponse;
+
   const agentRunObservabilityResponse = await handleAgentRunObservabilityRoute(request, url, context, authenticateDataScope);
   if (agentRunObservabilityResponse) return agentRunObservabilityResponse;
-
-  const agentRunWriteResponse = await handleAgentRunWriteRoute(request, url, context, authenticateDataScope);
-  if (agentRunWriteResponse) return agentRunWriteResponse;
 
   const providerProxyResponse = await handleProviderProxyRoute(request, url, context);
   if (providerProxyResponse) return providerProxyResponse;

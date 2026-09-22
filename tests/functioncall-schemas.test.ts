@@ -64,7 +64,7 @@ const expectedSchemaShapes = {
   },
   resetCanvas: {
     required: [],
-    properties: ["perspective", "confirmed", "authorization", "reason", "intendedOutcome", "nextExpectedAction"],
+    properties: ["perspective", "confirmed", "reason", "intendedOutcome", "nextExpectedAction"],
     modelRequired: ["reason"]
   },
   getCanvasContext: {

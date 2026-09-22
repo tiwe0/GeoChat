@@ -3,13 +3,18 @@ import { dirname, resolve } from "node:path";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { sql } from "drizzle-orm";
+import {
+  compactAgentRunLedgerForStorage,
+  finishAgentRunLedger,
+  isAgentRunLedgerRecord,
+} from "@geochat-ai/app";
 
 const agentRunLedgersTableSql = `
   CREATE TABLE agent_run_ledgers (
     run_id TEXT PRIMARY KEY,
     conversation_id TEXT NOT NULL,
     status TEXT NOT NULL CONSTRAINT agent_run_ledgers_status_ck CHECK (status IN ('running', 'succeeded', 'failed', 'cancelled')),
-    mode TEXT NOT NULL CONSTRAINT agent_run_ledgers_mode_ck CHECK (mode IN ('ai-sdk', 'local-planner')),
+    revision INTEGER NOT NULL DEFAULT 0,
     model_provider TEXT NOT NULL,
     model_id TEXT NOT NULL,
     started_at INTEGER NOT NULL,
@@ -23,89 +28,13 @@ const agentRunLedgersTableSql = `
   )
 `;
 
-const agentRunRemoteToolRequestsTableSql = `
-  CREATE TABLE agent_run_remote_tool_requests (
-    request_id TEXT PRIMARY KEY,
-    run_id TEXT NOT NULL,
-    tool_call_id TEXT NOT NULL,
-    tool_name TEXT NOT NULL,
-    status TEXT NOT NULL CONSTRAINT agent_run_remote_tool_requests_status_ck CHECK (status IN ('pending', 'running', 'succeeded', 'failed', 'cancelled')),
-    requested_at INTEGER NOT NULL,
-    claimed_at INTEGER,
-    claimed_by TEXT,
-    lease_expires_at INTEGER,
-    attempt_count INTEGER NOT NULL DEFAULT 0 CONSTRAINT agent_run_remote_tool_requests_attempt_count_ck CHECK (attempt_count >= 0),
-    completed_at INTEGER,
-    payload TEXT NOT NULL,
-    UNIQUE (run_id, tool_call_id),
-    CONSTRAINT agent_run_remote_tool_requests_lifecycle_ck CHECK (
-      (status = 'pending' AND claimed_at IS NULL AND lease_expires_at IS NULL AND completed_at IS NULL) OR
-      (status = 'running' AND claimed_at IS NOT NULL AND lease_expires_at IS NOT NULL AND completed_at IS NULL) OR
-      (status IN ('succeeded', 'failed', 'cancelled') AND completed_at IS NOT NULL)
-    ),
-    CONSTRAINT agent_run_remote_tool_requests_claim_state_ck CHECK (
-      (claimed_by IS NULL AND lease_expires_at IS NULL) OR claimed_at IS NOT NULL
-    ),
-    CONSTRAINT agent_run_remote_tool_requests_timeline_ck CHECK (
-      claimed_at IS NULL OR claimed_at >= requested_at
-    ),
-    CONSTRAINT agent_run_remote_tool_requests_lease_timeline_ck CHECK (
-      lease_expires_at IS NULL OR lease_expires_at >= claimed_at
-    ),
-    CONSTRAINT agent_run_remote_tool_requests_completion_timeline_ck CHECK (
-      completed_at IS NULL OR (
-        completed_at >= requested_at AND
-        (claimed_at IS NULL OR completed_at >= claimed_at)
-      )
-    )
-  )
-`;
-
-const agentRunPolicyDecisionsTableSql = `
-  CREATE TABLE agent_run_policy_decisions (
-    decision_id TEXT PRIMARY KEY,
-    run_id TEXT NOT NULL,
-    stage TEXT NOT NULL CONSTRAINT agent_run_policy_decisions_stage_ck CHECK (stage IN ('runner_start', 'runner_continuation', 'ledger_tool_event', 'remote_tool_request')),
-    kind TEXT NOT NULL,
-    allowed INTEGER NOT NULL CONSTRAINT agent_run_policy_decisions_allowed_ck CHECK (allowed IN (0, 1)),
-    tool_call_id TEXT,
-    tool_name TEXT,
-    created_at INTEGER NOT NULL,
-    payload TEXT NOT NULL
-  )
-`;
-
-const agentRunModelStepsTableSql = `
-  CREATE TABLE agent_run_model_steps (
-    step_id TEXT PRIMARY KEY,
-    run_id TEXT NOT NULL,
-    stage TEXT NOT NULL CONSTRAINT agent_run_model_steps_stage_ck CHECK (stage IN ('runner_start', 'runner_continuation')),
-    source TEXT NOT NULL CONSTRAINT agent_run_model_steps_source_ck CHECK (source IN ('model', 'policy')),
-    status TEXT NOT NULL CONSTRAINT agent_run_model_steps_status_ck CHECK (status IN ('running', 'succeeded', 'failed', 'cancelled')),
-    model_provider TEXT NOT NULL,
-    model_id TEXT NOT NULL,
-    started_at INTEGER NOT NULL,
-    completed_at INTEGER,
-    input_tool_count INTEGER NOT NULL CONSTRAINT agent_run_model_steps_input_tool_count_ck CHECK (input_tool_count >= 0),
-    attachment_count INTEGER NOT NULL CONSTRAINT agent_run_model_steps_attachment_count_ck CHECK (attachment_count >= 0),
-    output_type TEXT CONSTRAINT agent_run_model_steps_output_type_ck CHECK (output_type IN ('tool', 'finish')),
-    output_tool_call_id TEXT,
-    output_tool_name TEXT,
-    payload TEXT NOT NULL,
-    CONSTRAINT agent_run_model_steps_lifecycle_ck CHECK (
-      (status = 'running' AND completed_at IS NULL) OR
-      (status IN ('succeeded', 'failed', 'cancelled') AND completed_at IS NOT NULL)
-    ),
-    CONSTRAINT agent_run_model_steps_timeline_ck CHECK (completed_at IS NULL OR completed_at >= started_at)
-  )
-`;
 
 const agentErrorEventsTableSql = `
   CREATE TABLE agent_error_events (
     event_id TEXT PRIMARY KEY,
     run_id TEXT NOT NULL,
     conversation_id TEXT,
-    source TEXT NOT NULL CONSTRAINT agent_error_events_source_ck CHECK (source IN ('run', 'tool', 'remote_tool_request', 'policy', 'model_step')),
+    source TEXT NOT NULL CONSTRAINT agent_error_events_source_ck CHECK (source IN ('run', 'tool')),
     code TEXT NOT NULL,
     severity TEXT NOT NULL CONSTRAINT agent_error_events_severity_ck CHECK (severity IN ('warning', 'error')),
     message TEXT NOT NULL,
@@ -124,6 +53,7 @@ export function createDatabase() {
 
   const sqlite = new Database(databasePath);
   configureSqliteConnection(sqlite);
+  migrateLegacyAgentRunLedgers(sqlite);
   const db = drizzle(sqlite);
 
   db.run(sql`
@@ -209,205 +139,9 @@ export function createDatabase() {
   `);
 
   db.run(sql.raw(agentRunLedgersTableSql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS")));
-  db.run(sql.raw(agentRunRemoteToolRequestsTableSql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS")));
-  db.run(sql.raw(agentRunPolicyDecisionsTableSql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS")));
-  db.run(sql.raw(agentRunModelStepsTableSql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS")));
+  ensureColumn(sqlite, "agent_run_ledgers", "revision", "revision INTEGER NOT NULL DEFAULT 0");
+  reconcileInterruptedAgentRuns(sqlite);
   db.run(sql.raw(agentErrorEventsTableSql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS")));
-
-  ensureColumn(sqlite, "agent_run_remote_tool_requests", "claimed_by", "claimed_by TEXT");
-  ensureColumn(sqlite, "agent_run_remote_tool_requests", "lease_expires_at", "lease_expires_at INTEGER");
-  ensureColumn(sqlite, "agent_run_remote_tool_requests", "attempt_count", "attempt_count INTEGER NOT NULL DEFAULT 0");
-  ensureTableConstraints(sqlite, {
-    table: "agent_run_ledgers",
-    marker: "agent_run_ledgers_lifecycle_ck",
-    createSql: agentRunLedgersTableSql,
-    columns: [
-      "run_id",
-      "conversation_id",
-      "status",
-      "mode",
-      "model_provider",
-      "model_id",
-      "started_at",
-      "completed_at",
-      "payload"
-    ],
-    selectExpressions: [
-      "run_id",
-      "conversation_id",
-      "status",
-      "mode",
-      "model_provider",
-      "model_id",
-      "started_at",
-      "CASE WHEN status = 'running' THEN NULL WHEN completed_at IS NULL OR completed_at < started_at THEN started_at ELSE completed_at END",
-      "payload"
-    ]
-  });
-  ensureTableConstraints(sqlite, {
-    table: "agent_run_remote_tool_requests",
-    marker: "agent_run_remote_tool_requests_lifecycle_ck",
-    createSql: agentRunRemoteToolRequestsTableSql,
-    columns: [
-      "request_id",
-      "run_id",
-      "tool_call_id",
-      "tool_name",
-      "status",
-      "requested_at",
-      "claimed_at",
-      "claimed_by",
-      "lease_expires_at",
-      "attempt_count",
-      "completed_at",
-      "payload"
-    ],
-    selectExpressions: [
-      "request_id",
-      "run_id",
-      "tool_call_id",
-      "tool_name",
-      "status",
-      "requested_at",
-      "CASE WHEN status = 'pending' THEN NULL WHEN claimed_at IS NULL OR claimed_at < requested_at THEN requested_at ELSE claimed_at END",
-      "CASE WHEN status = 'pending' THEN NULL ELSE claimed_by END",
-      `CASE
-        WHEN status IN ('pending', 'succeeded', 'failed', 'cancelled') THEN NULL
-        WHEN lease_expires_at IS NULL OR lease_expires_at < (CASE WHEN claimed_at IS NULL OR claimed_at < requested_at THEN requested_at ELSE claimed_at END)
-          THEN (CASE WHEN claimed_at IS NULL OR claimed_at < requested_at THEN requested_at ELSE claimed_at END)
-        ELSE lease_expires_at
-      END`,
-      "CASE WHEN attempt_count IS NULL OR attempt_count < 0 THEN 0 ELSE attempt_count END",
-      `CASE
-        WHEN status IN ('pending', 'running') THEN NULL
-        WHEN completed_at IS NULL OR completed_at < requested_at THEN requested_at
-        WHEN claimed_at IS NOT NULL AND completed_at < claimed_at THEN claimed_at
-        ELSE completed_at
-      END`,
-      "payload"
-    ]
-  });
-  ensureTableConstraints(sqlite, {
-    table: "agent_run_policy_decisions",
-    marker: "agent_run_policy_decisions_allowed_ck",
-    createSql: agentRunPolicyDecisionsTableSql,
-    columns: [
-      "decision_id",
-      "run_id",
-      "stage",
-      "kind",
-      "allowed",
-      "tool_call_id",
-      "tool_name",
-      "created_at",
-      "payload"
-    ],
-    selectExpressions: [
-      "decision_id",
-      "run_id",
-      "stage",
-      "kind",
-      "CASE WHEN allowed = 1 THEN 1 ELSE 0 END",
-      "tool_call_id",
-      "tool_name",
-      "created_at",
-      "payload"
-    ]
-  });
-  ensureTableConstraints(sqlite, {
-    table: "agent_run_model_steps",
-    marker: "agent_run_model_steps_lifecycle_ck",
-    createSql: agentRunModelStepsTableSql,
-    columns: [
-      "step_id",
-      "run_id",
-      "stage",
-      "source",
-      "status",
-      "model_provider",
-      "model_id",
-      "started_at",
-      "completed_at",
-      "input_tool_count",
-      "attachment_count",
-      "output_type",
-      "output_tool_call_id",
-      "output_tool_name",
-      "payload"
-    ],
-    selectExpressions: [
-      "step_id",
-      "run_id",
-      "stage",
-      "source",
-      "status",
-      "model_provider",
-      "model_id",
-      "started_at",
-      "CASE WHEN status = 'running' THEN NULL WHEN completed_at IS NULL OR completed_at < started_at THEN started_at ELSE completed_at END",
-      "CASE WHEN input_tool_count IS NULL OR input_tool_count < 0 THEN 0 ELSE input_tool_count END",
-      "CASE WHEN attachment_count IS NULL OR attachment_count < 0 THEN 0 ELSE attachment_count END",
-      "output_type",
-      "output_tool_call_id",
-      "output_tool_name",
-      "payload"
-    ]
-  });
-  ensureTableConstraints(sqlite, {
-    table: "agent_error_events",
-    marker: "agent_error_events_source_ck",
-    createSql: agentErrorEventsTableSql,
-    columns: [
-      "event_id",
-      "run_id",
-      "conversation_id",
-      "source",
-      "code",
-      "severity",
-      "message",
-      "model_provider",
-      "model_id",
-      "tool_call_id",
-      "tool_name",
-      "created_at",
-      "payload"
-    ],
-    selectExpressions: [
-      "event_id",
-      "run_id",
-      "conversation_id",
-      "source",
-      "code",
-      "severity",
-      "message",
-      "model_provider",
-      "model_id",
-      "tool_call_id",
-      "tool_name",
-      "created_at",
-      "payload"
-    ]
-  });
-
-  db.run(sql`
-    CREATE UNIQUE INDEX IF NOT EXISTS agent_run_remote_tool_requests_run_tool_call_uidx
-    ON agent_run_remote_tool_requests (run_id, tool_call_id)
-  `);
-
-  db.run(sql`
-    CREATE INDEX IF NOT EXISTS agent_run_remote_tool_requests_run_id_idx
-    ON agent_run_remote_tool_requests (run_id, status, requested_at)
-  `);
-
-  db.run(sql`
-    CREATE INDEX IF NOT EXISTS agent_run_policy_decisions_run_id_idx
-    ON agent_run_policy_decisions (run_id, created_at)
-  `);
-
-  db.run(sql`
-    CREATE INDEX IF NOT EXISTS agent_run_model_steps_run_id_idx
-    ON agent_run_model_steps (run_id, started_at)
-  `);
 
   db.run(sql`
     CREATE INDEX IF NOT EXISTS agent_error_events_run_id_idx
@@ -590,39 +324,67 @@ function configureSqliteConnection(sqlite: Database) {
   sqlite.run("PRAGMA synchronous = NORMAL");
 }
 
+function migrateLegacyAgentRunLedgers(sqlite: Database) {
+  const columns = sqlite.query("PRAGMA table_info(agent_run_ledgers)").all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === "mode")) return;
+
+  const replacementTable = "agent_run_ledgers_native";
+  const replacementSql = agentRunLedgersTableSql.replace("agent_run_ledgers", replacementTable);
+  sqlite.transaction(() => {
+    sqlite.run(`DROP TABLE IF EXISTS ${replacementTable}`);
+    sqlite.run(replacementSql);
+    sqlite.run(`
+      INSERT INTO ${replacementTable} (
+        run_id, conversation_id, status, model_provider, model_id, started_at, completed_at, payload
+      )
+      SELECT
+        run_id, conversation_id, status, model_provider, model_id, started_at, completed_at, payload
+      FROM agent_run_ledgers
+    `);
+    sqlite.run("DROP TABLE agent_run_ledgers");
+    sqlite.run(`ALTER TABLE ${replacementTable} RENAME TO agent_run_ledgers`);
+  })();
+}
+
+function reconcileInterruptedAgentRuns(sqlite: Database) {
+  const rows = sqlite.query("SELECT run_id, revision, payload FROM agent_run_ledgers WHERE status = 'running'").all() as Array<{
+    run_id: string;
+    revision: number;
+    payload: string;
+  }>;
+  if (!rows.length) return;
+  const completedAt = new Date().toISOString();
+  const update = sqlite.query(`
+    UPDATE agent_run_ledgers
+    SET status = ?, revision = ?, completed_at = ?, payload = ?
+    WHERE run_id = ? AND status = 'running'
+  `);
+  sqlite.transaction(() => {
+    for (const row of rows) {
+      try {
+        const payload = { ...JSON.parse(row.payload), revision: row.revision };
+        if (!isAgentRunLedgerRecord(payload)) continue;
+        const hasFinished = payload.tools.some((tool) => tool.toolName === "setFinished" && tool.status === "succeeded");
+        const terminal = compactAgentRunLedgerForStorage(finishAgentRunLedger({
+          ...payload,
+          revision: row.revision + 1,
+          continuationLeaseId: null,
+          continuationLeaseExpiresAt: null,
+        }, {
+          status: hasFinished ? "succeeded" : "cancelled",
+          completedAt,
+          ...(hasFinished ? { usage: payload.usage } : { error: "Interrupted before completion." }),
+        }));
+        update.run(terminal.status, terminal.revision, Date.parse(completedAt), JSON.stringify(terminal), row.run_id);
+      } catch (error) {
+        console.error(`[ERROR] Failed to reconcile interrupted agent run runId=${row.run_id}`, error);
+      }
+    }
+  })();
+}
+
 function ensureColumn(sqlite: Database, table: string, column: string, columnDefinition: string) {
   const columns = sqlite.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
   if (columns.some((item) => item.name === column)) return;
   sqlite.run(`ALTER TABLE ${table} ADD COLUMN ${columnDefinition}`);
-}
-
-function ensureTableConstraints(
-  sqlite: Database,
-  input: { table: string; marker: string; createSql: string; columns: string[]; selectExpressions?: string[] }
-) {
-  const row = sqlite
-    .query(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?`)
-    .get(input.table) as { sql?: string } | undefined;
-  if (row?.sql?.includes(input.marker)) return;
-
-  const oldTable = `${input.table}_old`;
-  const columnList = input.columns.join(", ");
-  const selectList = (input.selectExpressions ?? input.columns).join(", ");
-  sqlite.run("BEGIN");
-  try {
-    sqlite.run(`DROP TABLE IF EXISTS ${oldTable}`);
-    sqlite.run(`ALTER TABLE ${input.table} RENAME TO ${oldTable}`);
-    sqlite.run(input.createSql);
-    sqlite.run(`
-      INSERT INTO ${input.table} (${columnList})
-      SELECT ${selectList}
-      FROM ${oldTable}
-    `);
-    sqlite.run(`DROP TABLE ${oldTable}`);
-    sqlite.run("COMMIT");
-  } catch (error) {
-    console.error("[ERROR] Caught exception at backend/src/db/client.ts:623", error);
-    sqlite.run("ROLLBACK");
-    throw error;
-  }
 }

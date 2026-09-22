@@ -1,5 +1,8 @@
 import type { FunctionCallLocale } from "./functioncalls";
-import { GENERATED_GEOGEBRA_COMMAND_REFERENCE } from "./geogebra-command-reference-data";
+import {
+  GENERATED_GEOGEBRA_COMMAND_REFERENCE,
+  GENERATED_GEOGEBRA_COMMAND_REFERENCE_METADATA
+} from "./geogebra-command-reference-data";
 
 export const GEOGEBRA_COMMAND_SEARCH_SCOPES = [
   "global",
@@ -47,10 +50,8 @@ const ENGLISH_DESCRIPTION_OVERRIDES: Record<string, string> = {
   Midpoint: "Create the midpoint of two points.",
   Intersect: "Find intersection points between two objects, such as Intersect(f, xAxis). Do not assign values to built-in fixed axes such as xAxis/yAxis.",
   Tangent: "Create a tangent at a point on a conic or function. Create the point first, then call Tangent(A, f).",
-  OrthogonalLine: "Create a line through a point perpendicular to a line, segment, vector, plane, or another 3D direction object.",
   PerpendicularLine: "Create a line through a point perpendicular to a given line.",
   Polygon: "Create a polygon from points.",
-  Circumcircle: "Create the circumcircle through three points.",
   Extremum: "Find extrema of a function. The command is Extremum, not extrema.",
   Root: "Find a function's x-axis crossing/root in an interval, for example Z = Root(f, startX, endX).",
   Text: "Create text at a position, for example Text(\"slope = -2\", (1, 2)).",
@@ -73,7 +74,6 @@ const ENGLISH_DESCRIPTION_OVERRIDES: Record<string, string> = {
 
 const SEARCH_ALIASES: Record<string, string> = {
   Extremum: "extrema maximum minimum max min 极值 最大值 最小值",
-  OrthogonalLine: "PerpendicularLine perpendicular orthogonal 垂线 垂直线",
   PerpendicularLine: "OrthogonalLine perpendicular orthogonal 垂线 垂直线",
   Sphere: "ball 球 过两点球面 外接球 circumsphere circumscribed sphere not Sphere(A,B,C,D)",
   PlaneBisector: "perpendicular bisector plane 中垂面 垂直平分面",
@@ -89,10 +89,20 @@ const STRONG_INTENT_TOKENS: Record<string, readonly string[]> = {
 };
 
 export const GEOGEBRA_COMMAND_REFERENCE = GENERATED_GEOGEBRA_COMMAND_REFERENCE;
+export const GEOGEBRA_COMMAND_REFERENCE_METADATA = GENERATED_GEOGEBRA_COMMAND_REFERENCE_METADATA;
+
+const GEOGEBRA_COMMAND_REFERENCE_BY_NAME = new Map(
+  GEOGEBRA_COMMAND_REFERENCE.map((entry) => [entry.command, entry] as const)
+);
+const GEOGEBRA_COMMAND_REFERENCE_BY_NORMALIZED_NAME = new Map(
+  GEOGEBRA_COMMAND_REFERENCE.map((entry) => [entry.command.toLowerCase(), entry] as const)
+);
 
 export function findGeoGebraCommandReferenceEntry(command: string, locale?: FunctionCallLocale | null) {
-  const normalized = command.trim().toLowerCase();
-  const entry = GEOGEBRA_COMMAND_REFERENCE.find((item) => item.command.toLowerCase() === normalized);
+  const exact = command.trim();
+  const normalized = exact.toLowerCase();
+  const entry = GEOGEBRA_COMMAND_REFERENCE_BY_NAME.get(exact)
+    ?? GEOGEBRA_COMMAND_REFERENCE_BY_NORMALIZED_NAME.get(normalized);
   return entry ? localizeCommandReferenceEntry(entry, locale) : undefined;
 }
 
@@ -113,14 +123,30 @@ export function searchGeoGebraCommandReference(
   locale?: FunctionCallLocale | null,
   scope: GeoGebraCommandSearchScope = "global"
 ) {
+  const exactQuery = query.trim();
   const normalized = normalizeSearchText(query);
   const tokens = normalized.split(/[\s,;，；、"“”'()]+/u).filter((token) => token.length >= 2);
   const limit = Math.max(1, Math.min(12, Math.floor(topN || 8)));
+  const exactEntry = GEOGEBRA_COMMAND_REFERENCE_BY_NAME.get(exactQuery)
+    ?? GEOGEBRA_COMMAND_REFERENCE_BY_NORMALIZED_NAME.get(normalized);
+  if (
+    limit === 1
+    && exactEntry
+    && (scope === "global" || (exactEntry.scopes as readonly GeoGebraCommandSearchScope[]).includes(scope))
+  ) {
+    return [localizeCommandReferenceEntry(exactEntry, locale)];
+  }
   const candidates = GEOGEBRA_COMMAND_REFERENCE.filter(
     (item) => scope === "global" || (item.scopes as readonly GeoGebraCommandSearchScope[]).includes(scope)
   );
   const scored = candidates
-    .map((item, index) => ({ item, index, score: normalized ? scoreCommandReference(item, normalized, tokens) : candidates.length - index }))
+    .map((item, index) => ({
+      item,
+      index,
+      score: normalized
+        ? scoreCommandReference(item, normalized, tokens) + (item.command === exactQuery ? 2_000 : 0)
+        : candidates.length - index
+    }))
     .filter(({ score }) => score > 0)
     .sort((left, right) => right.score - left.score || left.item.command.localeCompare(right.item.command));
 

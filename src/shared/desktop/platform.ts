@@ -1,4 +1,4 @@
-import type { RuntimeInfo } from "@geochat-ai/app";
+import type { RuntimeInfo } from "@geochat-ai/app/desktop-contracts";
 
 const DEFAULT_LOCAL_BACKEND_BASE_URL = "http://127.0.0.1:17365";
 // The real version is injected from package.json at build time. A literal

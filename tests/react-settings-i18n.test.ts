@@ -24,6 +24,7 @@ const SOURCES = [
   "src/renderer-react/src/features/desktop/SettingsPanel.tsx",
   "src/renderer-react/src/features/desktop/UpdateSection.tsx",
   "src/renderer-react/src/features/desktop/settings/ModelSettings.tsx",
+  "src/renderer-react/src/features/desktop/settings/ProblemBankSettings.tsx",
   "src/renderer-react/src/features/desktop/settings/GeneralSettings.tsx",
   "src/renderer-react/src/features/desktop/settings/AboutSettings.tsx"
 ];
@@ -31,9 +32,11 @@ const SOURCES = [
 /** Keys the panel builds by interpolation, which the literal scan cannot see. */
 const INTERPOLATED_KEYS = [
   "settings.tabs.model",
+  "settings.tabs.problemBank",
   "settings.tabs.general",
   "settings.tabs.about",
   "settings.tabDescriptions.model",
+  "settings.tabDescriptions.problemBank",
   "settings.tabDescriptions.general",
   "settings.tabDescriptions.about",
   "about.geogebraCredit",
@@ -59,6 +62,14 @@ describe("react desktop settings i18n", () => {
   test("the two locales carry the same settings and about keys", () => {
     expect(keyPaths(zhCN.settings).sort()).toEqual(keyPaths(en.settings).sort());
     expect(keyPaths(zhCN.about).sort()).toEqual(keyPaths(en.about).sort());
+  });
+
+  test("the acknowledgements include cortexsat", () => {
+    const source = readFileSync(
+      new URL("../src/renderer-react/src/features/desktop/settings/AboutSettings.tsx", import.meta.url),
+      "utf8"
+    );
+    expect(source).toContain('{ name: "cortexsat" }');
   });
 
   test("general settings keeps secondary logging controls behind the enabled state", () => {

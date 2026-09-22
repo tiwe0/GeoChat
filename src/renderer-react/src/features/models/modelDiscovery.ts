@@ -2,7 +2,7 @@ import {
   agentModelListRequest,
   parseAgentModelListResponse
 } from "@geochat-ai/app/model-discovery";
-import type { AgentModelProtocol } from "@geochat-ai/app";
+import type { AgentModelProtocol } from "@geochat-ai/app/model-registry";
 
 /**
  * Ask a provider what it currently serves, through the backend's proxy.
@@ -27,6 +27,7 @@ function cacheKey(provider: string, baseUrl: string, protocol?: AgentModelProtoc
 }
 
 function readCache(key: string): CachedDiscovery | null {
+  if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(key);
     if (!raw) return null;
@@ -43,6 +44,7 @@ function readCache(key: string): CachedDiscovery | null {
 }
 
 function writeCache(key: string, value: CachedDiscovery) {
+  if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(key, JSON.stringify(value));
   } catch (caughtError) {

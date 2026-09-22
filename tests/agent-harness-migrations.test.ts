@@ -1,185 +1,58 @@
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { sql } from "drizzle-orm";
-
 import { createDatabase } from "../backend/src/db/client";
-import {
-  agentRunLedgers,
-  agentRunModelSteps,
-  agentRunPolicyDecisions,
-  agentRunRemoteToolRequests
-} from "../backend/src/db/schema";
+import { createAgentRunLedger } from "@geochat-ai/app";
 
-describe("sqlite harness migrations", () => {
-  test("migrates old policy decision stage constraints for manual event decisions", () => {
-    const databasePath = `/tmp/geochat-policy-stage-migration-${crypto.randomUUID()}.sqlite`;
-    const sqlite = new Database(databasePath);
-    sqlite.run(`
-      CREATE TABLE agent_run_policy_decisions (
-        decision_id TEXT PRIMARY KEY,
-        run_id TEXT NOT NULL,
-        stage TEXT NOT NULL CHECK (stage IN ('runner_start', 'runner_continuation')),
-        kind TEXT NOT NULL,
-        allowed INTEGER NOT NULL,
-        tool_call_id TEXT,
-        tool_name TEXT,
-        created_at INTEGER NOT NULL,
-        payload TEXT NOT NULL
-      )
-    `);
-    sqlite.run(
-      `
-        INSERT INTO agent_run_policy_decisions (
-          decision_id,
-          run_id,
-          stage,
-          kind,
-          allowed,
-          created_at,
-          payload
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-      `,
-      [
-        "old-decision-1",
-        "old-run-1",
-        "runner_start",
-        "runner_start_enqueued",
-        1,
-        new Date("2026-06-06T00:02:30.000Z").getTime(),
-        JSON.stringify({
-          decisionId: "old-decision-1",
-          runId: "old-run-1",
-          stage: "runner_start",
-          kind: "runner_start_enqueued",
-          allowed: true,
-          createdAt: "2026-06-06T00:02:30.000Z"
-        })
-      ]
-    );
-    sqlite.close();
+function tableNames(sqlite: Database) {
+  return (sqlite.query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>).map((row) => row.name);
+}
 
+describe("native AI SDK sqlite schema", () => {
+  test("creates only the active run ledger and error-event tables", () => {
+    const previousPath = Bun.env.GEOCHAT_DESKTOP_DB_PATH;
+    const databasePath = `/tmp/geochat-native-schema-${crypto.randomUUID()}.sqlite`;
     Bun.env.GEOCHAT_DESKTOP_DB_PATH = databasePath;
-    const db = createDatabase();
-    db.insert(agentRunPolicyDecisions)
-      .values({
-        decisionId: "new-decision-1",
-        runId: "new-run-1",
-        stage: "remote_tool_request",
-        kind: "workflow_blocked",
-        allowed: false,
-        toolCallId: "blocked-request-1",
-        toolName: "getCanvasContext",
-        createdAt: new Date("2026-06-06T00:02:31.000Z"),
-        payload: {
-          decisionId: "new-decision-1",
-          runId: "new-run-1",
-          stage: "remote_tool_request",
-          kind: "workflow_blocked",
-          allowed: false,
-          toolCallId: "blocked-request-1",
-          toolName: "getCanvasContext",
-          createdAt: "2026-06-06T00:02:31.000Z"
-        }
-      })
-      .run();
+    try {
+      const db = createDatabase();
+      const sqlite = new Database(databasePath);
+      const names = tableNames(sqlite);
+      expect(names).toContain("agent_run_ledgers");
+      expect(names).toContain("agent_error_events");
+      expect(names).not.toContain("agent_run_remote_tool_requests");
+      expect(names).not.toContain("agent_run_policy_decisions");
+      expect(names).not.toContain("agent_run_model_steps");
+      sqlite.close();
 
-    expect(db.select().from(agentRunPolicyDecisions).all().map((row) => row.stage)).toEqual([
-      "runner_start",
-      "remote_tool_request"
-    ]);
+      expect(() => db.run(sql`
+        INSERT INTO agent_run_ledgers (
+          run_id, conversation_id, status, model_provider, model_id, started_at, completed_at, payload
+        ) VALUES (
+          'bad-lifecycle', 'conversation-1', 'succeeded', 'openai', 'gpt-5.5', 1, NULL, '{}'
+        )
+      `)).toThrow();
+      expect(() => db.run(sql`
+        INSERT INTO agent_error_events (
+          event_id, run_id, source, code, severity, message, created_at, payload
+        ) VALUES (
+          'bad-source', 'run-1', 'policy', 'bad', 'error', 'bad', 1, '{}'
+        )
+      `)).toThrow();
+    } finally {
+      if (previousPath === undefined) delete Bun.env.GEOCHAT_DESKTOP_DB_PATH;
+      else Bun.env.GEOCHAT_DESKTOP_DB_PATH = previousPath;
+    }
   });
 
-  test("migrates old remote tool request tables to enforce run scoped tool-call ids", () => {
-    const databasePath = `/tmp/geochat-remote-request-unique-migration-${crypto.randomUUID()}.sqlite`;
-    const sqlite = new Database(databasePath);
-    sqlite.run(`
-      CREATE TABLE agent_run_remote_tool_requests (
-        request_id TEXT PRIMARY KEY,
-        run_id TEXT NOT NULL,
-        tool_call_id TEXT NOT NULL,
-        tool_name TEXT NOT NULL,
-        status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'succeeded', 'failed', 'cancelled')),
-        requested_at INTEGER NOT NULL,
-        claimed_at INTEGER,
-        claimed_by TEXT,
-        lease_expires_at INTEGER,
-        attempt_count INTEGER NOT NULL DEFAULT 0,
-        completed_at INTEGER,
-        payload TEXT NOT NULL
-      )
-    `);
-    sqlite.run(
-      `
-        INSERT INTO agent_run_remote_tool_requests (
-          request_id,
-          run_id,
-          tool_call_id,
-          tool_name,
-          status,
-          requested_at,
-          payload
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-      `,
-      [
-        "legacy-request-a",
-        "legacy-run-remote-unique",
-        "legacy-tool-call",
-        "getCanvasContext",
-        "pending",
-        new Date("2026-06-06T00:02:40.000Z").getTime(),
-        JSON.stringify({
-          runId: "legacy-run-remote-unique",
-          toolCallId: "legacy-tool-call",
-          toolName: "getCanvasContext",
-          args: { includeXml: false },
-          status: "pending",
-          requestedAt: "2026-06-06T00:02:40.000Z",
-          claimedAt: null,
-          leaseExpiresAt: null,
-          completedAt: null,
-          error: null
-        })
-      ]
-    );
-    sqlite.close();
-
-    Bun.env.GEOCHAT_DESKTOP_DB_PATH = databasePath;
-    const db = createDatabase();
-
-    expect(() =>
-      db.insert(agentRunRemoteToolRequests)
-        .values({
-          requestId: "legacy-request-b",
-          runId: "legacy-run-remote-unique",
-          toolCallId: "legacy-tool-call",
-          toolName: "getCanvasContext",
-          status: "pending",
-          requestedAt: new Date("2026-06-06T00:02:41.000Z"),
-          payload: {
-            runId: "legacy-run-remote-unique",
-            toolCallId: "legacy-tool-call",
-            toolName: "getCanvasContext",
-            args: { includeXml: false },
-            status: "pending",
-            requestedAt: "2026-06-06T00:02:41.000Z",
-            claimedAt: null,
-            leaseExpiresAt: null,
-            completedAt: null,
-            error: null
-          }
-        })
-        .run()
-    ).toThrow(/UNIQUE constraint failed/);
-  });
-
-  test("migrates and enforces sqlite lifecycle and counter constraints", () => {
-    const databasePath = `/tmp/geochat-sqlite-harness-constraints-${crypto.randomUUID()}.sqlite`;
-    const sqlite = new Database(databasePath);
-    sqlite.run(`
+  test("removes the legacy run mode column without losing ledgers", () => {
+    const previousPath = Bun.env.GEOCHAT_DESKTOP_DB_PATH;
+    const databasePath = `/tmp/geochat-native-schema-legacy-${crypto.randomUUID()}.sqlite`;
+    const legacy = new Database(databasePath);
+    legacy.run(`
       CREATE TABLE agent_run_ledgers (
         run_id TEXT PRIMARY KEY,
         conversation_id TEXT NOT NULL,
-        status TEXT NOT NULL CHECK (status IN ('running', 'succeeded', 'failed', 'cancelled')),
+        status TEXT NOT NULL,
         mode TEXT NOT NULL CHECK (mode IN ('ai-sdk', 'local-planner')),
         model_provider TEXT NOT NULL,
         model_id TEXT NOT NULL,
@@ -188,355 +61,135 @@ describe("sqlite harness migrations", () => {
         payload TEXT NOT NULL
       )
     `);
-    sqlite.run(
-      `
-        INSERT INTO agent_run_ledgers (
-          run_id,
-          conversation_id,
-          status,
-          mode,
-          model_provider,
-          model_id,
-          started_at,
-          completed_at,
-          payload
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-      [
-        "legacy-run-constraints",
-        "conversation-1",
-        "running",
-        "ai-sdk",
-        "openai",
-        "gpt-5.5",
-        new Date("2026-06-06T00:02:50.000Z").getTime(),
-        null,
-        JSON.stringify({
-          runId: "legacy-run-constraints",
-          conversationId: "conversation-1",
-          status: "running",
-          mode: "ai-sdk",
-          modelProvider: "openai",
-          modelId: "gpt-5.5",
-          prompt: "legacy",
-          attachmentCount: 0,
-          startedAt: "2026-06-06T00:02:50.000Z",
-          completedAt: null,
-          durationMs: null,
-          usage: null,
-          error: null,
-          tools: []
-        })
-      ]
-    );
-    sqlite.run(
-      `
-        INSERT INTO agent_run_ledgers (
-          run_id,
-          conversation_id,
-          status,
-          mode,
-          model_provider,
-          model_id,
-          started_at,
-          completed_at,
-          payload
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-      [
-        "legacy-run-terminal-missing-completed",
-        "conversation-1",
-        "succeeded",
-        "ai-sdk",
-        "openai",
-        "gpt-5.5",
-        new Date("2026-06-06T00:02:55.000Z").getTime(),
-        null,
-        "{}"
-      ]
-    );
-    sqlite.run(`
-      CREATE TABLE agent_run_remote_tool_requests (
-        request_id TEXT PRIMARY KEY,
-        run_id TEXT NOT NULL,
-        tool_call_id TEXT NOT NULL,
-        tool_name TEXT NOT NULL,
-        status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'succeeded', 'failed', 'cancelled')),
-        requested_at INTEGER NOT NULL,
-        claimed_at INTEGER,
-        claimed_by TEXT,
-        lease_expires_at INTEGER,
-        attempt_count INTEGER NOT NULL DEFAULT 0,
-        completed_at INTEGER,
-        payload TEXT NOT NULL
+    legacy.run(`
+      INSERT INTO agent_run_ledgers (
+        run_id, conversation_id, status, mode, model_provider, model_id, started_at, completed_at, payload
+      ) VALUES (
+        'legacy-run', 'legacy-conversation', 'succeeded', 'ai-sdk', 'deepseek', 'deepseek-chat', 1, 2, '{"runId":"legacy-run"}'
       )
     `);
-    sqlite.run(
-      `
-        INSERT INTO agent_run_remote_tool_requests (
-          request_id,
-          run_id,
-          tool_call_id,
-          tool_name,
-          status,
-          requested_at,
-          claimed_at,
-          claimed_by,
-          lease_expires_at,
-          attempt_count,
-          completed_at,
-          payload
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-      [
-        "legacy-remote-dirty",
-        "legacy-run-constraints",
-        "legacy-remote-dirty",
-        "getCanvasContext",
-        "running",
-        new Date("2026-06-06T00:03:00.000Z").getTime(),
-        null,
-        "renderer-a",
-        null,
-        -4,
-        new Date("2026-06-06T00:02:59.000Z").getTime(),
-        "{}"
-      ]
-    );
-    sqlite.run(`
-      CREATE TABLE agent_run_policy_decisions (
-        decision_id TEXT PRIMARY KEY,
-        run_id TEXT NOT NULL,
-        stage TEXT NOT NULL CHECK (stage IN ('runner_start', 'runner_continuation', 'ledger_tool_event', 'remote_tool_request')),
-        kind TEXT NOT NULL,
-        allowed INTEGER NOT NULL,
-        tool_call_id TEXT,
-        tool_name TEXT,
-        created_at INTEGER NOT NULL,
-        payload TEXT NOT NULL
-      )
-    `);
-    sqlite.run(
-      `
-        INSERT INTO agent_run_policy_decisions (
-          decision_id,
-          run_id,
-          stage,
-          kind,
-          allowed,
-          created_at,
-          payload
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-      `,
-      [
-        "legacy-policy-dirty",
-        "legacy-run-constraints",
-        "runner_start",
-        "model_error",
-        2,
-        new Date("2026-06-06T00:03:05.000Z").getTime(),
-        "{}"
-      ]
-    );
-    sqlite.run(`
-      CREATE TABLE agent_run_model_steps (
-        step_id TEXT PRIMARY KEY,
-        run_id TEXT NOT NULL,
-        stage TEXT NOT NULL CHECK (stage IN ('runner_start', 'runner_continuation')),
-        source TEXT NOT NULL CHECK (source IN ('model', 'policy')),
-        status TEXT NOT NULL CHECK (status IN ('running', 'succeeded', 'failed', 'cancelled')),
-        model_provider TEXT NOT NULL,
-        model_id TEXT NOT NULL,
-        started_at INTEGER NOT NULL,
-        completed_at INTEGER,
-        input_tool_count INTEGER NOT NULL,
-        attachment_count INTEGER NOT NULL,
-        output_type TEXT CHECK (output_type IN ('tool', 'finish')),
-        output_tool_call_id TEXT,
-        output_tool_name TEXT,
-        payload TEXT NOT NULL
-      )
-    `);
-    sqlite.run(
-      `
-        INSERT INTO agent_run_model_steps (
-          step_id,
-          run_id,
-          stage,
-          source,
-          status,
-          model_provider,
-          model_id,
-          started_at,
-          completed_at,
-          input_tool_count,
-          attachment_count,
-          payload
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-      [
-        "legacy-model-step-dirty",
-        "legacy-run-constraints",
-        "runner_continuation",
-        "model",
-        "succeeded",
-        "openai",
-        "gpt-5.5",
-        new Date("2026-06-06T00:03:10.000Z").getTime(),
-        null,
-        -2,
-        -1,
-        "{}"
-      ]
-    );
-    sqlite.close();
-
+    legacy.close();
     Bun.env.GEOCHAT_DESKTOP_DB_PATH = databasePath;
-    const db = createDatabase();
-    const migratedSqlite = new Database(databasePath);
-    const migratedLedgerTable = migratedSqlite
-      .query("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'agent_run_ledgers'")
-      .get() as { sql?: string } | undefined;
-    const migratedDirtyLedger = migratedSqlite
-      .query("SELECT started_at, completed_at FROM agent_run_ledgers WHERE run_id = 'legacy-run-terminal-missing-completed'")
-      .get() as { started_at: number; completed_at: number } | undefined;
-    const migratedDirtyRemote = migratedSqlite
-      .query("SELECT requested_at, claimed_at, claimed_by, lease_expires_at, attempt_count, completed_at FROM agent_run_remote_tool_requests WHERE request_id = 'legacy-remote-dirty'")
-      .get() as
-      | {
-        requested_at: number;
-        claimed_at: number | null;
-        claimed_by: string | null;
-        lease_expires_at: number | null;
-        attempt_count: number;
-        completed_at: number | null;
-      }
-      | undefined;
-    const migratedDirtyPolicy = migratedSqlite
-      .query("SELECT allowed FROM agent_run_policy_decisions WHERE decision_id = 'legacy-policy-dirty'")
-      .get() as { allowed: number } | undefined;
-    const migratedDirtyModelStep = migratedSqlite
-      .query("SELECT started_at, completed_at, input_tool_count, attachment_count FROM agent_run_model_steps WHERE step_id = 'legacy-model-step-dirty'")
-      .get() as { started_at: number; completed_at: number; input_tool_count: number; attachment_count: number } | undefined;
-    migratedSqlite.close();
 
-    expect(migratedLedgerTable?.sql).toContain("agent_run_ledgers_lifecycle_ck");
-    expect(db.select().from(agentRunLedgers).all().map((row) => row.runId)).toContain("legacy-run-constraints");
-    expect(migratedDirtyLedger?.completed_at).toBe(migratedDirtyLedger?.started_at);
-    expect(migratedDirtyRemote).toMatchObject({
-      claimed_at: migratedDirtyRemote?.requested_at,
-      claimed_by: "renderer-a",
-      lease_expires_at: migratedDirtyRemote?.requested_at,
-      attempt_count: 0,
-      completed_at: null
-    });
-    expect(migratedDirtyPolicy?.allowed).toBe(0);
-    expect(migratedDirtyModelStep).toMatchObject({
-      completed_at: migratedDirtyModelStep?.started_at,
-      input_tool_count: 0,
-      attachment_count: 0
-    });
-    expect(() =>
-      db.run(sql`
+    try {
+      createDatabase();
+      const migrated = new Database(databasePath);
+      const columns = migrated.query("PRAGMA table_info(agent_run_ledgers)").all() as Array<{ name: string }>;
+      expect(columns.map((column) => column.name)).not.toContain("mode");
+      expect(migrated.query("SELECT run_id FROM agent_run_ledgers").get()).toEqual({ run_id: "legacy-run" });
+      migrated.close();
+    } finally {
+      if (previousPath === undefined) delete Bun.env.GEOCHAT_DESKTOP_DB_PATH;
+      else Bun.env.GEOCHAT_DESKTOP_DB_PATH = previousPath;
+    }
+  });
+
+  test("marks runs interrupted by a backend restart as cancelled", () => {
+    const previousPath = Bun.env.GEOCHAT_DESKTOP_DB_PATH;
+    const databasePath = `/tmp/geochat-native-schema-interrupted-${crypto.randomUUID()}.sqlite`;
+    Bun.env.GEOCHAT_DESKTOP_DB_PATH = databasePath;
+    try {
+      createDatabase();
+      const sqlite = new Database(databasePath);
+      const run = createAgentRunLedger({
+        runId: "interrupted-run",
+        conversationId: "interrupted-conversation",
+        model: { provider: "deepseek", model: "deepseek-chat", apiKey: "test", customBaseUrl: "" },
+        prompt: "draw",
+        attachmentCount: 0,
+        startedAt: "2026-09-22T00:00:00.000Z",
+      });
+      sqlite.query(`
         INSERT INTO agent_run_ledgers (
-          run_id,
-          conversation_id,
-          status,
-          mode,
-          model_provider,
-          model_id,
-          started_at,
-          completed_at,
-          payload
-        ) VALUES (
-          'bad-ledger-terminal',
-          'conversation-1',
-          'succeeded',
-          'ai-sdk',
-          'openai',
-          'gpt-5.5',
-          ${new Date("2026-06-06T00:02:50.000Z").getTime()},
-          NULL,
-          '{}'
-        )
-      `)
-    ).toThrow();
-    expect(() =>
-      db.run(sql`
-        INSERT INTO agent_run_remote_tool_requests (
-          request_id,
-          run_id,
-          tool_call_id,
-          tool_name,
-          status,
-          requested_at,
-          attempt_count,
-          payload
-        ) VALUES (
-          'bad-remote-attempt',
-          'run-constraints',
-          'remote-constraints',
-          'getCanvasContext',
-          'pending',
-          ${new Date("2026-06-06T00:02:51.000Z").getTime()},
-          -1,
-          '{}'
-        )
-      `)
-    ).toThrow();
-    expect(() =>
-      db.run(sql`
-        INSERT INTO agent_run_model_steps (
-          step_id,
-          run_id,
-          stage,
-          source,
-          status,
-          model_provider,
-          model_id,
-          started_at,
-          completed_at,
-          input_tool_count,
-          attachment_count,
-          payload
-        ) VALUES (
-          'bad-model-step',
-          'run-constraints',
-          'runner_continuation',
-          'model',
-          'succeeded',
-          'openai',
-          'gpt-5.5',
-          ${new Date("2026-06-06T00:02:52.000Z").getTime()},
-          ${new Date("2026-06-06T00:02:53.000Z").getTime()},
-          -1,
-          0,
-          '{}'
-        )
-      `)
-    ).toThrow();
-    expect(() =>
-      db.run(sql`
-        INSERT INTO agent_run_policy_decisions (
-          decision_id,
-          run_id,
-          stage,
-          kind,
-          allowed,
-          created_at,
-          payload
-        ) VALUES (
-          'bad-policy-allowed',
-          'run-constraints',
-          'runner_start',
-          'model_error',
-          2,
-          ${new Date("2026-06-06T00:02:54.000Z").getTime()},
-          '{}'
-        )
-      `)
-    ).toThrow();
-    expect(db.select().from(agentRunModelSteps).all().map((row) => row.stepId)).toEqual(["legacy-model-step-dirty"]);
-    expect(db.select().from(agentRunPolicyDecisions).all().map((row) => row.decisionId)).toEqual(["legacy-policy-dirty"]);
+          run_id, conversation_id, status, model_provider, model_id, started_at, completed_at, payload
+        ) VALUES (?, ?, 'running', ?, ?, ?, NULL, ?)
+      `).run(run.runId, run.conversationId, run.modelProvider, run.modelId, Date.parse(run.startedAt), JSON.stringify(run));
+      sqlite.close();
+
+      createDatabase();
+      const reopened = new Database(databasePath);
+      const row = reopened.query("SELECT status, revision, completed_at, payload FROM agent_run_ledgers WHERE run_id = ?").get(run.runId) as {
+        status: string;
+        revision: number;
+        completed_at: number | null;
+        payload: string;
+      };
+      const payload = JSON.parse(row.payload);
+      expect(row.status).toBe("cancelled");
+      expect(row.revision).toBe(1);
+      expect(row.completed_at).toBeNumber();
+      expect(payload).toMatchObject({ status: "cancelled", revision: 1, error: "Interrupted before completion." });
+      reopened.close();
+    } finally {
+      if (previousPath === undefined) delete Bun.env.GEOCHAT_DESKTOP_DB_PATH;
+      else Bun.env.GEOCHAT_DESKTOP_DB_PATH = previousPath;
+    }
+  });
+
+  test("preserves a successful setFinished result across a backend restart", () => {
+    const previousPath = Bun.env.GEOCHAT_DESKTOP_DB_PATH;
+    const databasePath = `/tmp/geochat-native-schema-finished-${crypto.randomUUID()}.sqlite`;
+    Bun.env.GEOCHAT_DESKTOP_DB_PATH = databasePath;
+    try {
+      createDatabase();
+      const sqlite = new Database(databasePath);
+      const run = createAgentRunLedger({
+        runId: "finished-before-restart",
+        conversationId: "finished-conversation",
+        model: { provider: "deepseek", model: "deepseek-chat", apiKey: "test", customBaseUrl: "" },
+        prompt: "draw",
+        attachmentCount: 0,
+        startedAt: "2026-09-22T00:00:00.000Z",
+      });
+      const finishedToolAt = "2026-09-22T00:00:01.000Z";
+      const interrupted = {
+        ...run,
+        continuationLeaseId: "stale-lease",
+        continuationLeaseExpiresAt: "2026-09-22T00:10:00.000Z",
+        usage: { inputTokens: 12, outputTokens: 7, totalTokens: 19 },
+        tools: [{
+          toolCallId: "call_finished",
+          toolName: "setFinished",
+          status: "succeeded",
+          args: { summary: "done" },
+          result: { ok: true },
+          error: null,
+          startedAt: finishedToolAt,
+          completedAt: finishedToolAt,
+          durationMs: 0,
+        }],
+      };
+      sqlite.query(`
+        INSERT INTO agent_run_ledgers (
+          run_id, conversation_id, status, model_provider, model_id, started_at, completed_at, payload
+        ) VALUES (?, ?, 'running', ?, ?, ?, NULL, ?)
+      `).run(run.runId, run.conversationId, run.modelProvider, run.modelId, Date.parse(run.startedAt), JSON.stringify(interrupted));
+      sqlite.close();
+
+      createDatabase();
+      const reopened = new Database(databasePath);
+      const row = reopened.query("SELECT status, revision, completed_at, payload FROM agent_run_ledgers WHERE run_id = ?").get(run.runId) as {
+        status: string;
+        revision: number;
+        completed_at: number | null;
+        payload: string;
+      };
+      const payload = JSON.parse(row.payload);
+      expect(row.status).toBe("succeeded");
+      expect(row.revision).toBe(1);
+      expect(row.completed_at).toBeNumber();
+      expect(payload).toMatchObject({
+        status: "succeeded",
+        revision: 1,
+        continuationLeaseId: null,
+        continuationLeaseExpiresAt: null,
+        usage: { inputTokens: 12, outputTokens: 7, totalTokens: 19 },
+        error: null,
+      });
+      reopened.close();
+    } finally {
+      if (previousPath === undefined) delete Bun.env.GEOCHAT_DESKTOP_DB_PATH;
+      else Bun.env.GEOCHAT_DESKTOP_DB_PATH = previousPath;
+    }
   });
 });

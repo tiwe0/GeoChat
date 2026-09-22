@@ -43,6 +43,7 @@ type ModelMenuProps = {
   models: readonly RuntimeModelOption[];
   disabled: boolean;
   thinkingEnabled: boolean;
+  thinkingSupported: boolean;
   thinkingEffort: ThinkingEffort;
   portalContainer: () => Element | null;
   onChange: (value: string) => void;
@@ -51,7 +52,7 @@ type ModelMenuProps = {
   tourId?: string;
 };
 
-export function ModelMenu({ value, models, disabled, thinkingEnabled, thinkingEffort, portalContainer, onChange, onThinkingEnabledChange, onThinkingEffortChange, tourId }: ModelMenuProps) {
+export function ModelMenu({ value, models, disabled, thinkingEnabled, thinkingSupported, thinkingEffort, portalContainer, onChange, onThinkingEnabledChange, onThinkingEffortChange, tourId }: ModelMenuProps) {
   const { t } = useTranslation();
   const [anchorElement, setAnchorElement] = useState<HTMLButtonElement | null>(null);
   const [menuMounted, setMenuMounted] = useState(false);
@@ -66,7 +67,11 @@ export function ModelMenu({ value, models, disabled, thinkingEnabled, thinkingEf
     return groups;
   }, []);
   const open = menuOpen && Boolean(anchorElement);
-  const modeLabel = thinkingEnabled ? t("model.thinkingEnabled") : t("model.thinkingDisabled");
+  const modeLabel = !thinkingSupported
+    ? t("model.thinkingUnavailable")
+    : thinkingEnabled
+      ? t("model.thinkingEnabled")
+      : t("model.thinkingDisabled");
 
   useEffect(() => {
     if (menuOpen || !menuMounted) return;
@@ -179,22 +184,24 @@ export function ModelMenu({ value, models, disabled, thinkingEnabled, thinkingEf
           >
             <ListItemText sx={{ px: 1.5, py: 0.5 }} primary={<Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>{t("model.responseMode")}</Typography>} />
             <MenuItem
+              disabled={!thinkingSupported}
               onClick={() => onThinkingEnabledChange(!thinkingEnabled)}
               sx={{ minHeight: 48, px: 1.25, borderRadius: 0.75 }}
             >
               <ListItemText
-                primary={t("model.thinkingEnabled")}
+                primary={thinkingSupported ? t("model.thinkingEnabled") : t("model.thinkingUnavailable")}
               />
               <Switch
                 edge="end"
                 size="small"
+                disabled={!thinkingSupported}
                 checked={thinkingEnabled}
                 onChange={(event) => onThinkingEnabledChange(event.target.checked)}
                 onClick={(event) => event.stopPropagation()}
                 slotProps={{ input: { "aria-label": t("model.thinkingEnabled") } }}
               />
             </MenuItem>
-            {thinkingEnabled && (
+            {thinkingSupported && thinkingEnabled && (
               <>
                 <Divider sx={{ my: 0.5 }} />
                 <Box sx={{ px: 1.5, py: 0.75 }}>

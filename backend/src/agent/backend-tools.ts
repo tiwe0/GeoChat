@@ -10,7 +10,6 @@ import {
   isConstructionRecipeId,
   searchGeoGebraCommandReference,
   type AdvancedDrawingToolName,
-  type AgentRunRemoteToolRequestInput,
   type AgentRunToolRecord,
   type ActivateSkillArgs,
   type BlackboardPatchResult,
@@ -19,6 +18,7 @@ import {
   type ExecuteAdvancedDrawingCommandArgs,
   type FunctionCallArgsByName,
   type FunctionCallLocale,
+  type FunctionCallToolName,
   type ListSkillsArgs,
   type LoadSkillArgs,
   type PatchBlackboardArgs,
@@ -52,12 +52,19 @@ export type BackendToolExecutionContext = {
   ) => BlackboardPatchResult | Promise<BlackboardPatchResult>;
 };
 
-export function canExecuteBackendToolRequest(request: AgentRunRemoteToolRequestInput) {
+export type BackendToolRequest = {
+  toolCallId: string;
+  toolName: FunctionCallToolName;
+  args: unknown;
+  requestedAt?: string;
+};
+
+export function canExecuteBackendToolRequest(request: BackendToolRequest) {
   return getFunctionCallBackendExecutableToolNames().includes(request.toolName);
 }
 
 export async function executeBackendToolRequest(
-  request: AgentRunRemoteToolRequestInput,
+  request: BackendToolRequest,
   context: BackendToolExecutionContext,
   startedAt = new Date().toISOString()
 ): Promise<AgentRunToolRecord> {
@@ -82,7 +89,7 @@ export async function executeBackendToolRequest(
   };
 }
 
-async function executeBackendToolResult(request: AgentRunRemoteToolRequestInput, context: BackendToolExecutionContext) {
+async function executeBackendToolResult(request: BackendToolRequest, context: BackendToolExecutionContext) {
   if (request.toolName === "searchGeoGebraCommands") {
     const args = request.args as SearchGeoGebraCommandsArgs;
     return okBackendToolResult(searchGeoGebraCommandReference(args.query, args.topN ?? 8, context.locale, args.scope), {

@@ -1,6 +1,4 @@
 import { resolve } from "node:path";
-import { DEFAULT_AGENT_RUN_REMOTE_TOOL_MAX_ATTEMPTS } from "@geochat-ai/app";
-import { createBackendModelNextAction } from "../agent/model-runner";
 import { createBlackboardRepository } from "../db/blackboard-repository";
 import { createDatabase } from "../db/client";
 import { createConversationRepository } from "../db/conversation-repository";
@@ -27,9 +25,6 @@ export function createBackendHttpContext() {
       messages: createMessageRepository(databaseRuntime, database),
       agentRuns: createAgentRunRepository(databaseRuntime, database)
     },
-    services: {
-      modelNextAction: createBackendModelNextAction
-    },
     resources: {
       root: resourceRoot,
       geogebraAssetRoot: resolve(resourceRoot, "vendor/geogebra"),
@@ -37,12 +32,7 @@ export function createBackendHttpContext() {
     },
     routeLimits: {
       maxProviderRequestBodyBytes: 24 * 1024 * 1024,
-      maxProviderResponseBodyBytes: 48 * 1024 * 1024,
-      remoteToolLeaseMs: 120_000
-    },
-    remoteTools: {
-      maxAttempts: DEFAULT_AGENT_RUN_REMOTE_TOOL_MAX_ATTEMPTS,
-      defaultClaimOwner: "desktop-renderer"
+      maxProviderResponseBodyBytes: 48 * 1024 * 1024
     }
   };
 }

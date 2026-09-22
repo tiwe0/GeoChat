@@ -139,9 +139,24 @@ export async function mountGeoGebra(options: {
   };
   let runtimeApi: GeoGebraApi | null = null;
   let resizeFrame: number | undefined;
-  let visualRefreshTimers: number[] = [];
-  let visualTreeObserved = false;
+  let drawingCanvasObserved = false;
   let disposed = false;
+
+  const refreshRuntimeViews = () => {
+    if (!runtimeApi) return;
+    try {
+      const recalculateEnvironments = runtimeApi.recalculateEnvironments;
+      if (typeof recalculateEnvironments === "function") recalculateEnvironments.call(runtimeApi);
+    } catch (caughtError) {
+      console.error("[ERROR] Failed to recalculate GeoGebra environments after resize", caughtError);
+    }
+    try {
+      const refreshViews = runtimeApi.refreshViews;
+      if (typeof refreshViews === "function") refreshViews.call(runtimeApi);
+    } catch (caughtError) {
+      console.error("[ERROR] Failed to refresh GeoGebra views after resize", caughtError);
+    }
+  };
 
   /**
    * Resizing the applet takes more than setSize.
@@ -174,8 +189,10 @@ export async function mountGeoGebra(options: {
     // GeoGebra's renderer owns an inner frame beneath the scaler.  In the
     // standalone Tauri shell it can retain the bootstrap dimensions (or zero
     // dimensions when the host mounted during a layout pass), leaving a live
-    // API with a completely blank visual surface. Keep the frame and drawing
-    // canvas tied to the host box as well.
+    // API with a completely blank visual surface. Keep the frame tied to the
+    // host box, but leave its internal canvases to GeoGebra: their CSS size is
+    // DPR-aware and overriding it makes the drawing render at half size on
+    // Retina displays.
     const frame = root.querySelector<HTMLElement>(".GeoGebraFrame");
     if (frame) {
       frame.style.display = "block";
@@ -189,9 +206,6 @@ export async function mountGeoGebra(options: {
       canvas.style.display = "block";
       canvas.style.visibility = "visible";
       canvas.style.opacity = "1";
-      canvas.style.width = "100%";
-      canvas.style.height = "100%";
-      canvas.style.maxWidth = "none";
     });
     const parameters = root.querySelector<HTMLElement>(".appletParameters");
     if (parameters) {
@@ -200,17 +214,24 @@ export async function mountGeoGebra(options: {
     }
     const setSize = runtimeApi?.setSize;
     if (typeof setSize === "function") {
-      // A throw here needs no bookkeeping: the next observer or window event
-      // recomputes from the stage, which is always the current truth.
-      try { setSize.call(runtimeApi, width, height); } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:204", caughtError); /* retried on the next event */ }
+      // Canvas insertion can happen after appletOnLoad without changing the
+      // host dimensions. Always forward a scheduled lifecycle resize so that
+      // the canvas-ready pass also forces GeoGebra to repaint.
+      try {
+        setSize.call(runtimeApi, width, height);
+        refreshRuntimeViews();
+      } catch (caughtError) {
+        console.error("[ERROR] Failed to resize the GeoGebra runtime", caughtError);
+      }
       return;
     }
     // Until the runtime API exists, deployggb's own resize() is all there is.
     try { applet.resize?.(); } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:208", caughtError); /* best effort during teardown */ }
   };
 
-  // A window drag fires resize continuously; coalescing to one frame keeps the
-  // applet from re-laying out dozens of times per second.
+  // ResizeObserver also covers window drags and shell layout changes. Coalesce
+  // its notifications to one frame so the applet only performs one layout for
+  // the final size in that frame.
   const scheduleSyncSize = () => {
     if (disposed) return;
     if (resizeFrame !== undefined) window.cancelAnimationFrame(resizeFrame);
@@ -218,37 +239,6 @@ export async function mountGeoGebra(options: {
       resizeFrame = undefined;
       syncSize();
     });
-  };
-  const refreshVisuals = () => {
-    if (disposed) return;
-    scheduleSyncSize();
-    try { applet.resize?.(); } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:224", caughtError); /* retried by the next pass */ }
-    if (runtimeApi) {
-      try {
-        const recalculateEnvironments = runtimeApi.recalculateEnvironments;
-        if (typeof recalculateEnvironments === "function") recalculateEnvironments.call(runtimeApi);
-      } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:229", caughtError); /* optional API */ }
-      try {
-        const refreshViews = runtimeApi.refreshViews;
-        if (typeof refreshViews === "function") refreshViews.call(runtimeApi);
-      } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:233", caughtError); /* optional API */ }
-    }
-    // GWT may create the canvas one or two turns after appletOnLoad. A single
-    // requestAnimationFrame is not enough in WebView2, where the first paint
-    // can be deferred until after the React overlay is removed.
-    for (const delay of [0, 80, 250, 700, 1500]) {
-      const timer = window.setTimeout(() => {
-        visualRefreshTimers = visualRefreshTimers.filter((item) => item !== timer);
-        if (disposed) return;
-        scheduleSyncSize();
-        try { applet.resize?.(); } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:243", caughtError); /* best effort */ }
-        try {
-          const refreshViews = runtimeApi?.refreshViews;
-          if (typeof refreshViews === "function") refreshViews.call(runtimeApi);
-        } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:247", caughtError); /* best effort */ }
-      }, delay);
-      visualRefreshTimers.push(timer);
-    }
   };
   const applet = new window.GGBApplet(5.0, {
     id,
@@ -284,7 +274,7 @@ export async function mountGeoGebra(options: {
         if (typeof setPerspective === "function") setPerspective.call(api, "G");
       } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:284", caughtError); /* perspective: G remains the initialization fallback */ }
       options.onReady(api);
-      refreshVisuals();
+      scheduleSyncSize();
     },
   });
   throwIfMountCancelled(options.signal, isActiveMount);
@@ -295,17 +285,16 @@ export async function mountGeoGebra(options: {
   // Observe the stage. Observing the host would feed syncSize its own writes.
   const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleSyncSize);
   resizeObserver?.observe(options.container.parentElement ?? options.container);
-  // deployggb can invoke appletOnLoad before it has appended the scaler/frame
-  // subtree. Observe child insertion so the final DOM gets the same sizing and
-  // repaint pass as the synchronous path.
+  // On a cold GWT load, GeoGebra can append `.GeoGebraFrame` before its actual
+  // drawing canvas exists. Do not treat the frame as readiness: wait for the
+  // canvas insertion, then run one deterministic sizing/repaint pass.
   const mutationObserver = typeof MutationObserver === "undefined" ? null : new MutationObserver(() => {
-    if (!visualTreeObserved && options.container.querySelector(".GeoGebraFrame, canvas")) {
-      visualTreeObserved = true;
-      refreshVisuals();
+    if (!drawingCanvasObserved && options.container.querySelector(".GeoGebraFrame canvas")) {
+      drawingCanvasObserved = true;
+      scheduleSyncSize();
     }
   });
   mutationObserver?.observe(options.container, { childList: true, subtree: true });
-  window.addEventListener("resize", scheduleSyncSize);
   syncSize();
 
   return {
@@ -313,11 +302,8 @@ export async function mountGeoGebra(options: {
     dispose() {
       disposed = true;
       if (resizeFrame !== undefined) window.cancelAnimationFrame(resizeFrame);
-      visualRefreshTimers.forEach((timer) => window.clearTimeout(timer));
-      visualRefreshTimers = [];
       resizeObserver?.disconnect();
       mutationObserver?.disconnect();
-      window.removeEventListener("resize", scheduleSyncSize);
       runtimeApi = null;
       if (!isActiveMount()) return;
       activeMounts.delete(options.container);

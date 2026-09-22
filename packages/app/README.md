@@ -13,7 +13,7 @@ intended to be shared across ownership boundaries.
 These exports describe persisted data, public runtime contracts, or cross-process schemas.
 They may be imported by backend, renderer, Tauri-facing code, workers, scripts, and tests.
 
-- conversation and runtime types from `src/index.ts`
+- conversation and runtime types from `desktop-contracts`
 - `agent-run-ids`
 - `agent-run-review`
 - `agent-run-time`
@@ -25,8 +25,6 @@ They may be imported by backend, renderer, Tauri-facing code, workers, scripts, 
 - `migration`
 - `model-registry`
 - `problem-bank`
-- `remote-tool`
-- `run-coordinator`
 - `run-ledger`
 
 Compatibility rule: changing a stable contract requires a migration or an explicit
@@ -73,7 +71,6 @@ backend and renderer code both consume them, but they are not standalone public 
 - `geometry-intent-parser`
 - `geometry-ir`
 - `geometry-verifier`
-- `runner`
 
 Compatibility rule: prefer narrower imports and tests around behavior. Do not add new
 callers casually; consider a dedicated stable contract first.
@@ -103,5 +100,5 @@ The minimum checks for shared package boundary changes are:
 
 ```bash
 bun run typecheck
-bun test tests/shared-package-export-policy.test.ts tests/functioncall-groups.test.ts tests/model-registry-schema.test.ts tests/agent-harness.test.ts tests/agent-harness-runner-policy.test.ts
+bun test tests/shared-package-export-policy.test.ts tests/functioncall-groups.test.ts tests/model-registry-schema.test.ts tests/agent-harness.test.ts tests/ai-sdk-native-boundaries.test.ts
 ```

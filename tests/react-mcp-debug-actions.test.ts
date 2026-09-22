@@ -25,7 +25,11 @@ function harness(overrides: {
     getModelConfig: () => overrides.model ?? CONFIGURED,
     getMcpStatus: () => ({ ...DEFAULT_MCP_STATUS, running: true, endpoint: "http://127.0.0.1:17369/mcp" }),
     isRunning: () => overrides.running ?? false,
-    sendMessage: async (content) => { sent.push(content); },
+    sendMessage: (content, requestedConversationId) => {
+      sent.push(content);
+      conversationId = requestedConversationId ?? conversationId ?? "conv_generated";
+      return conversationId;
+    },
     activateConversation: async (next) => {
       activated.push(next);
       if (next) conversationId = next;
@@ -50,9 +54,11 @@ describe("react MCP debug action executor", () => {
     expect(result.geogebra.ready).toBe(false);
   });
 
-  test("refuses every action while a run is in flight", async () => {
+  test("reports status during a run but refuses mutating actions", async () => {
     const { execute } = harness({ running: true, controller: { ready: true } });
-    await expect(execute({ id: "1", type: "get_ui_status" })).rejects.toThrow(/already running/);
+    const status = await execute({ id: "1", type: "get_ui_status" }) as Record<string, unknown>;
+    expect(status.running).toBe(true);
+    await expect(execute({ id: "2", type: "send_message", content: "draw" })).rejects.toThrow(/already running/);
   });
 
   test("exports a PNG through the same tool path the agent uses", async () => {
@@ -118,6 +124,12 @@ describe("react MCP debug action executor", () => {
   test("refuses to send without a configured key, rather than starting a run that cannot finish", async () => {
     const { execute, sent } = harness({ model: DEFAULT_MODEL_CONFIG, controller: { ready: true } });
     await expect(execute({ id: "1", type: "send_message", content: "hi" })).rejects.toThrow(/API key/);
+    expect(sent).toEqual([]);
+  });
+
+  test("refuses to start a model run before the GeoGebra canvas is ready", async () => {
+    const { execute, sent } = harness({ controller: null });
+    await expect(execute({ id: "1", type: "send_message", content: "draw" })).rejects.toThrow(/not ready/);
     expect(sent).toEqual([]);
   });
 

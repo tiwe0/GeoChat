@@ -26,11 +26,8 @@ export default function App() {
 
   useEffect(() => {
     let disposed = false;
-    // React StrictMode intentionally replays effects in development. Abort
-    // the first mount before it reaches deployggb's asynchronous inject path;
-    // otherwise two applets race on the same host and the later one can be
-    // removed by deployggb.removeExistingApplet(), leaving a live API with a
-    // blank canvas.
+    // Abort an in-flight mount during HMR or teardown so a stale applet can
+    // never replace the current one on the shared host.
     const mountAbort = new AbortController();
     let mountedApplet: Awaited<ReturnType<typeof mountGeoGebra>> | null = null;
     const container = canvasRef.current;
@@ -49,8 +46,8 @@ export default function App() {
       if (disposed) mounted.dispose();
       else mountedApplet = mounted;
     }).catch((error) => {
+        if (disposed || (error instanceof Error && error.name === "AbortError")) return;
         console.error("[ERROR] Failed to mount the GeoGebra applet", error);
-        if (disposed) return;
         setCanvasState("error");
         setCanvasError(error instanceof Error ? error.message : String(error));
       });

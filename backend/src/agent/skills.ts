@@ -762,6 +762,9 @@ async function canRead(path: string) {
     await access(path, constants.R_OK);
     return true;
   } catch (caughtError) {
+    if (caughtError && typeof caughtError === "object" && "code" in caughtError && caughtError.code === "ENOENT") {
+      return false;
+    }
     console.error("[ERROR] Caught exception at backend/src/agent/skills.ts:763", caughtError);
     return false;
   }

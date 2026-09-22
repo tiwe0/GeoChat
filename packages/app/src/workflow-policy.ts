@@ -24,7 +24,15 @@ const blackboardTools = new Set<FunctionCallToolName>(["readBlackboard", "patchB
 const skillTools = new Set<FunctionCallToolName>(["listSkills", "searchSkills", "loadSkill", "activateSkill"]);
 
 const allowedToolsByPhase = {
-  needs_canvas_read: new Set<FunctionCallToolName>(["listSkills", "searchSkills", "loadSkill", "activateSkill", "getCanvasContext"]),
+  needs_canvas_read: new Set<FunctionCallToolName>([
+    "readBlackboard",
+    "patchBlackboard",
+    "listSkills",
+    "searchSkills",
+    "loadSkill",
+    "activateSkill",
+    "getCanvasContext"
+  ]),
   planning: new Set<FunctionCallToolName>([
     "searchGeoGebraCommands",
     "readBlackboard",
@@ -44,6 +52,7 @@ const allowedToolsByPhase = {
     "showAnimationGuide",
     "showChoiceAnalysis",
     "showSelectedElements",
+    "setFinished",
     "setPerspective"
   ]),
   writing: new Set<FunctionCallToolName>([]),
@@ -67,6 +76,7 @@ const allowedToolsByPhase = {
     "showAnimationGuide",
     "showChoiceAnalysis",
     "showSelectedElements",
+    "setFinished",
     "setPerspective"
   ])
 } satisfies Record<AgentWorkflowPhase, Set<FunctionCallToolName>>;
@@ -115,12 +125,6 @@ export function evaluateAgentWorkflowToolCall(state: AgentWorkflowState, toolNam
     return {
       allowed: false,
       reason: "画布构造写入后必须先通过 getCanvasContext 或 getPNGBase64 验证，再继续构造或生成解释。"
-    };
-  }
-  if (toolName === "executeGeoGebraCommands" && !state.hasCommandReferenceSearch && !state.hasGeometryPlan) {
-    return {
-      allowed: false,
-      reason: "执行原始 GeoGebra 命令前必须先调用 searchGeoGebraCommands 查询相关语法，或先通过 createGeometryPlan 生成结构化构造计划。"
     };
   }
   return { allowed: true };

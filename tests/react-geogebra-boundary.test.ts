@@ -110,6 +110,7 @@ describe("controller tool boundary", () => {
     expect(result.dpi).toBe(600);
     expect(result.transparent).toBe(false);
     expect(calls[0]?.[0]).toBe(4);
+    expect(calls[0]).toEqual([4, false, 600]);
   });
 
   test("an empty PNG is an error, not an empty success", async () => {
@@ -148,6 +149,21 @@ describe("controller tool boundary", () => {
     const many = await controller.executeTool("executeGeoGebraCommands", { commands: ["A=(1,2)", "B=(3,4)"] }) as Record<string, unknown>;
     expect((single.clientMeta as Record<string, unknown>).commandDelayMs).toBe(0);
     expect((many.clientMeta as Record<string, unknown>).commandDelayMs).toBe(80);
+  });
+
+  test("normalizes 0-255 RGB values at the final applet execution boundary", async () => {
+    const evaluated: string[] = [];
+    const controller = new GeoGebraController();
+    controller.setApi(api({
+      evalCommand: (command: string) => { evaluated.push(command); return true; }
+    }));
+
+    const result = await controller.executeTool("executeGeoGebraCommands", {
+      commands: ["SetColor(c, 52, 120, 246)"]
+    }) as Record<string, unknown>;
+
+    expect(result.ok).toBe(true);
+    expect(evaluated).toEqual(["SetColor(c, 0.20392157, 0.47058824, 0.96470589)"]);
   });
 
   test("rejects a tool it does not implement", async () => {

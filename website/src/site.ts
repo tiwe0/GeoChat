@@ -28,7 +28,7 @@ export const CONTACT_EMAIL = "contact@ivory.cafe";
  * release feed is reachable. Kept in sync with the desktop app's
  * package.json version by scripts/sync-version.mjs, which runs from `build`.
  */
-export const FALLBACK_VERSION = "0.5.2";
+export const FALLBACK_VERSION = "0.5.3";
 
 export const SITE_NAME = "GeoChat Desktop";
 

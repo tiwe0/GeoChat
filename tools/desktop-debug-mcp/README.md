@@ -69,12 +69,12 @@ MCP client example:
 - `get_desktop_runtime_diagnostics`: runtime, database path, file state, MCP limits.
 - `list_problem_bank_sets`: list problem-bank sets through the local backend.
 - `list_problem_bank_problems`: search problems through the local backend, including `query`, `difficulty`, `questionType`, `year`, `paper`, `topic`, `taskType`, and `visualOnly` filters.
-- `get_desktop_ui_status`: inspect the local renderer/MCP bridge state, queued UI actions, selected problem, and recent UI errors.
+- `get_desktop_ui_status`: inspect the local renderer/MCP bridge state and canvas readiness.
 - `send_desktop_message`: enqueue a real desktop UI send-message action.
+- `run_single_problem_test`: resolve a local problem-bank prompt, send it through the real desktop chat path, and wait for the correlated conversation run.
 - `execute_geogebra_commands`: execute GeoGebra commands directly in the open desktop canvas, without invoking the model.
 - Internal GeoGebra tools are also exposed one-to-one: `executeGeoGebraCommands`, `resetCanvas`, `getCanvasContext`, `getPNGBase64`, `setPerspective`, `getValue`, `getValueString`, `setValue`, `exists`, and `getObjectType`.
 - `export_desktop_canvas_png`: enqueue a real desktop GeoGebra PNG export action; read the completed action result for `base64` or `dataUrl`.
-- `select_desktop_problem`: enqueue a real desktop UI problem selection action; it can select by `problemId` or search with the same problem-bank filters. Modes are `show`, `draft`, and `send`.
 - `list_desktop_debug_actions`: inspect queued/claimed/succeeded/failed desktop control actions.
 - `get_sqlite_overview`: table counts, Agent run status, remote tool status, recent errors, problem bank counts.
 - `list_recent_conversations`: recent conversation IDs with latest run status and error count.

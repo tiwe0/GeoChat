@@ -22,7 +22,7 @@
     "preview": "vite preview --config vite.react.config.ts --host 127.0.0.1",
     "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "tauri:dev:mcp": "tauri dev --config src-tauri/tauri.dev.conf.json -- -- --mcp",
-    "tauri:prepare": "bun run build:backend && bun run tauri:renderer:build && bun scripts/stage-vendor-bundle.mjs && bun scripts/stage-runtime-sidecar.mjs && bun scripts/write-app-bundle-manifest.mjs",
+    "tauri:prepare": "bun run build:backend && bun run tauri:renderer:build && bun scripts/stage-vendor-bundle.mjs && bun scripts/stage-runtime-sidecar.mjs && bun run stage:benchmarks && bun scripts/write-app-bundle-manifest.mjs",
     "tauri:build": "tauri build --bundles app",
     "tauri:build:macos": "tauri build --bundles app,dmg",
     "tauri:build:windows": "tauri build --bundles nsis",
@@ -47,7 +47,11 @@
     "mcp:desktop-debug": "bun tools/desktop-debug-mcp/index.ts",
     "mcp:desktop-debug:http": "bun tools/desktop-debug-mcp/http.ts",
     "mcp:desktop-debug:smoke": "bun tools/desktop-debug-mcp/smoke.ts",
-    "eval:harness": "mkdir -p .artifacts && bun test tests/agent-harness-evals.test.ts tests/p0-agent-hardening.test.ts --reporter=junit --reporter-outfile=.artifacts/agent-harness-evals.xml"
+    "eval:harness": "mkdir -p .artifacts && bun test tests/agent-harness-evals.test.ts tests/p0-agent-hardening.test.ts --reporter=junit --reporter-outfile=.artifacts/agent-harness-evals.xml",
+    "benchmark:validate": "bun tools/validate-benchmark-suite.ts",
+    "benchmark:test": "bun test tests/benchmark-contract.test.ts tests/benchmark-evaluator.test.ts tests/benchmark-backend.test.ts tests/benchmark-runner.test.ts",
+    "benchmark:run": "bun tools/run-benchmark-suite.ts",
+    "stage:benchmarks": "bun scripts/stage-benchmark-suite.mjs"
   },
   "dependencies": {},
   "devDependencies": {

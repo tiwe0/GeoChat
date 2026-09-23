@@ -19,6 +19,7 @@ They may be imported by backend, renderer, Tauri-facing code, workers, scripts, 
 - `agent-run-time`
 - `attachments`
 - `blackboard`
+- `benchmark`
 - `functioncalls`
 - `functioncall-groups`
 - `functioncall-schemas`

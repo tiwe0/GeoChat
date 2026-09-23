@@ -33,6 +33,23 @@ export function agentRunCancelPath(pathname: string) {
   return match ? decodeURIComponent(match[1]) : undefined;
 }
 
+export function benchmarkRunPath(pathname: string) {
+  const match = pathname.match(/^\/v1\/benchmark-runs\/([^/]+)$/);
+  return match ? decodeURIComponent(match[1]) : undefined;
+}
+
+export function benchmarkRunResultsPath(pathname: string) {
+  const match = pathname.match(/^\/v1\/benchmark-runs\/([^/]+)\/results$/);
+  return match ? decodeURIComponent(match[1]) : undefined;
+}
+
+export function benchmarkRunActionPath(pathname: string) {
+  const match = pathname.match(/^\/v1\/benchmark-runs\/([^/]+)\/(complete|cancel|fail|interrupt)$/);
+  return match
+    ? { runId: decodeURIComponent(match[1]), action: match[2] as "complete" | "cancel" | "fail" | "interrupt" }
+    : undefined;
+}
+
 export function isGeoGebraAssetPath(pathname: string) {
   return pathname.startsWith("/tools/geogebra-assets-v2/") || pathname.startsWith("/tools/geogebra-assets/");
 }

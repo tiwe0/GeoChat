@@ -1,0 +1,28 @@
+{
+  "id": "triangle-centroid",
+  "version": "1.0.0",
+  "path": "cases/triangle-centroid.json",
+  "publicTask": {
+    "title": "Triangle centroid",
+    "prompt": "Create triangle A=(0,0), B=(6,0), C=(0,3), and its centroid G. Return only the y-coordinate of G.",
+    "tags": [
+      "triangle",
+      "centroid"
+    ],
+    "difficulty": "smoke"
+  },
+  "oracle": {
+    "answer": {
+      "kind": "numeric",
+      "expected": 1,
+      "absoluteTolerance": 1e-09
+    },
+    "requiredTools": [
+      "executeGeoGebraCommands"
+    ]
+  },
+  "limits": {
+    "timeoutMs": 120000,
+    "maxToolCalls": 12
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "id": "circle-radius",
+  "version": "1.0.0",
+  "path": "cases/circle-radius.json",
+  "publicTask": {
+    "title": "Circle radius",
+    "prompt": "Draw a circle centered at the origin with radius 3. Return only its radius.",
+    "tags": [
+      "circle",
+      "construction"
+    ],
+    "difficulty": "smoke"
+  },
+  "oracle": {
+    "answer": {
+      "kind": "numeric",
+      "expected": 3,
+      "absoluteTolerance": 1e-09
+    },
+    "requiredTools": [
+      "executeGeoGebraCommands"
+    ]
+  },
+  "limits": {
+    "timeoutMs": 120000,
+    "maxToolCalls": 12
+  }
+}

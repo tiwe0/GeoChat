@@ -1,0 +1,28 @@
+{
+  "id": "slider-dependent-point",
+  "version": "1.0.0",
+  "path": "cases/slider-dependent-point.json",
+  "publicTask": {
+    "title": "Slider dependent point",
+    "prompt": "Create a slider a from 0 to 5 with step 1, set it to 4, and create P=(a,a^2). Return only the y-coordinate of P.",
+    "tags": [
+      "slider",
+      "dependency"
+    ],
+    "difficulty": "smoke"
+  },
+  "oracle": {
+    "answer": {
+      "kind": "numeric",
+      "expected": 16,
+      "absoluteTolerance": 1e-09
+    },
+    "requiredTools": [
+      "executeGeoGebraCommands"
+    ]
+  },
+  "limits": {
+    "timeoutMs": 120000,
+    "maxToolCalls": 12
+  }
+}

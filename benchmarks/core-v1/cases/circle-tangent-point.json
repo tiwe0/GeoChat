@@ -1,0 +1,28 @@
+{
+  "id": "circle-tangent-point",
+  "version": "1.0.0",
+  "path": "cases/circle-tangent-point.json",
+  "publicTask": {
+    "title": "Circle tangent point",
+    "prompt": "Create the circle x^2+y^2=25 and the vertical tangent line at its rightmost point T. Return only the x-coordinate of T.",
+    "tags": [
+      "circle",
+      "tangent"
+    ],
+    "difficulty": "smoke"
+  },
+  "oracle": {
+    "answer": {
+      "kind": "numeric",
+      "expected": 5,
+      "absoluteTolerance": 1e-09
+    },
+    "requiredTools": [
+      "executeGeoGebraCommands"
+    ]
+  },
+  "limits": {
+    "timeoutMs": 120000,
+    "maxToolCalls": 12
+  }
+}

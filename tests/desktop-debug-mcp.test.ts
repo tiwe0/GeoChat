@@ -4,7 +4,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAgentRunLedger, finishAgentRunLedger } from "@geochat-ai/app";
-import { agentRunReviewFromLedgerRow, waitForConversationRun } from "../tools/desktop-debug-mcp/tools";
+import { createGeoChatDesktopDebugServer } from "../tools/desktop-debug-mcp/index";
+import { agentRunReviewFromLedgerRow, desktopSubmissionEvidence, problemContentForDesktopRun, waitForConversationRun } from "../tools/desktop-debug-mcp/tools";
 
 const temporaryDirectories: string[] = [];
 
@@ -15,6 +16,33 @@ afterEach(() => {
 });
 
 describe("desktop debug MCP", () => {
+  test("does not advertise the unsupported desktop problem-selection action", () => {
+    const { server } = createGeoChatDesktopDebugServer();
+    const registeredTools = (server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools;
+
+    expect(Object.keys(registeredTools)).not.toContain("select_desktop_problem");
+  });
+
+  test("resolves a local problem into the exact content sent through the real chat path", () => {
+    expect(problemContentForDesktopRun({ prompt: "  构造一个圆。\n" })).toBe("构造一个圆。");
+    expect(() => problemContentForDesktopRun({ title: "Only a title" })).toThrow(/non-empty prompt/);
+  });
+
+  test("only trusts submission timestamps correlated to the completed debug action", () => {
+    expect(desktopSubmissionEvidence("action-1", {
+      debugActionId: "action-1",
+      submittedAt: "2026-09-24T08:00:00.000Z"
+    })).toEqual({
+      debugActionId: "action-1",
+      submittedAt: "2026-09-24T08:00:00.000Z",
+      submittedAtMs: Date.parse("2026-09-24T08:00:00.000Z")
+    });
+    expect(desktopSubmissionEvidence("action-1", {
+      debugActionId: "another-action",
+      submittedAt: "2026-09-24T08:00:00.000Z"
+    })).toBeNull();
+  });
+
   test("derives an agent run review from a persisted ledger row payload", () => {
     const run = finishAgentRunLedger(createAgentRunLedger({
       runId: "mcp-review-run",

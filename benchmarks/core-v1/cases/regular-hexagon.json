@@ -1,0 +1,28 @@
+{
+  "id": "regular-hexagon",
+  "version": "1.0.0",
+  "path": "cases/regular-hexagon.json",
+  "publicTask": {
+    "title": "Regular hexagon",
+    "prompt": "Create a regular hexagon with one side from A=(0,0) to B=(2,0). Return only its number of vertices.",
+    "tags": [
+      "polygon",
+      "regular-polygon"
+    ],
+    "difficulty": "smoke"
+  },
+  "oracle": {
+    "answer": {
+      "kind": "numeric",
+      "expected": 6,
+      "absoluteTolerance": 1e-09
+    },
+    "requiredTools": [
+      "executeGeoGebraCommands"
+    ]
+  },
+  "limits": {
+    "timeoutMs": 120000,
+    "maxToolCalls": 12
+  }
+}

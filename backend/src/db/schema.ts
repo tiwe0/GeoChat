@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const messages = sqliteTable(
   "messages",
@@ -238,6 +238,65 @@ export const problemAttempts = sqliteTable(
       (${table.status} = 'started' AND ${table.completedAt} IS NULL) OR
       (${table.status} IN ('completed', 'failed') AND ${table.completedAt} IS NOT NULL)
     `)
+  ]
+);
+
+export const benchmarkRuns = sqliteTable(
+  "benchmark_runs",
+  {
+    id: text("id").primaryKey(),
+    ownerUserId: text("owner_user_id"),
+    suiteId: text("suite_id").notNull(),
+    suiteVersion: text("suite_version").notNull(),
+    suiteHash: text("suite_hash").notNull(),
+    configHash: text("config_hash").notNull(),
+    status: text("status", { enum: ["running", "completed", "failed", "interrupted", "cancelled"] }).notNull(),
+    totalCases: integer("total_cases").notNull(),
+    completedCases: integer("completed_cases").notNull().default(0),
+    passedCases: integer("passed_cases").notNull().default(0),
+    failedCases: integer("failed_cases").notNull().default(0),
+    config: text("config", { mode: "json" }).notNull(),
+    metrics: text("metrics", { mode: "json" }).notNull(),
+    evidenceRefs: text("evidence_refs", { mode: "json" }).notNull(),
+    error: text("error"),
+    startedAt: integer("started_at", { mode: "timestamp_ms" }).notNull(),
+    completedAt: integer("completed_at", { mode: "timestamp_ms" })
+  },
+  (table) => [
+    index("benchmark_runs_owner_started_idx").on(table.ownerUserId, table.startedAt),
+    index("benchmark_runs_suite_started_idx").on(table.suiteId, table.startedAt),
+    check("benchmark_runs_total_cases_ck", sql`${table.totalCases} >= 0`),
+    check("benchmark_runs_case_counts_ck", sql`
+      ${table.completedCases} >= 0 AND ${table.passedCases} >= 0 AND ${table.failedCases} >= 0 AND
+      ${table.completedCases} <= ${table.totalCases} AND
+      ${table.passedCases} + ${table.failedCases} <= ${table.completedCases}
+    `),
+    check("benchmark_runs_lifecycle_ck", sql`
+      (${table.status} = 'running' AND ${table.completedAt} IS NULL) OR
+      (${table.status} IN ('completed', 'failed', 'interrupted', 'cancelled') AND ${table.completedAt} IS NOT NULL)
+    `)
+  ]
+);
+
+export const benchmarkCaseResults = sqliteTable(
+  "benchmark_case_results",
+  {
+    id: text("id").primaryKey(),
+    runId: text("run_id").notNull(),
+    caseId: text("case_id").notNull(),
+    status: text("status", { enum: ["passed", "failed", "error", "skipped"] }).notNull(),
+    score: real("score"),
+    metrics: text("metrics", { mode: "json" }).notNull(),
+    evidenceRefs: text("evidence_refs", { mode: "json" }).notNull(),
+    error: text("error"),
+    startedAt: integer("started_at", { mode: "timestamp_ms" }),
+    completedAt: integer("completed_at", { mode: "timestamp_ms" }).notNull()
+  },
+  (table) => [
+    uniqueIndex("benchmark_case_results_run_case_uidx").on(table.runId, table.caseId),
+    index("benchmark_case_results_run_idx").on(table.runId, table.completedAt),
+    check("benchmark_case_results_score_ck", sql`${table.score} IS NULL OR (${table.score} >= 0 AND ${table.score} <= 1)`),
+    check("benchmark_case_results_timeline_ck", sql`${table.startedAt} IS NULL OR ${table.completedAt} >= ${table.startedAt}`)
   ]
 );
 

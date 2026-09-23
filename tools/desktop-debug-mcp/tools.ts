@@ -21,7 +21,6 @@ const includeFullContentSchema = z.boolean().optional();
 const problemQuestionTypeSchema = z.enum(["mcq", "fill_blank", "open_ended", "curated"]).optional();
 const problemDifficultySchema = z.enum(["easy", "medium", "hard"]).optional();
 const problemTaskTypeSchema = z.enum(["draw", "solve", "explain", "construct", "diagnose", "revise", "mixed", "animation"]).optional();
-const problemSourceSchema = z.enum(["local", "cloud"]).optional();
 
 const knownTables = [
   "messages",
@@ -43,7 +42,9 @@ const knownTables = [
   "problem_topics",
   "problem_sets",
   "problem_set_items",
-  "problem_attempts"
+  "problem_attempts",
+  "benchmark_runs",
+  "benchmark_case_results"
 ] as const;
 
 export function registerDesktopDebugTools(server: McpServer, { config, actions }: RegisterOptions) {
@@ -93,7 +94,7 @@ export function registerDesktopDebugTools(server: McpServer, { config, actions }
     {
       title: "List desktop problem bank sets",
       description:
-        "通过本机后端列出题库题集。用于先选择 setId/slug，再调用 list_problem_bank_problems 或 select_desktop_problem。",
+        "通过本机后端列出题库题集。用于先选择 setId/slug，再调用 list_problem_bank_problems 或 run_single_problem_test。",
       inputSchema: {}
     },
     async () => {
@@ -110,7 +111,7 @@ export function registerDesktopDebugTools(server: McpServer, { config, actions }
     {
       title: "Search desktop problem bank problems",
       description:
-        "通过本机后端搜索题库题目，支持题集、关键词、题型、年份、卷别、难度、任务类型和仅可视化过滤。返回 problemId，可交给 select_desktop_problem。",
+        "通过本机后端搜索题库题目，支持题集、关键词、题型、年份、卷别、难度、任务类型和仅可视化过滤。返回 problemId，可交给 run_single_problem_test。",
       inputSchema: {
         setIdOrSlug: z.string().min(1).max(180).optional(),
         query: z.string().min(1).max(300).optional(),
@@ -349,10 +350,6 @@ export function registerDesktopDebugTools(server: McpServer, { config, actions }
         topic: z.string().min(1).max(120).optional(),
         taskType: problemTaskTypeSchema,
         visualOnly: z.boolean().optional(),
-        source: problemSourceSchema,
-        cloudBaseUrl: z.url().optional(),
-        bankSlug: z.string().min(1).max(180).optional(),
-        problemApiPath: z.string().min(1).max(300).optional(),
         timeoutMs: z.number().int().min(1_000).max(900_000).optional(),
         pollIntervalMs: z.number().int().min(250).max(5_000).optional(),
         exportPng: z.boolean().optional(),
@@ -379,9 +376,11 @@ export function registerDesktopDebugTools(server: McpServer, { config, actions }
 
         const action = await waitForDesktopDebugAction(actions, launch.action.id, timeoutMs, pollIntervalMs);
         const conversationId = resultConversationId(action.result) ?? launch.conversationId ?? input.conversationId ?? null;
+        const submissionEvidence = desktopSubmissionEvidence(action.id, action.result);
+        const runNotBeforeMs = submissionEvidence?.submittedAtMs ?? testStartedAt;
         const remainingAfterAction = Math.max(0, timeoutMs - (Date.now() - testStartedAt));
         const runWait = action.status === "succeeded" && conversationId && remainingAfterAction > 0
-          ? await waitForConversationRun(config, conversationId, testStartedAt, remainingAfterAction, pollIntervalMs)
+          ? await waitForConversationRun(config, conversationId, runNotBeforeMs, remainingAfterAction, pollIntervalMs)
           : { run: null, timedOut: action.status === "succeeded" };
         const redact = redactionContext(config, { includeSensitive: input.includeSensitive });
         const runSummary = conversationId
@@ -414,6 +413,7 @@ export function registerDesktopDebugTools(server: McpServer, { config, actions }
           problem: launch.problem ?? null,
           action,
           conversationId,
+          submissionEvidence,
           runWait,
           runSummary,
           pngReadyWait,
@@ -458,7 +458,7 @@ export function registerDesktopDebugTools(server: McpServer, { config, actions }
     {
       title: "List queued desktop debug actions",
       description:
-        "查看 MCP 调试动作队列，包括 send_desktop_message/select_desktop_problem 是否已被桌面 renderer 消费、成功或失败。",
+        "查看 MCP 调试动作队列，包括消息与画板动作是否已被桌面 renderer 消费、成功或失败。",
       inputSchema: {
         limit: limitSchema
       }
@@ -467,87 +467,6 @@ export function registerDesktopDebugTools(server: McpServer, { config, actions }
       ok: true,
       actions: actions.list(clampLimit(limit, config, 30))
     })
-  );
-
-  server.registerTool(
-    "select_desktop_problem",
-    {
-      title: "Select a problem in the desktop UI",
-      description:
-        "把题库题目选择动作放入桌面端调试队列。mode=show 会打开题库并选中题目；mode=draft 会填入输入框；mode=send 会调用真实发送流程开始解题。若不提供 problemId，则按过滤条件取第一题。",
-      inputSchema: {
-        problemId: idSchema.optional(),
-        setIdOrSlug: z.string().min(1).max(180).optional(),
-        query: z.string().min(1).max(300).optional(),
-        difficulty: problemDifficultySchema,
-        questionType: problemQuestionTypeSchema,
-        year: z.string().min(1).max(40).optional(),
-        paper: z.string().min(1).max(80).optional(),
-        topic: z.string().min(1).max(120).optional(),
-        taskType: problemTaskTypeSchema,
-        visualOnly: z.boolean().optional(),
-        source: problemSourceSchema,
-        cloudBaseUrl: z.url().optional(),
-        bankSlug: z.string().min(1).max(180).optional(),
-        problemApiPath: z.string().min(1).max(300).optional(),
-        mode: z.enum(["show", "draft", "send"]).optional(),
-        conversationId: idSchema.optional()
-      }
-    },
-    async ({ problemId, setIdOrSlug, query, difficulty, questionType, year, paper, topic, taskType, visualOnly, source, cloudBaseUrl, bankSlug, problemApiPath, mode = "show", conversationId }) => {
-      try {
-        let selectedProblemId = problemId;
-        let problem: unknown;
-        const selectedSource = source ?? (bankSlug || cloudBaseUrl || problemApiPath ? "cloud" : "local");
-        if (!selectedProblemId && selectedSource === "cloud") {
-          return blockedResult("Cloud problem selection requires problemId.", { cloudBaseUrl, bankSlug });
-        }
-        if (!selectedProblemId) {
-          const list = await fetchProblems(config, {
-            setIdOrSlug,
-            query,
-            difficulty,
-            questionType,
-            year,
-            paper,
-            topic,
-            taskType,
-            visualOnly,
-            limit: 1
-          }) as { problems?: Array<{ id?: unknown }> };
-          const first = list.problems?.[0];
-          if (!first || typeof first.id !== "string") {
-            return blockedResult("No matching problem was found.", { backendBaseUrl: config.backendBaseUrl });
-          }
-          selectedProblemId = first.id;
-          problem = first;
-        } else if (selectedSource === "cloud") {
-          problem = { id: selectedProblemId, source: "cloud", bankSlug, problemApiPath };
-        } else {
-          problem = await fetchProblemDetail(config, selectedProblemId);
-        }
-
-        const action = actions.enqueue({
-          type: "select_problem",
-          problemId: selectedProblemId,
-          source: selectedSource,
-          cloudBaseUrl,
-          bankSlug,
-          problemApiPath,
-          mode,
-          conversationId
-        });
-        return toolResult({
-          ok: true,
-          queued: true,
-          action,
-          problem,
-          note: "The Tauri renderer must be open with the MCP switch enabled to execute this problem action."
-        });
-      } catch (error) {
-        return blockedResult(error instanceof Error ? error.message : "Problem selection failed.", { backendBaseUrl: config.backendBaseUrl });
-      }
-    }
   );
 
   server.registerTool(
@@ -1083,7 +1002,7 @@ function safetySummary(config: DesktopDebugMcpConfig) {
   return {
     sqliteMode: "readonly",
     databaseWrites: false,
-    desktopControlActions: "send_message/select_problem queue; renderer executes only while MCP switch is enabled",
+    desktopControlActions: "message/canvas action queue; renderer executes only while MCP switch is enabled",
     arbitrarySql: "SELECT/readonly PRAGMA only",
     sensitiveOutput: config.includeSensitiveByDefault ? "opt-in per tool" : "disabled"
   };
@@ -1102,10 +1021,6 @@ type SingleProblemTestInput = {
   topic?: string;
   taskType?: "draw" | "solve" | "explain" | "construct" | "diagnose" | "revise" | "mixed" | "animation";
   visualOnly?: boolean;
-  source?: "local" | "cloud";
-  cloudBaseUrl?: string;
-  bankSlug?: string;
-  problemApiPath?: string;
 };
 
 async function enqueueSingleProblemTestAction(input: {
@@ -1138,10 +1053,6 @@ async function enqueueSingleProblemTestAction(input: {
 
   let selectedProblemId = input.input.problemId;
   let problem: unknown;
-  const selectedSource = input.input.source ?? (input.input.bankSlug || input.input.cloudBaseUrl || input.input.problemApiPath ? "cloud" : "local");
-  if (!selectedProblemId && selectedSource === "cloud") {
-    return { ok: false, message: "Cloud problem test requires problemId.", details: { cloudBaseUrl: input.input.cloudBaseUrl, bankSlug: input.input.bankSlug } };
-  }
   if (!selectedProblemId) {
     const list = await fetchProblems(input.config, {
       setIdOrSlug: input.input.setIdOrSlug,
@@ -1160,11 +1071,18 @@ async function enqueueSingleProblemTestAction(input: {
       return { ok: false, message: "No matching problem was found.", details: { backendBaseUrl: input.config.backendBaseUrl } };
     }
     selectedProblemId = first.id;
-    problem = first;
-  } else if (selectedSource === "cloud") {
-    problem = { id: selectedProblemId, source: "cloud", bankSlug: input.input.bankSlug, problemApiPath: input.input.problemApiPath };
-  } else {
-    problem = await fetchProblemDetail(input.config, selectedProblemId);
+  }
+  problem = await fetchProblemDetail(input.config, selectedProblemId);
+
+  let problemContent: string;
+  try {
+    problemContent = problemContentForDesktopRun(problem);
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "Problem does not contain a usable prompt.",
+      details: { problemId: selectedProblemId, backendBaseUrl: input.config.backendBaseUrl }
+    };
   }
 
   return {
@@ -1173,16 +1091,22 @@ async function enqueueSingleProblemTestAction(input: {
     conversationId: input.input.conversationId,
     problem,
     action: input.actions.enqueue({
-      type: "select_problem",
-      problemId: selectedProblemId,
-      source: selectedSource,
-      cloudBaseUrl: input.input.cloudBaseUrl,
-      bankSlug: input.input.bankSlug,
-      problemApiPath: input.input.problemApiPath,
-      mode: "send",
+      type: "send_message",
+      content: problemContent,
       conversationId: input.input.conversationId
     })
   };
+}
+
+export function problemContentForDesktopRun(problem: unknown) {
+  if (!problem || typeof problem !== "object") {
+    throw new Error("Selected problem does not contain a non-empty prompt.");
+  }
+  const prompt = "prompt" in problem && typeof problem.prompt === "string"
+    ? problem.prompt.trim()
+    : "";
+  if (!prompt) throw new Error("Selected problem does not contain a non-empty prompt.");
+  return prompt;
 }
 
 async function waitForDesktopDebugAction(
@@ -1253,6 +1177,15 @@ function resultConversationId(result: unknown) {
   if (!result || typeof result !== "object" || Array.isArray(result)) return null;
   const value = (result as Record<string, unknown>).conversationId;
   return typeof value === "string" && value.trim() ? value : null;
+}
+
+export function desktopSubmissionEvidence(actionId: string, result: unknown) {
+  if (!result || typeof result !== "object") return null;
+  const value = result as { debugActionId?: unknown; submittedAt?: unknown };
+  if (value.debugActionId !== actionId || typeof value.submittedAt !== "string") return null;
+  const submittedAtMs = Date.parse(value.submittedAt);
+  if (!Number.isFinite(submittedAtMs)) return null;
+  return { debugActionId: actionId, submittedAt: value.submittedAt, submittedAtMs };
 }
 
 type ConversationRunState = {

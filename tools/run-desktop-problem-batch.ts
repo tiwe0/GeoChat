@@ -244,6 +244,25 @@ async function getRunQuality(runId: string) {
   return payload.stats?.runQualityItems?.find((item) => item.runId === runId);
 }
 
+async function fetchCloudProblem(problemId: string) {
+  const baseUrl = cloudBaseUrl.replace(/\/$/, "");
+  const response = await fetch(`${baseUrl}/problem-bank/v1/problems/${encodeURIComponent(problemId)}`);
+  if (!response.ok) throw new Error(`problem CDN ${response.status}: ${await response.text()}`);
+  const payload = await response.json() as {
+    problem?: { prompt?: unknown; title?: unknown };
+    record?: { prompt?: unknown; title?: unknown };
+    prompt?: unknown;
+    title?: unknown;
+  };
+  const problem = payload.problem ?? payload.record ?? payload;
+  const prompt = typeof problem.prompt === "string" ? problem.prompt.trim() : "";
+  if (!prompt) throw new Error(`Problem ${problemId} did not contain a non-empty prompt.`);
+  return {
+    prompt,
+    title: typeof problem.title === "string" && problem.title.trim() ? problem.title.trim() : problemId
+  };
+}
+
 function authHeaders(): Record<string, string> {
   return localAuthToken ? { authorization: `Bearer ${localAuthToken}` } : {};
 }
@@ -270,17 +289,13 @@ async function main() {
     if (itemIndex < startIndex) continue;
     if (onlyIndexes.size > 0 && !onlyIndexes.has(itemIndex)) continue;
     const conversationId = `batch-${Date.now()}-${String(itemIndex).padStart(2, "0")}`;
+    const problem = await fetchCloudProblem(problemId);
     const sent = await callTool<{
       ok: boolean;
       action: ActionRecord;
-      problem?: { id?: string; title?: string };
-    }>("select_desktop_problem", {
-      problemId,
-      mode: "send",
-      conversationId,
-      source: "cloud",
-      cloudBaseUrl,
-      bankSlug: cloudBankSlug
+    }>("send_desktop_message", {
+      content: problem.prompt,
+      conversationId
     });
     await waitForActionClaimed(sent.action.id);
     const action = await waitForActionSucceeded(sent.action.id);
@@ -291,7 +306,7 @@ async function main() {
     const result = {
       index: itemIndex,
       problemId,
-      title: sent.problem?.title ?? completed.title,
+      title: problem.title ?? completed.title,
       conversationId: completed.id,
       runId,
       status: completed.latest_run_status,

@@ -138,9 +138,10 @@ describe("react MCP debug action executor", () => {
     await expect(execute({ id: "1", type: "send_message", content: "   " })).rejects.toThrow(/non-empty/);
   });
 
-  test("says plainly that the problem bank is unavailable", async () => {
-    const { execute } = harness({ controller: { ready: true } });
-    await expect(execute({ id: "1", type: "select_problem", problemId: "p1", mode: "show" }))
-      .rejects.toThrow(/problem bank is not available in this desktop/);
+  test("returns the debug action id so the server can correlate submission evidence", async () => {
+    const h = harness({ conversationId: null, controller: { ready: true } });
+    const result = await h.execute({ id: "action-correlation", type: "send_message", content: "draw" }) as Record<string, unknown>;
+    expect(result.debugActionId).toBe("action-correlation");
+    expect(typeof result.submittedAt).toBe("string");
   });
 });

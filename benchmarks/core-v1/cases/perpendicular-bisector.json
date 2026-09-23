@@ -1,0 +1,28 @@
+{
+  "id": "perpendicular-bisector",
+  "version": "1.0.0",
+  "path": "cases/perpendicular-bisector.json",
+  "publicTask": {
+    "title": "Perpendicular bisector",
+    "prompt": "Create A=(-3,0), B=(5,0), and the perpendicular bisector of segment AB. Return only the x-coordinate where it crosses the x-axis.",
+    "tags": [
+      "line",
+      "perpendicular-bisector"
+    ],
+    "difficulty": "smoke"
+  },
+  "oracle": {
+    "answer": {
+      "kind": "numeric",
+      "expected": 1,
+      "absoluteTolerance": 1e-09
+    },
+    "requiredTools": [
+      "executeGeoGebraCommands"
+    ]
+  },
+  "limits": {
+    "timeoutMs": 120000,
+    "maxToolCalls": 12
+  }
+}

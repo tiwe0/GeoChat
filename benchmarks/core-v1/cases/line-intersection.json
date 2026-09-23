@@ -1,0 +1,28 @@
+{
+  "id": "line-intersection",
+  "version": "1.0.0",
+  "path": "cases/line-intersection.json",
+  "publicTask": {
+    "title": "Line intersection",
+    "prompt": "Graph y=2x+1 and y=-x+7, then mark their intersection P. Return only the x-coordinate of P.",
+    "tags": [
+      "line",
+      "intersection"
+    ],
+    "difficulty": "smoke"
+  },
+  "oracle": {
+    "answer": {
+      "kind": "numeric",
+      "expected": 2,
+      "absoluteTolerance": 1e-09
+    },
+    "requiredTools": [
+      "executeGeoGebraCommands"
+    ]
+  },
+  "limits": {
+    "timeoutMs": 120000,
+    "maxToolCalls": 12
+  }
+}

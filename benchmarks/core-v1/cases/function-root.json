@@ -1,0 +1,28 @@
+{
+  "id": "function-root",
+  "version": "1.0.0",
+  "path": "cases/function-root.json",
+  "publicTask": {
+    "title": "Linear function root",
+    "prompt": "Graph f(x)=3x-12 and mark its x-axis intersection. Return only the x-coordinate of the root.",
+    "tags": [
+      "function",
+      "root"
+    ],
+    "difficulty": "smoke"
+  },
+  "oracle": {
+    "answer": {
+      "kind": "numeric",
+      "expected": 4,
+      "absoluteTolerance": 1e-09
+    },
+    "requiredTools": [
+      "executeGeoGebraCommands"
+    ]
+  },
+  "limits": {
+    "timeoutMs": 120000,
+    "maxToolCalls": 12
+  }
+}

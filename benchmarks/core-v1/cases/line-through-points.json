@@ -1,0 +1,28 @@
+{
+  "id": "line-through-points",
+  "version": "1.0.0",
+  "path": "cases/line-through-points.json",
+  "publicTask": {
+    "title": "Line through two points",
+    "prompt": "Create A=(0,1), B=(4,9), and the line through them. Return only the slope of the line.",
+    "tags": [
+      "line",
+      "slope"
+    ],
+    "difficulty": "smoke"
+  },
+  "oracle": {
+    "answer": {
+      "kind": "numeric",
+      "expected": 2,
+      "absoluteTolerance": 1e-09
+    },
+    "requiredTools": [
+      "executeGeoGebraCommands"
+    ]
+  },
+  "limits": {
+    "timeoutMs": 120000,
+    "maxToolCalls": 12
+  }
+}

@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   agentRunCancelPath,
+  benchmarkRunActionPath,
+  benchmarkRunPath,
+  benchmarkRunResultsPath,
   conversationBlackboardPath,
   conversationDetailPath,
   conversationMessagesPath,
@@ -38,5 +41,16 @@ describe("backend http path helpers", () => {
     expect(agentRunCancelPath("/v1/agent-runs/run%2F1/cancel")).toBe("run/1");
     expect(agentRunCancelPath("/v1/agent-runs/run-1")).toBeUndefined();
     expect(agentRunCancelPath("/v1/agent-runs/run-1/cancel/extra")).toBeUndefined();
+  });
+
+  test("parses benchmark run routes exactly", () => {
+    expect(benchmarkRunPath("/v1/benchmark-runs/run%2F1")).toBe("run/1");
+    expect(benchmarkRunResultsPath("/v1/benchmark-runs/run%2F1/results")).toBe("run/1");
+    expect(benchmarkRunActionPath("/v1/benchmark-runs/run%2F1/complete")).toEqual({
+      runId: "run/1",
+      action: "complete"
+    });
+    expect(benchmarkRunPath("/v1/benchmark-runs/run-1/results")).toBeUndefined();
+    expect(benchmarkRunActionPath("/v1/benchmark-runs/run-1/retry")).toBeUndefined();
   });
 });

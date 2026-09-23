@@ -32,17 +32,6 @@ export type DesktopDebugAction =
       type: "send_message";
       conversationId?: string;
       content: string;
-    }
-  | {
-      id: string;
-      type: "select_problem";
-      conversationId?: string;
-      source?: "local" | "cloud";
-      cloudBaseUrl?: string;
-      bankSlug?: string;
-      problemApiPath?: string | null;
-      problemId: string;
-      mode: "show" | "draft" | "send";
     };
 
 export const DEFAULT_MCP_STATUS: RendererMcpStatus = {
@@ -76,13 +65,17 @@ export async function fetchNextDesktopDebugAction(endpoint: string, authToken?: 
 }
 
 export async function reportDesktopDebugAction(endpoint: string, id: string, payload: { ok: boolean; result?: unknown; error?: string }, authToken?: string) {
-  await fetch(`${desktopMcpHttpBase(endpoint)}/debug-actions/${encodeURIComponent(id)}/result`, {
+  const response = await fetch(`${desktopMcpHttpBase(endpoint)}/debug-actions/${encodeURIComponent(id)}/result`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders(authToken) },
     body: JSON.stringify(payload)
-  }).catch((error) => {
-    console.error("[ERROR] Failed to report the desktop MCP debug action", error);
   });
+  if (response.ok) return;
+  const detail = (await response.text().catch(() => "")).trim();
+  throw new Error([
+    `MCP debug action report failed: ${response.status} ${response.statusText}`.trim(),
+    detail
+  ].filter(Boolean).join(" - "));
 }
 
 /**
@@ -104,18 +97,26 @@ export async function runMcpDebugActionPollOnce(input: {
   input.setBusy(true);
   let action: DesktopDebugAction | null = null;
   try {
-    action = await input.fetchNextDebugAction(input.endpoint, input.authToken);
+    try {
+      action = await input.fetchNextDebugAction(input.endpoint, input.authToken);
+    } catch (error) {
+      console.error("[ERROR] Failed to poll the desktop MCP debug-action queue", error);
+      return;
+    }
     if (!action || input.isCancelled?.()) return;
-    const result = await input.executeDebugAction(action);
-    await input.reportDebugAction(input.endpoint, action.id, { ok: true, result }, input.authToken);
-  } catch (error) {
-    console.error("[ERROR] Caught exception at src/shared/desktop/mcp-debug-actions.ts:103", error);
-    if (action) {
+
+    let result: unknown;
+    try {
+      result = await input.executeDebugAction(action);
+    } catch (error) {
+      console.error("[ERROR] Failed to execute the desktop MCP debug action", error);
       await input.reportDebugAction(input.endpoint, action.id, {
         ok: false,
         error: error instanceof Error ? error.message : String(error)
       }, input.authToken);
+      return;
     }
+    await input.reportDebugAction(input.endpoint, action.id, { ok: true, result }, input.authToken);
   } finally {
     input.setBusy(false);
   }
@@ -145,6 +146,8 @@ export function createMcpDebugActionPolling(input: {
       reportDebugAction: input.reportDebugAction,
       executeDebugAction: input.executeDebugAction,
       isCancelled: () => cancelled
+    }).catch((error) => {
+      console.error("[ERROR] Failed to report the desktop MCP debug-action result", error);
     });
   }
 

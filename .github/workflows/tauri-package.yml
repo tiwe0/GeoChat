@@ -50,6 +50,14 @@ jobs:
         with:
           bun-version: 1.3.11
 
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
       - name: Install JavaScript dependencies
         run: bun install --no-save
 
@@ -58,6 +66,12 @@ jobs:
 
       - name: Test
         run: bun test tests
+
+      - name: Validate benchmark suite
+        run: bun run benchmark:validate
+
+      - name: Test Tauri Rust shell
+        run: cargo test --manifest-path src-tauri/Cargo.toml
 
       - name: Harness evaluation
         if: always()
@@ -280,4 +294,3 @@ jobs:
             'application/json' 'public, max-age=300'
 
           echo "Mirrored $uploaded installer(s) to $BUCKET/$PREFIX/$TAG_NAME/"
-

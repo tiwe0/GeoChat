@@ -6,9 +6,9 @@ import { getFrontendGeoGebraController } from "../../geogebra/runtime";
 /**
  * Executes an action the MCP server queued for the renderer.
  *
- * `select_problem` is unavailable because this desktop exposes direct canvas
- * control rather than a bundled problem-bank browser. Report that explicitly
- * so an MCP client receives a stable capability error.
+ * Only actions the renderer can execute end-to-end belong in this contract.
+ * Problem lookup happens on the MCP server; a resolved prompt then uses the
+ * same `send_message` path as an ordinary user submission.
  */
 export function createDesktopDebugActionExecutor(input: {
   getConversationId: () => string | null;
@@ -65,10 +65,15 @@ export function createDesktopDebugActionExecutor(input: {
       if (!controller?.ready) throw new Error("The GeoGebra canvas is not ready.");
       await input.activateConversation(action.conversationId);
       input.showChat();
+      const submittedAt = new Date().toISOString();
       const conversationId = input.sendMessage(content, action.conversationId);
-      return { type: action.type, conversationId, sent: true };
+      return {
+        type: action.type,
+        conversationId,
+        sent: true,
+        debugActionId: action.id,
+        submittedAt
+      };
     }
-
-    throw new Error(`The problem bank is not available in this desktop, so ${action.type} is unsupported.`);
   };
 }

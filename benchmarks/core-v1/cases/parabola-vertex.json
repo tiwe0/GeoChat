@@ -1,0 +1,28 @@
+{
+  "id": "parabola-vertex",
+  "version": "1.0.0",
+  "path": "cases/parabola-vertex.json",
+  "publicTask": {
+    "title": "Parabola vertex",
+    "prompt": "Graph y=(x-2)^2-5 and mark its vertex V. Return only the y-coordinate of V.",
+    "tags": [
+      "function",
+      "parabola"
+    ],
+    "difficulty": "smoke"
+  },
+  "oracle": {
+    "answer": {
+      "kind": "numeric",
+      "expected": -5,
+      "absoluteTolerance": 1e-09
+    },
+    "requiredTools": [
+      "executeGeoGebraCommands"
+    ]
+  },
+  "limits": {
+    "timeoutMs": 120000,
+    "maxToolCalls": 12
+  }
+}

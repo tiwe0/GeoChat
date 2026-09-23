@@ -6,6 +6,7 @@ import { createMessageRepository } from "../db/message-repository";
 import { createMigrationRepository } from "../db/migration-repository";
 import { createProblemBankRepository } from "../db/problem-bank-repository";
 import { createAgentRunRepository } from "../db/agent-run-repository";
+import { createBenchmarkRepository } from "../db/benchmark-repository";
 import { readDatabaseRuntimeConfig } from "../db/runtime";
 import { defaultProblemCasesRoot } from "../problem-cases";
 
@@ -23,7 +24,8 @@ export function createBackendHttpContext() {
       problemBank: createProblemBankRepository(databaseRuntime, database),
       migration: createMigrationRepository(databaseRuntime, database),
       messages: createMessageRepository(databaseRuntime, database),
-      agentRuns: createAgentRunRepository(databaseRuntime, database)
+      agentRuns: createAgentRunRepository(databaseRuntime, database),
+      benchmarks: createBenchmarkRepository(database)
     },
     resources: {
       root: resourceRoot,

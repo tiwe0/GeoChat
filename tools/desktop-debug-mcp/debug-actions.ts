@@ -47,23 +47,6 @@ export type DesktopDebugAction =
       completedAt?: string;
       result?: unknown;
       error?: string;
-    }
-  | {
-      id: string;
-      type: "select_problem";
-      conversationId?: string;
-      source?: "local" | "cloud";
-      cloudBaseUrl?: string;
-      bankSlug?: string;
-      problemApiPath?: string | null;
-      problemId: string;
-      mode: "show" | "draft" | "send";
-      createdAt: string;
-      status: DesktopDebugActionStatus;
-      claimedAt?: string;
-      completedAt?: string;
-      result?: unknown;
-      error?: string;
     };
 
 export type DesktopDebugActionInput =
@@ -74,17 +57,7 @@ export type DesktopDebugActionInput =
       toolName: string;
       args: Record<string, unknown>;
     }
-  | { type: "send_message"; conversationId?: string; content: string }
-  | {
-      type: "select_problem";
-      conversationId?: string;
-      source?: "local" | "cloud";
-      cloudBaseUrl?: string;
-      bankSlug?: string;
-      problemApiPath?: string | null;
-      problemId: string;
-      mode: "show" | "draft" | "send";
-    };
+  | { type: "send_message"; conversationId?: string; content: string };
 
 export type DesktopDebugActionQueue = ReturnType<typeof createDesktopDebugActionQueue>;
 

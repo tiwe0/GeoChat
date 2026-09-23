@@ -1,0 +1,28 @@
+{
+  "id": "segment-midpoint",
+  "version": "1.0.0",
+  "path": "cases/segment-midpoint.json",
+  "publicTask": {
+    "title": "Segment midpoint",
+    "prompt": "Create A=(-2,4), B=(6,0), and their midpoint M. Return only the x-coordinate of M.",
+    "tags": [
+      "point",
+      "midpoint"
+    ],
+    "difficulty": "smoke"
+  },
+  "oracle": {
+    "answer": {
+      "kind": "numeric",
+      "expected": 2,
+      "absoluteTolerance": 1e-09
+    },
+    "requiredTools": [
+      "executeGeoGebraCommands"
+    ]
+  },
+  "limits": {
+    "timeoutMs": 120000,
+    "maxToolCalls": 12
+  }
+}

@@ -7,6 +7,7 @@ export * from "./agent-routing-text";
 export * from "./advanced-drawing-tools";
 export * from "./attachments";
 export * from "./blackboard";
+export * from "./benchmark";
 export * from "./canvas-visual-guidance";
 export * from "./functioncalls";
 export * from "./functioncall-groups";

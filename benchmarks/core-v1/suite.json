@@ -1,0 +1,346 @@
+{
+  "schemaVersion": 1,
+  "id": "geochat-core-smoke",
+  "version": "1.0.0",
+  "title": "GeoChat Core Benchmark",
+  "description": "Original deterministic smoke cases for core GeoGebra construction workflows.",
+  "cases": [
+    {
+      "id": "circle-radius",
+      "version": "1.0.0",
+      "path": "cases/circle-radius.json",
+      "publicTask": {
+        "title": "Circle radius",
+        "prompt": "Draw a circle centered at the origin with radius 3. Return only its radius.",
+        "tags": [
+          "circle",
+          "construction"
+        ],
+        "difficulty": "smoke"
+      },
+      "oracle": {
+        "answer": {
+          "kind": "numeric",
+          "expected": 3,
+          "absoluteTolerance": 1e-9
+        },
+        "requiredTools": [
+          "executeGeoGebraCommands"
+        ]
+      },
+      "limits": {
+        "timeoutMs": 120000,
+        "maxToolCalls": 12
+      }
+    },
+    {
+      "id": "line-through-points",
+      "version": "1.0.0",
+      "path": "cases/line-through-points.json",
+      "publicTask": {
+        "title": "Line through two points",
+        "prompt": "Create A=(0,1), B=(4,9), and the line through them. Return only the slope of the line.",
+        "tags": [
+          "line",
+          "slope"
+        ],
+        "difficulty": "smoke"
+      },
+      "oracle": {
+        "answer": {
+          "kind": "numeric",
+          "expected": 2,
+          "absoluteTolerance": 1e-9
+        },
+        "requiredTools": [
+          "executeGeoGebraCommands"
+        ]
+      },
+      "limits": {
+        "timeoutMs": 120000,
+        "maxToolCalls": 12
+      }
+    },
+    {
+      "id": "segment-midpoint",
+      "version": "1.0.0",
+      "path": "cases/segment-midpoint.json",
+      "publicTask": {
+        "title": "Segment midpoint",
+        "prompt": "Create A=(-2,4), B=(6,0), and their midpoint M. Return only the x-coordinate of M.",
+        "tags": [
+          "point",
+          "midpoint"
+        ],
+        "difficulty": "smoke"
+      },
+      "oracle": {
+        "answer": {
+          "kind": "numeric",
+          "expected": 2,
+          "absoluteTolerance": 1e-9
+        },
+        "requiredTools": [
+          "executeGeoGebraCommands"
+        ]
+      },
+      "limits": {
+        "timeoutMs": 120000,
+        "maxToolCalls": 12
+      }
+    },
+    {
+      "id": "perpendicular-bisector",
+      "version": "1.0.0",
+      "path": "cases/perpendicular-bisector.json",
+      "publicTask": {
+        "title": "Perpendicular bisector",
+        "prompt": "Create A=(-3,0), B=(5,0), and the perpendicular bisector of segment AB. Return only the x-coordinate where it crosses the x-axis.",
+        "tags": [
+          "line",
+          "perpendicular-bisector"
+        ],
+        "difficulty": "smoke"
+      },
+      "oracle": {
+        "answer": {
+          "kind": "numeric",
+          "expected": 1,
+          "absoluteTolerance": 1e-9
+        },
+        "requiredTools": [
+          "executeGeoGebraCommands"
+        ]
+      },
+      "limits": {
+        "timeoutMs": 120000,
+        "maxToolCalls": 12
+      }
+    },
+    {
+      "id": "triangle-centroid",
+      "version": "1.0.0",
+      "path": "cases/triangle-centroid.json",
+      "publicTask": {
+        "title": "Triangle centroid",
+        "prompt": "Create triangle A=(0,0), B=(6,0), C=(0,3), and its centroid G. Return only the y-coordinate of G.",
+        "tags": [
+          "triangle",
+          "centroid"
+        ],
+        "difficulty": "smoke"
+      },
+      "oracle": {
+        "answer": {
+          "kind": "numeric",
+          "expected": 1,
+          "absoluteTolerance": 1e-9
+        },
+        "requiredTools": [
+          "executeGeoGebraCommands"
+        ]
+      },
+      "limits": {
+        "timeoutMs": 120000,
+        "maxToolCalls": 12
+      }
+    },
+    {
+      "id": "parabola-vertex",
+      "version": "1.0.0",
+      "path": "cases/parabola-vertex.json",
+      "publicTask": {
+        "title": "Parabola vertex",
+        "prompt": "Graph y=(x-2)^2-5 and mark its vertex V. Return only the y-coordinate of V.",
+        "tags": [
+          "function",
+          "parabola"
+        ],
+        "difficulty": "smoke"
+      },
+      "oracle": {
+        "answer": {
+          "kind": "numeric",
+          "expected": -5,
+          "absoluteTolerance": 1e-9
+        },
+        "requiredTools": [
+          "executeGeoGebraCommands"
+        ]
+      },
+      "limits": {
+        "timeoutMs": 120000,
+        "maxToolCalls": 12
+      }
+    },
+    {
+      "id": "function-root",
+      "version": "1.0.0",
+      "path": "cases/function-root.json",
+      "publicTask": {
+        "title": "Linear function root",
+        "prompt": "Graph f(x)=3x-12 and mark its x-axis intersection. Return only the x-coordinate of the root.",
+        "tags": [
+          "function",
+          "root"
+        ],
+        "difficulty": "smoke"
+      },
+      "oracle": {
+        "answer": {
+          "kind": "numeric",
+          "expected": 4,
+          "absoluteTolerance": 1e-9
+        },
+        "requiredTools": [
+          "executeGeoGebraCommands"
+        ]
+      },
+      "limits": {
+        "timeoutMs": 120000,
+        "maxToolCalls": 12
+      }
+    },
+    {
+      "id": "line-intersection",
+      "version": "1.0.0",
+      "path": "cases/line-intersection.json",
+      "publicTask": {
+        "title": "Line intersection",
+        "prompt": "Graph y=2x+1 and y=-x+7, then mark their intersection P. Return only the x-coordinate of P.",
+        "tags": [
+          "line",
+          "intersection"
+        ],
+        "difficulty": "smoke"
+      },
+      "oracle": {
+        "answer": {
+          "kind": "numeric",
+          "expected": 2,
+          "absoluteTolerance": 1e-9
+        },
+        "requiredTools": [
+          "executeGeoGebraCommands"
+        ]
+      },
+      "limits": {
+        "timeoutMs": 120000,
+        "maxToolCalls": 12
+      }
+    },
+    {
+      "id": "circle-tangent-point",
+      "version": "1.0.0",
+      "path": "cases/circle-tangent-point.json",
+      "publicTask": {
+        "title": "Circle tangent point",
+        "prompt": "Create the circle x^2+y^2=25 and the vertical tangent line at its rightmost point T. Return only the x-coordinate of T.",
+        "tags": [
+          "circle",
+          "tangent"
+        ],
+        "difficulty": "smoke"
+      },
+      "oracle": {
+        "answer": {
+          "kind": "numeric",
+          "expected": 5,
+          "absoluteTolerance": 1e-9
+        },
+        "requiredTools": [
+          "executeGeoGebraCommands"
+        ]
+      },
+      "limits": {
+        "timeoutMs": 120000,
+        "maxToolCalls": 12
+      }
+    },
+    {
+      "id": "regular-hexagon",
+      "version": "1.0.0",
+      "path": "cases/regular-hexagon.json",
+      "publicTask": {
+        "title": "Regular hexagon",
+        "prompt": "Create a regular hexagon with one side from A=(0,0) to B=(2,0). Return only its number of vertices.",
+        "tags": [
+          "polygon",
+          "regular-polygon"
+        ],
+        "difficulty": "smoke"
+      },
+      "oracle": {
+        "answer": {
+          "kind": "numeric",
+          "expected": 6,
+          "absoluteTolerance": 1e-9
+        },
+        "requiredTools": [
+          "executeGeoGebraCommands"
+        ]
+      },
+      "limits": {
+        "timeoutMs": 120000,
+        "maxToolCalls": 12
+      }
+    },
+    {
+      "id": "slider-dependent-point",
+      "version": "1.0.0",
+      "path": "cases/slider-dependent-point.json",
+      "publicTask": {
+        "title": "Slider dependent point",
+        "prompt": "Create a slider a from 0 to 5 with step 1, set it to 4, and create P=(a,a^2). Return only the y-coordinate of P.",
+        "tags": [
+          "slider",
+          "dependency"
+        ],
+        "difficulty": "smoke"
+      },
+      "oracle": {
+        "answer": {
+          "kind": "numeric",
+          "expected": 16,
+          "absoluteTolerance": 1e-9
+        },
+        "requiredTools": [
+          "executeGeoGebraCommands"
+        ]
+      },
+      "limits": {
+        "timeoutMs": 120000,
+        "maxToolCalls": 12
+      }
+    },
+    {
+      "id": "multi-view-sphere",
+      "version": "1.0.0",
+      "path": "cases/multi-view-sphere.json",
+      "publicTask": {
+        "title": "3D sphere",
+        "prompt": "In the 3D view, create a sphere centered at O=(0,0,0) through A=(0,0,2). Return only the sphere radius.",
+        "tags": [
+          "3d",
+          "sphere"
+        ],
+        "difficulty": "smoke"
+      },
+      "oracle": {
+        "answer": {
+          "kind": "numeric",
+          "expected": 2,
+          "absoluteTolerance": 1e-9
+        },
+        "requiredTools": [
+          "executeGeoGebraCommands"
+        ]
+      },
+      "limits": {
+        "timeoutMs": 120000,
+        "maxToolCalls": 12
+      }
+    }
+  ],
+  "contentHash": "fnv1a64:d55b62a2c4fdb9d7"
+}

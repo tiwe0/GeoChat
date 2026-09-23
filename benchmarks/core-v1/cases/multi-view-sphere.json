@@ -1,0 +1,28 @@
+{
+  "id": "multi-view-sphere",
+  "version": "1.0.0",
+  "path": "cases/multi-view-sphere.json",
+  "publicTask": {
+    "title": "3D sphere",
+    "prompt": "In the 3D view, create a sphere centered at O=(0,0,0) through A=(0,0,2). Return only the sphere radius.",
+    "tags": [
+      "3d",
+      "sphere"
+    ],
+    "difficulty": "smoke"
+  },
+  "oracle": {
+    "answer": {
+      "kind": "numeric",
+      "expected": 2,
+      "absoluteTolerance": 1e-09
+    },
+    "requiredTools": [
+      "executeGeoGebraCommands"
+    ]
+  },
+  "limits": {
+    "timeoutMs": 120000,
+    "maxToolCalls": 12
+  }
+}

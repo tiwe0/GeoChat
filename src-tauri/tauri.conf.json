@@ -62,6 +62,7 @@
       "../dist/runtime",
       "../dist/renderer",
       "../dist/vendor",
+      "../dist/benchmarks",
       "../dist/app-bundle-manifest.json"
     ]
   }

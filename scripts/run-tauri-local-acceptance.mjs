@@ -6,6 +6,7 @@ const buildScript = isWindows ? "tauri:build:windows" : "tauri:build:macos";
 const steps = [
   ["Typecheck", ["bun", "run", "typecheck"]],
   ["Test", ["bun", "test", "tests"]],
+  ["Test Tauri Rust shell", ["cargo", "test", "--manifest-path", "src-tauri/Cargo.toml"]],
   ["Prepare Tauri app bundle", ["bun", "run", "tauri:prepare"]],
   ["Check Tauri Rust shell", ["bun", "run", "tauri:check"]],
   [`Build Tauri ${isWindows ? "Windows" : "macOS"} package`, ["bun", "run", buildScript]],

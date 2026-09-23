@@ -3,6 +3,7 @@ import {
   createMcpDebugActionPolling,
   desktopMcpHttpBase,
   MCP_DEBUG_ACTION_POLL_INTERVAL_MS,
+  reportDesktopDebugAction,
   runMcpDebugActionPollOnce,
   type DesktopDebugAction
 } from "../src/shared/desktop/mcp-debug-actions";
@@ -16,6 +17,25 @@ describe("MCP debug-action transport", () => {
     expect(desktopMcpHttpBase("http://127.0.0.1:17369/mcp")).toBe("http://127.0.0.1:17369");
     expect(desktopMcpHttpBase("http://127.0.0.1:17369/mcp/")).toBe("http://127.0.0.1:17369");
     expect(desktopMcpHttpBase(null)).toBe("");
+  });
+
+  test("rejects a debug-action result response that the server did not accept", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => new Response("queue unavailable", {
+      status: 503,
+      statusText: "Service Unavailable"
+    })) as typeof fetch;
+
+    try {
+      await expect(reportDesktopDebugAction(
+        "http://127.0.0.1:17369/mcp",
+        "action/1",
+        { ok: true, result: { ready: true } },
+        "token"
+      )).rejects.toThrow(/503.*queue unavailable/);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   test("polling runs once immediately and then on the interval, and cleans up", async () => {

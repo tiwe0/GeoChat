@@ -13,6 +13,7 @@ import { handleNativeChatRoute } from "./routes/native-chat";
 import { handleProblemBankRoute } from "./routes/problem-bank";
 import { handleProviderProxyRoute } from "./routes/provider-proxy";
 import { handleSkillCatalogRoute } from "./routes/skills";
+import { handleBenchmarkRoute } from "./routes/benchmark";
 
 type AuthenticatedDataScope = (
   request: Request
@@ -99,6 +100,9 @@ async function routeRequest(
 
   const problemBankResponse = await handleProblemBankRoute(request, url, context, authenticateDataScope);
   if (problemBankResponse) return problemBankResponse;
+
+  const benchmarkResponse = await handleBenchmarkRoute(request, url, context, authenticateDataScope);
+  if (benchmarkResponse) return benchmarkResponse;
 
   const nativeChatResponse = await handleNativeChatRoute(request, url, context, authenticateDataScope);
   if (nativeChatResponse) return nativeChatResponse;

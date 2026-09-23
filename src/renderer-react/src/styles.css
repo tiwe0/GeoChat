@@ -412,6 +412,7 @@ h2 { font-size: 18px; }
 @media (prefers-reduced-motion: reduce) {
   .problem-bank-sidecar * { scroll-behavior: auto !important; }
   .problem-bank-view-transition { will-change: auto; }
+  .geochat-settings .thinking-chain-path--active { animation: none; }
 }
 .geochat-settings {
   container-type: inline-size;
@@ -474,6 +475,34 @@ h2 { font-size: 18px; }
   width: 100%;
   max-width: 680px;
   margin: 0 auto;
+}
+.geochat-settings .settings-sponsor-page {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+}
+.geochat-settings .settings-sponsor-placeholder {
+  min-height: 220px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border: 1px solid rgba(185, 201, 191, .58);
+  border-radius: 14px;
+  color: #526079;
+  background: rgba(255, 255, 255, .76);
+  box-shadow: 0 1px 2px rgba(24, 41, 34, .025);
+}
+.geochat-settings .settings-sponsor-mark {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  color: var(--app-accent-dark);
+  background: var(--app-accent-soft);
 }
 .geochat-settings .settings-section {
   display: grid;
@@ -599,6 +628,202 @@ h2 { font-size: 18px; }
   line-height: 1.35;
   font-variant-numeric: tabular-nums;
 }
+.geochat-settings .settings-skills-page {
+  overflow: hidden;
+  border: 1px solid rgba(185, 201, 191, .58);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .76);
+  box-shadow: 0 1px 2px rgba(24, 41, 34, .025);
+}
+.geochat-settings .settings-skills-header {
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 18px;
+}
+.geochat-settings .settings-skills-heading { min-width: 0; align-items: center; }
+.geochat-settings .settings-skills-mark {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--app-accent-dark);
+  background: var(--app-accent-soft);
+}
+.geochat-settings .settings-skills-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, .72fr);
+  align-items: center;
+  gap: 18px;
+  padding: 14px 18px;
+  border-top: 1px solid rgba(185, 201, 191, .42);
+  background: rgba(247, 250, 248, .66);
+}
+.geochat-settings .settings-skills-catalog {
+  border-top: 1px solid rgba(185, 201, 191, .42);
+}
+.geochat-settings .settings-skills-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+}
+.geochat-settings .settings-skills-actions { justify-content: flex-end; }
+.geochat-settings .settings-skills-actions .MuiButton-root { white-space: nowrap; }
+.geochat-settings .settings-skills-state {
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 18px;
+  text-align: center;
+}
+.geochat-settings .settings-skill-group {
+  border-top: 1px solid rgba(185, 201, 191, .36);
+}
+.geochat-settings .settings-skill-group-title {
+  display: block;
+  padding: 10px 18px 7px;
+  color: #526079;
+  font-weight: 750;
+  letter-spacing: .02em;
+}
+.geochat-settings .settings-skill-row {
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px 7px 10px;
+  cursor: pointer;
+  transition: background-color 160ms ease;
+}
+.geochat-settings .settings-skill-row:hover { background: rgba(54, 96, 224, .045); }
+.geochat-settings .settings-skill-row--enabled { background: rgba(54, 96, 224, .025); }
+.geochat-settings .settings-skill-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.geochat-settings .settings-skill-level {
+  padding: 0 5px;
+  border-radius: 999px;
+  color: var(--app-accent-dark);
+  background: var(--app-accent-soft);
+  font-weight: 750;
+}
+.geochat-settings .settings-skill-auto-icon {
+  color: var(--app-accent);
+  opacity: .78;
+}
+.geochat-settings .settings-thinking-card {
+  overflow: hidden;
+  border: 1px solid rgba(185, 201, 191, .58);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .76);
+  box-shadow: 0 1px 2px rgba(24, 41, 34, .025);
+}
+.geochat-settings .settings-thinking-header {
+  min-height: 76px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(185, 201, 191, .42);
+}
+.geochat-settings .settings-thinking-heading { min-width: 0; align-items: center; }
+.geochat-settings .settings-thinking-mark {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--app-accent-dark);
+  background: var(--app-accent-soft);
+}
+.geochat-settings .settings-thinking-mode {
+  flex: 0 0 auto;
+  color: var(--app-accent-dark);
+  border: 1px solid var(--app-accent-border);
+  background: var(--app-accent-soft);
+  font-weight: 700;
+}
+.geochat-settings .settings-thinking-mode--off,
+.geochat-settings .settings-thinking-mode--unsupported {
+  color: #526079;
+  border-color: rgba(82, 96, 121, .24);
+  background: rgba(82, 96, 121, .08);
+}
+.geochat-settings .settings-thinking-diagram-wrap {
+  padding: 22px 18px 12px;
+  background:
+    radial-gradient(circle at 50% 42%, var(--app-accent-soft), transparent 48%),
+    rgba(247, 250, 248, .52);
+}
+.geochat-settings .settings-thinking-diagram {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 184px;
+  max-height: 244px;
+}
+.geochat-settings .settings-thinking-diagram marker path { fill: var(--app-accent); }
+.geochat-settings .thinking-chain-path {
+  fill: none;
+  stroke: #aab4c2;
+  stroke-width: 3;
+  stroke-linecap: round;
+  opacity: .38;
+  transition: opacity 180ms ease, stroke 180ms ease;
+}
+.geochat-settings .thinking-chain-path--active {
+  stroke: var(--app-accent);
+  opacity: 1;
+  stroke-dasharray: 8 7;
+  animation: thinking-chain-flow 1.2s linear infinite;
+}
+.geochat-settings .thinking-chain-path--loop { stroke-dasharray: 5 8; }
+.geochat-settings .thinking-chain-node circle {
+  fill: rgba(247, 250, 248, .96);
+  stroke: #aab4c2;
+  stroke-width: 2;
+  opacity: .62;
+  transition: fill 180ms ease, stroke 180ms ease, opacity 180ms ease;
+}
+.geochat-settings .thinking-chain-node text {
+  fill: #7b8798;
+  font-size: 14px;
+  font-weight: 700;
+  transition: fill 180ms ease;
+}
+.geochat-settings .thinking-chain-node--active circle {
+  fill: color-mix(in srgb, var(--app-accent) 9%, white);
+  stroke: var(--app-accent);
+  opacity: 1;
+}
+.geochat-settings .thinking-chain-node--active text { fill: var(--app-accent-dark); }
+.geochat-settings .settings-thinking-footer {
+  min-height: 42px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px 12px;
+  background: rgba(247, 250, 248, .52);
+}
+.geochat-settings .settings-thinking-legend-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--app-accent);
+  box-shadow: 0 0 0 4px var(--app-accent-soft);
+}
+@keyframes thinking-chain-flow { to { stroke-dashoffset: -15; } }
 .geochat-settings .settings-general-page > .settings-section {
   grid-template-columns: 138px minmax(0, 1fr);
   gap: 20px;
@@ -776,6 +1001,16 @@ h2 { font-size: 18px; }
   .geochat-settings .settings-problem-bank-cache-actions { justify-content: flex-end; }
   .geochat-settings .settings-problem-set-row { padding-inline: 14px; }
   .geochat-settings .settings-problem-set-actions { min-width: auto; }
+  .geochat-settings .settings-skills-header { padding: 14px; }
+  .geochat-settings .settings-skills-controls,
+  .geochat-settings .settings-skills-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+    padding-inline: 14px;
+  }
+  .geochat-settings .settings-skills-actions { justify-content: flex-end; }
+  .geochat-settings .settings-thinking-header { padding: 14px; }
+  .geochat-settings .settings-thinking-diagram-wrap { padding: 18px 10px 8px; }
+  .geochat-settings .settings-thinking-diagram { min-height: 148px; }
 }
 .geochat-blackboard {
   background: rgba(23, 63, 53, .84) !important;

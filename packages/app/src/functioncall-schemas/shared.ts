@@ -1,14 +1,13 @@
 import { BLACKBOARD_CATEGORIES } from "../blackboard";
 import { getConstructionRecipes } from "../construction-recipes";
 import { geogebraCanvasVisualGuidance } from "../canvas-visual-guidance";
-import { GEOGEBRA_COMMAND_SEARCH_SCOPES } from "../geogebra-command-reference";
 import { ADVANCED_DRAWING_TOOL_NAMES } from "../advanced-drawing-tools";
 import type { JsonSchemaProperty } from "./types";
 
 export const constructionRecipeIdValues = getConstructionRecipes().map((recipe) => recipe.id);
 export const advancedDrawingToolNameValues = [...ADVANCED_DRAWING_TOOL_NAMES];
 export const blackboardCategoryValues = [...BLACKBOARD_CATEGORIES];
-export const geogebraCommandSearchScopeValues = GEOGEBRA_COMMAND_SEARCH_SCOPES;
+export const geogebraCommandTagMatchValues = ["any", "all"] as const;
 export const choiceLabelValues = ["A", "B", "C", "D"] as const;
 export const choiceVerdictValues = ["true", "false", "unknown"] as const;
 export const choiceDisplayModeValues = ["single_active_choice", "compare_choices", "text_only"] as const;

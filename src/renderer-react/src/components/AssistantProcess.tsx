@@ -201,7 +201,9 @@ export function AssistantProcess({ active, labels, process }: {
         }}
       >
         <Stack direction="row" spacing={0.65} sx={{ alignItems: "center", minWidth: 0 }}>
-          {active ? <CircularProgress size={14} thickness={5} color="inherit" /> : <PsychologyRounded sx={{ fontSize: 16 }} />}
+          {process.reasoningCount > 0
+            ? <PsychologyRounded sx={{ fontSize: 16 }} />
+            : <ConstructionRounded sx={{ fontSize: 16 }} />}
           <Typography variant="caption" sx={{ fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {summary}
           </Typography>

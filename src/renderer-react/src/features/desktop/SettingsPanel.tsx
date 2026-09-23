@@ -2,8 +2,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import InfoOutlined from "@mui/icons-material/InfoOutlined";
 import LibraryBooksOutlined from "@mui/icons-material/LibraryBooksOutlined";
 import ExtensionOutlined from "@mui/icons-material/ExtensionOutlined";
+import PsychologyAltOutlined from "@mui/icons-material/PsychologyAltOutlined";
 import SettingsOutlined from "@mui/icons-material/SettingsOutlined";
 import TuneRounded from "@mui/icons-material/TuneRounded";
+import VolunteerActivismOutlined from "@mui/icons-material/VolunteerActivismOutlined";
 import { Box, Stack, Tab, Tabs } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { ModelSettings } from "./settings/ModelSettings";
@@ -11,6 +13,9 @@ import { GeneralSettings } from "./settings/GeneralSettings";
 import { AboutSettings } from "./settings/AboutSettings";
 import { ProblemBankSettings } from "./settings/ProblemBankSettings";
 import { SkillsSettings } from "./settings/SkillsSettings";
+import { ThinkingChainSettings } from "./settings/ThinkingChainSettings";
+import { SponsorSettings } from "./settings/SponsorSettings";
+import type { ThinkingEffort } from "../../components/ModelMenu";
 import type { McpController } from "./useMcpState";
 
 /**
@@ -25,10 +30,19 @@ import type { McpController } from "./useMcpState";
  * implementation structure. These sections instead represent user-facing
  * concerns: model setup, app behaviour, and project info.
  */
-const TABS = ["model", "problemBank", "skills", "general", "about"] as const;
+const TABS = ["model", "problemBank", "skills", "thinking", "general", "about", "sponsor"] as const;
 type SettingsTab = (typeof TABS)[number];
 
-export function SettingsPanel(props: { mcp: McpController; onRestartTour: () => void }) {
+type SettingsPanelProps = {
+  mcp: McpController;
+  onRestartTour: () => void;
+  thinkingEnabled: boolean;
+  thinkingSupported: boolean;
+  thinkingEffort: ThinkingEffort;
+  modelLabel: string;
+};
+
+export function SettingsPanel(props: SettingsPanelProps) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<SettingsTab>("model");
   const rootRef = useRef<HTMLDivElement>(null);
@@ -38,8 +52,10 @@ export function SettingsPanel(props: { mcp: McpController; onRestartTour: () => 
     model: <TuneRounded fontSize="small" />,
     problemBank: <LibraryBooksOutlined fontSize="small" />,
     skills: <ExtensionOutlined fontSize="small" />,
+    thinking: <PsychologyAltOutlined fontSize="small" />,
     general: <SettingsOutlined fontSize="small" />,
     about: <InfoOutlined fontSize="small" />,
+    sponsor: <VolunteerActivismOutlined fontSize="small" />,
   } as const;
 
   useLayoutEffect(() => {
@@ -116,6 +132,20 @@ export function SettingsPanel(props: { mcp: McpController; onRestartTour: () => 
             <SkillsSettings />
           </Box>
           <Box
+            id="settings-panel-thinking"
+            className="settings-tab-panel"
+            role="tabpanel"
+            aria-labelledby="settings-tab-thinking"
+            hidden={tab !== "thinking"}
+          >
+            <ThinkingChainSettings
+              enabled={props.thinkingEnabled}
+              supported={props.thinkingSupported}
+              effort={props.thinkingEffort}
+              modelLabel={props.modelLabel}
+            />
+          </Box>
+          <Box
             id="settings-panel-general"
             className="settings-tab-panel"
             role="tabpanel"
@@ -132,6 +162,15 @@ export function SettingsPanel(props: { mcp: McpController; onRestartTour: () => 
             hidden={tab !== "about"}
           >
             <AboutSettings />
+          </Box>
+          <Box
+            id="settings-panel-sponsor"
+            className="settings-tab-panel"
+            role="tabpanel"
+            aria-labelledby="settings-tab-sponsor"
+            hidden={tab !== "sponsor"}
+          >
+            <SponsorSettings />
           </Box>
         </Box>
       </Box>

@@ -26,6 +26,8 @@ const SOURCES = [
   "src/renderer-react/src/features/desktop/settings/ModelSettings.tsx",
   "src/renderer-react/src/features/desktop/settings/ProblemBankSettings.tsx",
   "src/renderer-react/src/features/desktop/settings/SkillsSettings.tsx",
+  "src/renderer-react/src/features/desktop/settings/ThinkingChainSettings.tsx",
+  "src/renderer-react/src/features/desktop/settings/SponsorSettings.tsx",
   "src/renderer-react/src/features/desktop/settings/ProblemBankCacheSettings.tsx",
   "src/renderer-react/src/features/desktop/settings/GeneralSettings.tsx",
   "src/renderer-react/src/features/desktop/settings/AboutSettings.tsx"
@@ -36,13 +38,17 @@ const INTERPOLATED_KEYS = [
   "settings.tabs.model",
   "settings.tabs.problemBank",
   "settings.tabs.skills",
+  "settings.tabs.thinking",
   "settings.tabs.general",
   "settings.tabs.about",
+  "settings.tabs.sponsor",
   "settings.tabDescriptions.model",
   "settings.tabDescriptions.problemBank",
   "settings.tabDescriptions.skills",
+  "settings.tabDescriptions.thinking",
   "settings.tabDescriptions.general",
   "settings.tabDescriptions.about",
+  "settings.tabDescriptions.sponsor",
   "about.geogebraCredit",
   "about.gaokaoCredit",
   "about.conic10kCredit"
@@ -73,15 +79,19 @@ describe("react desktop settings i18n", () => {
       model: "管理模型与供应商",
       problemBank: "管理题库与下载",
       skills: "管理技能",
+      thinking: "查看当前思考路径",
       general: "管理应用选项",
       about: "查看版本与许可",
+      sponsor: "查看赞助内容",
     });
     expect(en.settings.tabDescriptions).toEqual({
       model: "Manage models and providers",
       problemBank: "Manage problem banks and downloads",
       skills: "Manage skills",
+      thinking: "View the current reasoning path",
       general: "Manage app options",
       about: "View version and licensing",
+      sponsor: "View sponsorship options",
     });
 
     expect(zhCN.settings.customModelsDescription).toBe("添加并配置自定义模型");
@@ -112,7 +122,7 @@ describe("react desktop settings i18n", () => {
     expect(source.match(/t\("settings\.problemBankClearCacheDescription"\)/g)?.length).toBe(1);
   });
 
-  test("keeps the empty Skills module between Problems and General", () => {
+  test("keeps the configurable Skills module between Problems and Reasoning", () => {
     const panel = readFileSync(
       new URL("../src/renderer-react/src/features/desktop/SettingsPanel.tsx", import.meta.url),
       "utf8"
@@ -121,9 +131,29 @@ describe("react desktop settings i18n", () => {
       new URL("../src/renderer-react/src/features/desktop/settings/SkillsSettings.tsx", import.meta.url),
       "utf8"
     );
-    expect(panel).toContain('const TABS = ["model", "problemBank", "skills", "general", "about"] as const;');
+    expect(panel).toContain('const TABS = ["model", "problemBank", "skills", "thinking", "general", "about", "sponsor"] as const;');
     expect(panel).toContain('<SkillsSettings />');
     expect(skills).toContain('className="settings-page settings-skills-page"');
+    expect(skills).toContain("fetchSkillCatalog(backendOrigin(), backendAuthToken()");
+    expect(skills).toContain("persistDesktopConfig({ ...desktopConfig, skills: next })");
+    expect(skills).toContain("enabledSkillNames:");
+    expect(skills).toContain("visualProfile:");
+  });
+
+  test("keeps the sponsorship placeholder as the final settings module", () => {
+    const panel = readFileSync(
+      new URL("../src/renderer-react/src/features/desktop/SettingsPanel.tsx", import.meta.url),
+      "utf8"
+    );
+    const sponsor = readFileSync(
+      new URL("../src/renderer-react/src/features/desktop/settings/SponsorSettings.tsx", import.meta.url),
+      "utf8"
+    );
+    expect(panel).toContain('"about", "sponsor"] as const');
+    expect(panel).toContain("<SponsorSettings />");
+    expect(sponsor).toContain('t("settings.sponsorPlaceholder")');
+    expect(zhCN.settings.sponsorPlaceholder).toBe("虚位以待");
+    expect(en.settings.sponsorPlaceholder).toBe("Coming soon");
   });
 
   test("the acknowledgements include cortexsat", () => {

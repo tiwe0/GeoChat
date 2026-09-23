@@ -17,6 +17,80 @@ describe("desktop Agent Skill configuration", () => {
     expect(config.skills.visualProfile).toBe(DEFAULT_VISUAL_PROFILE);
   });
 
+  test("adds the expanded GeoGebra workflows when the saved selection was the previous default catalog", () => {
+    const previousDefaults = DEFAULT_BUSINESS_AGENT_SKILL_NAMES.filter((name) => ![
+      "piecewise-domain-function",
+      "dynamic-parameter-exploration",
+      "dynamic-construction-validation",
+      "parametric-surface-revolution",
+      "list-driven-construction",
+      "parametric-polar-curves",
+      "locus-envelope",
+      "regression-model-diagnostics",
+      "geometric-theorem-verification",
+      "multi-view-coordination",
+      "cas-graphics-workflow",
+      "spreadsheet-data-workflow",
+      "construction-protocol-presentation",
+      "interactive-controls-workflow",
+      "object-view-layer-management",
+      "dynamic-worksheet-authoring",
+      "dynamic-text-feedback",
+      "visual-style-system",
+      "mathematical-animation-design"
+    ].includes(name));
+
+    const config = normalizeDesktopConfig({
+      skills: {
+        enabled: true,
+        autoActivate: true,
+        enabledSkillNames: previousDefaults,
+        visualProfile: DEFAULT_VISUAL_PROFILE
+      }
+    }, "zh-CN");
+
+    expect(config.skills.enabledSkillNames).toEqual([...DEFAULT_BUSINESS_AGENT_SKILL_NAMES]);
+  });
+
+  test("adds software workflow skills when the saved selection was the preceding default catalog", () => {
+    const precedingDefaults = DEFAULT_BUSINESS_AGENT_SKILL_NAMES.filter((name) => ![
+      "multi-view-coordination",
+      "cas-graphics-workflow",
+      "spreadsheet-data-workflow",
+      "construction-protocol-presentation",
+      "interactive-controls-workflow",
+      "object-view-layer-management",
+      "dynamic-worksheet-authoring",
+      "dynamic-text-feedback",
+      "visual-style-system",
+      "mathematical-animation-design"
+    ].includes(name));
+
+    const config = normalizeDesktopConfig({
+      skills: {
+        enabled: true,
+        autoActivate: true,
+        enabledSkillNames: precedingDefaults,
+        visualProfile: DEFAULT_VISUAL_PROFILE
+      }
+    }, "zh-CN");
+
+    expect(config.skills.enabledSkillNames).toEqual([...DEFAULT_BUSINESS_AGENT_SKILL_NAMES]);
+  });
+
+  test("preserves an intentionally customized skill selection", () => {
+    const config = normalizeDesktopConfig({
+      skills: {
+        enabled: true,
+        autoActivate: true,
+        enabledSkillNames: ["plane-geometry", "locus-envelope"],
+        visualProfile: DEFAULT_VISUAL_PROFILE
+      }
+    }, "zh-CN");
+
+    expect(config.skills.enabledSkillNames).toEqual(["plane-geometry", "locus-envelope"]);
+  });
+
   test("injects an authoritative disabled policy into the run prompt", () => {
     const config = {
       ...createDefaultDesktopConfig("en-US"),

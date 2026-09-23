@@ -1,30 +1,19 @@
 import type { FunctionCallLocale } from "./functioncalls";
 import {
   GENERATED_GEOGEBRA_COMMAND_REFERENCE,
-  GENERATED_GEOGEBRA_COMMAND_REFERENCE_METADATA
+  GENERATED_GEOGEBRA_COMMAND_REFERENCE_METADATA,
+  GENERATED_GEOGEBRA_COMMAND_TAGS
 } from "./geogebra-command-reference-data";
 
-export const GEOGEBRA_COMMAND_SEARCH_SCOPES = [
-  "global",
-  "dsl",
-  "dsl_function",
-  "dsl_geometry",
-  "dsl_3d",
-  "dsl_coordinate",
-  "animation",
-  "style",
-  "repair_dsl",
-  "repair_animation",
-  "repair_style",
-  "geometry-2d",
-  "function-graph",
-  "conic",
-  "axis",
-  "geometry-3d",
-  "diagnostic"
-] as const;
+export type GeoGebraCommandTagMatch = "any" | "all";
 
-export type GeoGebraCommandSearchScope = typeof GEOGEBRA_COMMAND_SEARCH_SCOPES[number];
+/** Exact, case-insensitive tag filters applied before text scoring. */
+export type GeoGebraCommandSearchOptions = {
+  tags?: readonly string[];
+  tagMatch?: GeoGebraCommandTagMatch;
+};
+
+export type GeoGebraCommandTagQuery = GeoGebraCommandSearchOptions;
 
 export type GeoGebraCommandReferenceEntry = {
   command: string;
@@ -36,8 +25,7 @@ export type GeoGebraCommandReferenceEntry = {
   searchTextEn?: string;
   note?: string;
   examples?: readonly string[];
-  tags?: readonly string[];
-  scopes: readonly GeoGebraCommandSearchScope[];
+  tags: readonly string[];
 };
 
 const ENGLISH_DESCRIPTION_OVERRIDES: Record<string, string> = {
@@ -90,6 +78,7 @@ const STRONG_INTENT_TOKENS: Record<string, readonly string[]> = {
 
 export const GEOGEBRA_COMMAND_REFERENCE = GENERATED_GEOGEBRA_COMMAND_REFERENCE;
 export const GEOGEBRA_COMMAND_REFERENCE_METADATA = GENERATED_GEOGEBRA_COMMAND_REFERENCE_METADATA;
+export const GEOGEBRA_COMMAND_TAGS: readonly string[] = GENERATED_GEOGEBRA_COMMAND_TAGS;
 
 const GEOGEBRA_COMMAND_REFERENCE_BY_NAME = new Map(
   GEOGEBRA_COMMAND_REFERENCE.map((entry) => [entry.command, entry] as const)
@@ -121,8 +110,10 @@ export function searchGeoGebraCommandReference(
   query: string,
   topN = 8,
   locale?: FunctionCallLocale | null,
-  scope: GeoGebraCommandSearchScope = "global"
+  options: GeoGebraCommandSearchOptions = {}
 ) {
+  const requestedTags = normalizeTags(options.tags ?? []);
+  const tagMatch = options.tagMatch ?? "any";
   const exactQuery = query.trim();
   const normalized = normalizeSearchText(query);
   const tokens = normalized.split(/[\s,;，；、"“”'()]+/u).filter((token) => token.length >= 2);
@@ -132,25 +123,43 @@ export function searchGeoGebraCommandReference(
   if (
     limit === 1
     && exactEntry
-    && (scope === "global" || (exactEntry.scopes as readonly GeoGebraCommandSearchScope[]).includes(scope))
+    && matchesTagFilter(exactEntry, requestedTags, tagMatch)
   ) {
     return [localizeCommandReferenceEntry(exactEntry, locale)];
   }
   const candidates = GEOGEBRA_COMMAND_REFERENCE.filter(
-    (item) => scope === "global" || (item.scopes as readonly GeoGebraCommandSearchScope[]).includes(scope)
+    (item) => matchesTagFilter(item, requestedTags, tagMatch)
   );
   const scored = candidates
     .map((item, index) => ({
       item,
       index,
-      score: normalized
-        ? scoreCommandReference(item, normalized, tokens) + (item.command === exactQuery ? 2_000 : 0)
-        : candidates.length - index
+      score: (normalized
+        ? scoreCommandReference(item, normalized, tokens) + (item === exactEntry ? 2_000 : 0)
+        : candidates.length - index) + scoreRequestedTags(item, requestedTags)
     }))
     .filter(({ score }) => score > 0)
     .sort((left, right) => right.score - left.score || left.item.command.localeCompare(right.item.command));
 
   return scored.slice(0, limit).map(({ item }) => localizeCommandReferenceEntry(item, locale));
+}
+
+function matchesTagFilter(
+  entry: GeoGebraCommandReferenceEntry,
+  requestedTags: readonly string[],
+  match: GeoGebraCommandTagMatch
+) {
+  if (requestedTags.length === 0) return true;
+  const entryTags = new Set(normalizeTags(entry.tags));
+  return match === "all"
+    ? requestedTags.every((tag) => entryTags.has(tag))
+    : requestedTags.some((tag) => entryTags.has(tag));
+}
+
+function scoreRequestedTags(entry: GeoGebraCommandReferenceEntry, requestedTags: readonly string[]) {
+  if (requestedTags.length === 0) return 0;
+  const entryTags = new Set(normalizeTags(entry.tags));
+  return requestedTags.reduce((score, tag) => score + (entryTags.has(tag) ? 240 : 0), 0);
 }
 
 function scoreCommandReference(entry: GeoGebraCommandReferenceEntry, normalizedQuery: string, tokens: readonly string[]) {
@@ -162,16 +171,17 @@ function scoreCommandReference(entry: GeoGebraCommandReferenceEntry, normalizedQ
   const descriptionEn = normalizeSearchText(entry.descriptionEn ?? ENGLISH_DESCRIPTION_OVERRIDES[entry.command] ?? "");
   const searchTextEn = normalizeSearchText(entry.searchTextEn ?? "");
   const aliases = normalizeSearchText(SEARCH_ALIASES[entry.command] ?? "");
-  const tags = normalizeSearchText((entry.tags ?? []).join(" "));
-  const scopes = normalizeSearchText(entry.scopes.join(" "));
+  const normalizedTags = normalizeTags(entry.tags);
+  const tags = normalizedTags.join(" ");
   const examples = normalizeSearchText((entry.examples ?? []).join(" "));
-  const haystack = [command, localizedName, syntax, syntaxEn, description, descriptionEn, searchTextEn, aliases, tags, scopes, examples]
+  const haystack = [command, localizedName, syntax, syntaxEn, description, descriptionEn, searchTextEn, aliases, tags, examples]
     .filter(Boolean)
     .join(" ");
   let score = 0;
 
   if ((STRONG_INTENT_TOKENS[entry.command] ?? []).some((token) => normalizedQuery.includes(token))) score += 900;
   if (normalizedQuery === command || normalizedQuery === localizedName) score += 1000;
+  if (normalizedTags.includes(normalizedQuery)) score += 700;
   if (command.startsWith(normalizedQuery) || localizedName.startsWith(normalizedQuery)) score += 500;
   if (command.includes(normalizedQuery) || localizedName.includes(normalizedQuery)) score += 300;
   if (syntax.includes(normalizedQuery) || syntaxEn.includes(normalizedQuery)) score += 180;
@@ -186,7 +196,7 @@ function scoreCommandReference(entry: GeoGebraCommandReferenceEntry, normalizedQ
     if (syntax.includes(token) || syntaxEn.includes(token)) score += 45;
     if (aliases.includes(token)) score += 120;
     if (description.includes(token) || descriptionEn.includes(token) || searchTextEn.includes(token) || examples.includes(token)) score += 20;
-    if (tags.includes(token) || scopes.includes(token)) score += 8;
+    if (tags.includes(token)) score += 8;
     score += Math.max(fuzzyScore(command, token), fuzzyScore(localizedName, token));
   }
 
@@ -213,4 +223,8 @@ function fuzzyScore(value: string, query: string) {
 
 function normalizeSearchText(value: string) {
   return value.trim().toLowerCase();
+}
+
+function normalizeTags(tags: readonly string[]) {
+  return [...new Set(tags.map(normalizeSearchText).filter(Boolean))];
 }

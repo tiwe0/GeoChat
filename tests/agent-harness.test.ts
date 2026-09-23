@@ -300,8 +300,9 @@ describe("function call registry", () => {
     expect(String(getFunctionCallInputJsonSchema("executeGeoGebraCommands", "en-US").properties.commands.description)).toContain("StartAnimation");
     expect(getFunctionCallSpec("setPerspective", "en-US").description).toContain("3D Graphics uses code T");
     expect(getFunctionCallInputJsonSchema("searchGeoGebraCommands", "en-US").properties.query.description).toContain("GeoGebra command search keywords");
-    expect(getFunctionCallInputJsonSchema("searchGeoGebraCommands").required).toContain("scope");
-    expect(getFunctionCallInputJsonSchema("searchGeoGebraCommands", "en-US").properties.scope.description).toContain("Required search scope");
+    expect(getFunctionCallInputJsonSchema("searchGeoGebraCommands").required).toEqual(["query"]);
+    expect(getFunctionCallInputJsonSchema("searchGeoGebraCommands", "en-US").properties.tags.description).toContain("Optional exact tag filters");
+    expect(getFunctionCallInputJsonSchema("searchGeoGebraCommands", "en-US").properties.tagMatch.description).toContain("all requires every tag");
     expect(getFunctionCallInputJsonSchema("createGeometryPlan", "en-US").properties.sourceText.description).toContain("Original problem statement");
     expect(getFunctionCallInputJsonSchema("setPerspective", "en-US").properties.mode.description).toContain("Localized aliases");
     expect(getFunctionCallInputJsonSchema("setPerspective", "en-US").properties.mode.description).not.toContain("画板");
@@ -350,6 +351,9 @@ describe("function call registry", () => {
     expect(GEOCHAT_SYSTEM_PROMPT).toContain("最小可视化表达");
     expect(GEOCHAT_SYSTEM_PROMPT).toContain("完成动态表达检查");
     expect(GEOCHAT_SYSTEM_PROMPT).toContain("没有动态变量时继续完成静态画板构造");
+    expect(GEOCHAT_SYSTEM_PROMPT).toContain("已经注入状态为 selected 且包含命令参考的【预检 GeoGebra 命令参考 Packet】");
+    expect(GEOCHAT_SYSTEM_PROMPT).toContain("当 packet 未覆盖后续所需的具体命令时");
+    expect(GEOCHAT_SYSTEM_PROMPT).toContain("如果没有有效预检 packet");
     expect(GEOCHAT_SYSTEM_PROMPT).not.toContain("text-only");
     expect(GEOCHAT_SYSTEM_PROMPT).not.toContain("兜底条件");
     expect(GEOCHAT_SYSTEM_PROMPT).not.toContain("无法形成有效可视化构造");
@@ -367,6 +371,9 @@ describe("function call registry", () => {
     expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("minimal visual expression");
     expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("Complete the dynamic-expression check");
     expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("continue with a static canvas construction");
+    expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("already includes a [Preflight GeoGebra Command Reference packet] with selected status and command references");
+    expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("when the packet does not cover a concrete command needed later");
+    expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("If there is no effective preflight packet");
     expect(GEOCHAT_SYSTEM_PROMPT_EN).not.toContain("text-only");
     expect(GEOCHAT_SYSTEM_PROMPT_EN).not.toContain("fallback condition");
     expect(GEOCHAT_SYSTEM_PROMPT_EN).not.toContain("first judge its visualization value");
@@ -463,9 +470,16 @@ describe("function call registry", () => {
   });
 
   test("validates tool args against the shared input schema", () => {
-    expect(isFunctionCallArgs("searchGeoGebraCommands", { query: "circle", scope: "conic" })).toBe(true);
-    expect(isFunctionCallArgs("searchGeoGebraCommands", { query: "circle" })).toBe(false);
-    expect(isFunctionCallArgs("searchGeoGebraCommands", { query: "circle", scope: "unknown" })).toBe(false);
+    expect(isFunctionCallArgs("searchGeoGebraCommands", {
+      query: "circle",
+      tags: ["category:conic", "category:geometry"],
+      tagMatch: "all"
+    })).toBe(true);
+    expect(isFunctionCallArgs("searchGeoGebraCommands", { query: "circle" })).toBe(true);
+    expect(isFunctionCallArgs("searchGeoGebraCommands", { query: "circle", tags: [] })).toBe(false);
+    expect(isFunctionCallArgs("searchGeoGebraCommands", { query: "label", tags: ["capability:label-position"] })).toBe(false);
+    expect(isFunctionCallArgs("searchGeoGebraCommands", { query: "circle", tagMatch: "unknown" })).toBe(false);
+    expect(isFunctionCallArgs("searchGeoGebraCommands", { query: "circle", scope: "conic" })).toBe(false);
     expect(isFunctionCallArgs("executeGeoGebraCommands", { commands: ["A = (0, 0)"] })).toBe(true);
     expect(isFunctionCallArgs("executeGeoGebraCommands", { commands: [] })).toBe(false);
     expect(isFunctionCallArgs("executeGeoGebraCommands", { commands: "A = (0, 0)" })).toBe(false);
@@ -691,7 +705,7 @@ describe("function call registry", () => {
     expect(routingPrompt).not.toContain("derivative-application");
   });
 
-  test("omits skill discovery tools after host skill selector packet is available", () => {
+  test("keeps command search available after preflight command selection", () => {
     const tools = createBackendPlanningTools("zh-CN", [], {
       status: "selected",
       visualProfile: "spatial-3d",
@@ -708,10 +722,73 @@ describe("function call registry", () => {
       injectedContext: "Use 3D skeleton first."
     }, { tools: [{ toolName: "getCanvasContext", status: "succeeded" }] });
 
-    expect(Object.keys(tools)).not.toEqual(expect.arrayContaining(["listSkills", "searchSkills", "loadSkill", "activateSkill"]));
+    expect(Object.keys(tools)).toEqual(expect.arrayContaining(["listSkills", "searchSkills", "loadSkill", "activateSkill"]));
     expect(Object.keys(tools)).toEqual(expect.arrayContaining(["readBlackboard", "patchBlackboard"]));
     expect(Object.keys(tools)).toContain("executeGeoGebraCommands");
-    expect(Object.keys(tools)).not.toContain("searchGeoGebraCommands");
+    expect(Object.keys(tools)).toContain("searchGeoGebraCommands");
+  });
+
+  test("exposes command search when no effective preflight command packet is available", () => {
+    const withoutSelection = createBackendPlanningTools("zh-CN", [], undefined, {
+      tools: [{ toolName: "getCanvasContext", status: "succeeded" }],
+      prompt: "处理当前题目。"
+    });
+    expect(Object.keys(withoutSelection)).toContain("searchGeoGebraCommands");
+
+    const emptyPreflight = createBackendPlanningTools("zh-CN", [], {
+      status: "not_needed",
+      curriculumNodes: [],
+      selectedSkills: [],
+      enabledAdvancedTools: [],
+      selectorReason: "No matching skill or command family.",
+      injectedContext: ""
+    }, {
+      tools: [{ toolName: "getCanvasContext", status: "succeeded" }],
+      prompt: "处理当前题目。"
+    });
+    expect(Object.keys(emptyPreflight)).toContain("searchGeoGebraCommands");
+  });
+
+  test("keeps manual skill discovery available when automatic matching is off", () => {
+    const tools = createBackendPlanningTools("zh-CN", [], {
+      status: "disabled",
+      visualProfile: "exam-clean",
+      curriculumNodes: [],
+      selectedSkills: [],
+      enabledAdvancedTools: [],
+      selectorReason: "Automatic skill selection is disabled for this run.",
+      injectedContext: ""
+    }, {
+      tools: [],
+      prompt: [
+        "画一个圆。",
+        "【Agent Skill 策略】",
+        "允许使用的技能：plane-geometry。",
+        "自动加载：关闭。"
+      ].join("\n")
+    });
+
+    expect(Object.keys(tools)).toEqual(expect.arrayContaining(["listSkills", "searchSkills", "loadSkill", "activateSkill"]));
+  });
+
+  test("hides every skill tool when Agent Skills are disabled", () => {
+    const tools = createBackendPlanningTools("zh-CN", [], {
+      status: "disabled",
+      curriculumNodes: [],
+      selectedSkills: [],
+      enabledAdvancedTools: [],
+      selectorReason: "Agent Skills are disabled for this run.",
+      injectedContext: ""
+    }, {
+      tools: [],
+      prompt: [
+        "画一个圆。",
+        "【Agent Skill 策略】",
+        "本轮已关闭 Agent Skills，不要调用 listSkills、searchSkills、loadSkill 或 activateSkill。"
+      ].join("\n")
+    });
+
+    expect(Object.keys(tools)).not.toEqual(expect.arrayContaining(["listSkills", "searchSkills", "loadSkill", "activateSkill"]));
   });
 
   test("exposes blackboard tools after drawing work has started", () => {
@@ -765,13 +842,13 @@ describe("function call registry", () => {
     const prompt = formatCommandReferencePacketPrompt(packet, "zh-CN");
 
     expect(packet.status).toBe("selected");
-    expect(packet.queryIntents.map((intent) => intent.scope)).toContain("geometry-3d");
+    expect(packet.queryIntents.flatMap((intent) => intent.tags)).toContain("category:3d");
     expect(packet.references.map((item) => item.command)).toEqual(expect.arrayContaining(["Sphere", "Segment", "Polygon"]));
     expect(packet.injectedContext).toContain("Sphere");
     expect(prompt).toContain("【预检 GeoGebra 命令参考 Packet】");
     expect(prompt).toContain("Sphere");
     expect(prompt).toContain("GeoGebra 5");
-    expect(prompt).toContain("不要再次调用 searchGeoGebraCommands");
+    expect(prompt).toContain("未被该 packet 覆盖时");
   });
 
   test("preloads viewport command references for post-processing skills", () => {
@@ -805,7 +882,10 @@ describe("function call registry", () => {
     });
 
     expect(packet.status).toBe("selected");
-    expect(packet.queryIntents.map((intent) => intent.scope)).toContain("global");
+    expect(packet.queryIntents.flatMap((intent) => intent.tags)).toEqual(expect.arrayContaining([
+      "category:scripting",
+      "capability:view"
+    ]));
     expect(packet.references.map((item) => item.command)).toEqual(expect.arrayContaining([
       "SetPerspective",
       "ZoomIn",
@@ -838,7 +918,10 @@ describe("function call registry", () => {
     });
 
     expect(packet.status).toBe("selected");
-    expect(packet.queryIntents.map((intent) => intent.scope)).toContain("global");
+    expect(packet.queryIntents.flatMap((intent) => intent.tags)).toEqual(expect.arrayContaining([
+      "category:scripting",
+      "capability:view"
+    ]));
     expect(packet.references.map((item) => item.command)).toEqual(expect.arrayContaining([
       "CenterView",
       "ZoomIn",
@@ -1069,28 +1152,34 @@ describe("function call registry", () => {
     expect(searchGeoGebraCommandReference("extrema", 1)).toMatchObject([
       { command: "Extremum" }
     ]);
-    expect(searchGeoGebraCommandReference("Sphere through 4 points 3D circumsphere", 3, undefined, "geometry-3d")[0]).toMatchObject(
+    expect(searchGeoGebraCommandReference("Sphere through 4 points 3D circumsphere", 3, undefined, {
+      tags: ["category:3d"],
+      tagMatch: "all"
+    })[0]).toMatchObject(
       { command: "Sphere", syntax: "Sphere( <点>, <半径> ); Sphere( <点>, <点> )" }
     );
-    expect(searchGeoGebraCommandReference("外接球 四面体", 3, undefined, "dsl_3d")[0]).toMatchObject({ command: "Sphere" });
+    expect(searchGeoGebraCommandReference("外接球 四面体", 3, undefined, { tags: ["category:3d"] })[0]).toMatchObject({ command: "Sphere" });
     expect(searchGeoGebraCommandReference("y轴 SetColor", 2).map((item) => item.command)).toContain("SetColor");
-    expect(searchGeoGebraCommandReference("Extremum", 3, undefined, "style").map((item) => item.command)).not.toContain("Extremum");
-    expect(searchGeoGebraCommandReference("Extremum", 3, undefined, "function-graph").map((item) => item.command)).toContain("Extremum");
-    expect(searchGeoGebraCommandReference("SetColor", 3, undefined, "style").map((item) => item.command)).toContain("SetColor");
-    expect(searchGeoGebraCommandReference("Root function", 8, "en-US", "function-graph").map((item) => item.command)).toContain("Root");
+    expect(searchGeoGebraCommandReference("Extremum", 3, undefined, { tags: ["capability:style"] }).map((item) => item.command)).not.toContain("Extremum");
+    expect(searchGeoGebraCommandReference("Extremum", 3, undefined, { tags: ["category:functions-and-calculus"] }).map((item) => item.command)).toContain("Extremum");
+    expect(searchGeoGebraCommandReference("SetColor", 3, undefined, { tags: ["capability:style"] }).map((item) => item.command)).toContain("SetColor");
+    expect(searchGeoGebraCommandReference("Root function", 8, "en-US", { tags: ["category:functions-and-calculus"] }).map((item) => item.command)).toContain("Root");
     expect(searchGeoGebraCommandReference("滑块 动画", 8).map((item) => item.command)).toContain("StartAnimation");
     expect(searchGeoGebraCommandReference("slider animation", 8, "en-US").map((item) => item.command)).toContain("StartAnimation");
-    expect(searchGeoGebraCommandReference("center radius circle", 3, "en-US", "dsl_geometry")[0]).toMatchObject({
+    expect(searchGeoGebraCommandReference("center radius circle", 3, "en-US", { tags: ["category:conic"] })[0]).toMatchObject({
       command: "Circle",
       syntax: expect.stringContaining("<Radius Number>")
     });
-    expect(searchGeoGebraCommandReference("perpendicular bisector plane between two points", 3, "en-US", "dsl_3d")[0]).toMatchObject(
+    expect(searchGeoGebraCommandReference("perpendicular bisector plane between two points", 3, "en-US", { tags: ["category:3d"] })[0]).toMatchObject(
       { command: "PlaneBisector" }
     );
-    expect(searchGeoGebraCommandReference("intersection point x axis function", 3, "en-US", "dsl")[0]).toMatchObject(
+    expect(searchGeoGebraCommandReference("intersection point x axis function", 3, "en-US", {
+      tags: ["category:geometry", "category:functions-and-calculus"],
+      tagMatch: "all"
+    })[0]).toMatchObject(
       { command: "Intersect" }
     );
-    expect(searchGeoGebraCommandReference("regular tetrahedron solid", 3, "en-US", "dsl_3d")[0]).toMatchObject(
+    expect(searchGeoGebraCommandReference("regular tetrahedron solid", 3, "en-US", { tags: ["category:3d"] })[0]).toMatchObject(
       { command: "Tetrahedron" }
     );
     expect(searchGeoGebraCommandReference("lowercase point", 1, "en-US")).toMatchObject([
@@ -1117,7 +1206,7 @@ describe("function call registry", () => {
       toolCallId: "search-circle",
       toolName: "searchGeoGebraCommands",
       status: "succeeded",
-      args: { query: "Circle", scope: "conic", topN: 2 },
+      args: { query: "Circle", tags: ["category:conic", "category:geometry"], tagMatch: "all", topN: 2 },
       result: { ok: true, result: [{ command: "Circle" }] },
       startedAt: "2026-06-06T00:00:01.000Z",
       completedAt: "2026-06-06T00:00:02.000Z",
@@ -1152,8 +1241,17 @@ describe("function call registry", () => {
         canvas_failed: 1,
         model_failed: 0
       },
-      searchScopes: [{ scope: "conic", count: 1, runCount: 1 }],
-      searchQueries: [{ query: "Circle", scope: "conic", count: 1, runCount: 1 }]
+      searchTags: [
+        { tag: "category:conic", count: 1, runCount: 1 },
+        { tag: "category:geometry", count: 1, runCount: 1 }
+      ],
+      searchQueries: [{
+        query: "Circle",
+        tags: ["category:conic", "category:geometry"],
+        tagMatch: "all",
+        count: 1,
+        runCount: 1
+      }]
     });
     expect(stats.commands).toEqual([
       expect.objectContaining({ commandName: "Circle", executedCount: 1, succeededCount: 1, runCount: 1 }),
@@ -1327,7 +1425,7 @@ describe("function call registry", () => {
     const searchRequest = {
       toolCallId: "backend-search",
       toolName: "searchGeoGebraCommands" as const,
-      args: { query: "circle", scope: "conic", topN: 1 }
+      args: { query: "circle", tags: ["category:conic"], tagMatch: "all", topN: 1 }
     };
     expect(canExecuteBackendToolRequest(searchRequest)).toBe(true);
     await expect(executeBackendToolRequest(searchRequest, backendContext(), "2026-06-06T00:00:00.000Z")).resolves.toMatchObject({
@@ -1464,7 +1562,7 @@ describe("function call registry", () => {
           toolCallId: "backend-skill-list",
           toolName: "listSkills",
           args: {
-            limit: 20,
+            limit: 80,
             reason: "Evaluate available skills before deciding whether one is useful."
           }
         },

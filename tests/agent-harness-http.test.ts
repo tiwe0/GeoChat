@@ -77,6 +77,24 @@ describe("desktop-only renderer and backend boundaries", () => {
     expect(assetResponse.response.headers.get("cross-origin-resource-policy")).toBe("cross-origin");
   });
 
+  test("serves the business-ready Agent Skill catalog", async () => {
+    const { request } = await createHttpHarness();
+    const response = await request("/v1/skills");
+
+    expect(response.status).toBe(200);
+    expect(response.json.count).toBe(response.json.skills.length);
+    expect(response.json.skills.length).toBeGreaterThan(20);
+    expect(response.json.skills).toContainEqual(expect.objectContaining({
+      name: "plane-geometry",
+      source: "built-in",
+      maturity: "default",
+      category: "high-school-plane-geometry",
+    }));
+    expect(response.json.skills.every((skill: { path?: string; maturity: string }) =>
+      skill.path === undefined && skill.maturity !== "draft"
+    )).toBe(true);
+  });
+
   test("strips GeoGebra remote source maps from served JavaScript assets", async () => {
     const { handleRequest } = await createHttpHarness();
     const response = await handleRequest(new Request("http://127.0.0.1:17365/tools/geogebra-assets-v2/HTML5/5.0/web3d/web3d.devmode.js"));
@@ -207,7 +225,7 @@ describe("desktop-only renderer and backend boundaries", () => {
       toolCallId: `${runId}-search`,
       toolName: "searchGeoGebraCommands",
       status: "succeeded",
-      args: { query: "Circle", scope: "conic", topN: 2 },
+      args: { query: "Circle", tags: ["category:conic"], tagMatch: "all", topN: 2 },
       result: { ok: true, result: [{ command: "Circle" }] },
       startedAt: "2026-06-06T04:04:02.100Z",
       completedAt: "2026-06-06T04:04:02.900Z"

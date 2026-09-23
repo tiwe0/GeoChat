@@ -13,9 +13,9 @@ type SchemaShape = {
 
 const expectedSchemaShapes = {
   searchGeoGebraCommands: {
-    required: ["query", "scope"],
-    properties: ["query", "scope", "topN", "reason", "intendedOutcome", "nextExpectedAction"],
-    modelRequired: ["query", "scope", "reason"]
+    required: ["query"],
+    properties: ["query", "tags", "tagMatch", "topN", "reason", "intendedOutcome", "nextExpectedAction"],
+    modelRequired: ["query", "reason"]
   },
   readBlackboard: {
     required: [],

@@ -1,5 +1,5 @@
 import type { PatchBlackboardArgs, ReadBlackboardArgs } from "./blackboard";
-import type { GeoGebraCommandSearchScope } from "./geogebra-command-reference";
+import type { GeoGebraCommandTagMatch } from "./geogebra-command-reference";
 import type { AdvancedDrawingCommandArgs } from "./advanced-drawing-tools";
 import type { FunctionCallStatus, FunctionCallToolName } from "./functioncall-types";
 
@@ -36,7 +36,8 @@ export type FunctionCallAuditFields = {
 
 export type SearchGeoGebraCommandsArgs = FunctionCallAuditFields & {
   query: string;
-  scope: GeoGebraCommandSearchScope;
+  tags?: string[] | null;
+  tagMatch?: GeoGebraCommandTagMatch | null;
   topN?: number | null;
 };
 

@@ -4,7 +4,8 @@ import {
   activateAgentSkill,
   filterBusinessReadyAgentSkills,
   formatSkillCatalogPrompt,
-  listAvailableAgentSkills
+  listAvailableAgentSkills,
+  searchAvailableAgentSkills
 } from "../backend/src/agent/skills";
 
 const isolatedSkillEnv = {
@@ -89,17 +90,131 @@ describe("built-in Agent Skill catalog", () => {
       "quadratic-equation",
       "inequality-interval",
       "quadratic-function",
+      "piecewise-domain-function",
+      "dynamic-parameter-exploration",
       "triangle-circle-geometry",
+      "dynamic-construction-validation",
       "solid-section",
+      "parametric-surface-revolution",
       "pyramid-circumsphere",
       "conic-focus-directrix",
+      "parametric-polar-curves",
+      "locus-envelope",
+      "list-driven-construction",
       "classical-probability",
-      "statistical-distribution"
+      "statistical-distribution",
+      "regression-model-diagnostics",
+      "geometric-theorem-verification",
+      "cas-graphics-workflow",
+      "spreadsheet-data-workflow",
+      "construction-protocol-presentation",
+      "interactive-controls-workflow",
+      "object-view-layer-management",
+      "dynamic-worksheet-authoring",
+      "dynamic-text-feedback",
+      "visual-style-system",
+      "mathematical-animation-design"
     ]) {
       expect(secondLayerNames.has(name)).toBe(true);
     }
     expect(secondLayer.length).toBeGreaterThanOrEqual(15);
     expect(secondLayer.every((skill) => Boolean(skill.parent))).toBe(true);
+  });
+
+  test("includes common and expert GeoGebra workflows with explicit safety and validation rules", async () => {
+    const piecewise = await activateAgentSkill("piecewise-domain-function", isolatedSkillEnv);
+    const dynamic = await activateAgentSkill("dynamic-parameter-exploration", isolatedSkillEnv);
+    const dragTest = await activateAgentSkill("dynamic-construction-validation", isolatedSkillEnv);
+    const curves = await activateAgentSkill("parametric-polar-curves", isolatedSkillEnv);
+    const locus = await activateAgentSkill("locus-envelope", isolatedSkillEnv);
+    const lists = await activateAgentSkill("list-driven-construction", isolatedSkillEnv);
+    const regression = await activateAgentSkill("regression-model-diagnostics", isolatedSkillEnv);
+    const theorem = await activateAgentSkill("geometric-theorem-verification", isolatedSkillEnv);
+    const surface = await activateAgentSkill("parametric-surface-revolution", isolatedSkillEnv);
+
+    expect(piecewise.markdown).toContain("Function(f, a, b)");
+    expect(piecewise.markdown).toContain("空心/实心端点");
+    expect(dynamic.markdown).toContain("预测—观察—解释");
+    expect(dynamic.markdown).toContain("不生成任意 JavaScript");
+    expect(dragTest.markdown).toContain("欠约束");
+    expect(dragTest.markdown).toContain("过约束");
+    expect(curves.markdown).toContain("Curve(x(t), y(t), t, a, b)");
+    expect(locus.markdown).toContain("额外分支");
+    expect(lists.markdown).toContain("不通过 `Execute`");
+    expect(regression.markdown).toContain("ResidualPlot");
+    expect(theorem.markdown).toContain("`undefined` 只表示系统未能判定");
+    expect(surface.markdown).toContain("WebGL");
+  });
+
+  test("finds the expanded workflows from natural Chinese task descriptions", async () => {
+    const cases = [
+      ["画分段函数并检查空心实心端点", "piecewise-domain-function"],
+      ["让一个滑块控制完整的动态演示", "dynamic-parameter-exploration"],
+      ["拖动顶点验证构造不会变形", "dynamic-construction-validation"],
+      ["绘制极坐标参数曲线并求切线", "parametric-polar-curves"],
+      ["求动点轨迹和直线族包络", "locus-envelope"],
+      ["用 Sequence 和 Zip 批量生成点列", "list-driven-construction"],
+      ["比较回归模型的残差与 R 方", "regression-model-diagnostics"],
+      ["用符号方法验证共圆命题", "geometric-theorem-verification"],
+      ["把母线绕轴旋转生成参数曲面", "parametric-surface-revolution"]
+    ] as const;
+
+    for (const [query, expectedName] of cases) {
+      const results = await searchAvailableAgentSkills({ query, limit: 5 }, isolatedSkillEnv);
+      expect(results.map((result) => result.name)).toContain(expectedName);
+    }
+  });
+
+  test("includes coordinated GeoGebra software workflows with capability fallbacks", async () => {
+    const multiView = await activateAgentSkill("multi-view-coordination", isolatedSkillEnv);
+    const cas = await activateAgentSkill("cas-graphics-workflow", isolatedSkillEnv);
+    const spreadsheet = await activateAgentSkill("spreadsheet-data-workflow", isolatedSkillEnv);
+    const protocol = await activateAgentSkill("construction-protocol-presentation", isolatedSkillEnv);
+    const controls = await activateAgentSkill("interactive-controls-workflow", isolatedSkillEnv);
+    const layers = await activateAgentSkill("object-view-layer-management", isolatedSkillEnv);
+    const worksheet = await activateAgentSkill("dynamic-worksheet-authoring", isolatedSkillEnv);
+    const feedback = await activateAgentSkill("dynamic-text-feedback", isolatedSkillEnv);
+    const visualStyle = await activateAgentSkill("visual-style-system", isolatedSkillEnv);
+    const animation = await activateAgentSkill("mathematical-animation-design", isolatedSkillEnv);
+
+    expect(multiView.category).toBe("geogebra-workflow");
+    expect(multiView.markdown).toContain("共享同一构造依赖");
+    expect(multiView.markdown).toContain("不声称切换成功");
+    expect(cas.markdown).toContain("图形近似不能替代证明");
+    expect(spreadsheet.markdown).toContain("自由副本");
+    expect(protocol.markdown).toContain("SetConstructionStep");
+    expect(controls.markdown).toContain("默认不生成任意 JavaScript");
+    expect(layers.markdown).toContain("图层只负责显示与命中顺序");
+    expect(worksheet.markdown).toContain("一概念、一主视图、一屏完成");
+    expect(worksheet.markdown).toContain("窄窗口");
+    expect(feedback.markdown).toContain("FractionText");
+    expect(feedback.markdown).toContain("不用红绿颜色作为唯一的正误区分");
+    expect(visualStyle.markdown).toContain("颜色只承担一种稳定语义");
+    expect(visualStyle.markdown).toContain("#0072B2");
+    expect(visualStyle.markdown).toContain("无颜色检查");
+    expect(animation.markdown).toContain("默认不自动播放");
+    expect(animation.markdown).toContain("一次递增");
+    expect(animation.markdown).toContain("暂停、继续和重置");
+  });
+
+  test("finds software-use skills from natural Chinese task descriptions", async () => {
+    const cases = [
+      ["把代数视图表格和两个图形窗口同步起来", "multi-view-coordination"],
+      ["在 CAS 推导后同步到图形检查定义域", "cas-graphics-workflow"],
+      ["用电子表格相对引用批量生成数据点", "spreadsheet-data-workflow"],
+      ["打开构造协议逐步回放尺规作图", "construction-protocol-presentation"],
+      ["用输入框复选框和下拉列表制作控制面板", "interactive-controls-workflow"],
+      ["把辅助对象分图层并只在图形2显示", "object-view-layer-management"],
+      ["把动态课件整理成手机上也能操作的单屏布局", "dynamic-worksheet-authoring"],
+      ["用动态公式和文字做不只靠颜色的正误反馈", "dynamic-text-feedback"],
+      ["统一几何图的配色线型标签和视觉层级", "visual-style-system"],
+      ["制作可以播放暂停重置的单时间轴数学动画", "mathematical-animation-design"]
+    ] as const;
+
+    for (const [query, expectedName] of cases) {
+      const results = await searchAvailableAgentSkills({ query, limit: 5 }, isolatedSkillEnv);
+      expect(results.map((result) => result.name)).toContain(expectedName);
+    }
   });
 
   test("attaches third-layer task recipes to every built-in skill without enabling draft macros by default", async () => {

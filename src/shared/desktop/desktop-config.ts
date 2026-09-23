@@ -53,12 +53,16 @@ export const BUILTIN_AGENT_SKILL_NAMES = [
   "quadratic-equation",
   "inequality-interval",
   "function-graph",
+  "piecewise-domain-function",
+  "dynamic-parameter-exploration",
   "plane-geometry",
   "triangle-circle-geometry",
   "geometric-transformations",
   "geometric-construction",
+  "dynamic-construction-validation",
   "solid-geometry",
   "solid-section",
+  "parametric-surface-revolution",
   "prism",
   "sphere",
   "pyramid-circumsphere",
@@ -71,14 +75,29 @@ export const BUILTIN_AGENT_SKILL_NAMES = [
   "trigonometric-function",
   "trigonometric-unit-circle",
   "sequence",
+  "list-driven-construction",
   "vector",
   "analytic-geometry-conic",
+  "parametric-polar-curves",
+  "locus-envelope",
   "conic-focus-directrix",
   "derivative-application",
   "derivative-tangent",
   "probability-statistics",
+  "regression-model-diagnostics",
   "classical-probability",
   "statistical-distribution",
+  "geometric-theorem-verification",
+  "multi-view-coordination",
+  "cas-graphics-workflow",
+  "spreadsheet-data-workflow",
+  "construction-protocol-presentation",
+  "interactive-controls-workflow",
+  "object-view-layer-management",
+  "dynamic-worksheet-authoring",
+  "dynamic-text-feedback",
+  "visual-style-system",
+  "mathematical-animation-design",
   "visual-post-processing",
   "camera-framing",
   "viewport-scale-composition"
@@ -91,12 +110,16 @@ export const DEFAULT_BUSINESS_AGENT_SKILL_NAMES = [
   "quadratic-equation",
   "inequality-interval",
   "function-graph",
+  "piecewise-domain-function",
+  "dynamic-parameter-exploration",
   "plane-geometry",
   "triangle-circle-geometry",
   "geometric-transformations",
   "geometric-construction",
+  "dynamic-construction-validation",
   "solid-geometry",
   "solid-section",
+  "parametric-surface-revolution",
   "prism",
   "sphere",
   "pyramid-circumsphere",
@@ -109,15 +132,64 @@ export const DEFAULT_BUSINESS_AGENT_SKILL_NAMES = [
   "trigonometric-function",
   "trigonometric-unit-circle",
   "sequence",
+  "list-driven-construction",
   "vector",
   "analytic-geometry-conic",
+  "parametric-polar-curves",
+  "locus-envelope",
   "conic-focus-directrix",
   "derivative-application",
   "derivative-tangent",
   "probability-statistics",
+  "regression-model-diagnostics",
   "classical-probability",
-  "statistical-distribution"
+  "statistical-distribution",
+  "geometric-theorem-verification",
+  "multi-view-coordination",
+  "cas-graphics-workflow",
+  "spreadsheet-data-workflow",
+  "construction-protocol-presentation",
+  "interactive-controls-workflow",
+  "object-view-layer-management",
+  "dynamic-worksheet-authoring",
+  "dynamic-text-feedback",
+  "visual-style-system",
+  "mathematical-animation-design"
 ] as const;
+
+const GEOGEBRA_MATH_SKILL_EXPANSION_NAMES = new Set([
+  "piecewise-domain-function",
+  "dynamic-parameter-exploration",
+  "dynamic-construction-validation",
+  "parametric-surface-revolution",
+  "list-driven-construction",
+  "parametric-polar-curves",
+  "locus-envelope",
+  "regression-model-diagnostics",
+  "geometric-theorem-verification"
+]);
+
+const GEOGEBRA_WORKFLOW_SKILL_EXPANSION_NAMES = new Set([
+  "multi-view-coordination",
+  "cas-graphics-workflow",
+  "spreadsheet-data-workflow",
+  "construction-protocol-presentation",
+  "interactive-controls-workflow",
+  "object-view-layer-management",
+  "dynamic-worksheet-authoring",
+  "dynamic-text-feedback",
+  "visual-style-system",
+  "mathematical-animation-design"
+]);
+
+const PRE_GEOGEBRA_MATH_EXPANSION_DEFAULT_NAMES = DEFAULT_BUSINESS_AGENT_SKILL_NAMES.filter(
+  (name) => !GEOGEBRA_MATH_SKILL_EXPANSION_NAMES.has(name)
+    && !GEOGEBRA_WORKFLOW_SKILL_EXPANSION_NAMES.has(name)
+);
+
+const PRE_GEOGEBRA_WORKFLOW_EXPANSION_DEFAULT_NAMES = DEFAULT_BUSINESS_AGENT_SKILL_NAMES.filter(
+  (name) => !GEOGEBRA_WORKFLOW_SKILL_EXPANSION_NAMES.has(name)
+);
 
 export const VISUAL_PROFILE_NAMES = [
   "exam-clean",
@@ -261,7 +333,13 @@ function normalizeSkillNames(value: unknown) {
   const names = value
     .map((item) => typeof item === "string" ? item.trim() : "")
     .filter(Boolean);
-  return Array.from(new Set(names));
+  const uniqueNames = Array.from(new Set(names));
+  const wasPreviousDefaultSelection = [
+    PRE_GEOGEBRA_MATH_EXPANSION_DEFAULT_NAMES,
+    PRE_GEOGEBRA_WORKFLOW_EXPANSION_DEFAULT_NAMES
+  ].some((previousDefaults) => uniqueNames.length === previousDefaults.length
+    && previousDefaults.every((name) => uniqueNames.includes(name)));
+  return wasPreviousDefaultSelection ? [...DEFAULT_SKILL_CONFIG.enabledSkillNames] : uniqueNames;
 }
 
 export function normalizeSkillConfig(value: Partial<SkillConfig> | undefined): SkillConfig {

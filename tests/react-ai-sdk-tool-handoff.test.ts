@@ -117,7 +117,7 @@ describe("native AI SDK renderer-tool handoff", () => {
         type: "tool-searchGeoGebraCommands",
         toolCallId: "backend-1",
         state: "output-available",
-        input: { query: "Circle", scope: "global" },
+        input: { query: "Circle", tags: ["category:conic"], tagMatch: "any" },
         output: { ok: true },
       } as never],
     };

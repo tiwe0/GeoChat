@@ -8,7 +8,7 @@ import {
   type AgentRunLedgerRecord,
   type FunctionCallToolName
 } from "@geochat-ai/app";
-import type { AgentSkillSelectionPacket } from "./skill-selector";
+import { skillRuntimePolicyFromPrompt, type AgentSkillSelectionPacket } from "./skill-selector";
 import { validateNativeToolInput, type NativeToolPolicyContext } from "./native-tool-policy";
 
 export function createBackendPlanningTools(
@@ -25,23 +25,29 @@ export function createBackendPlanningTools(
   } = {}
 ) {
   const disabled = new Set(disabledToolNames);
+  const prompt = run && "prompt" in run && typeof run.prompt === "string" ? run.prompt : "";
   return Object.fromEntries(
     getFunctionCallPlanningToolNames()
-      .filter((toolName) => toolName !== "searchGeoGebraCommands")
-      .filter((toolName) => shouldExposeSkillDiscoveryTool(toolName, skillSelection))
+      .filter((toolName) => shouldExposeSkillDiscoveryTool(toolName, skillSelection, prompt))
       .filter((toolName) => shouldExposeBlackboardTool(toolName, run))
       .filter((toolName) => toolName !== "executeAdvancedDrawingCommand" || Boolean(skillSelection?.enabledAdvancedTools.length))
       .filter((toolName) => !disabled.has(toolName))
       .map((toolName) => [toolName, createBackendPlanningTool(toolName, locale, skillSelection, {
-        prompt: run && "prompt" in run && typeof run.prompt === "string" ? run.prompt : "",
+        prompt,
         locale,
       }, options)])
   ) as Record<FunctionCallToolName, ReturnType<typeof createBackendPlanningTool>>;
 }
 
-function shouldExposeSkillDiscoveryTool(toolName: FunctionCallToolName, skillSelection?: AgentSkillSelectionPacket) {
+function shouldExposeSkillDiscoveryTool(
+  toolName: FunctionCallToolName,
+  skillSelection: AgentSkillSelectionPacket | undefined,
+  prompt: string,
+) {
   if (!["listSkills", "searchSkills", "loadSkill", "activateSkill"].includes(toolName)) return true;
-  return !skillSelection || skillSelection.status === "failed";
+  if (!skillSelection) return true;
+  if (skillSelection.status !== "disabled") return true;
+  return skillRuntimePolicyFromPrompt(prompt).enabled;
 }
 
 function shouldExposeBlackboardTool(toolName: FunctionCallToolName, run?: Pick<AgentRunLedgerRecord, "tools">) {

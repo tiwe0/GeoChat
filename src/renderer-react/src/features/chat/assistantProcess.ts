@@ -28,52 +28,61 @@ export function assistantToolStatus(part: AssistantProcessPart) {
   return "running" as const;
 }
 
-export function collectAssistantProcess(
+export function collectAssistantProcessRuns(
   parts: readonly unknown[],
   isDisplayTool: (part: unknown) => boolean,
-): AssistantProcess | null {
-  const entries: AssistantProcess["entries"] = [];
-  let reasoningCount = 0;
-  let toolCount = 0;
-  let hasFailure = false;
-  let hasFinalContent = false;
+  shouldIgnorePart: (part: unknown, index: number) => boolean = () => false,
+): AssistantProcess[] {
+  const runs: AssistantProcess[] = [];
+  let entries: AssistantProcess["entries"] = [];
+
+  const flush = () => {
+    if (!entries.length) return;
+    const lastIndex = entries.at(-1)!.index;
+    runs.push({
+      entries,
+      firstIndex: entries[0].index,
+      hasFailure: entries.some(({ part }) => part.type.startsWith("tool-") && assistantToolStatus(part) === "failed"),
+      hasFinalContent: parts.some((candidate, candidateIndex) => {
+        if (candidateIndex <= lastIndex || shouldIgnorePart(candidate, candidateIndex)) return false;
+        const laterPart = asPart(candidate);
+        if (!laterPart) return false;
+        if (laterPart.type === "text") return Boolean(laterPart.text?.trim());
+        if (laterPart.type === "file") return true;
+        return laterPart.type.startsWith("tool-") && isDisplayTool(laterPart);
+      }),
+      reasoningCount: entries.filter(({ part }) => part.type === "reasoning").length,
+      toolCount: entries.filter(({ part }) => part.type.startsWith("tool-")).length,
+    });
+    entries = [];
+  };
 
   parts.forEach((value, index) => {
+    if (shouldIgnorePart(value, index)) return;
     const part = asPart(value);
     if (!part) return;
 
     if (part.type === "reasoning") {
       if (part.text?.trim()) {
         entries.push({ index, part });
-        reasoningCount += 1;
       }
       return;
     }
 
     if (part.type.startsWith("tool-")) {
       if (isDisplayTool(part)) {
-        hasFinalContent = true;
+        flush();
         return;
       }
       entries.push({ index, part });
-      toolCount += 1;
-      hasFailure ||= assistantToolStatus(part) === "failed";
       return;
     }
 
-    if (part.type === "text" && part.text?.trim()) hasFinalContent = true;
-    if (part.type === "file") hasFinalContent = true;
+    if ((part.type === "text" && part.text?.trim()) || part.type === "file") flush();
   });
 
-  if (!entries.length) return null;
-  return {
-    entries,
-    firstIndex: entries[0].index,
-    hasFailure,
-    hasFinalContent,
-    reasoningCount,
-    toolCount,
-  };
+  flush();
+  return runs;
 }
 
 export function shouldExpandAssistantProcess(process: AssistantProcess, active: boolean) {

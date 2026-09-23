@@ -23,8 +23,9 @@ const auditPropertiesEn = {
 
 const FUNCTION_CALL_INPUT_JSON_SCHEMA_ENGLISH_OVERRIDES = {
   searchGeoGebraCommands: {
-    query: "GeoGebra command search keywords. Prefer the user's construction intent in English when the UI language is English.",
-    scope: "Required search scope. Pass global explicitly for broad lookup; use a narrower scope when the intended construction domain is known."
+    query: "GeoGebra command search keywords. Prefer the user's construction intent in English when the UI language is English. When tags are omitted, search text across all commands.",
+    tags: "Optional exact tag filters. Domain tags use category:*, behavior tags use capability:*, and risk tags use risk:*; examples include category:geometry, category:3d, capability:create, capability:measure, capability:relation, capability:transform, capability:label, capability:position, and capability:style. Native label offset has no command or capability:label-position tag. Omit tags for a global text search.",
+    tagMatch: "How multiple tags are matched: any accepts at least one tag and all requires every tag. Defaults to any."
   },
   readBlackboard: {
     categories: "Read only these blackboard categories. When omitted, read all active entries."
@@ -138,7 +139,8 @@ function localizedFunctionCallInputJsonSchema<TToolName extends FunctionCallTool
   const overrides = FUNCTION_CALL_INPUT_JSON_SCHEMA_ENGLISH_OVERRIDES;
   if (toolName === "searchGeoGebraCommands") {
     schema.properties.query = { ...schema.properties.query, description: overrides.searchGeoGebraCommands.query };
-    schema.properties.scope = { ...schema.properties.scope, description: overrides.searchGeoGebraCommands.scope };
+    schema.properties.tags = { ...schema.properties.tags, description: overrides.searchGeoGebraCommands.tags };
+    schema.properties.tagMatch = { ...schema.properties.tagMatch, description: overrides.searchGeoGebraCommands.tagMatch };
   }
   if (toolName === "readBlackboard") {
     schema.properties.categories = { ...schema.properties.categories, description: overrides.readBlackboard.categories };

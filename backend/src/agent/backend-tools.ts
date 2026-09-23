@@ -92,10 +92,14 @@ export async function executeBackendToolRequest(
 async function executeBackendToolResult(request: BackendToolRequest, context: BackendToolExecutionContext) {
   if (request.toolName === "searchGeoGebraCommands") {
     const args = request.args as SearchGeoGebraCommandsArgs;
-    return okBackendToolResult(searchGeoGebraCommandReference(args.query, args.topN ?? 8, context.locale, args.scope), {
+    return okBackendToolResult(searchGeoGebraCommandReference(args.query, args.topN ?? 8, context.locale, {
+      tags: args.tags ?? [],
+      tagMatch: args.tagMatch ?? "any"
+    }), {
       source: "backend-command-reference",
       query: args.query,
-      scope: args.scope
+      tags: args.tags ?? [],
+      tagMatch: args.tagMatch ?? "any"
     });
   }
   if (request.toolName === "readBlackboard") {

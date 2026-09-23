@@ -19,13 +19,17 @@ const BUILTIN_SKILL_RECIPES: Record<string, string[]> = {
   "quadratic-equation": ["discriminant-root-count", "vieta-root-relation", "parabola-zero-check"],
   "inequality-interval": ["number-line-endpoint-check", "rational-sign-table", "parameter-critical-collision"],
   "function-graph": ["expression-table-graph-link", "parameter-slider-transform", "option-feature-check"],
+  "piecewise-domain-function": ["domain-boundary-partition", "piecewise-endpoint-check", "discontinuity-limit-compare"],
+  "dynamic-parameter-exploration": ["single-driver-parameter-map", "predict-observe-explain", "staged-visibility-animation"],
   "quadratic-function": ["vertex-axis-zero-layout", "discriminant-intersection-count", "interval-extremum-visual-check"],
   "plane-geometry": ["base-diagram-then-auxiliary", "similarity-congruence-highlight", "option-by-option-geometric-check"],
   "triangle-circle-geometry": ["inscribed-angle-same-arc", "tangent-radius-perpendicular", "circumcircle-auxiliary-line"],
   "geometric-transformations": ["source-image-correspondence", "rotation-center-angle-mark", "symmetry-axis-pairing"],
   "geometric-construction": ["ruler-compass-step-replay", "bisector-locus-explain", "tangent-construction-verify"],
+  "dynamic-construction-validation": ["free-dependent-object-plan", "drag-test-invariants", "under-over-constraint-check"],
   "solid-geometry": ["3d-skeleton-first", "projection-auxiliary-triangle", "angle-distance-measurement-check"],
   "solid-section": ["section-plane-through-points", "intersection-edge-ordering", "section-polygon-highlight"],
+  "parametric-surface-revolution": ["bounded-parametric-surface", "curve-revolution-model", "section-and-viewpoint-check"],
   prism: ["coordinate-prism-skeleton", "section-face-intersection", "volume-base-height-mark"],
   sphere: ["center-radius-constraint", "section-circle-right-triangle", "equidistant-center-locus"],
   "pyramid-circumsphere": ["base-circumcenter-axis", "equal-distance-center-solve", "radius-right-triangle"],
@@ -37,14 +41,29 @@ const BUILTIN_SKILL_RECIPES: Record<string, string[]> = {
   "trigonometric-function": ["unit-circle-to-graph", "period-amplitude-phase", "identity-visual-verification"],
   "trigonometric-unit-circle": ["quadrant-sign-check", "reference-angle-reduction", "special-angle-coordinate"],
   sequence: ["term-table-discrete-plot", "recurrence-step-unroll", "sum-area-or-stack-model"],
+  "list-driven-construction": ["sequence-object-family", "zip-parallel-mapping", "flatten-filter-summarize"],
   vector: ["coordinate-vector-decompose", "dot-product-projection", "collinearity-perpendicular-check"],
   "analytic-geometry-conic": ["coordinate-object-extract", "chord-tangent-locus-visualize", "parameter-line-intersection-count"],
+  "parametric-polar-curves": ["bounded-parametric-curve", "polar-to-parametric-convert", "tangent-curvature-arc-length"],
+  "locus-envelope": ["driver-dependent-point-locus", "symbolic-locus-equation", "moving-family-envelope"],
   "conic-focus-directrix": ["focus-directrix-locus", "eccentricity-parameter-check", "tangent-chord-relation"],
   "derivative-application": ["derivative-sign-monotonicity", "extremum-critical-point", "parameter-inequality-visual-check"],
   "derivative-tangent": ["tangent-point-slope", "fixed-point-tangent-family", "common-tangent-compare"],
   "probability-statistics": ["sample-space-structure", "frequency-distribution-chart", "expected-value-step-table"],
+  "regression-model-diagnostics": ["scatter-before-fit", "candidate-model-compare", "residual-rsquare-diagnose"],
   "classical-probability": ["tree-or-grid-sample-space", "favorable-over-total-count", "complement-event-check"],
   "statistical-distribution": ["histogram-boxplot-summary", "mean-variance-compare", "normal-curve-interval-mark"],
+  "geometric-theorem-verification": ["numeric-relation-first", "symbolic-proof-second", "degeneracy-condition-report"],
+  "multi-view-coordination": ["role-based-view-layout", "shared-object-cross-view-check", "capability-fallback-layout"],
+  "cas-graphics-workflow": ["symbolic-derive-then-visualize", "exact-numeric-consistency-check", "domain-assumption-report"],
+  "spreadsheet-data-workflow": ["dependent-cell-table", "relative-absolute-reference-plan", "table-graph-cross-check"],
+  "construction-protocol-presentation": ["logical-step-order", "construction-replay-check", "teaching-stage-highlight"],
+  "interactive-controls-workflow": ["native-linked-control-first", "single-purpose-control-panel", "control-state-validation"],
+  "object-view-layer-management": ["semantic-layer-plan", "view-specific-visibility", "core-object-accessibility-check"],
+  "dynamic-worksheet-authoring": ["one-concept-one-screen", "obvious-affordance-layout", "first-frame-usability-check"],
+  "dynamic-text-feedback": ["clean-symbolic-display", "near-object-dynamic-label", "color-independent-feedback"],
+  "visual-style-system": ["semantic-color-role-map", "line-point-label-hierarchy", "color-independent-legibility-check"],
+  "mathematical-animation-design": ["single-master-timeline", "play-pause-reset-controls", "stable-keyframe-validation"],
   "visual-post-processing": ["verify-before-adjust", "compose-visible-frame", "preserve-axis-scale"],
   "camera-framing": ["3d-camera-after-skeleton", "show-three-faces", "avoid-occlusion-and-cropping"],
   "viewport-scale-composition": ["uniform-zoom-bounds", "center-important-objects", "preserve-one-to-one-axis-ratio"]
@@ -510,11 +529,23 @@ function normalizeSkillName(value: string) {
 }
 
 function tokenizeSkillQuery(value: string) {
-  return value
+  const coarseTerms = value
     .toLowerCase()
     .split(/[^\p{L}\p{N}]+/u)
     .map((term) => term.trim())
     .filter(Boolean);
+  const terms = new Set<string>();
+  for (const term of coarseTerms) {
+    terms.add(term);
+    if (!/\p{Script=Han}/u.test(term)) continue;
+    const characters = Array.from(term);
+    for (const size of [2, 3, 4]) {
+      for (let index = 0; index + size <= characters.length; index += 1) {
+        terms.add(characters.slice(index, index + size).join(""));
+      }
+    }
+  }
+  return [...terms];
 }
 
 function scoreSkillMatch(

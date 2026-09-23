@@ -21,7 +21,7 @@ export const FUNCTION_CALL_REGISTRY = {
   searchGeoGebraCommands: {
     name: "searchGeoGebraCommands",
     label: "搜索 GeoGebra 构造参考",
-    description: "按必填 scope 查询 GeoGebra 命令参考、命令名称、参数顺序和示例；即使全局检索也必须传 global。",
+    description: "按文本与可选 tags 查询 GeoGebra 命令参考、命令名称、参数顺序和示例。可用 tagMatch=all/any 控制多标签匹配；省略 tags 时执行全局文本检索。",
     executor: "backend",
     sideEffectLevel: "read",
     timeoutMs: 30_000,
@@ -371,7 +371,7 @@ export const FUNCTION_CALL_REGISTRY = {
 const FUNCTION_CALL_ENGLISH_OVERRIDES = {
   searchGeoGebraCommands: {
     label: "Search GeoGebra construction references",
-    description: "Look up GeoGebra command references, command names, argument order, and examples within the required scope. Pass global explicitly for broad lookup.",
+    description: "Look up GeoGebra command references, command names, argument order, and examples by text and optional tags. Use tagMatch=all/any for multiple tags; omit tags for a global text search.",
     display: {
       label: "Find construction references",
       running: "Searching",

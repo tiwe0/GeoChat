@@ -3,22 +3,35 @@ import {
   auditProperties,
   constructionRecipeIdValues,
   executeCommandsDescriptionZh,
-  geogebraCommandSearchScopeValues
+  geogebraCommandTagMatchValues
 } from "./shared";
 import type { FunctionCallInputJsonSchema } from "./types";
+import { GENERATED_GEOGEBRA_COMMAND_TAGS } from "../geogebra-command-reference-data";
 
 export const GEOGEBRA_FUNCTION_CALL_INPUT_JSON_SCHEMAS = {
   searchGeoGebraCommands: {
     type: "object",
     additionalProperties: false,
-    required: ["query", "scope"],
+    required: ["query"],
     properties: {
-      query: { type: "string", minLength: 1, description: "GeoGebra 命令搜索关键词，优先使用中文构造意图。" },
-      scope: {
+      query: {
         type: "string",
-        enum: geogebraCommandSearchScopeValues,
-        default: "global",
-        description: "必填检索范围。即使想查全局命令也必须显式传 global；更具体的范围会让命令参考更准确。"
+        minLength: 1,
+        description: "GeoGebra 命令搜索关键词，优先使用中文构造意图；不传 tags 时在全部命令中进行文本检索。"
+      },
+      tags: {
+        type: "array",
+        nullable: true,
+        minItems: 1,
+        items: { type: "string", minLength: 1, enum: GENERATED_GEOGEBRA_COMMAND_TAGS },
+        description: "可选的精确标签筛选。领域标签使用 category:*，功能标签使用 capability:*，风险标签使用 risk:*；例如 category:geometry、category:3d、capability:create、capability:measure、capability:relation、capability:transform、capability:label、capability:position、capability:style。原生标签偏移没有对应命令或 capability:label-position 标签。省略 tags 时执行全局文本检索。"
+      },
+      tagMatch: {
+        type: "string",
+        nullable: true,
+        enum: geogebraCommandTagMatchValues,
+        default: "any",
+        description: "多标签匹配方式：any 表示包含任一标签，all 要求命令包含全部标签；默认 any。"
       },
       topN: { type: "number", nullable: true, minimum: 1, maximum: 12 },
       ...auditProperties

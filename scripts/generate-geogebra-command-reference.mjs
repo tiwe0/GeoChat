@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import {
+  GEOGEBRA_COMMAND_TAXONOMY_SOURCE,
+  getGeoGebraCommandTaxonomyTags
+} from "./geogebra-command-taxonomy.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const VENDOR_ROOT = path.join(ROOT, "vendor/geogebra/HTML5/5.0/web3d");
@@ -34,10 +38,11 @@ function sha256(filePath) {
 
 function parseExistingEntries() {
   const source = readFileSync(OUTPUT, "utf8");
-  const start = source.indexOf("= [");
+  const marker = "export const GENERATED_GEOGEBRA_COMMAND_REFERENCE = [";
+  const start = source.indexOf(marker);
   const end = source.lastIndexOf("] satisfies");
   if (start < 0 || end < 0) throw new Error(`Generated command array not found in ${OUTPUT}`);
-  return JSON.parse(source.slice(start + 2, end + 1));
+  return JSON.parse(source.slice(start + marker.indexOf("["), end + 1));
 }
 
 function syntaxLines(properties, sourceCommand) {
@@ -81,9 +86,9 @@ export function generateGeoGebraCommandReference() {
       command,
       sourceCommand === command ? undefined : sourceCommand,
       localizedName,
-      syntaxEn,
-      previous.searchTextEn
+      syntaxEn
     ].filter(Boolean).join(" ").split(/\s+/u).filter(Boolean))].join(" ");
+    const tags = getGeoGebraCommandTaxonomyTags(command);
     return compactEntry({
       command,
       localizedName,
@@ -94,8 +99,7 @@ export function generateGeoGebraCommandReference() {
       searchTextEn,
       note: previous.note,
       examples: previous.examples ?? [],
-      tags: previous.tags ?? [],
-      scopes: previous.scopes ?? []
+      tags
     });
   });
 
@@ -106,6 +110,12 @@ export function generateGeoGebraCommandReference() {
   if (new Set(entries.map((entry) => entry.command)).size !== entries.length) {
     throw new Error("GeoGebra command generation produced duplicate canonical command names");
   }
+  const uncategorizedCommands = entries
+    .filter((entry) => !entry.tags.some((tag) => tag.startsWith("category:")))
+    .map((entry) => entry.command);
+  if (uncategorizedCommands.length > 0) {
+    throw new Error(`GeoGebra command taxonomy is missing categories for: ${uncategorizedCommands.join(", ")}`);
+  }
 
   const metadata = {
     runtimeVersion: readRuntimeVersion(),
@@ -113,7 +123,8 @@ export function generateGeoGebraCommandReference() {
     sources: {
       english: "vendor/geogebra/HTML5/5.0/web3d/js/properties_keys_en.js",
       chinese: "vendor/geogebra/HTML5/5.0/web3d/js/properties_keys_zh-CN.js",
-      runtimeManifest: "vendor/geogebra/HTML5/5.0/web3d/sworker-locked.js"
+      runtimeManifest: "vendor/geogebra/HTML5/5.0/web3d/sworker-locked.js",
+      taxonomy: GEOGEBRA_COMMAND_TAXONOMY_SOURCE
     },
     sha256: {
       english: sha256(ENGLISH_PROPERTIES),
@@ -121,8 +132,9 @@ export function generateGeoGebraCommandReference() {
       runtimeManifest: sha256(SERVICE_WORKER)
     }
   };
+  const tags = [...new Set(entries.flatMap((entry) => entry.tags))].sort();
 
-  return `// Generated from the command localization bundles shipped with GeoGebra ${metadata.runtimeVersion}.\n// These bundles are the runtime authority for canonical command names and exact parameter signatures.\n// Run \`bun run geogebra:commands:generate\` after updating the vendored GeoGebra runtime.\n\nimport type { GeoGebraCommandReferenceEntry } from "./geogebra-command-reference";\n\nexport const GENERATED_GEOGEBRA_COMMAND_REFERENCE_METADATA = ${JSON.stringify(metadata, null, 2)} as const;\n\nexport const GENERATED_GEOGEBRA_COMMAND_REFERENCE = ${JSON.stringify(entries, null, 2)} satisfies readonly GeoGebraCommandReferenceEntry[];\n`;
+  return `// Generated from the command localization bundles shipped with GeoGebra ${metadata.runtimeVersion}.\n// These bundles are the runtime authority for canonical command names and exact parameter signatures.\n// Run \`bun run geogebra:commands:generate\` after updating the vendored GeoGebra runtime.\n\nimport type { GeoGebraCommandReferenceEntry } from "./geogebra-command-reference";\n\nexport const GENERATED_GEOGEBRA_COMMAND_REFERENCE_METADATA = ${JSON.stringify(metadata, null, 2)} as const;\n\nexport const GENERATED_GEOGEBRA_COMMAND_TAGS = ${JSON.stringify(tags, null, 2)} as const;\n\nexport const GENERATED_GEOGEBRA_COMMAND_REFERENCE = ${JSON.stringify(entries, null, 2)} satisfies readonly GeoGebraCommandReferenceEntry[];\n`;
 }
 
 const generated = generateGeoGebraCommandReference();

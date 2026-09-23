@@ -38,7 +38,7 @@ import { useAgentRunChat } from "../hooks/useAgentRunChat";
 import { formatAgentRunError } from "../features/agent-run/errorMessage";
 import { STREAMDOWN_PLUGINS } from "../features/chat/streamdownPlugins";
 import { isInternalToolResultEcho } from "../features/chat/toolResultEcho";
-import { collectAssistantProcess } from "../features/chat/assistantProcess";
+import { collectAssistantProcessRuns } from "../features/chat/assistantProcess";
 import { useLocalSession } from "../features/local-session/useLocalSession";
 import { SettingsPanel } from "../features/desktop/SettingsPanel";
 import { saveStoredModel } from "../features/local-session/storage";
@@ -964,7 +964,14 @@ export function AssistantPanel({
             style={{ display: "flex", flex: 1, minHeight: 0, flexDirection: "column", overflow: "hidden" }}
           >
           {panelView === "user" ? (
-            <SettingsPanel mcp={mcp} onRestartTour={restartOnboardingTour} />
+            <SettingsPanel
+              mcp={mcp}
+              onRestartTour={restartOnboardingTour}
+              thinkingEnabled={thinkingEnabled}
+              thinkingSupported={thinkingSupported}
+              thinkingEffort={thinkingEffort}
+              modelLabel={selectedModelOption?.label ?? selectedModel}
+            />
           ) : (
         <>
           <Box
@@ -1103,13 +1110,16 @@ export function AssistantPanel({
                 </Box>
               )}
               {messages.map((message) => {
-                const process = message.role === "assistant"
-                  ? collectAssistantProcess(message.parts, isAgentDisplayToolPart)
-                  : null;
-                const processIndexes = new Set(process?.entries.map(({ index }) => index) ?? []);
-                const processActive = Boolean(
-                  process && isStreaming && message.id === messages.at(-1)?.id,
-                );
+                const processRuns = message.role === "assistant"
+                  ? collectAssistantProcessRuns(
+                    message.parts,
+                    isAgentDisplayToolPart,
+                    (_part, index) => isInternalToolResultEcho(message.parts, index),
+                  )
+                  : [];
+                const processByFirstIndex = new Map(processRuns.map((process) => [process.firstIndex, process]));
+                const processIndexes = new Set(processRuns.flatMap((process) => process.entries.map(({ index }) => index)));
+                const activeProcessIndex = processRuns.at(-1)?.firstIndex;
                 return (
                   <Box
                   key={message.id}
@@ -1125,11 +1135,17 @@ export function AssistantPanel({
                   }}
                 >
                     {message.parts.map((part, index) => {
-                    if (process && index === process.firstIndex) {
+                    const process = processByFirstIndex.get(index);
+                    if (process) {
                       return (
                         <AssistantProcess
                           key={index}
-                          active={processActive}
+                          active={Boolean(
+                            isStreaming
+                            && message.id === messages.at(-1)?.id
+                            && index === activeProcessIndex
+                            && !process.hasFinalContent
+                          )}
                           process={process}
                           labels={{
                             active: t("panel.process.active"),

@@ -1,5 +1,5 @@
 import type { AgentRunLedgerRecord, AgentRunStatus, AgentRunToolRecord } from "./run-ledger";
-import type { GeoGebraCommandSearchScope } from "./geogebra-command-reference";
+import type { GeoGebraCommandTagMatch } from "./geogebra-command-reference";
 
 export type GeoGebraCommandUsageItem = {
   commandName: string;
@@ -13,8 +13,8 @@ export type GeoGebraCommandUsageItem = {
   sampleCommands: string[];
 };
 
-export type GeoGebraCommandSearchScopeUsageItem = {
-  scope: GeoGebraCommandSearchScope | "unknown";
+export type GeoGebraCommandSearchTagUsageItem = {
+  tag: string;
   count: number;
   runCount: number;
   firstSeenAt: string | null;
@@ -23,7 +23,8 @@ export type GeoGebraCommandSearchScopeUsageItem = {
 
 export type GeoGebraCommandSearchQueryUsageItem = {
   query: string;
-  scope: GeoGebraCommandSearchScope | "unknown";
+  tags: string[];
+  tagMatch: GeoGebraCommandTagMatch;
   count: number;
   runCount: number;
   firstSeenAt: string | null;
@@ -56,7 +57,7 @@ export type GeoGebraCommandUsageStats = {
   runQuality: AgentRunQualitySummary;
   runQualityItems: AgentRunQualityItem[];
   commands: GeoGebraCommandUsageItem[];
-  searchScopes: GeoGebraCommandSearchScopeUsageItem[];
+  searchTags: GeoGebraCommandSearchTagUsageItem[];
   searchQueries: GeoGebraCommandSearchQueryUsageItem[];
 };
 
@@ -65,7 +66,7 @@ type MutableUsageItem = Omit<GeoGebraCommandUsageItem, "runCount"> & {
   toolCallIds: Set<string>;
 };
 
-type MutableSearchScopeUsageItem = Omit<GeoGebraCommandSearchScopeUsageItem, "runCount"> & {
+type MutableSearchTagUsageItem = Omit<GeoGebraCommandSearchTagUsageItem, "runCount"> & {
   runIds: Set<string>;
 };
 
@@ -75,7 +76,7 @@ type MutableSearchQueryUsageItem = Omit<GeoGebraCommandSearchQueryUsageItem, "ru
 
 export function collectGeoGebraCommandUsageStats(runs: readonly AgentRunLedgerRecord[], generatedAt = new Date().toISOString()): GeoGebraCommandUsageStats {
   const commands = new Map<string, MutableUsageItem>();
-  const searchScopes = new Map<string, MutableSearchScopeUsageItem>();
+  const searchTags = new Map<string, MutableSearchTagUsageItem>();
   const searchQueries = new Map<string, MutableSearchQueryUsageItem>();
   const runQualityItems: AgentRunQualityItem[] = [];
   const runQuality = createEmptyRunQualitySummary();
@@ -95,7 +96,7 @@ export function collectGeoGebraCommandUsageStats(runs: readonly AgentRunLedgerRe
       }
       if (tool.toolName === "searchGeoGebraCommands") {
         searchToolCallCount += 1;
-        collectSearchToolUsage(searchScopes, searchQueries, run, tool);
+        collectSearchToolUsage(searchTags, searchQueries, run, tool);
       }
     }
   }
@@ -109,7 +110,7 @@ export function collectGeoGebraCommandUsageStats(runs: readonly AgentRunLedgerRe
     runQuality,
     runQualityItems,
     commands: [...commands.values()].map(finalizeCommandUsageItem).sort(compareCommandUsageItems),
-    searchScopes: [...searchScopes.values()].map(finalizeSearchScopeUsageItem).sort((a, b) => b.count - a.count || a.scope.localeCompare(b.scope)),
+    searchTags: [...searchTags.values()].map(finalizeSearchTagUsageItem).sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag)),
     searchQueries: [...searchQueries.values()].map(finalizeSearchQueryUsageItem).sort(compareSearchQueryUsageItems)
   };
 }
@@ -190,33 +191,36 @@ function collectExecuteToolUsage(commands: Map<string, MutableUsageItem>, run: A
 }
 
 function collectSearchToolUsage(
-  searchScopes: Map<string, MutableSearchScopeUsageItem>,
+  searchTags: Map<string, MutableSearchTagUsageItem>,
   searchQueries: Map<string, MutableSearchQueryUsageItem>,
   run: AgentRunLedgerRecord,
   tool: AgentRunToolRecord
 ) {
   const args = searchArgs(tool.args);
-  const scope = args.scope ?? "unknown";
+  const tags = args.tags.length > 0 ? args.tags : ["untagged"];
   const query = args.query?.trim() || "(empty)";
   const seenAt = tool.completedAt ?? tool.startedAt;
 
-  const scopeItem = searchScopes.get(scope) ?? {
-    scope,
-    count: 0,
-    runIds: new Set<string>(),
-    firstSeenAt: null,
-    lastSeenAt: null
-  };
-  scopeItem.count += 1;
-  scopeItem.runIds.add(run.runId);
-  scopeItem.firstSeenAt = earliestTimestamp(scopeItem.firstSeenAt, tool.startedAt);
-  scopeItem.lastSeenAt = latestTimestamp(scopeItem.lastSeenAt, seenAt);
-  searchScopes.set(scope, scopeItem);
+  for (const tag of tags) {
+    const tagItem = searchTags.get(tag) ?? {
+      tag,
+      count: 0,
+      runIds: new Set<string>(),
+      firstSeenAt: null,
+      lastSeenAt: null
+    };
+    tagItem.count += 1;
+    tagItem.runIds.add(run.runId);
+    tagItem.firstSeenAt = earliestTimestamp(tagItem.firstSeenAt, tool.startedAt);
+    tagItem.lastSeenAt = latestTimestamp(tagItem.lastSeenAt, seenAt);
+    searchTags.set(tag, tagItem);
+  }
 
-  const queryKey = `${scope}\u0000${query.toLowerCase()}`;
+  const queryKey = `${args.tagMatch}\u0000${tags.join("\u0000")}\u0000${query.toLowerCase()}`;
   const queryItem = searchQueries.get(queryKey) ?? {
     query,
-    scope,
+    tags,
+    tagMatch: args.tagMatch,
     count: 0,
     runIds: new Set<string>(),
     firstSeenAt: null,
@@ -327,12 +331,22 @@ function safeSerializeToolPayload(tool: AgentRunToolRecord) {
 }
 
 function searchArgs(args: unknown) {
-  if (!args || typeof args !== "object") return {};
-  const payload = args as { query?: unknown; scope?: unknown };
+  if (!args || typeof args !== "object") return { tags: [], tagMatch: "any" as const };
+  const payload = args as { query?: unknown; tags?: unknown; tagMatch?: unknown };
   return {
     query: typeof payload.query === "string" ? payload.query : undefined,
-    scope: typeof payload.scope === "string" ? payload.scope as GeoGebraCommandSearchScope : undefined
+    tags: normalizeSearchTags(payload.tags),
+    tagMatch: payload.tagMatch === "all" ? "all" as const : "any" as const
   };
+}
+
+function normalizeSearchTags(tags: unknown) {
+  if (!Array.isArray(tags)) return [];
+  return [...new Set(tags
+    .filter((tag): tag is string => typeof tag === "string")
+    .map((tag) => tag.trim().toLowerCase())
+    .filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b));
 }
 
 function createCommandUsageItem(commandName: string): MutableUsageItem {
@@ -364,9 +378,9 @@ function finalizeCommandUsageItem(item: MutableUsageItem): GeoGebraCommandUsageI
   };
 }
 
-function finalizeSearchScopeUsageItem(item: MutableSearchScopeUsageItem): GeoGebraCommandSearchScopeUsageItem {
+function finalizeSearchTagUsageItem(item: MutableSearchTagUsageItem): GeoGebraCommandSearchTagUsageItem {
   return {
-    scope: item.scope,
+    tag: item.tag,
     count: item.count,
     runCount: item.runIds.size,
     firstSeenAt: item.firstSeenAt,
@@ -377,7 +391,8 @@ function finalizeSearchScopeUsageItem(item: MutableSearchScopeUsageItem): GeoGeb
 function finalizeSearchQueryUsageItem(item: MutableSearchQueryUsageItem): GeoGebraCommandSearchQueryUsageItem {
   return {
     query: item.query,
-    scope: item.scope,
+    tags: item.tags,
+    tagMatch: item.tagMatch,
     count: item.count,
     runCount: item.runIds.size,
     firstSeenAt: item.firstSeenAt,
@@ -390,7 +405,10 @@ function compareCommandUsageItems(a: GeoGebraCommandUsageItem, b: GeoGebraComman
 }
 
 function compareSearchQueryUsageItems(a: GeoGebraCommandSearchQueryUsageItem, b: GeoGebraCommandSearchQueryUsageItem) {
-  return b.count - a.count || a.scope.localeCompare(b.scope) || a.query.localeCompare(b.query);
+  return b.count - a.count
+    || a.tagMatch.localeCompare(b.tagMatch)
+    || a.tags.join("\u0000").localeCompare(b.tags.join("\u0000"))
+    || a.query.localeCompare(b.query);
 }
 
 function earliestTimestamp(current: string | null, candidate?: string | null) {

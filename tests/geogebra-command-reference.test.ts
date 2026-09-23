@@ -36,14 +36,16 @@ describe("GeoGebra command reference", () => {
     const result = searchGeoGebraCommandReference("Circle", 3, "en-US");
     expect(result[0]?.command).toBe("Circle");
     expect(result[0]?.syntax).toContain("Circle( <Point>, <Radius Number> )");
-    expect(searchGeoGebraCommandReference("perpendicular bisector plane", 3, "en-US", "geometry-3d")[0]?.command).toBe(
+    expect(searchGeoGebraCommandReference("perpendicular bisector plane", 3, "en-US", {
+      tags: ["category:3d"]
+    })[0]?.command).toBe(
       "PlaneBisector"
     );
   });
 
   test("can retrieve every runtime command by its exact executable name without changing its parameters", () => {
     for (const entry of GEOGEBRA_COMMAND_REFERENCE) {
-      expect(searchGeoGebraCommandReference(entry.command, 1, "en-US", "global")[0]).toMatchObject({
+      expect(searchGeoGebraCommandReference(entry.command, 1, "en-US")[0]).toMatchObject({
         command: entry.command,
         syntax: entry.syntaxEn
       });

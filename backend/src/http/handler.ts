@@ -12,6 +12,7 @@ import { handleMigrationRoute } from "./routes/migration";
 import { handleNativeChatRoute } from "./routes/native-chat";
 import { handleProblemBankRoute } from "./routes/problem-bank";
 import { handleProviderProxyRoute } from "./routes/provider-proxy";
+import { handleSkillCatalogRoute } from "./routes/skills";
 
 type AuthenticatedDataScope = (
   request: Request
@@ -83,6 +84,9 @@ async function routeRequest(
 
   const healthOrAssetResponse = await handleHealthAndAssetRoute(request, url, context);
   if (healthOrAssetResponse) return healthOrAssetResponse;
+
+  const skillCatalogResponse = await handleSkillCatalogRoute(request, url);
+  if (skillCatalogResponse) return skillCatalogResponse;
 
   const conversationResponse = await handleConversationRoute(request, url, context, authenticateDataScope);
   if (conversationResponse) return conversationResponse;

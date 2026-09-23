@@ -79,6 +79,9 @@ jobs:
       - name: Validate benchmark suite
         run: bun run benchmark:validate
 
+      - name: Prepare Tauri resources
+        run: bun run tauri:prepare
+
       - name: Test Tauri Rust shell
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
@@ -93,12 +96,6 @@ jobs:
           name: geochat-harness-evals-${{ github.sha }}
           if-no-files-found: warn
           path: .artifacts/agent-harness-evals.xml
-
-      # The renderer bundle is where a removed dependency export actually
-      # surfaces (lucide-solid 1.x did exactly this). Building it here means
-      # that failure costs a Linux minute, not two platform builds.
-      - name: Build renderer bundle
-        run: bun run tauri:renderer:build
 
   package:
     name: Package (${{ matrix.platform }})

@@ -376,7 +376,11 @@ function verifyWebsite(version) {
   while (Date.now() < deadline) {
     const home = tryFetchText(`${base}/`);
     const download = tryFetchText(`${base}/download`);
-    if (home?.includes("/download") && download?.includes(version)) {
+    if (
+      home?.includes("/download") &&
+      download &&
+      (download.includes(version) || deployedScriptsIncludeVersion(`${base}/download`, download, version))
+    ) {
       console.log(`Website download link synchronized: ${base}/download (${version})`);
       return;
     }
@@ -384,6 +388,17 @@ function verifyWebsite(version) {
     sleep(10);
   }
   fail(`Published website does not yet expose version ${version}.`);
+}
+
+function deployedScriptsIncludeVersion(pageUrl, html, version) {
+  const scriptSources = Array.from(
+    html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi),
+    (match) => match[1]
+  );
+  return scriptSources.some((source) => {
+    const scriptUrl = new URL(source, pageUrl).toString();
+    return tryFetchText(scriptUrl)?.includes(version);
+  });
 }
 
 function tryFetchJson(url) {

@@ -1,5 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import {
   benchmarkSuiteHash,
   validateBenchmarkSuite,
@@ -43,7 +43,8 @@ const suiteDir = dirname(suitePath);
 if (Array.isArray(suite.cases)) {
   for (const benchmarkCase of suite.cases) {
     const casePath = resolve(suiteDir, benchmarkCase.path);
-    if (!casePath.startsWith(`${suiteDir}/`)) {
+    const relativeCasePath = relative(suiteDir, casePath);
+    if (relativeCasePath === "" || relativeCasePath.startsWith("..") || isAbsolute(relativeCasePath)) {
       errors.push(`${benchmarkCase.path} [invalid_path] Case escapes the suite directory.`);
       continue;
     }

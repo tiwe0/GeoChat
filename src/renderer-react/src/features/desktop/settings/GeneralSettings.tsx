@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import FolderOpenRounded from "@mui/icons-material/FolderOpenRounded";
 import { Box, Stack, Typography, FormControlLabel, Switch, Button, IconButton, MenuItem, TextField, Tooltip } from "@mui/material";
 import { useTranslation } from "react-i18next";
@@ -6,8 +5,9 @@ import type { DesktopLogLevel } from "../../../../../shared/desktop-api";
 import { UpdateSection } from "../UpdateSection";
 import type { McpController } from "../useMcpState";
 import { useLoggingState } from "../useLoggingState";
+import { ProblemBankCacheSettings } from "./ProblemBankCacheSettings";
 import { SettingsDisclosure } from "./SettingsDisclosure";
-import { SettingsHint } from "./SettingsHint";
+import { SettingsSection } from "./SettingsSection";
 
 const LOG_LEVELS: DesktopLogLevel[] = ["error", "warn", "info", "debug", "trace"];
 
@@ -21,6 +21,7 @@ export function GeneralSettings({ mcp, onRestartTour }: { mcp: McpController; on
       <TourSection onRestartTour={onRestartTour} />
       <UpdateSection />
       <LoggingSection />
+      <ProblemBankCacheSettings />
       <McpSection mcp={mcp} />
     </Box>
   );
@@ -149,20 +150,5 @@ function McpSection({ mcp }: { mcp: McpController }) {
         <Box className="settings-inline-detail">{detail}</Box>
       </SettingsDisclosure>
     </SettingsSection>
-  );
-}
-
-function SettingsSection(props: { title: string; description: string; children: ReactNode }) {
-  return (
-    <Box component="section" className="settings-section">
-      <Box className="settings-section-copy">
-        <SettingsHint text={props.description}>
-          <Typography component="span" variant="subtitle2" sx={{ fontWeight: 750 }}>{props.title}</Typography>
-        </SettingsHint>
-      </Box>
-      <Stack className="settings-section-controls" spacing={1.25}>
-        {props.children}
-      </Stack>
-    </Box>
   );
 }

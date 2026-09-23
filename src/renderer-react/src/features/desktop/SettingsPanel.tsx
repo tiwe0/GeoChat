@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import InfoOutlined from "@mui/icons-material/InfoOutlined";
 import LibraryBooksOutlined from "@mui/icons-material/LibraryBooksOutlined";
+import ExtensionOutlined from "@mui/icons-material/ExtensionOutlined";
 import SettingsOutlined from "@mui/icons-material/SettingsOutlined";
 import TuneRounded from "@mui/icons-material/TuneRounded";
 import { Box, Stack, Tab, Tabs } from "@mui/material";
@@ -9,6 +10,7 @@ import { ModelSettings } from "./settings/ModelSettings";
 import { GeneralSettings } from "./settings/GeneralSettings";
 import { AboutSettings } from "./settings/AboutSettings";
 import { ProblemBankSettings } from "./settings/ProblemBankSettings";
+import { SkillsSettings } from "./settings/SkillsSettings";
 import type { McpController } from "./useMcpState";
 
 /**
@@ -23,7 +25,7 @@ import type { McpController } from "./useMcpState";
  * implementation structure. These sections instead represent user-facing
  * concerns: model setup, app behaviour, and project info.
  */
-const TABS = ["model", "problemBank", "general", "about"] as const;
+const TABS = ["model", "problemBank", "skills", "general", "about"] as const;
 type SettingsTab = (typeof TABS)[number];
 
 export function SettingsPanel(props: { mcp: McpController; onRestartTour: () => void }) {
@@ -35,6 +37,7 @@ export function SettingsPanel(props: { mcp: McpController; onRestartTour: () => 
   const tabIcons = {
     model: <TuneRounded fontSize="small" />,
     problemBank: <LibraryBooksOutlined fontSize="small" />,
+    skills: <ExtensionOutlined fontSize="small" />,
     general: <SettingsOutlined fontSize="small" />,
     about: <InfoOutlined fontSize="small" />,
   } as const;
@@ -102,6 +105,15 @@ export function SettingsPanel(props: { mcp: McpController; onRestartTour: () => 
             hidden={tab !== "problemBank"}
           >
             <ProblemBankSettings />
+          </Box>
+          <Box
+            id="settings-panel-skills"
+            className="settings-tab-panel"
+            role="tabpanel"
+            aria-labelledby="settings-tab-skills"
+            hidden={tab !== "skills"}
+          >
+            <SkillsSettings />
           </Box>
           <Box
             id="settings-panel-general"

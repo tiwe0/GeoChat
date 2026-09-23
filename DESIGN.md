@@ -2,107 +2,116 @@
 
 ## Source of truth
 - Status: Active
-- Last refreshed: 2026-09-13
-- Primary product surfaces: Tauri desktop workbench, GeoGebra canvas, floating AI chat panel, problem-bank browser, local settings dialog, update panels, sponsor/about page.
-- Evidence reviewed: `README.md`, `docs/current-project-state.md`, `docs/product-design-optimization-plan.md`, `src/renderer-react/src/components/AssistantPanel.tsx`, `src/renderer-react/src/components/AgentToolResult.tsx`, `src/renderer-react/src/features/geogebra/choiceScenario.ts`, `src/renderer-react/src/features/desktop/SettingsPanel.tsx`, and current renderer styles.
+- Last refreshed: 2026-09-23
+- Primary product surfaces: Tauri desktop workbench, GeoGebra canvas, floating AI chat panel, problem-bank browser, settings dialog, update controls, sponsor/about page.
+- Evidence reviewed: current source-dev settings screenshot, `src/renderer-react/src/components/AssistantPanel.tsx`, `src/renderer-react/src/features/desktop/SettingsPanel.tsx`, `src/renderer-react/src/features/desktop/settings/ProblemBankSettings.tsx`, `src/renderer-react/src/features/desktop/settings/problemBankApi.ts`, `packages/app/src/problem-bank.ts`, and `docs/problem-bank-versioned-cache-design.md`.
+- Supporting feature brief: `docs/problem-bank-ui-interaction-plan.md`.
 
 ## Brand
 - Personality: quiet, precise, lightweight, mathematically focused.
-- Trust signals: local-first desktop runtime, visible GeoGebra canvas state, restrained system UI, clear status chips.
-- Avoid: heavy glassmorphism, large decorative gradients, nested card stacks, marketing-page weight inside the workbench, oversized shadows.
+- Trust signals: canvas-first composition, restrained native-utility styling, explicit local/cloud source labels, visible cache and license state, reversible actions.
+- Avoid: heavy glassmorphism, decorative gradients, nested card stacks, dashboard density, promotional copy inside the workbench, and controls that silently trigger AI or canvas writes.
 
 ## Product goals
-- Goals: make GeoGebra the primary workspace; keep AI chat immediately available without dominating; expose local model/config tools cleanly.
-- Non-goals: account-centric SaaS UX, promotional landing page, decorative visual showcase.
-- Success signals: the canvas reads first, chat feels movable and calm, settings feel like a native utility panel, QR/sponsor content is clear without visual noise.
+- Goals: keep GeoGebra as the primary workspace; make problem discovery and reuse fast; keep model, cache, and app configuration understandable; preserve work when moving between chat, settings, and the problem bank.
+- Non-goals: account-centric SaaS navigation, a full learning-management system, a web-store catalog, or automatic submission of a selected problem to the model.
+- Success signals: users can identify the active problem-bank version, browse cached content offline, find a problem with a few filters, preview its provenance and reuse policy, then deliberately bring it into the current conversation without losing canvas or draft state.
 
 ## Personas and jobs
-- Primary personas: desktop user exploring math problems, developer testing AI function calls, educator preparing visual explanations.
-- User jobs: input a math problem, browse a configured problem bank, execute GeoGebra commands, inspect canvas state, adjust local model/UI/settings choices, export `.ggb`.
-- Key contexts of use: long desktop sessions, repeated scanning between canvas and chat, local backend/app runtime debugging.
+- Primary personas: learner exploring a geometry problem, educator selecting a visual example, developer validating AI tool calls and datasets.
+- User jobs: find a suitable problem, inspect prompt/media/answer metadata, send a problem to chat, analyze it on the canvas, manage local/cloud cache, execute GeoGebra commands, and export `.ggb` work.
+- Key contexts of use: long desktop sessions, repeated scanning between canvas and the floating panel, intermittent network access, and local runtime debugging.
 
 ## Information architecture
-- Primary navigation: top bar with workbench views and concise runtime status.
-- Core routes/screens: chat workbench, problem-bank browser, blackboard/settings dialog, sponsor/about surface.
-- Content hierarchy: canvas first, floating chat second, status/config controls third.
-- Settings dialog IA: use a left sidebar for modules and a right detail pane for the selected module. Model, Skills, MCP, Tasks, About, Credits, and Debug are peer modules. Keep internal developer/debug controls under Debug, not mixed into user task history. Put future Agent skill and MCP configuration behind their own sidebar modules, even while they are still in development.
+- Primary hierarchy: GeoGebra canvas first, floating assistant second, transient drawers and configuration third.
+- Assistant views: `chat` and `settings`. Conversation, composer draft, attachments, canvas, panel position, and panel size remain intact when changing views.
+- Chat header actions: history/title, new conversation, blackboard, problem bank, language, settings, minimize. The problem-bank entry is a visible icon button with a tooltip, not hidden inside settings.
+- Problem-bank browser: an animated companion card opens immediately to the right of the chat panel, stays equal to the panel height, scrolls independently, and can be retracted from either the header trigger or its close button. On constrained widths it becomes a right-edge overlay rather than forcing the whole workspace off-screen.
+- Problem-bank navigation inside the companion card is catalog -> filtered results -> problem detail. Back first returns from detail to results; closing the card returns focus to its chat-header trigger.
+- Settings modules: Model, Problem Bank, General, About. The Problem Bank module manages sources, versions, sync, and per-bank downloads; General owns shared local storage controls such as the problem-bank cache directory and cache clearing. Settings do not become the browsing surface.
+- Source model: local built-in sets and the active cloud release appear in one catalog, but every bank/problem keeps an explicit source badge and release/provenance metadata.
+
+### Problem-bank experience
+- Problem Bank settings: one compact summary row shows availability and total entries. Source rows expose local reindexing, cloud metadata sync, per-bank offline status, and resumable downloads.
+- General settings: the problem-bank cache row shows total cache size and directory, with right-aligned open-folder and clear-cache actions.
+- Browser catalog: bank cards show title, source, problem count, media count, access tier, reuse policy, and offline availability. Reuse policy must not be inferred from public readability.
+- Results: persistent search field, compact filter button/chips, result count, and virtualizable result rows. Initial facets are dataset, grade, construction, modality, and media presence.
+- Detail: prompt and media are primary; answer/analysis is collapsed by default; dataset, release, license, and reuse policy remain visible. Restricted or unknown reuse receives a neutral warning before any downstream action.
+- Handoff: `发送到对话` returns to chat and pre-fills the composer with a structured problem reference plus readable prompt. It never auto-sends. `在画板中分析` also returns to chat with a canvas-analysis instruction; it never mutates GeoGebra before the user submits.
+- Offline behavior: continue showing the active verified cache, mark stale data without blocking it, disable only network-dependent actions, and provide one retry control.
 
 ## Design principles
-- Principle 1: Canvas-first calm. UI overlays should frame the canvas, not compete with it.
-- Principle 2: Desktop utility over web landing. Prefer crisp controls, thin borders, low elevation, and compact copy.
-- Tradeoffs: keep enough contrast for status and active controls while reducing saturated color and deep shadow.
+- Canvas-first calm: overlays frame the mathematical workspace instead of competing with it.
+- Progressive disclosure: show the next meaningful choice; reveal filters, cache details, answers, and storage controls only when relevant.
+- Explicit side effects: browsing is read-only; chat submission, downloads, deletion, and canvas changes require a deliberate action.
+- Source transparency: local/cloud, release, cache, access tier, and reuse policy are inspectable wherever they affect trust or availability.
+- Tradeoff: dense desktop utility controls are acceptable, but the default surface must remain visually sparse.
 
 ## Visual language
-- Color: near-white surfaces, graphite text, muted blue as the only primary action accent, soft green for healthy runtime.
-- Typography: system sans, compact hierarchy, no viewport-scaled type.
-- Spacing/layout rhythm: 8px base rhythm with dense but breathable controls.
-- Shape/radius/elevation: 10-14px controls, 16px movable/modal surfaces, shadows below 10% opacity; persistent canvas-adjacent surfaces use solid fills, reserving blur for shallow modal dimming only.
-- Motion: simple state transitions only when added; no ambient animation.
-- Imagery/iconography: lucide icons in controls; real QR image only where sponsor content needs it.
+- Color: near-white surfaces, graphite text, muted blue for primary actions, soft green for healthy/local-ready states, amber for stale/restricted states, red only for actionable failures.
+- Typography: system sans; compact hierarchy; one strong title per panel; no viewport-scaled type.
+- Spacing/layout rhythm: 8px base rhythm, 12-16px card padding, consistent right-aligned actions, and no control pairs touching without at least 8px separation.
+- Shape/radius/elevation: 10-14px controls, 16px panel/modal surfaces, thin borders, shadows below 10% opacity.
+- Motion: a 160-220ms opacity/8-28px directional transition for panel views and the problem-bank companion card, plus height/opacity transition for disclosure. Respect reduced motion and avoid reflow-heavy animation.
+- Imagery/iconography: MUI/lucide-style outline icons in controls; problem media is content, never decoration.
 
-### Settings Visual Language
-- Layout: the settings dialog is a utility panel with a fixed header/footer, a left module sidebar, and a scrollable right content pane. On desktop the sidebar is vertical and the Debug module sits at the bottom; on narrow screens the sidebar becomes a horizontal tab strip and Debug rejoins the normal tab flow.
-- Cards: repeated configuration groups use `SectionCard`. Short peer cards may sit in a two-column grid; long or primary sections span the full width with `config-card-wide`. Do not force equal heights across unlike content. Give compact summary cards a dedicated class and opt out of generic card `min-height` when their content is intentionally short.
-- Module headers: settings summary cards use the MCP page pattern: `config-module-card` + `mcp-setting` + `mcp-setting-main`, with the icon/title and body copy on the left and status or action on the right. Do not introduce a one-off header wrapper for Tasks or other modules.
-- Configuration modules: module detail pages such as Skills, MCP, and Debug use `config-module-card` so they share the same card sizing and spacing. Incomplete modules say "开发中" / "In development" inside the card, not "占位", "未配置", or disabled/error language.
-- Collapsible model sections: model, vision, and advanced endpoint settings use `config-collapsible-card`. The summary row contains an icon, title, one-line helper text, and a chevron. Collapsed sections should shrink to the summary row; do not leave empty vertical space below them.
-- Capability status: capability cards use semantic status color plus an icon. Ready is soft green; blocked is soft red. The circular status icon inherits the card status color and renders the check or X in white so it remains visible. Capability copy should explain the actual runtime consequence, not just repeat the label.
-- Status pills: use `status-pill` variants consistently. Green means active/healthy, yellow means checking/available/in development, red means blocked/error/disabled. Do not use red disabled styling for a feature that is merely under development.
-- Developer controls: local debug surfaces and internal MCP inspection controls belong under Debug. Product-facing MCP configuration means Agent-calling-external-MCP capability and belongs under the MCP module.
-- About page: use a 2x2 information layout. Top row is Project on the left and Author on the right; bottom row is Update on the left and Improvement Plan on the right. Update information stays compact: show current version, update availability, and one primary update action instead of exposing every shell/app-bundle track and auto-update preference on this page.
-- Copy: settings microcopy should be direct and operational. Prefer "开发中" for unfinished product modules, "本机调试 MCP" for internal debug MCP, and "MCP" for the product module. Avoid implementation placeholders becoming user-facing labels.
+### Settings visual language
+- Layout: fixed title bar, vertical module navigation on desktop, horizontal tabs on narrow layouts, and one scrollable detail pane.
+- Cards: configuration groups use one bordered surface; rows inside it use dividers rather than nested cards.
+- Action alignment: refresh, check, sync, reindex, and open-folder actions occupy a consistent right-side action column.
+- Copy: keep primary labels visible and move explanatory text into tooltips or contextual status lines. Do not hide state, version, license, or destructive consequences in hover-only content.
+- Collapsible content: collapsed rows shrink to their summary height; expanded content aligns with the value column and animates height/opacity without shifting unrelated rows.
 
-### Choice Analysis Cards
-- Purpose: render a multiple-choice result as a structured card inside the assistant message. The model chooses the presentation mode from the problem shape; users should not have to configure a card mode.
-- Modes:
-  - `decision_grid` (default): all options remain visible in a compact 2-column desktop grid and single-column narrow layout. Each option shows its label, claim, verdict, and one-line reason. Use for ordinary single- or multiple-select questions.
-  - `proof_stack`: a vertical evidence-first list. Each option shows verdict, explanation, and evidence bullets; use when the distinction between options needs a longer proof. Keep the final answer pinned in the card header.
-  - `canvas_scenario`: the card shows one option's canvas evidence at a time. A small segmented control can request another option preview, but rendering the card must not mutate the canvas automatically. Every preview starts from the captured shared baseline and runs only that option's commands.
-- Information hierarchy: card eyebrow `选择题分析` / `Choice analysis` → final answer banner (when known) → shared conditions (collapsible when long) → option content → optional canvas action → auxiliary-element review.
-- Verdict semantics: use icon + text (`正确`, `错误`, `待确认`) rather than color alone. Green is reserved for correct, red for incorrect, and amber for uncertain; do not use a red disabled treatment for unknown evidence.
-- Interaction rules: selecting an option only changes the preview when `canvas_scenario` is active; it never changes the recorded verdict. The `全部` state restores the captured baseline. Keyboard focus must be visible and option controls must have labels such as `在画板中查看选项 A`.
-- LLM contract: the tool must provide one entry per option (normally A–D), a non-empty statement, verdict, and explanation. `canvas_scenario` requires non-empty `constructionFocus` and executable option-only `commands`; `decision_grid` and `proof_stack` may omit commands. `text_only` is a compatibility input only and must be normalized to `decision_grid` for visual choice prompts.
-- Failure fallback: if a mode or option evidence is invalid, render `decision_grid` with the available text and an inline diagnostic; do not block the whole assistant message or issue an automatic canvas write.
-- Responsive behavior: at ≤720px, stack option cards, keep the answer banner sticky within the card only, and move preview controls below the option explanation. Never allow long statements or LaTeX to force horizontal scrolling.
+### Choice analysis cards
+- `decision_grid`: default compact grid for ordinary option comparison.
+- `proof_stack`: evidence-first vertical list for longer reasoning.
+- `canvas_scenario`: one option's canvas evidence at a time; previews start from a captured baseline and never mutate the recorded verdict.
+- Verdicts use icon and text, not color alone. Invalid evidence falls back to `decision_grid` with an inline diagnostic rather than blocking the message.
 
 ## Components
-- Existing components to reuse: `IconButton`, `FloatingChatPanel`, `ConfigDialog`, `ProblemBankPage`, `SponsorPage`, `SectionCard`, `BlackboardPanel`.
-- New/changed components: no new component layer; restyle existing components. Settings-specific classes include `config-card-wide`, `config-collapsible-card`, `config-module-card`, `config-module-note`, and `config-capability-status`.
-- Variants and states: active nav, online/offline chips, disabled tools, loading/error diagnostics, capability ready/blocked, and development-state pills.
-- Token/component ownership: `src/renderer/src/styles.css` owns visual tokens and component styling.
+- Existing components to reuse: MUI `IconButton`, `Tooltip`, `Tabs`, `Chip`, `Skeleton`, existing floating panel/title bar, `ConversationDrawer`, `BlackboardDrawer`, settings section patterns, and problem-bank contract types from `@geochat-ai/app`.
+- New components: `ProblemBankSidecar`, `ProblemBankCatalog`, `ProblemBankFilters`, `ProblemResultList`, `ProblemDetail`, `ProblemBankSourceRow`, `ProblemBankSyncProgress`, and a structured `ProblemReference` composer attachment.
+- Variants/states: local/cloud, open/restricted, cached/remote-only/stale, idle/checking/syncing/ready/error, list/detail, answer collapsed/expanded.
+- Token ownership: MUI theme plus `src/renderer-react/src/styles.css`; do not introduce a parallel design system or new styling dependency.
 
 ## Accessibility
-- Target standard: pragmatic WCAG AA contrast for text and controls.
-- Keyboard/focus behavior: native controls stay reachable; icon buttons require titles.
-- Contrast/readability: avoid low-contrast glass overlays over canvas; use solid or near-solid panels.
-- Screen-reader semantics: keep button labels/titles meaningful.
-- Reduced motion and sensory considerations: no decorative animation.
+- Target: WCAG AA contrast for text and controls.
+- Keyboard/focus: all header actions, catalog cards, filters, result rows, disclosures, and detail actions are keyboard reachable with visible focus. Focus returns to the invoking item after closing detail or filters.
+- Semantics: icon-only buttons require localized accessible names and tooltips; sync progress uses `aria-live="polite"`; result counts and errors are announced without moving focus.
+- Media: use provided alt text; otherwise use a localized problem-image fallback rather than filename text.
+- Reduced motion: replace directional/height animation with an immediate state change or short opacity transition.
 
 ## Responsive behavior
-- Supported breakpoints/devices: desktop primary, narrow fallback down to 360px.
-- Layout adaptations: top bar compresses, panel remains bounded, dialogs collapse to single column.
-- Touch/hover differences: hover is optional; controls must remain visible without hover.
+- Desktop primary; narrow fallback down to 360px panel width.
+- At wide widths, result list and detail may form a master-detail split. At narrow widths, catalog, results, and detail are single-stack views with an explicit back button.
+- Filter controls collapse into a sheet/popover below 720px. Result metadata wraps; prompts and LaTeX never force horizontal scrolling.
+- Hover adds affordance only; all status and actions remain discoverable for touch and keyboard users.
 
 ## Interaction states
-- Loading: short centered diagnostic panel with concrete resource status.
-- Empty: welcome card in chat, visually quiet.
-- Error: explicit text with light red/orange treatment, not full-page alarm styling.
-- Success: green status chips and ready labels.
-- Disabled: reduced opacity only; layout must not shift.
-- In development: yellow status pill, clear "开发中" copy, no disabled/error color unless the user attempted an unavailable action.
-- Offline/slow network, if applicable: status chip and diagnostics show backend/applet state.
+- Loading: skeleton rows preserve the expected catalog/list layout; do not replace the whole panel with a spinner.
+- Empty: distinguish no configured source, no cached source, and no filter matches; each state offers one relevant recovery action.
+- Error: retain usable cached data, place an inline error beside the failed source/action, and offer retry. Never clear the active cache on a failed update.
+- Success: show current release/cache state in the row; transient success copy must not become a permanent banner.
+- Partial publication: if aggregate indexes load but referenced pages/postings/lookup are missing, keep source management available, disable drill-down, and report `题库索引尚未完整发布`.
+- Offline/slow network: serve the most recent verified active release, mark last-checked time, pause download progress safely, and preserve `.part` resume state.
+- Corrupt cache: quarantine the artifact/release, keep the previous verified release active, and expose a repair action.
 
 ## Content voice
-- Tone: direct, local-first, tool-like.
-- Terminology: "本机", "本地 Bun runtime", "GeoGebra 画板", "配置中心".
-- Microcopy rules: no account/cloud sync language; avoid marketing claims inside the workbench.
+- Tone: direct, calm, operational.
+- Terminology: `本地题库`, `云端题库`, `当前版本`, `离线可用`, `检查更新`, `同步`, `发送到对话`, `在画板中分析`.
+- Microcopy: describe user-visible outcomes, not storage internals. Use cloud terminology only for the problem-bank source; do not imply account sync or upload of user work.
+- Warnings: say why access/reuse is limited and what action is unavailable; avoid alarm language for stale but usable data.
 
 ## Implementation constraints
-- Framework/styling system: SolidJS renderer with plain CSS.
-- Design-token constraints: define colors/shadows/radii in `:root`; avoid new design-system dependency.
-- Performance constraints: keep CSS simple; avoid expensive backdrop blur except shallow modal dimming.
-- Compatibility constraints: Tauri/Vite local assets, GeoGebra iframe/canvas must remain visible.
-- Test/screenshot expectations: run `bun run build`; use Browser screenshot for workbench/settings/sponsor after significant visual changes.
+- Framework/styling: React 19, MUI 9, `motion/react`, and repository CSS; no new UI dependency.
+- Data boundary: renderer uses typed Tauri commands/events for versioned cache state and backend APIs for normalized catalog/problem data. It must not own release activation, integrity validation, or direct R2 caching.
+- Performance: paginate/virtualize large lists; cache decoded summaries; lazy-load media and answers; do not render 300k records or download all media by default.
+- Security/licensing: reject cross-origin manifest redirects; never promote restricted/unknown content into commercial or sponsor-only flows without an explicit policy decision.
+- Compatibility: keep GeoGebra visible and mounted while switching panel views. Browser interactions must not remount the applet or reset canvas state.
+- Verification: targeted parser/state tests, React interaction tests for navigation/filter/handoff, Rust cache tests for failure/rollback, typecheck, renderer build, and source-dev screenshots at desktop and narrow widths.
 
 ## Open questions
-- [ ] Final brand wordmark and icon asset / owner: product / impact: current `G` mark is a placeholder.
+- [ ] Decide which restricted/unknown datasets may appear in the public open-source client / owner: product + legal / impact: catalog visibility and downstream actions.
+- [ ] Publish and verify bank pages, facet postings, and problem-id lookup for the active release / owner: data pipeline / impact: browser drill-down remains disabled until complete.
+- [ ] Define initial records/media cache quotas from measured production artifacts / owner: desktop engineering / impact: storage defaults and offline controls.
+- [ ] Confirm whether sponsor status changes access to additional banks or only presentation/theme / owner: product / impact: entitlement copy and filtering.

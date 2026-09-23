@@ -30,7 +30,17 @@ const expectedCommandByMethod = {
   getLoggingPreferences: "get_logging_preferences",
   setLoggingPreferences: "set_logging_preferences",
   openLogDirectory: "open_log_directory",
-  writeAppLog: "write_app_log"
+  writeAppLog: "write_app_log",
+  getProblemBankCacheState: "get_problem_bank_cache_state",
+  getProblemBankCatalog: "get_problem_bank_catalog",
+  checkProblemBankUpdate: "check_problem_bank_update",
+  syncProblemBankMetadata: "sync_problem_bank_metadata",
+  openProblemBankCacheDirectory: "open_problem_bank_cache_directory",
+  clearProblemBankCache: "clear_problem_bank_cache",
+  getProblemBankDownloadStates: "get_problem_bank_download_states",
+  downloadProblemBank: "download_problem_bank",
+  loadProblemBankPage: "load_problem_bank_page",
+  loadProblemDetail: "load_problem_detail"
 } as const;
 
 describe("Tauri desktop bridge contract", () => {
@@ -72,6 +82,18 @@ describe("Tauri desktop bridge contract", () => {
         setLoggingPreferences: "set_logging_preferences",
         openLogDirectory: "open_log_directory",
         writeAppLog: "write_app_log"
+      },
+      problemBank: {
+        getProblemBankCacheState: "get_problem_bank_cache_state",
+        getProblemBankCatalog: "get_problem_bank_catalog",
+        checkProblemBankUpdate: "check_problem_bank_update",
+        syncProblemBankMetadata: "sync_problem_bank_metadata",
+        openProblemBankCacheDirectory: "open_problem_bank_cache_directory",
+        clearProblemBankCache: "clear_problem_bank_cache",
+        getProblemBankDownloadStates: "get_problem_bank_download_states",
+        downloadProblemBank: "download_problem_bank",
+        loadProblemBankPage: "load_problem_bank_page",
+        loadProblemDetail: "load_problem_detail"
       }
     });
 
@@ -79,6 +101,8 @@ describe("Tauri desktop bridge contract", () => {
     expect(Object.keys(api).sort()).toEqual([
       ...Object.keys(expectedCommandByMethod),
       "onAppBundleUpdateState",
+      "onProblemBankCacheState",
+      "onProblemBankDownloadState",
       "onUpdateState"
     ].sort());
   });
@@ -113,6 +137,16 @@ describe("Tauri desktop bridge contract", () => {
     await api.setLoggingPreferences({ enabled: true, level: "debug" });
     await api.openLogDirectory();
     await api.writeAppLog("warn", "Renderer warning");
+    await api.getProblemBankCacheState();
+    await api.getProblemBankCatalog();
+    await api.checkProblemBankUpdate();
+    await api.syncProblemBankMetadata();
+    await api.openProblemBankCacheDirectory();
+    await api.clearProblemBankCache();
+    await api.getProblemBankDownloadStates();
+    await api.downloadProblemBank("gaokao");
+    await api.loadProblemBankPage("gaokao", "2");
+    await api.loadProblemDetail("gaokao", "problem-1");
 
     expect(calls.map((call) => call.command)).toEqual(Object.values(expectedCommandByMethod));
     expect(calls.find((call) => call.command === "set_mcp_enabled")?.args).toEqual({ enabled: true });
@@ -129,6 +163,17 @@ describe("Tauri desktop bridge contract", () => {
       level: "warn",
       message: "Renderer warning"
     });
+    expect(calls.find((call) => call.command === "download_problem_bank")?.args).toEqual({
+      bankSlug: "gaokao"
+    });
+    expect(calls.find((call) => call.command === "load_problem_bank_page")?.args).toEqual({
+      bankSlug: "gaokao",
+      cursor: "2"
+    });
+    expect(calls.find((call) => call.command === "load_problem_detail")?.args).toEqual({
+      bankSlug: "gaokao",
+      problemId: "problem-1"
+    });
   });
 
   test("maps update listeners to stable Tauri event names", async () => {
@@ -137,15 +182,21 @@ describe("Tauri desktop bridge contract", () => {
 
     const disposeUpdate = api.onUpdateState(() => undefined);
     const disposeAppBundle = api.onAppBundleUpdateState(() => undefined);
+    const disposeProblemBank = api.onProblemBankCacheState(() => undefined);
+    const disposeProblemBankDownload = api.onProblemBankDownloadState(() => undefined);
     await Promise.resolve();
 
     expect(events).toEqual([
       TAURI_DESKTOP_EVENTS.shellUpdateState,
-      TAURI_DESKTOP_EVENTS.appBundleUpdateState
+      TAURI_DESKTOP_EVENTS.appBundleUpdateState,
+      TAURI_DESKTOP_EVENTS.problemBankCacheState,
+      TAURI_DESKTOP_EVENTS.problemBankDownloadState
     ]);
 
     disposeUpdate();
     disposeAppBundle();
+    disposeProblemBank();
+    disposeProblemBankDownload();
   });
 
   test("Tauri command names remain backed by Rust command functions", () => {

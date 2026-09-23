@@ -21,12 +21,14 @@ import AddCommentRounded from "@mui/icons-material/AddCommentRounded";
 import MinimizeRounded from "@mui/icons-material/MinimizeRounded";
 import SettingsRounded from "@mui/icons-material/SettingsRounded";
 import KeyboardArrowDownRounded from "@mui/icons-material/KeyboardArrowDownRounded";
+import LibraryBooksOutlined from "@mui/icons-material/LibraryBooksOutlined";
 import { Joyride, STATUS, type Step } from "react-joyride";
 import {
   useLayoutEffect,
   useEffect,
   useRef,
   useState,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
 import { Streamdown } from "streamdown";
@@ -66,6 +68,7 @@ import { BlackboardDrawer } from "./BlackboardDrawer";
 import { OnboardingTooltip } from "./OnboardingTooltip";
 import { ErrorToast } from "./ErrorToast";
 import { BrandIcon } from "./BrandIcon";
+import { ProblemBankSidecar } from "./ProblemBankSidecar";
 import type { ThinkingEffort } from "./ModelMenu";
 import { createDesktopDebugActionExecutor } from "../features/desktop/mcpDebugActions";
 import { useMcpState } from "../features/desktop/useMcpState";
@@ -80,10 +83,14 @@ import { loadModelCatalog, type RuntimeModelOption } from "../features/models/mo
 import { backendAuthToken, backendOrigin } from "../features/desktop/runtime";
 
 const ONBOARDING_TOUR_STORAGE_KEY = "geogebraCopilotOnboardingTourCompleted";
+const ONBOARDING_TOUR_VERSION = 2;
 const THINKING_ENABLED_STORAGE_KEY = "geogebraCopilotThinkingEnabled";
 const LEGACY_REASONING_MODE_STORAGE_KEY = "geogebraCopilotReasoningMode";
 const THINKING_EFFORT_STORAGE_KEY = "geogebraCopilotThinkingEffort";
 const MotionPaper = motion.create(Paper);
+const PROBLEM_BANK_SIDECAR_WIDTH = 380;
+const PROBLEM_BANK_SIDECAR_GAP = 12;
+const PANEL_VIEWPORT_GUTTER = 8;
 
 function compactConversationTitle(value: string) {
   const normalized = value
@@ -194,6 +201,9 @@ export function AssistantPanel({
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [panelView, setPanelView] = useState<"chat" | "user">("chat");
+  const [problemBankOpen, setProblemBankOpen] = useState(false);
+  const problemBankTriggerRef = useRef<HTMLButtonElement>(null);
+  const problemBankRestorePositionRef = useRef<{ left: number; top: number } | null>(null);
   const [modelOptions, setModelOptions] = useState<RuntimeModelOption[]>(loadModelCatalog());
   const modelOptionsRef = useRef<RuntimeModelOption[]>(loadModelCatalog());
   modelOptionsRef.current = modelOptions;
@@ -328,7 +338,7 @@ export function AssistantPanel({
   useEffect(() => {
     void browser.storage.local
       .get(ONBOARDING_TOUR_STORAGE_KEY)
-      .then((stored) => setOnboardingTourReady(stored[ONBOARDING_TOUR_STORAGE_KEY] !== true))
+      .then((stored) => setOnboardingTourReady(stored[ONBOARDING_TOUR_STORAGE_KEY] !== ONBOARDING_TOUR_VERSION))
       .catch((error) => {
         console.error("[ERROR] Failed to read onboarding state", error);
         setOnboardingTourReady(true);
@@ -358,11 +368,12 @@ export function AssistantPanel({
 
   function completeOnboardingTour() {
     setOnboardingTourReady(false);
-    void browser.storage.local.set({ [ONBOARDING_TOUR_STORAGE_KEY]: true });
+    void browser.storage.local.set({ [ONBOARDING_TOUR_STORAGE_KEY]: ONBOARDING_TOUR_VERSION });
   }
 
   function restartOnboardingTour() {
     setPanelView("chat");
+    closeProblemBank();
     setConversationDrawerOpen(false);
     setBlackboardOpen(false);
     setOnboardingTourReady(false);
@@ -374,8 +385,11 @@ export function AssistantPanel({
 
   const onboardingSteps: Step[] = [
     { target: () => panelRef.current?.querySelector<HTMLElement>('[data-copilot-tour="history"]') ?? null, title: t("tour.historyTitle"), content: t("tour.historyDescription"), placement: "bottom", skipBeacon: true, buttons: ["back", "skip", "primary"] },
+    { target: () => panelRef.current?.querySelector<HTMLElement>('[data-copilot-tour="new-conversation"]') ?? null, title: t("tour.newConversationTitle"), content: t("tour.newConversationDescription"), placement: "bottom", skipBeacon: true, buttons: ["back", "skip", "primary"] },
     { target: () => panelRef.current?.querySelector<HTMLElement>('[data-copilot-tour="blackboard"]') ?? null, title: t("tour.blackboardTitle"), content: t("tour.blackboardDescription"), placement: "bottom", skipBeacon: true, buttons: ["back", "skip", "primary"] },
+    { target: () => panelRef.current?.querySelector<HTMLElement>('[data-copilot-tour="problem-bank"]') ?? null, title: t("tour.problemBankTitle"), content: t("tour.problemBankDescription"), placement: "bottom", skipBeacon: true, buttons: ["back", "skip", "primary"] },
     { target: () => panelRef.current?.querySelector<HTMLElement>('[data-copilot-tour="language"]') ?? null, title: t("tour.languageTitle"), content: t("tour.languageDescription"), placement: "bottom", skipBeacon: true, buttons: ["back", "skip", "primary"] },
+    { target: () => panelRef.current?.querySelector<HTMLElement>('[data-copilot-tour="settings"]') ?? null, title: t("tour.settingsTitle"), content: t("tour.settingsDescription"), placement: "bottom-end", skipBeacon: true, buttons: ["back", "skip", "primary"] },
     { target: () => panelRef.current?.querySelector<HTMLElement>('[data-copilot-tour="model"]') ?? null, title: t("tour.modelTitle"), content: t("tour.modelDescription"), placement: "top", skipBeacon: true, buttons: ["back", "skip", "primary"] },
     { target: () => panelRef.current?.querySelector<HTMLElement>('[data-copilot-tour="attachments"]') ?? null, title: t("tour.attachmentsTitle"), content: t("tour.attachmentsDescription"), placement: "top", skipBeacon: true, buttons: ["back", "skip", "primary"] },
     { target: () => panelRef.current?.querySelector<HTMLElement>('[data-copilot-thinking-tour="thinking"]') ?? null, title: t("tour.thinkingTitle"), content: t("tour.thinkingDescription"), placement: "top", skipBeacon: true, buttons: ["back", "skip", "primary"] },
@@ -543,10 +557,97 @@ export function AssistantPanel({
   }
 
   function togglePanelView() {
+    closeProblemBank();
     setCollapsed(false);
     setConversationDrawerOpen(false);
     setBlackboardOpen(false);
     setPanelView((view) => view === "chat" ? "user" : "chat");
+  }
+
+  function openProblemBank() {
+    setCollapsed(false);
+    setConversationDrawerOpen(false);
+    setBlackboardOpen(false);
+    const panel = panelRef.current;
+    const host = panel?.parentElement;
+    if (panel && host && window.innerWidth > 980) {
+      const bounds = panel.getBoundingClientRect();
+      const targetLeft = Math.max(
+        PANEL_VIEWPORT_GUTTER,
+        Math.min(
+          bounds.left,
+          window.innerWidth
+            - bounds.width
+            - PROBLEM_BANK_SIDECAR_GAP
+            - PROBLEM_BANK_SIDECAR_WIDTH
+            - PANEL_VIEWPORT_GUTTER,
+        ),
+      );
+      if (targetLeft < bounds.left) {
+        problemBankRestorePositionRef.current = { left: bounds.left, top: bounds.top };
+        host.style.inset = "auto";
+        host.style.right = "auto";
+        host.style.left = `${bounds.left}px`;
+        host.style.top = `${bounds.top}px`;
+        host.style.transition = reduceMotion
+          ? "none"
+          : "left 220ms cubic-bezier(0.22, 1, 0.36, 1)";
+        window.requestAnimationFrame(() => {
+          host.style.left = `${targetLeft}px`;
+        });
+      }
+    }
+    setProblemBankOpen(true);
+  }
+
+  function closeProblemBank() {
+    setProblemBankOpen(false);
+  }
+
+  function movePanel(event: ReactPointerEvent<HTMLElement>) {
+    const isActiveDrag = event.currentTarget.hasPointerCapture(event.pointerId);
+    panelWindow.moveDragging(event);
+    if (!problemBankOpen || !isActiveDrag) return;
+
+    // Once the user moves the combined chat + problem-bank surface, that new
+    // location becomes intentional. Do not snap back to the pre-open position
+    // when the companion card is closed.
+    problemBankRestorePositionRef.current = null;
+
+    if (window.innerWidth <= 980) return;
+    const panel = panelRef.current;
+    const host = panel?.parentElement;
+    if (!panel || !host) return;
+    const panelBounds = panel.getBoundingClientRect();
+    const maxLeft = Math.max(
+      PANEL_VIEWPORT_GUTTER,
+      window.innerWidth
+        - panelBounds.width
+        - PROBLEM_BANK_SIDECAR_GAP
+        - PROBLEM_BANK_SIDECAR_WIDTH
+        - PANEL_VIEWPORT_GUTTER,
+    );
+    if (panelBounds.left > maxLeft) host.style.left = `${maxLeft}px`;
+  }
+
+  function restorePanelAfterProblemBankClose() {
+    if (problemBankOpen) return;
+    const restore = problemBankRestorePositionRef.current;
+    const host = panelRef.current?.parentElement;
+    if (!restore || !host) {
+      problemBankTriggerRef.current?.focus({ preventScroll: true });
+      return;
+    }
+    host.style.transition = reduceMotion
+      ? "none"
+      : "left 220ms cubic-bezier(0.22, 1, 0.36, 1)";
+    host.style.left = `${restore.left}px`;
+    host.style.top = `${restore.top}px`;
+    problemBankRestorePositionRef.current = null;
+    window.setTimeout(() => {
+      if (host.style.transition.includes("left 220ms")) host.style.transition = "";
+    }, 240);
+    problemBankTriggerRef.current?.focus({ preventScroll: true });
   }
 
   async function transitionLanguage(changeLanguage: () => Promise<void>) {
@@ -569,6 +670,7 @@ export function AssistantPanel({
   }
 
   return (
+    <>
     <MotionPaper
       ref={panelRef}
       className="geochat-panel"
@@ -663,7 +765,7 @@ export function AssistantPanel({
         component="header"
         data-language-transition-surface
         onPointerDown={panelWindow.startDragging}
-        onPointerMove={panelWindow.moveDragging}
+        onPointerMove={movePanel}
         onPointerUp={panelWindow.stopDragging}
         onPointerCancel={panelWindow.stopDragging}
         onLostPointerCapture={panelWindow.stopDragging}
@@ -762,6 +864,24 @@ export function AssistantPanel({
               >
                 <FactCheckRounded fontSize="small" />
               </IconButton>
+              <IconButton
+                ref={problemBankTriggerRef}
+                type="button"
+                size="small"
+                onClick={() => problemBankOpen ? closeProblemBank() : openProblemBank()}
+                aria-label={problemBankOpen ? t("problemBank.close") : t("problemBank.open")}
+                title={problemBankOpen ? t("problemBank.close") : t("problemBank.open")}
+                aria-expanded={problemBankOpen}
+                aria-controls={problemBankOpen ? "copilot-problem-bank-sidecar" : undefined}
+                data-copilot-no-drag
+                data-copilot-tour="problem-bank"
+                sx={{
+                  color: problemBankOpen ? "primary.main" : undefined,
+                  bgcolor: problemBankOpen ? "action.selected" : undefined,
+                }}
+              >
+                <LibraryBooksOutlined fontSize="small" />
+              </IconButton>
               <LanguageButton tourId="language" transitionLanguage={transitionLanguage} />
               <IconButton
                 type="button"
@@ -770,6 +890,7 @@ export function AssistantPanel({
                 aria-label={t("panel.openSettings")}
                 title={t("panel.openSettings")}
                 data-copilot-no-drag
+                data-copilot-tour="settings"
               >
                 <SettingsRounded fontSize="small" />
               </IconButton>
@@ -791,6 +912,7 @@ export function AssistantPanel({
             type="button"
             size="small"
             onClick={() => {
+              closeProblemBank();
               setConversationDrawerOpen(false);
               setBlackboardOpen(false);
               panelWindow.toggleCollapsed();
@@ -1218,5 +1340,44 @@ export function AssistantPanel({
       </Menu>
       <ErrorToast message={toastError} />
     </MotionPaper>
+    <AnimatePresence initial={false} onExitComplete={restorePanelAfterProblemBankClose}>
+      {problemBankOpen && !collapsed && panelView === "chat" ? (
+        <MotionPaper
+          key="problem-bank-sidecar"
+          className="problem-bank-sidecar"
+          elevation={6}
+          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 28, scale: 0.985 }}
+          animate={{ opacity: 1, x: 0, scale: 1 }}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 24, scale: 0.985 }}
+          transition={{ duration: reduceMotion ? 0.08 : 0.2, ease: [0.22, 1, 0.36, 1] }}
+          sx={{
+            position: "absolute",
+            top: 0,
+            left: `calc(100% + ${PROBLEM_BANK_SIDECAR_GAP}px)`,
+            width: PROBLEM_BANK_SIDECAR_WIDTH,
+            height: "100%",
+            minHeight: 0,
+            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column",
+            border: 1,
+            borderColor: "divider",
+            borderRadius: 1,
+            bgcolor: "background.paper",
+            transformOrigin: "left center",
+            "@media (max-width: 980px)": {
+              left: "auto",
+              right: 0,
+              width: "min(88vw, 380px)",
+              zIndex: 6,
+              boxShadow: "-16px 0 42px rgba(24, 59, 36, .16)",
+            },
+          }}
+        >
+          <ProblemBankSidecar onClose={closeProblemBank} />
+        </MotionPaper>
+      ) : null}
+    </AnimatePresence>
+    </>
   );
 }

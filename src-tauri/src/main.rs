@@ -8,6 +8,7 @@ mod env_config;
 mod installed_client_smoke;
 mod logging;
 mod mcp;
+mod problem_bank_cache;
 mod settings;
 mod shell_update;
 mod sidecar;
@@ -35,6 +36,12 @@ use commands::logging::{
     get_logging_preferences, open_log_directory, set_logging_preferences, write_app_log,
 };
 use commands::mcp::{get_mcp_status, set_mcp_enabled};
+use commands::problem_bank::{
+    check_problem_bank_update, clear_problem_bank_cache, download_problem_bank,
+    get_problem_bank_cache_state, get_problem_bank_catalog, get_problem_bank_download_states,
+    load_problem_bank_page, load_problem_detail, open_problem_bank_cache_directory,
+    sync_problem_bank_metadata,
+};
 use commands::runtime::{get_runtime_info, mark_renderer_ready};
 use commands::shell_update::{
     check_all_updates, check_for_updates, download_update, get_update_state, install_update,
@@ -46,6 +53,7 @@ use installed_client_smoke::{
     maybe_run_installed_client_update_smoke, run_installed_client_update_smoke_cli,
 };
 use mcp::{auto_start_desktop_mcp_requested, DesktopMcpStatus, McpRuntime};
+use problem_bank_cache::ProblemBankCacheRuntime;
 use settings::{desktop_database_path, load_settings, DesktopSettings, DesktopUpdatePreferences};
 use sidecar::{project_root, start_backend, BackendRuntime};
 use std::{
@@ -72,6 +80,7 @@ struct DesktopState {
     mcp: Mutex<McpRuntime>,
     shell_update: Mutex<ShellUpdateRuntime>,
     app_bundle_update: Mutex<AppBundleUpdateRuntime>,
+    problem_bank_cache: Mutex<ProblemBankCacheRuntime>,
     settings_path: PathBuf,
     app_data_dir: PathBuf,
     database_path: PathBuf,
@@ -133,6 +142,16 @@ fn main() {
             check_app_bundle_update,
             install_app_bundle_update,
             rollback_app_bundle_update,
+            get_problem_bank_cache_state,
+            get_problem_bank_catalog,
+            get_problem_bank_download_states,
+            download_problem_bank,
+            open_problem_bank_cache_directory,
+            clear_problem_bank_cache,
+            check_problem_bank_update,
+            sync_problem_bank_metadata,
+            load_problem_bank_page,
+            load_problem_detail,
             mark_renderer_ready,
             install_update
         ])
@@ -224,11 +243,13 @@ fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
             .as_ref()
             .map(|bundle| bundle.manifest.bundle_version.clone()),
     );
+    let problem_bank_cache = ProblemBankCacheRuntime::new(app_data_dir.join("problem-bank-cache"))?;
     app.manage(DesktopState {
         backend: Mutex::new(backend),
         mcp: Mutex::new(McpRuntime::new()),
         shell_update: Mutex::new(ShellUpdateRuntime::new(shell_update_state)),
         app_bundle_update: Mutex::new(AppBundleUpdateRuntime::new(app_bundle_update_state)),
+        problem_bank_cache: Mutex::new(problem_bank_cache),
         settings_path,
         app_data_dir: app_data_dir.clone(),
         database_path,

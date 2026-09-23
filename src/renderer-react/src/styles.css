@@ -247,6 +247,172 @@ h2 { font-size: 18px; }
   background: rgba(255, 255, 255, .58);
   border-top-color: rgba(185, 201, 191, .46);
 }
+.problem-bank-sidecar {
+  box-shadow: 0 20px 54px rgba(24, 59, 36, .16), 0 2px 8px rgba(24, 59, 36, .08);
+}
+.problem-bank-sidecar-content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  background: rgba(255, 255, 255, .96);
+}
+.problem-bank-sidecar-header {
+  min-height: 64px;
+  padding: 10px 10px 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid rgba(185, 201, 191, .5);
+}
+.problem-bank-sidecar-mark,
+.problem-bank-sidecar-source {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--app-accent, #3563e9);
+  background: rgba(53, 99, 233, .08);
+  border-radius: 9px;
+}
+.problem-bank-sidecar-mark { width: 32px; height: 32px; }
+.problem-bank-sidecar-source { width: 30px; height: 30px; }
+.problem-bank-switcher { width: min(248px, 100%); }
+.problem-bank-switcher .MuiInputBase-root { font-size: .875rem; font-weight: 760; }
+.problem-bank-switcher .MuiInputBase-root::before,
+.problem-bank-switcher .MuiInputBase-root::after { display: none; }
+.problem-bank-switcher .MuiSelect-select { padding: 1px 26px 1px 0 !important; }
+.problem-bank-sidecar-search { padding: 12px 14px 10px; }
+.problem-bank-sidecar-search .MuiOutlinedInput-root { background: rgba(255, 255, 255, .82); }
+.problem-bank-sidecar-body {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px 14px 14px;
+}
+.problem-bank-view-transition {
+  width: 100%;
+  min-height: 100%;
+  will-change: opacity, transform;
+}
+.problem-bank-loading-stack { padding-bottom: 4px; }
+.problem-bank-sidecar-list { padding-bottom: 2px; }
+.problem-bank-sidecar-item,
+.problem-bank-sidecar-skeleton {
+  padding: 12px;
+  border: 1px solid rgba(185, 201, 191, .62);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .7);
+}
+.problem-bank-sidecar-item-action {
+  width: 100%;
+  appearance: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease, transform 140ms ease;
+}
+.problem-bank-sidecar-item-action:hover {
+  border-color: color-mix(in srgb, var(--app-accent, #3563e9) 32%, rgba(185, 201, 191, .62));
+  background: color-mix(in srgb, var(--app-accent, #3563e9) 4%, rgba(255, 255, 255, .84));
+  transform: translateY(-1px);
+}
+.problem-bank-sidecar-item-action:focus-visible {
+  outline: 2px solid var(--app-accent, #3563e9);
+  outline-offset: 2px;
+}
+.problem-bank-sidecar-item .MuiChip-root {
+  height: 20px;
+  font-size: 10px;
+}
+.problem-bank-cloud-loader {
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid rgba(53, 99, 233, .2);
+  border-radius: 12px;
+  background: rgba(53, 99, 233, .045);
+}
+.problem-bank-cloud-loader .MuiButton-root { flex: 0 0 auto; min-width: 58px; }
+.problem-bank-waterfall { padding-bottom: 4px; }
+.problem-bank-problem-card {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid rgba(185, 201, 191, .62);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .72);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.problem-bank-problem-card-action { cursor: pointer; transition: border-color 140ms ease, background-color 140ms ease; }
+.problem-bank-problem-card-action:hover { border-color: rgba(53, 99, 233, .32); background: rgba(53, 99, 233, .035); }
+.problem-bank-problem-card-action:focus-visible { outline: 2px solid var(--app-accent, #3563e9); outline-offset: 2px; }
+.problem-bank-problem-card .MuiChip-root { height: 18px; font-size: 10px; }
+.problem-bank-index-skeleton { pointer-events: none; }
+.problem-bank-problem-markdown {
+  min-width: 0;
+  font-size: .875rem;
+  font-weight: 630;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.problem-bank-problem-markdown > :first-child { margin-top: 0; }
+.problem-bank-problem-markdown > :last-child { margin-bottom: 0; }
+.problem-bank-problem-markdown .katex {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.problem-bank-problem-markdown .katex-display {
+  margin: .65em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.problem-bank-page-status {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.problem-bank-page-end { padding: 12px 0 4px; text-align: center; }
+.problem-bank-detail,
+.problem-bank-detail-skeleton { padding-bottom: 6px; }
+.problem-bank-detail-section {
+  padding: 14px;
+  border: 1px solid rgba(185, 201, 191, .62);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .76);
+}
+.problem-bank-detail-answer { background: rgba(53, 99, 233, .035); }
+.problem-bank-detail-image { width: 100%; height: auto; display: block; border-radius: 12px; border: 1px solid rgba(185, 201, 191, .62); }
+.problem-bank-detail-image-fallback {
+  min-height: 132px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid rgba(185, 201, 191, .62);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .62);
+}
+.problem-bank-sidecar-state {
+  min-height: 180px;
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 6px;
+  text-align: center;
+}
+.problem-bank-sidecar-state-compact { min-height: 96px; }
+@media (prefers-reduced-motion: reduce) {
+  .problem-bank-sidecar * { scroll-behavior: auto !important; }
+  .problem-bank-view-transition { will-change: auto; }
+}
 .geochat-settings {
   container-type: inline-size;
   background: var(--app-settings-surface);
@@ -360,6 +526,21 @@ h2 { font-size: 18px; }
   background: var(--app-accent-soft);
 }
 .geochat-settings .settings-problem-bank-actions { flex: 0 0 auto; }
+.geochat-settings .settings-problem-bank-cache-control {
+  width: 100%;
+  min-width: 0;
+}
+.geochat-settings .settings-problem-bank-cache-summary {
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+}
+.geochat-settings .settings-problem-bank-cache-actions {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+}
+.geochat-settings .settings-problem-bank-cache-actions .MuiButton-root { white-space: nowrap; }
 .geochat-settings .settings-problem-bank-notice,
 .geochat-settings .settings-problem-bank-empty {
   padding: 13px 18px;
@@ -404,6 +585,18 @@ h2 { font-size: 18px; }
 .geochat-settings .settings-problem-set-count {
   white-space: nowrap;
   color: #526079;
+  font-variant-numeric: tabular-nums;
+}
+.geochat-settings .settings-problem-set-actions {
+  min-width: 148px;
+  align-items: center;
+  justify-content: flex-end;
+}
+.geochat-settings .settings-problem-set-download {
+  flex: 0 0 auto;
+}
+.geochat-settings .settings-problem-set-download-status {
+  line-height: 1.35;
   font-variant-numeric: tabular-nums;
 }
 .geochat-settings .settings-general-page > .settings-section {
@@ -576,7 +769,13 @@ h2 { font-size: 18px; }
   .geochat-settings .settings-about-grid { grid-template-columns: minmax(0, 1fr); }
   .geochat-settings .settings-about-wide { grid-column: auto; }
   .geochat-settings .settings-problem-bank-header { padding: 14px; }
+  .geochat-settings .settings-problem-bank-cache-summary {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .geochat-settings .settings-problem-bank-cache-actions { justify-content: flex-end; }
   .geochat-settings .settings-problem-set-row { padding-inline: 14px; }
+  .geochat-settings .settings-problem-set-actions { min-width: auto; }
 }
 .geochat-blackboard {
   background: rgba(23, 63, 53, .84) !important;

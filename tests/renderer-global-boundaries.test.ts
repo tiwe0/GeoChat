@@ -34,6 +34,10 @@ const allowedBoundaryFiles = {
     maxLines: 90,
     reason: "owns the MCP toggle and its poll loop's timer globals"
   },
+  "src/renderer-react/src/features/desktop/problemBankDesktop.ts": {
+    maxLines: 30,
+    reason: "exposes the problem-bank subset of the desktop bridge to the sidecar"
+  },
   "src/renderer-react/src/features/desktop/mcpDebugActions.ts": {
     maxLines: 80,
     reason: "executes MCP-queued actions against renderer surfaces"

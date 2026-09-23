@@ -87,6 +87,115 @@ export type DesktopAppBundleUpdateState = {
   errorCode: DesktopUpdateState["errorCode"];
 };
 
+export type DesktopProblemBankCacheErrorCode =
+  | "network_unavailable"
+  | "manifest_invalid"
+  | "schema_unsupported"
+  | "integrity_error"
+  | "permission_denied"
+  | "unknown"
+  | null;
+
+export type DesktopProblemBankCacheState = {
+  status: "disabled" | "idle" | "checking" | "available" | "syncing" | "ready" | "error";
+  configured: boolean;
+  manifestUrl: string | null;
+  activeReleaseId: string | null;
+  availableReleaseId: string | null;
+  activeChannel: "production" | "evaluation" | "internal" | string | null;
+  availableChannel: "production" | "evaluation" | "internal" | string | null;
+  updateAvailable: boolean;
+  checkedAt: string | null;
+  activatedAt: string | null;
+  cachedBytes: number;
+  cacheDirectory: string;
+  error: string | null;
+  errorCode: DesktopProblemBankCacheErrorCode;
+};
+
+export type DesktopProblemBankSummary = {
+  bankId: string;
+  bankSlug: string;
+  title: string;
+  description: string | null;
+  kind: string;
+  problemCount: number;
+  datasetId: string | null;
+  reusePolicy: "allowed" | "restricted" | "unknown";
+};
+
+export type DesktopProblemBankCatalog = {
+  releaseId: string;
+  channel: "production" | "evaluation" | "internal" | string;
+  cloudBaseUrl: string;
+  banks: DesktopProblemBankSummary[];
+};
+
+export type DesktopProblemBankDownloadState = {
+  bankSlug: string;
+  releaseId: string;
+  status: "idle" | "downloading" | "paused" | "complete" | "error";
+  phase: "preparing" | "pages" | "records" | "complete";
+  completedItems: number;
+  totalItems: number;
+  downloadedBytes: number;
+  totalBytes: number;
+  updatedAt: string;
+  error: string | null;
+};
+
+export type DesktopProblemBankPage = {
+  releaseId: string;
+  bankSlug: string;
+  cursor: string;
+  nextCursor: string | null;
+  items: Array<{
+    id: string;
+    promptPreview?: string;
+    answerPreview?: string;
+    difficulty?: string;
+    subject?: string;
+    grade?: string;
+    knowledge?: string[];
+    tags?: string[];
+    hasMedia?: boolean;
+    [key: string]: unknown;
+  }>;
+};
+
+export type DesktopProblemDetail = {
+  releaseId: string;
+  bankSlug: string;
+  problem: {
+    id: string;
+    prompt: string;
+    answer?: {
+      final?: string;
+      type?: string;
+      choices?: Array<{ label?: string; text?: string; correct?: boolean }>;
+      solution?: string;
+      analysis?: string;
+    };
+    taxonomy?: {
+      language?: string;
+      subject?: string;
+      grade?: string;
+      difficulty?: string;
+      knowledge?: string[];
+      skills?: string[];
+      tags?: string[];
+    };
+    media?: Array<{
+      url?: string;
+      r2Url?: string;
+      trackingUrl?: string;
+      alt?: string;
+    }> | null;
+    source?: { datasetId?: string; datasetSlug?: string };
+    [key: string]: unknown;
+  };
+};
+
 export type DesktopUpdateRecommendation =
   | "none"
   | "app_bundle"
@@ -123,6 +232,16 @@ export type GeoChatDesktopApi = {
   setLoggingPreferences: (preferences: Partial<Pick<DesktopLoggingState, "enabled" | "level">>) => Promise<DesktopLoggingState>;
   openLogDirectory: () => Promise<string>;
   writeAppLog: (level: DesktopLogLevel, message: string) => Promise<void>;
+  getProblemBankCacheState: () => Promise<DesktopProblemBankCacheState>;
+  getProblemBankCatalog: () => Promise<DesktopProblemBankCatalog | null>;
+  checkProblemBankUpdate: () => Promise<DesktopProblemBankCacheState>;
+  syncProblemBankMetadata: () => Promise<DesktopProblemBankCacheState>;
+  openProblemBankCacheDirectory: () => Promise<string>;
+  clearProblemBankCache: () => Promise<DesktopProblemBankCacheState>;
+  getProblemBankDownloadStates: () => Promise<DesktopProblemBankDownloadState[]>;
+  downloadProblemBank: (bankSlug: string) => Promise<DesktopProblemBankDownloadState>;
+  loadProblemBankPage: (bankSlug: string, cursor?: string | null) => Promise<DesktopProblemBankPage>;
+  loadProblemDetail: (bankSlug: string, problemId: string) => Promise<DesktopProblemDetail>;
   getAppBundleUpdateState: () => Promise<DesktopAppBundleUpdateState>;
   checkAppBundleUpdate: () => Promise<DesktopAppBundleUpdateState>;
   installAppBundleUpdate: () => Promise<DesktopAppBundleUpdateState>;
@@ -131,4 +250,6 @@ export type GeoChatDesktopApi = {
   installUpdate: () => Promise<DesktopUpdateState>;
   onUpdateState: (callback: (state: DesktopUpdateState) => void) => () => void;
   onAppBundleUpdateState: (callback: (state: DesktopAppBundleUpdateState) => void) => () => void;
+  onProblemBankCacheState: (callback: (state: DesktopProblemBankCacheState) => void) => () => void;
+  onProblemBankDownloadState: (callback: (state: DesktopProblemBankDownloadState) => void) => () => void;
 };

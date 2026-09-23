@@ -6,8 +6,10 @@ use crate::{
     },
     check_app_bundle_update, configured_string, desktop_database_path,
     initial_app_bundle_update_state, initial_shell_update_state, install_app_bundle_update,
-    load_settings, local_runtime_auth_token, now_iso, project_root, stable_device_id,
-    AppBundleUpdateRuntime, BackendRuntime, DesktopState, McpRuntime, ShellUpdateRuntime,
+    load_settings, local_runtime_auth_token, now_iso,
+    problem_bank_cache::ProblemBankCacheRuntime,
+    project_root, stable_device_id, AppBundleUpdateRuntime, BackendRuntime, DesktopState,
+    McpRuntime, ShellUpdateRuntime,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -112,6 +114,9 @@ pub(crate) fn run_installed_client_update_smoke_cli() -> Result<(), String> {
                     .map(|bundle| bundle.manifest.bundle_version.clone()),
             ),
         )),
+        problem_bank_cache: Mutex::new(ProblemBankCacheRuntime::new(
+            app_data_dir.join("problem-bank-cache"),
+        )?),
         settings_path,
         app_data_dir: app_data_dir.clone(),
         database_path: desktop_database_path(&app_data_dir),

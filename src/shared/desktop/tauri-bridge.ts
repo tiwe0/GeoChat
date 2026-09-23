@@ -5,6 +5,11 @@ import type {
   DesktopLogLevel,
   DesktopLoggingState,
   DesktopMcpStatus,
+  DesktopProblemBankCacheState,
+  DesktopProblemBankCatalog,
+  DesktopProblemBankDownloadState,
+  DesktopProblemBankPage,
+  DesktopProblemDetail,
   DesktopUpdatePreferences,
   DesktopUpdateState,
   GeoChatDesktopApi
@@ -13,6 +18,19 @@ import type {
 type TauriInvoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 type TauriListen = typeof import("@tauri-apps/api/event").listen;
 type BridgeSlice<K extends keyof GeoChatDesktopApi> = Pick<GeoChatDesktopApi, K>;
+
+function subscribe<T>(listen: TauriListen, event: string, callback: (state: T) => void) {
+  let disposed = false;
+  let unlisten: (() => void) | undefined;
+  void listen<T>(event, ({ payload }) => callback(payload)).then((nextUnlisten) => {
+    if (disposed) nextUnlisten();
+    else unlisten = nextUnlisten;
+  });
+  return () => {
+    disposed = true;
+    unlisten?.();
+  };
+}
 
 export const TAURI_DESKTOP_COMMANDS = {
   runtime: {
@@ -51,12 +69,26 @@ export const TAURI_DESKTOP_COMMANDS = {
     setLoggingPreferences: "set_logging_preferences",
     openLogDirectory: "open_log_directory",
     writeAppLog: "write_app_log"
+  },
+  problemBank: {
+    getProblemBankCacheState: "get_problem_bank_cache_state",
+    getProblemBankCatalog: "get_problem_bank_catalog",
+    checkProblemBankUpdate: "check_problem_bank_update",
+    syncProblemBankMetadata: "sync_problem_bank_metadata",
+    openProblemBankCacheDirectory: "open_problem_bank_cache_directory",
+    clearProblemBankCache: "clear_problem_bank_cache",
+    getProblemBankDownloadStates: "get_problem_bank_download_states",
+    downloadProblemBank: "download_problem_bank",
+    loadProblemBankPage: "load_problem_bank_page",
+    loadProblemDetail: "load_problem_detail"
   }
 } as const;
 
 export const TAURI_DESKTOP_EVENTS = {
   shellUpdateState: "desktop:update-state",
-  appBundleUpdateState: "desktop:app-bundle-update-state"
+  appBundleUpdateState: "desktop:app-bundle-update-state",
+  problemBankCacheState: "desktop:problem-bank-cache-state",
+  problemBankDownloadState: "desktop:problem-bank-download-state"
 } as const;
 
 export async function installTauriDesktopBridge() {
@@ -107,7 +139,8 @@ export function createTauriDesktopApi(
     ...createShellUpdateBridge(invoke, listen),
     ...createAppBundleUpdateBridge(invoke, listen),
     ...createImprovementBridge(invoke),
-    ...createLoggingBridge(invoke)
+    ...createLoggingBridge(invoke),
+    ...createProblemBankBridge(invoke, listen)
   };
 }
 
@@ -158,23 +191,8 @@ function createShellUpdateBridge(
     setUpdatePreferences: (preferences: Partial<DesktopUpdatePreferences>) =>
       invoke(commands.setUpdatePreferences, { preferences }),
     installUpdate: () => invoke(commands.installUpdate),
-    onUpdateState: (callback: (state: DesktopUpdateState) => void) => {
-      let disposed = false;
-      let unlisten: (() => void) | undefined;
-      void listen<DesktopUpdateState>(TAURI_DESKTOP_EVENTS.shellUpdateState, (event) => {
-        callback(event.payload);
-      }).then((nextUnlisten) => {
-        if (disposed) {
-          nextUnlisten();
-        } else {
-          unlisten = nextUnlisten;
-        }
-      });
-      return () => {
-        disposed = true;
-        unlisten?.();
-      };
-    }
+    onUpdateState: (callback: (state: DesktopUpdateState) => void) =>
+      subscribe(listen, TAURI_DESKTOP_EVENTS.shellUpdateState, callback)
   };
 }
 
@@ -194,23 +212,8 @@ function createAppBundleUpdateBridge(
     checkAppBundleUpdate: () => invoke(commands.checkAppBundleUpdate),
     installAppBundleUpdate: () => invoke(commands.installAppBundleUpdate),
     rollbackAppBundleUpdate: () => invoke(commands.rollbackAppBundleUpdate),
-    onAppBundleUpdateState: (callback: (state: DesktopAppBundleUpdateState) => void) => {
-      let disposed = false;
-      let unlisten: (() => void) | undefined;
-      void listen<DesktopAppBundleUpdateState>(TAURI_DESKTOP_EVENTS.appBundleUpdateState, (event) => {
-        callback(event.payload);
-      }).then((nextUnlisten) => {
-        if (disposed) {
-          nextUnlisten();
-        } else {
-          unlisten = nextUnlisten;
-        }
-      });
-      return () => {
-        disposed = true;
-        unlisten?.();
-      };
-    }
+    onAppBundleUpdateState: (callback: (state: DesktopAppBundleUpdateState) => void) =>
+      subscribe(listen, TAURI_DESKTOP_EVENTS.appBundleUpdateState, callback)
   };
 }
 
@@ -243,6 +246,46 @@ function createLoggingBridge(
     openLogDirectory: () => invoke(commands.openLogDirectory),
     writeAppLog: (level: DesktopLogLevel, message: string) =>
       invoke(commands.writeAppLog, { level, message })
+  };
+}
+
+function createProblemBankBridge(
+  invoke: TauriInvoke,
+  listen: TauriListen
+): BridgeSlice<
+  | "getProblemBankCacheState"
+  | "getProblemBankCatalog"
+  | "checkProblemBankUpdate"
+  | "syncProblemBankMetadata"
+  | "openProblemBankCacheDirectory"
+  | "clearProblemBankCache"
+  | "getProblemBankDownloadStates"
+  | "downloadProblemBank"
+  | "loadProblemBankPage"
+  | "loadProblemDetail"
+  | "onProblemBankCacheState"
+  | "onProblemBankDownloadState"
+> {
+  const commands = TAURI_DESKTOP_COMMANDS.problemBank;
+  return {
+    getProblemBankCacheState: () => invoke(commands.getProblemBankCacheState),
+    getProblemBankCatalog: () => invoke<DesktopProblemBankCatalog | null>(commands.getProblemBankCatalog),
+    checkProblemBankUpdate: () => invoke(commands.checkProblemBankUpdate),
+    syncProblemBankMetadata: () => invoke(commands.syncProblemBankMetadata),
+    openProblemBankCacheDirectory: () => invoke(commands.openProblemBankCacheDirectory),
+    clearProblemBankCache: () => invoke(commands.clearProblemBankCache),
+    getProblemBankDownloadStates: () =>
+      invoke<DesktopProblemBankDownloadState[]>(commands.getProblemBankDownloadStates),
+    downloadProblemBank: (bankSlug: string) =>
+      invoke<DesktopProblemBankDownloadState>(commands.downloadProblemBank, { bankSlug }),
+    loadProblemBankPage: (bankSlug: string, cursor?: string | null) =>
+      invoke<DesktopProblemBankPage>(commands.loadProblemBankPage, { bankSlug, cursor: cursor ?? null }),
+    loadProblemDetail: (bankSlug: string, problemId: string) =>
+      invoke<DesktopProblemDetail>(commands.loadProblemDetail, { bankSlug, problemId }),
+    onProblemBankCacheState: (callback: (state: DesktopProblemBankCacheState) => void) =>
+      subscribe(listen, TAURI_DESKTOP_EVENTS.problemBankCacheState, callback),
+    onProblemBankDownloadState: (callback: (state: DesktopProblemBankDownloadState) => void) =>
+      subscribe(listen, TAURI_DESKTOP_EVENTS.problemBankDownloadState, callback)
   };
 }
 

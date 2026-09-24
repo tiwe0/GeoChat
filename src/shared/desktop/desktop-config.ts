@@ -17,6 +17,7 @@ import type {
   ModelConfig,
   ProviderCredentialConfig,
   SkillConfig,
+  InteractionConfig,
   VisualProfileName
 } from "./workbench-types";
 import { detectPreferredLocale, type Locale } from "./locale";
@@ -213,6 +214,10 @@ export const DEFAULT_DEBUG_CONFIG: DebugConfig = {
   modelStepTimeoutMs: DEFAULT_AGENT_MODEL_STEP_TIMEOUT_MS
 };
 
+export const DEFAULT_INTERACTION_CONFIG: InteractionConfig = {
+  mode: "fusion"
+};
+
 function createDefaultSkillConfig(): SkillConfig {
   return {
     ...DEFAULT_SKILL_CONFIG,
@@ -236,6 +241,7 @@ export function createDefaultDesktopConfig(locale: Locale = detectPreferredLocal
     },
     customProvider: { ...DEFAULT_CUSTOM_PROVIDER_CONFIG, models: [] },
     skills: createDefaultSkillConfig(),
+    interaction: DEFAULT_INTERACTION_CONFIG,
     debug: DEFAULT_DEBUG_CONFIG,
     locale
   };
@@ -379,6 +385,11 @@ function normalizeVisualProfileName(value: unknown): VisualProfileName {
     : DEFAULT_VISUAL_PROFILE;
 }
 
+export function normalizeInteractionConfig(value: unknown): InteractionConfig {
+  const payload = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return { mode: payload.mode === "window" ? "window" : "fusion" };
+}
+
 export function normalizeDesktopConfig(value: Partial<DesktopConfig> | undefined, fallbackLocale: Locale = detectPreferredLocale()): DesktopConfig {
   const model = normalizeAgentModelConfig(value?.model ?? DEFAULT_MODEL_CONFIG);
   const visionModel = normalizeAgentModelConfig(value?.visionModel ?? DEFAULT_VISION_MODEL_CONFIG);
@@ -399,6 +410,7 @@ export function normalizeDesktopConfig(value: Partial<DesktopConfig> | undefined
     providerCredentials,
     customProvider: normalizeCustomProviderConfig(value?.customProvider),
     skills: normalizeSkillConfig(value?.skills),
+    interaction: normalizeInteractionConfig(value?.interaction),
     debug: normalizeDebugConfig(value?.debug),
     locale: normalizeLocale(value, fallbackLocale)
   };

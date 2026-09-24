@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
@@ -34,6 +34,7 @@ type ChatMessage = UIMessage<ChatMessageMetadata>;
 type SendMessageInput = { text?: string; files?: FileUIPart[] };
 type SendMessageOptions = { body?: { conversationId?: string } };
 type ActiveNativeRun = { runId: string; conversationId: string };
+type NativeRunRequestContext = Omit<StoredActiveNativeRun, "runId">;
 
 const NATIVE_CHAT_NETWORK_RETRY_DELAYS_MS = [750, 1_500, 3_000] as const;
 
@@ -45,6 +46,27 @@ export type AddToolOutput = (input: {
   errorText?: string;
 }) => void | PromiseLike<void>;
 
+export class AgentRunSubmissionError extends Error {
+  readonly messageAccepted: boolean;
+  readonly originalError: Error;
+
+  constructor(error: unknown, messageAccepted: boolean) {
+    const originalError = error instanceof Error ? error : new Error(String(error));
+    super(originalError.message, { cause: originalError });
+    this.name = "AgentRunSubmissionError";
+    this.messageAccepted = messageAccepted;
+    this.originalError = originalError;
+  }
+}
+
+export function wasAgentRunMessageAccepted(error: unknown) {
+  return error instanceof AgentRunSubmissionError && error.messageAccepted;
+}
+
+export function unwrapAgentRunSubmissionError(error: unknown) {
+  return error instanceof AgentRunSubmissionError ? error.originalError : error;
+}
+
 export function useAgentRunChat(input: {
   apiOrigin: string;
   getAuthToken: () => string | null;
@@ -53,6 +75,7 @@ export function useAgentRunChat(input: {
   getModelProvider?: (model: string) => string;
   locale: "zh-CN" | "en-US";
   onFinish?: () => void;
+  onRendererToolSettled?: (toolName: string) => void;
   onRestore?: (run: { conversationId: string; modelProvider: string; modelId: string; prompt: string; thinking: boolean; thinkingEffort: AgentRunThinkingEffort | null }) => void;
   getThinking: () => boolean;
   getThinkingEffort: () => AgentRunThinkingEffort;
@@ -68,6 +91,14 @@ export function useAgentRunChat(input: {
   const networkRetryAttemptRef = useRef(0);
   const networkRetryTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const retryCurrentRequestRef = useRef<(() => Promise<void>) | null>(null);
+  const activeRequestContextRef = useRef<NativeRunRequestContext | null>(null);
+  const failedRequestContextRef = useRef<NativeRunRequestContext | null>(null);
+  const [canRetry, setCanRetry] = useState(false);
+
+  const rememberFailedRequest = (request: NativeRunRequestContext | null) => {
+    failedRequestContextRef.current = request;
+    setCanRetry(Boolean(request));
+  };
 
   const clearNetworkRetry = () => {
     if (networkRetryTimerRef.current !== null) globalThis.clearTimeout(networkRetryTimerRef.current);
@@ -90,6 +121,8 @@ export function useAgentRunChat(input: {
       if (!retry) return;
       void retry().catch((retryError) => {
         if (scheduleNetworkRetry(active, retryError)) return;
+        rememberFailedRequest(activeRequestContextRef.current);
+        activeRequestContextRef.current = null;
         activeRunRef.current = null;
         runGenerationRef.current += 1;
         void terminalizeInterruptedNativeRun(active, inputRef.current, installationIdRef).catch((cancelError) => {
@@ -181,6 +214,8 @@ export function useAgentRunChat(input: {
           state: "output-error",
           errorText: error instanceof Error ? error.message : "Renderer tool failed.",
         }, isCurrentRun);
+      } finally {
+        if (isCurrentRun()) inputRef.current.onRendererToolSettled?.(toolName);
       }
     },
     onFinish: ({ message, finishReason, isAbort, isDisconnect, isError }) => {
@@ -212,6 +247,8 @@ export function useAgentRunChat(input: {
         return;
       }
       const completedRun = activeRunRef.current;
+      activeRequestContextRef.current = null;
+      rememberFailedRequest(null);
       activeRunRef.current = null;
       runGenerationRef.current += 1;
       clearNetworkRetry();
@@ -222,6 +259,8 @@ export function useAgentRunChat(input: {
       console.error(`[ERROR] Native AI SDK chat failed: ${error.message}`, error);
       const active = activeRunRef.current;
       if (active && scheduleNetworkRetry(active, error)) return;
+      rememberFailedRequest(activeRequestContextRef.current);
+      activeRequestContextRef.current = null;
       activeRunRef.current = null;
       runGenerationRef.current += 1;
       clearNetworkRetry();
@@ -286,19 +325,28 @@ export function useAgentRunChat(input: {
       throw new Error("A model configuration is required.");
     }
     const thinking = current.getThinking() && agentModelSupportsReasoning(model.provider, model.model);
+    const requestContext: NativeRunRequestContext = {
+      conversationId,
+      modelProvider: model.provider,
+      modelId: model.model,
+      prompt: currentPrompt,
+      thinking,
+      thinkingEffort: current.getThinkingEffort(),
+    };
+    activeRequestContextRef.current = requestContext;
+    rememberFailedRequest(null);
+    let messageAccepted = false;
     try {
       await activateNativeRun(activeRunRef, {
         runId,
-        conversationId,
-        modelProvider: model.provider,
-        modelId: model.model,
-        prompt: currentPrompt,
-        thinking,
-        thinkingEffort: current.getThinkingEffort(),
+        ...requestContext,
       });
+      messageAccepted = true;
       if (text) await chat.sendMessage({ text, ...(uploadedFiles.length ? { files: uploadedFiles } : {}) });
       else await chat.sendMessage({ files: uploadedFiles });
     } catch (error) {
+      if (messageAccepted) rememberFailedRequest(requestContext);
+      activeRequestContextRef.current = null;
       activeRunRef.current = null;
       runGenerationRef.current += 1;
       try {
@@ -306,12 +354,49 @@ export function useAgentRunChat(input: {
       } catch (cancelError) {
         console.error(`[ERROR] Failed to terminalize rejected native AI SDK run runId=${runId}`, cancelError);
       }
-      throw error;
+      throw new AgentRunSubmissionError(error, messageAccepted);
+    }
+  }, [chat]);
+
+  const retry = useCallback(async () => {
+    await recoveryPromiseRef.current;
+    if (chat.status === "submitted" || chat.status === "streaming" || activeRunRef.current) return false;
+    const requestContext = failedRequestContextRef.current;
+    if (!requestContext) return false;
+    const runId = `run_${crypto.randomUUID().replaceAll("-", "")}`;
+    clearNetworkRetry();
+    runGenerationRef.current += 1;
+    activeRequestContextRef.current = requestContext;
+    rememberFailedRequest(null);
+    let requestActivated = false;
+    try {
+      await activateNativeRun(activeRunRef, { runId, ...requestContext });
+      requestActivated = true;
+      chat.clearError();
+      // AI SDK owns message truncation and request reconstruction. This
+      // removes a partial assistant response, keeps the original user turn,
+      // and avoids duplicating that message in local history.
+      await chat.regenerate();
+      return true;
+    } catch (error) {
+      activeRequestContextRef.current = null;
+      activeRunRef.current = null;
+      rememberFailedRequest(requestContext);
+      if (requestActivated) {
+        try {
+          await terminalizeInterruptedNativeRun({ runId, conversationId: requestContext.conversationId }, inputRef.current, installationIdRef);
+        } catch (cancelError) {
+          console.error(`[ERROR] Failed to terminalize retried native AI SDK run runId=${runId}`, cancelError);
+        }
+      }
+      throw new AgentRunSubmissionError(error, true);
     }
   }, [chat]);
 
   const stop = useCallback(async () => {
     const active = activeRunRef.current;
+    activeRequestContextRef.current = null;
+    rememberFailedRequest(null);
     activeRunRef.current = null;
     runGenerationRef.current += 1;
     clearNetworkRetry();
@@ -329,6 +414,8 @@ export function useAgentRunChat(input: {
     messages: chat.messages,
     setMessages: chat.setMessages,
     sendMessage,
+    retry,
+    canRetry,
     stop,
     status: chat.status,
     error: chat.error,

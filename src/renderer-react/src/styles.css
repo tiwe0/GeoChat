@@ -100,6 +100,24 @@ h2 { font-size: 18px; }
 
 /* Standalone Web shell around the migrated extension panel. */
 .frontend-shell { width: 100%; height: 100%; min-height: 100vh; position: relative; overflow: hidden; background: var(--app-shell-background); }
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) { z-index: 1; }
+::view-transition-new(root) { z-index: 9999; }
+@keyframes interaction-mode-circle-reveal {
+  from {
+    clip-path: circle(0 at var(--interaction-transition-x) var(--interaction-transition-y));
+  }
+  to {
+    clip-path: circle(var(--interaction-transition-radius) at var(--interaction-transition-x) var(--interaction-transition-y));
+  }
+}
+html.interaction-mode-view-transition::view-transition-new(root) {
+  animation: interaction-mode-circle-reveal 900ms cubic-bezier(.22, 1, .36, 1) both;
+}
 .frontend-canvas { position: absolute; inset: 0; background: #fff; }
 .frontend-canvas-host { position: relative; z-index: 0; display: block; width: 100%; height: 100%; visibility: visible; opacity: 1; }
 .frontend-canvas-host > * { width: 100%; height: 100%; }
@@ -115,6 +133,13 @@ h2 { font-size: 18px; }
   max-width: min(500px, calc(100vw - 76px));
   pointer-events: none;
   color: #18231e;
+  transform-origin: left top;
+  will-change: transform, opacity, clip-path;
+}
+.frontend-canvas-intro-fusion {
+  /* Fusion controls live in a top-level overlay. Keep the initial canvas
+     guidance visibly anchored to the board instead of underneath that layer. */
+  z-index: 1320;
 }
 .frontend-canvas-intro-badge {
   display: inline-flex;

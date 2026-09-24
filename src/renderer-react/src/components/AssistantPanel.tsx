@@ -34,7 +34,11 @@ import { useTranslation } from "react-i18next";
 import { Streamdown } from "streamdown";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { agentModelSupportsReasoning } from "@geochat-ai/app/model-registry";
-import { useAgentRunChat } from "../hooks/useAgentRunChat";
+import {
+  unwrapAgentRunSubmissionError,
+  useAgentRunChat,
+  wasAgentRunMessageAccepted,
+} from "../hooks/useAgentRunChat";
 import { formatAgentRunError } from "../features/agent-run/errorMessage";
 import { STREAMDOWN_PLUGINS } from "../features/chat/streamdownPlugins";
 import { isInternalToolResultEcho } from "../features/chat/toolResultEcho";
@@ -54,6 +58,7 @@ import {
   RESIZE_HANDLES,
   USER_PAGE_MIN_HEIGHT,
   USER_PAGE_MIN_WIDTH,
+  resolvePanelWindowHost,
   usePanelWindow,
 } from "../features/panel-window/usePanelWindow";
 import { useMessageScroll } from "../hooks/useMessageScroll";
@@ -69,7 +74,7 @@ import { OnboardingTooltip } from "./OnboardingTooltip";
 import { ErrorToast } from "./ErrorToast";
 import { BrandIcon } from "./BrandIcon";
 import { ProblemBankSidecar } from "./ProblemBankSidecar";
-import type { ThinkingEffort } from "./ModelMenu";
+import { ModelMenu, type ThinkingEffort } from "./ModelMenu";
 import { createDesktopDebugActionExecutor } from "../features/desktop/mcpDebugActions";
 import { useMcpState } from "../features/desktop/useMcpState";
 import { DEFAULT_MCP_STATUS, type DesktopDebugAction } from "../../../shared/desktop/mcp-debug-actions";
@@ -81,9 +86,24 @@ import {
 import type { RendererMcpStatus } from "../../../shared/desktop/workbench-types";
 import { loadModelCatalog, type RuntimeModelOption } from "../features/models/modelCatalog";
 import { backendAuthToken, backendOrigin } from "../features/desktop/runtime";
+import type { GeoGebraSelectionContext, GeoGebraSelectionRefreshReason } from "../geogebra/selection-context";
+import {
+  FusionModeSurface,
+  FusionOnboardingTour,
+  FusionTranscript,
+  FusionViewportCard,
+  InteractionModeButton,
+  InteractionModeTransition,
+  fusionPanelFromWindowState,
+  windowStateFromFusionPanel,
+  type FusionPanelId,
+  useFusionModeController,
+  useInteractionMode,
+  useInteractionModeTransition,
+} from "../features/fusion-mode";
 
 const ONBOARDING_TOUR_STORAGE_KEY = "geogebraCopilotOnboardingTourCompleted";
-const ONBOARDING_TOUR_VERSION = 2;
+const ONBOARDING_TOUR_VERSION = 3;
 const THINKING_ENABLED_STORAGE_KEY = "geogebraCopilotThinkingEnabled";
 const LEGACY_REASONING_MODE_STORAGE_KEY = "geogebraCopilotReasoningMode";
 const THINKING_EFFORT_STORAGE_KEY = "geogebraCopilotThinkingEffort";
@@ -108,7 +128,6 @@ type PanelContextMenuState = {
   selectedText: string;
   editable: HTMLInputElement | HTMLTextAreaElement | HTMLElement | null;
 };
-
 
 function contextMenuEditableTarget(target: EventTarget | null) {
   if (!(target instanceof Element)) return null;
@@ -187,14 +206,21 @@ function TypewriterText({ text }: { text: string }) {
 
 export function AssistantPanel({
   canvasReady = true,
+  selectionContext = { status: "unavailable", objectNames: [] },
+  onRefreshSelection,
   onConversationStarted,
 }: {
   canvasReady?: boolean;
+  selectionContext?: GeoGebraSelectionContext;
+  onRefreshSelection?: (reason: GeoGebraSelectionRefreshReason) => GeoGebraSelectionContext | undefined;
   onConversationStarted?: () => void;
 }) {
   const { t, i18n } = useTranslation();
   const appTheme = useTheme();
   const reduceMotion = useReducedMotion();
+  const interaction = useInteractionMode();
+  const modeTransition = useInteractionModeTransition(interaction);
+  const fusionController = useFusionModeController(interaction.mode === "fusion");
   const streamdownTranslations = useStreamdownTranslations();
   const [input, setInput] = useState("");
   const [contextMenu, setContextMenu] = useState<PanelContextMenuState | null>(null);
@@ -212,10 +238,20 @@ export function AssistantPanel({
   const [thinkingEffort, setThinkingEffort] = useState<ThinkingEffort>("standard");
   const [conversationDrawerOpen, setConversationDrawerOpen] = useState(false);
   const [blackboardOpen, setBlackboardOpen] = useState(false);
+  const [fusionPanel, setFusionPanel] = useState<FusionPanelId | null>(null);
+  const fusionPanelTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const fusionPanelFocusRestoreTimerRef = useRef<number | null>(null);
+  const previousInteractionModeRef = useRef(interaction.mode);
   const [onboardingTourReady, setOnboardingTourReady] = useState<boolean | null>(null);
   const suppressBlackboardToggleRef = useRef(false);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [currentConversationTitle, setCurrentConversationTitle] = useState<string | null>(null);
+
+  useEffect(() => () => {
+    if (fusionPanelFocusRestoreTimerRef.current !== null) {
+      globalThis.clearTimeout(fusionPanelFocusRestoreTimerRef.current);
+    }
+  }, []);
   const panelChatRef = useRef(new PanelChatState());
   const selectedModelOption = modelOptions.find((option) => option.id === selectedModel);
   const thinkingSupported = selectedModelOption
@@ -232,10 +268,10 @@ export function AssistantPanel({
     conversationId: currentConversationId,
     loadFailedMessage: t("blackboard.loadFailed"),
   });
-  const panelWindow = usePanelWindow(panelView);
+  const panelWindow = usePanelWindow(panelView, interaction.mode === "window");
   const { panelRef, collapsed, setCollapsed, dragging, resizing } = panelWindow;
   const messageScroll = useMessageScroll({ active: !collapsed && panelView === "chat" });
-  const { messages, setMessages, sendMessage, stop, status, error } = useAgentRunChat({
+  const { messages, setMessages, sendMessage, retry, canRetry, stop, status, error } = useAgentRunChat({
     apiOrigin: API_ORIGIN,
     getAuthToken: () => authSessionRef.current.token,
     getModel: () => panelChatRef.current.model,
@@ -246,6 +282,7 @@ export function AssistantPanel({
     // mode that explicitly suppresses the provider's reasoning channel.
     getThinking: () => thinkingEnabled,
     getThinkingEffort: () => thinkingEffort,
+    onRendererToolSettled: () => onRefreshSelection?.("tool-complete"),
     locale: i18n.language.startsWith("en") ? "en-US" : "zh-CN",
     onFinish: () => {
       void conversationHistory.load(true);
@@ -328,6 +365,27 @@ export function AssistantPanel({
     return () => globalThis.removeEventListener(DESKTOP_CONFIG_CHANGED_EVENT, refreshCatalog);
   }, []);
   useEffect(() => {
+    if (interaction.mode !== "fusion" || !fusionPanel) return;
+    const focusFrame = globalThis.requestAnimationFrame(() => {
+      const panel = document.querySelector<HTMLElement>(`[data-fusion-panel="${fusionPanel}"]`);
+      const target = panel?.querySelector<HTMLElement>(
+        "[data-fusion-panel-close], button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex='-1'])",
+      );
+      target?.focus({ preventScroll: true });
+    });
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || document.querySelector('[role="menu"], [role="listbox"]')) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      closeFusionPanel();
+    };
+    globalThis.addEventListener("keydown", closeOnEscape, { capture: true });
+    return () => {
+      globalThis.cancelAnimationFrame(focusFrame);
+      globalThis.removeEventListener("keydown", closeOnEscape, { capture: true });
+    };
+  }, [fusionPanel, interaction.mode]);
+  useEffect(() => {
     if (!selectedModel || thinkingSupported || !thinkingEnabled) return;
     setThinkingEnabled(false);
     panelChatRef.current.setThinkingEnabled(false);
@@ -408,6 +466,7 @@ export function AssistantPanel({
     changeModel,
     followLatest: messageScroll.followLatest,
     onSelect: (conversation) => {
+      fusionController.resetTurns();
       panelChatRef.current.setConversationId(conversation.id);
       setCurrentConversationId(conversation.id);
       setCurrentConversationTitle(conversation.title || t("history.untitled"));
@@ -423,6 +482,7 @@ export function AssistantPanel({
       setInput("");
       setAttachments([]);
       setBlackboardOpen(false);
+      fusionController.resetTurns();
     },
     messages,
     conversationId: currentConversationId,
@@ -459,6 +519,7 @@ export function AssistantPanel({
     setAttachments([]);
     setConversationDrawerOpen(false);
     setBlackboardOpen(false);
+    fusionController.resetTurns();
     messageScroll.followLatest();
   }
 
@@ -476,15 +537,15 @@ export function AssistantPanel({
     void blackboard.load();
   }
 
-  async function submit(exampleText?: string, requestedConversationId?: string) {
+  async function submit(exampleText?: string, requestedConversationId?: string): Promise<boolean> {
     const text = (exampleText ?? input).trim();
     const pendingAttachments = exampleText === undefined ? attachments : [];
-    if ((!text && pendingAttachments.length === 0) || isStreaming) return;
+    if ((!text && pendingAttachments.length === 0) || isStreaming) return false;
     const files = pendingAttachments.map((attachment) => attachment.part);
     if (!areSupportedAgentAttachments(files)) {
       const unsupported = pendingAttachments.find((attachment) => !attachment.part.mediaType?.startsWith("image/"));
       setSubmissionError(t("composer.unsupportedFile", { name: unsupported?.part.filename ?? t("common.attachment") }));
-      return;
+      return false;
     }
     const conversationId = requestedConversationId ?? currentConversationId ?? `conv_${crypto.randomUUID().replaceAll("-", "")}`;
     if (conversationId !== currentConversationId) {
@@ -498,10 +559,33 @@ export function AssistantPanel({
     setInput("");
     if (exampleText === undefined) setAttachments([]);
     onConversationStarted?.();
-    if (text) {
-      await sendMessage({ text, files }, { body: { conversationId } });
-    } else {
-      await sendMessage({ files }, { body: { conversationId } });
+    try {
+      if (text) {
+        await sendMessage({ text, files }, { body: { conversationId } });
+      } else {
+        await sendMessage({ files }, { body: { conversationId } });
+      }
+      return true;
+    } catch (caughtError) {
+      const accepted = wasAgentRunMessageAccepted(caughtError);
+      if (!accepted) {
+        if (exampleText === undefined) {
+          setInput(text);
+          setAttachments(pendingAttachments);
+        }
+        setSubmissionError(formatAgentRunError(unwrapAgentRunSubmissionError(caughtError), t));
+      }
+      return accepted;
+    }
+  }
+
+  async function retryFailedRun() {
+    setSubmissionError(null);
+    try {
+      return await retry();
+    } catch (caughtError) {
+      setSubmissionError(formatAgentRunError(unwrapAgentRunSubmissionError(caughtError), t));
+      return false;
     }
   }
 
@@ -569,7 +653,7 @@ export function AssistantPanel({
     setConversationDrawerOpen(false);
     setBlackboardOpen(false);
     const panel = panelRef.current;
-    const host = panel?.parentElement;
+    const host = panel ? resolvePanelWindowHost(panel) : null;
     if (panel && host && window.innerWidth > 980) {
       const bounds = panel.getBoundingClientRect();
       const targetLeft = Math.max(
@@ -616,7 +700,7 @@ export function AssistantPanel({
 
     if (window.innerWidth <= 980) return;
     const panel = panelRef.current;
-    const host = panel?.parentElement;
+    const host = panel ? resolvePanelWindowHost(panel) : null;
     if (!panel || !host) return;
     const panelBounds = panel.getBoundingClientRect();
     const maxLeft = Math.max(
@@ -633,7 +717,8 @@ export function AssistantPanel({
   function restorePanelAfterProblemBankClose() {
     if (problemBankOpen) return;
     const restore = problemBankRestorePositionRef.current;
-    const host = panelRef.current?.parentElement;
+    const panel = panelRef.current;
+    const host = panel ? resolvePanelWindowHost(panel) : null;
     if (!restore || !host) {
       problemBankTriggerRef.current?.focus({ preventScroll: true });
       return;
@@ -669,8 +754,202 @@ export function AssistantPanel({
     }));
   }
 
+  function restoreFusionPanelTrigger() {
+    const trigger = fusionPanelTriggerRef.current;
+    fusionPanelTriggerRef.current = null;
+    if (!trigger?.isConnected) return;
+    trigger.focus({ preventScroll: true });
+  }
+
+  function cancelFusionPanelFocusRestore() {
+    if (fusionPanelFocusRestoreTimerRef.current === null) return;
+    globalThis.clearTimeout(fusionPanelFocusRestoreTimerRef.current);
+    fusionPanelFocusRestoreTimerRef.current = null;
+  }
+
+  function scheduleFusionPanelFocusRestore() {
+    cancelFusionPanelFocusRestore();
+    fusionPanelFocusRestoreTimerRef.current = globalThis.setTimeout(() => {
+      fusionPanelFocusRestoreTimerRef.current = null;
+      restoreFusionPanelTrigger();
+    }, reduceMotion ? 0 : 400);
+  }
+
+  function closeFusionPanel(options: { restoreFocus?: boolean } = {}) {
+    setFusionPanel(null);
+    if (options.restoreFocus !== false) {
+      scheduleFusionPanelFocusRestore();
+    } else {
+      cancelFusionPanelFocusRestore();
+      fusionPanelTriggerRef.current = null;
+    }
+  }
+
+  function toggleFusionPanel(panel: FusionPanelId, trigger: HTMLButtonElement, beforeOpen?: () => void) {
+    if (fusionPanel === panel) {
+      closeFusionPanel();
+      return;
+    }
+    cancelFusionPanelFocusRestore();
+    fusionPanelTriggerRef.current = trigger;
+    beforeOpen?.();
+    setFusionPanel(panel);
+  }
+
+  useLayoutEffect(() => {
+    const previousMode = previousInteractionModeRef.current;
+    if (previousMode === interaction.mode) return;
+    previousInteractionModeRef.current = interaction.mode;
+    cancelFusionPanelFocusRestore();
+    fusionPanelTriggerRef.current = null;
+
+    if (interaction.mode === "fusion") {
+      const nextPanel = fusionPanelFromWindowState({
+        panelView,
+        conversationDrawerOpen,
+        blackboardOpen,
+        problemBankOpen,
+      });
+      setFusionPanel(nextPanel);
+      if (nextPanel === "history") void conversationHistory.load();
+      if (nextPanel === "blackboard") void blackboard.load();
+      return;
+    }
+
+    const returningPanel = fusionPanel;
+    setFusionPanel(null);
+    if (returningPanel === "problem-bank") openProblemBank();
+  }, [interaction.mode]);
+
+  useLayoutEffect(() => {
+    if (interaction.mode !== "fusion") return;
+    const windowState = windowStateFromFusionPanel(fusionPanel);
+    setCollapsed(false);
+    setPanelView(windowState.panelView);
+    setConversationDrawerOpen(windowState.conversationDrawerOpen);
+    setBlackboardOpen(windowState.blackboardOpen);
+    setProblemBankOpen(windowState.problemBankOpen);
+  }, [fusionPanel, interaction.mode, setCollapsed]);
+
+  if (interaction.mode === "fusion") {
+    return (
+      <>
+      <InteractionModeTransition
+        transition={modeTransition.transition}
+      />
+      <FusionModeSurface
+        controller={fusionController}
+        messages={messages}
+        status={status}
+        error={toastError}
+        input={input}
+        attachments={attachments}
+        canvasReady={canvasReady}
+        modelLabel={selectedModelOption?.label ?? selectedModel}
+        modelControl={(
+          <ModelMenu
+            value={selectedModel}
+            models={modelOptions}
+            disabled={isStreaming}
+            thinkingEnabled={thinkingEnabled}
+            thinkingSupported={thinkingSupported}
+            thinkingEffort={thinkingEffort}
+            portalContainer={() => document.body}
+            onChange={changeModel}
+            onThinkingEnabledChange={changeThinkingEnabled}
+            onThinkingEffortChange={changeThinkingEffort}
+            tourId="fusion-model"
+            compact
+          />
+        )}
+        selectionContext={selectionContext}
+        onRefreshSelection={onRefreshSelection}
+        activePanel={fusionPanel}
+        languageControl={<LanguageButton />}
+        onInputChange={setInput}
+        onAttachmentsChange={setAttachments}
+        onSend={() => submit()}
+        onStop={stop}
+        canRetry={canRetry}
+        onRetry={retryFailedRun}
+        onOpenHistory={(trigger) => toggleFusionPanel("history", trigger, () => { void conversationHistory.load(); })}
+        onOpenTranscript={(trigger) => toggleFusionPanel("transcript", trigger)}
+        onNewConversation={() => {
+          closeFusionPanel({ restoreFocus: false });
+          startNewConversation();
+        }}
+        onOpenBlackboard={(trigger) => toggleFusionPanel("blackboard", trigger, () => { void blackboard.load(); })}
+        onOpenProblemBank={(trigger) => toggleFusionPanel("problem-bank", trigger)}
+        onOpenSettings={(trigger) => toggleFusionPanel("settings", trigger)}
+        onSwitchToWindow={(origin) => {
+          modeTransition.requestMode("window", origin);
+        }}
+      />
+      <ConversationDrawer
+        viewport
+        open={fusionPanel === "history"}
+        interactionDisabled={isStreaming}
+        loading={conversationHistoryLoading}
+        selectingId={selectingConversationId}
+        deletingId={deletingConversationId}
+        error={conversationHistoryError}
+        conversations={conversations}
+        currentConversationId={currentConversationId}
+        onClose={closeFusionPanel}
+        onSelect={(conversation) => {
+          void conversationHistory.select(conversation).finally(() => closeFusionPanel());
+        }}
+        onDelete={conversationHistory.remove}
+      />
+      <BlackboardDrawer
+        viewport
+        open={fusionPanel === "blackboard"}
+        conversationId={currentConversationId}
+        loading={blackboard.loading}
+        error={blackboard.error}
+        entries={blackboard.entries}
+        onClose={closeFusionPanel}
+        onRefresh={() => void blackboard.load()}
+      />
+      <AnimatePresence initial={false}>
+        {fusionPanel === "transcript" && (
+          <FusionViewportCard key="fusion-transcript" panelId="transcript" title={panelTitle} closeLabel={t("history.close")} onClose={closeFusionPanel}>
+            <FusionTranscript
+              messages={messages}
+              streaming={isStreaming}
+              emptyLabel={t("history.empty")}
+              ariaLabel={t("fusion.transcript")}
+            />
+          </FusionViewportCard>
+        )}
+        {fusionPanel === "problem-bank" && (
+          <FusionViewportCard key="fusion-problem-bank" panelId="problem-bank" title={t("problemBank.title")} closeLabel={t("problemBank.close")} onClose={closeFusionPanel}>
+            <ProblemBankSidecar onClose={closeFusionPanel} />
+          </FusionViewportCard>
+        )}
+        {fusionPanel === "settings" && (
+          <FusionViewportCard key="fusion-settings" panelId="settings" wide title={t("settings.title")} closeLabel={t("settings.back")} onClose={closeFusionPanel}>
+            <SettingsPanel
+              mcp={mcp}
+              onRestartTour={restartOnboardingTour}
+              thinkingEnabled={thinkingEnabled}
+              thinkingSupported={thinkingSupported}
+              thinkingEffort={thinkingEffort}
+              modelLabel={selectedModelOption?.label ?? selectedModel}
+            />
+          </FusionViewportCard>
+        )}
+      </AnimatePresence>
+      <FusionOnboardingTour run={onboardingTourReady === true} onComplete={completeOnboardingTour} />
+      </>
+    );
+  }
+
   return (
     <>
+    <InteractionModeTransition
+      transition={modeTransition.transition}
+    />
     <MotionPaper
       ref={panelRef}
       className="geochat-panel"
@@ -681,8 +960,14 @@ export function AssistantPanel({
       // starts the transition from the drag surface, before dragging state is
       // released, so disabling layout here would make the restore snap open.
       layout={!resizing}
-      animate={{ borderRadius: collapsed ? 20 : 4 }}
-      transition={{ layout: { duration: 0.24, ease: [0.22, 1, 0.36, 1] } }}
+      initial={reduceMotion ? false : { opacity: 0, scale: 0.985, y: 8 }}
+      animate={{ borderRadius: collapsed ? 20 : 4, opacity: 1, scale: 1, y: 0 }}
+      transition={{
+        layout: { duration: 0.24, ease: [0.22, 1, 0.36, 1] },
+        opacity: { duration: reduceMotion ? 0 : 0.18 },
+        scale: { duration: reduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] },
+        y: { duration: reduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] },
+      }}
       onContextMenuCapture={(event) => {
         const target = event.target instanceof Element ? event.target : null;
         const editable = contextMenuEditableTarget(event.target);
@@ -882,6 +1167,11 @@ export function AssistantPanel({
               >
                 <LibraryBooksOutlined fontSize="small" />
               </IconButton>
+              <InteractionModeButton
+                mode="window"
+                label={t("panel.switchToFusion")}
+                onToggle={(origin) => modeTransition.requestMode("fusion", origin)}
+              />
               <LanguageButton tourId="language" transitionLanguage={transitionLanguage} />
               <IconButton
                 type="button"

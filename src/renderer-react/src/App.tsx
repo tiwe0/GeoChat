@@ -1,20 +1,31 @@
 import { useEffect, useRef, useState } from "react";
 import RestartAltRounded from "@mui/icons-material/RestartAltRounded";
 import { CircularProgress } from "@mui/material";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { AssistantPanel } from "./components/AssistantPanel";
 import { GeoGebraController } from "./geogebra/controller";
 import { mountGeoGebra } from "./geogebra/ggbdeploy-wrapper";
+import {
+  createGeoGebraSelectionContextBridge,
+  type GeoGebraSelectionContext,
+  type GeoGebraSelectionContextBridge,
+  type GeoGebraSelectionRefreshReason,
+} from "./geogebra/selection-context";
 import { setFrontendGeoGebraController } from "./geogebra/runtime";
 import { WindowTitleBar } from "./features/desktop/WindowTitleBar";
+import { useInteractionMode } from "./features/fusion-mode";
 import { backendOrigin, desktopRuntimeError } from "./features/desktop/runtime";
 import { desktopLogger } from "./features/desktop/desktopLogger";
 
 export default function App() {
   const { t } = useTranslation();
+  const reduceMotion = useReducedMotion();
+  const interaction = useInteractionMode();
   const canvasRef = useRef<HTMLDivElement>(null);
   const controllerRef = useRef(new GeoGebraController());
+  const selectionBridgeRef = useRef<GeoGebraSelectionContextBridge | null>(null);
+  const [selectionContext, setSelectionContext] = useState<GeoGebraSelectionContext>({ status: "unavailable", objectNames: [] });
   const [canvasState, setCanvasState] = useState<"loading" | "ready" | "error">("loading");
   const [canvasError, setCanvasError] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
@@ -39,6 +50,9 @@ export default function App() {
       onReady: (api) => {
         if (disposed) return;
         controllerRef.current.setApi(api);
+        selectionBridgeRef.current?.dispose();
+        selectionBridgeRef.current = createGeoGebraSelectionContextBridge(api, { onChange: setSelectionContext });
+        setSelectionContext(selectionBridgeRef.current.getSnapshot());
         setFrontendGeoGebraController(controllerRef.current);
         setCanvasState("ready");
       },
@@ -55,6 +69,8 @@ export default function App() {
       disposed = true;
       mountAbort.abort();
       mountedApplet?.dispose();
+      selectionBridgeRef.current?.dispose();
+      selectionBridgeRef.current = null;
       setFrontendGeoGebraController(null);
     };
   }, []);
@@ -84,11 +100,13 @@ export default function App() {
         <AnimatePresence initial={false}>
           {canvasState === "ready" && canvasIntroVisible && (
             <motion.div
-              className="frontend-canvas-intro"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -14, filter: "blur(3px)" }}
-              transition={{ duration: 0.28, ease: "easeOut" }}
+              className={`frontend-canvas-intro${interaction.mode === "fusion" ? " frontend-canvas-intro-fusion" : ""}`}
+              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 12, clipPath: "inset(0 0 0% 0)" }}
+              animate={{ opacity: 1, y: 0, clipPath: "inset(0 0 0% 0)", filter: "blur(0px)" }}
+              exit={reduceMotion
+                ? { opacity: 0 }
+                : { opacity: 0, y: -58, clipPath: "inset(0 0 100% 0)", filter: "blur(2px)" }}
+              transition={{ duration: reduceMotion ? 0.12 : 0.38, ease: [0.22, 1, 0.36, 1] }}
               aria-live="polite"
             >
               <span className="frontend-canvas-intro-badge">{t("canvasIntro.badge")}</span>
@@ -129,6 +147,12 @@ export default function App() {
       <div id="geochat-panel-host" className="geochat-panel-host">
         <AssistantPanel
           canvasReady={canvasState === "ready"}
+          selectionContext={selectionContext}
+          onRefreshSelection={(reason: GeoGebraSelectionRefreshReason) => {
+            const next = selectionBridgeRef.current?.refresh(reason);
+            if (next) setSelectionContext(next);
+            return next;
+          }}
           onConversationStarted={() => setCanvasIntroVisible(false)}
         />
       </div>

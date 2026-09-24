@@ -50,9 +50,10 @@ type ModelMenuProps = {
   onThinkingEnabledChange: (value: boolean) => void;
   onThinkingEffortChange: (value: ThinkingEffort) => void;
   tourId?: string;
+  compact?: boolean;
 };
 
-export function ModelMenu({ value, models, disabled, thinkingEnabled, thinkingSupported, thinkingEffort, portalContainer, onChange, onThinkingEnabledChange, onThinkingEffortChange, tourId }: ModelMenuProps) {
+export function ModelMenu({ value, models, disabled, thinkingEnabled, thinkingSupported, thinkingEffort, portalContainer, onChange, onThinkingEnabledChange, onThinkingEffortChange, tourId, compact = false }: ModelMenuProps) {
   const { t } = useTranslation();
   const [anchorElement, setAnchorElement] = useState<HTMLButtonElement | null>(null);
   const [menuMounted, setMenuMounted] = useState(false);
@@ -90,12 +91,19 @@ export function ModelMenu({ value, models, disabled, thinkingEnabled, thinkingSu
       if (eventPath.includes(anchorElement) || (menuRef.current && eventPath.includes(menuRef.current))) return;
       setMenuOpen(false);
     };
+    const closeOnOutsideFocus = (event: FocusEvent) => {
+      const eventPath = event.composedPath();
+      if (eventPath.includes(anchorElement) || (menuRef.current && eventPath.includes(menuRef.current))) return;
+      setMenuOpen(false);
+    };
     const closeOnWindowBlur = () => setMenuOpen(false);
 
     ownerDocument.addEventListener("pointerdown", closeOnOutsidePointerDown, true);
+    ownerDocument.addEventListener("focusin", closeOnOutsideFocus, true);
     ownerDocument.defaultView?.addEventListener("blur", closeOnWindowBlur);
     return () => {
       ownerDocument.removeEventListener("pointerdown", closeOnOutsidePointerDown, true);
+      ownerDocument.removeEventListener("focusin", closeOnOutsideFocus, true);
       ownerDocument.defaultView?.removeEventListener("blur", closeOnWindowBlur);
     };
   }, [anchorElement]);
@@ -151,12 +159,12 @@ export function ModelMenu({ value, models, disabled, thinkingEnabled, thinkingSu
       </ButtonBase>
       <Popper
         id="geogebra-copilot-model-menu"
-        anchorEl={anchorElement}
+        anchorEl={compact ? anchorElement?.closest("form") ?? anchorElement : anchorElement}
         open={menuMounted}
         container={portalContainer}
-        placement="top-end"
+        placement={compact ? "top-start" : "top-end"}
         modifiers={[
-          { name: "offset", options: { offset: [0, 4] } },
+          { name: "offset", options: { offset: [0, compact ? 6 : 4] } },
           { name: "preventOverflow", options: { padding: 8 } },
         ]}
         sx={{ zIndex: (theme) => theme.zIndex.tooltip }}
@@ -167,7 +175,14 @@ export function ModelMenu({ value, models, disabled, thinkingEnabled, thinkingSu
           animate={open ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: 4, scale: 0.96 }}
           transition={{ duration: 0.16, ease: "easeOut" }}
           onContextMenu={(event) => event.preventDefault()}
-          sx={{ width: 320, maxWidth: "calc(100vw - 24px)", border: 1, borderColor: "divider", overflow: "hidden" }}
+          sx={{
+            width: compact ? 216 : 320,
+            maxWidth: "calc(100vw - 24px)",
+            border: 1,
+            borderColor: "divider",
+            borderRadius: compact ? 2 : 1,
+            overflow: "hidden",
+          }}
         >
           <MenuList
             ref={menuRef}
@@ -175,18 +190,24 @@ export function ModelMenu({ value, models, disabled, thinkingEnabled, thinkingSu
             dense
             autoFocusItem={open}
             aria-labelledby="geogebra-copilot-model-button"
-            sx={{ maxHeight: "min(480px, 66vh)", overflowY: "auto", px: 0.5, py: 0.5, scrollbarWidth: "thin" }}
+            sx={{
+              maxHeight: compact ? "min(286px, 46vh)" : "min(480px, 66vh)",
+              overflowY: "auto",
+              px: 0.5,
+              py: compact ? 0.25 : 0.5,
+              scrollbarWidth: "thin",
+            }}
             onKeyDown={(event) => {
               if (event.key !== "Escape") return;
               setMenuOpen(false);
               anchorElement?.focus();
             }}
           >
-            <ListItemText sx={{ px: 1.5, py: 0.5 }} primary={<Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>{t("model.responseMode")}</Typography>} />
+            <ListItemText sx={{ px: compact ? 1 : 1.5, py: compact ? 0.125 : 0.5 }} primary={<Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>{t("model.responseMode")}</Typography>} />
             <MenuItem
               disabled={!thinkingSupported}
               onClick={() => onThinkingEnabledChange(!thinkingEnabled)}
-              sx={{ minHeight: 48, px: 1.25, borderRadius: 0.75 }}
+              sx={{ minHeight: compact ? 34 : 48, px: compact ? 1 : 1.25, borderRadius: 0.75 }}
             >
               <ListItemText
                 primary={thinkingSupported ? t("model.thinkingEnabled") : t("model.thinkingUnavailable")}
@@ -237,9 +258,9 @@ export function ModelMenu({ value, models, disabled, thinkingEnabled, thinkingSu
                 </Box>
               </>
             )}
-            <Divider sx={{ my: 0.5 }} />
+            <Divider sx={{ my: compact ? 0.25 : 0.5 }} />
             <ListItemText
-              sx={{ px: 1.5, py: 0.5 }}
+              sx={{ px: compact ? 1 : 1.5, py: compact ? 0.125 : 0.5 }}
               primary={<Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>{t("model.models")}</Typography>}
             />
             {providerView === null ? (
@@ -247,7 +268,7 @@ export function ModelMenu({ value, models, disabled, thinkingEnabled, thinkingSu
                 {modelGroups.map(({ provider, options }) => {
                   const current = options.find((option) => option.id === value);
                   return (
-                    <MenuItem key={provider} onClick={() => setProviderView(provider)} sx={{ minHeight: 44, px: 1.25, borderRadius: 0.75 }}>
+                    <MenuItem key={provider} onClick={() => setProviderView(provider)} sx={{ minHeight: compact ? 34 : 44, px: compact ? 1 : 1.25, borderRadius: 0.75 }}>
                       <Box sx={{ width: 8, height: 8, mr: 1, borderRadius: "50%", bgcolor: "primary.main", opacity: 0.75 }} />
                       <ListItemText
                         primary={providerLabel(provider, options)}
@@ -269,7 +290,7 @@ export function ModelMenu({ value, models, disabled, thinkingEnabled, thinkingSu
                 if (!group) return null;
                 return (
                   <>
-                    <MenuItem onClick={() => setProviderView(null)} sx={{ minHeight: 34, px: 1, color: "text.secondary" }}>
+                    <MenuItem onClick={() => setProviderView(null)} sx={{ minHeight: compact ? 28 : 34, px: 1, color: "text.secondary" }}>
                       <ArrowBackRounded sx={{ mr: 0.75, fontSize: 17 }} />
                       <Typography variant="caption" sx={{ fontWeight: 700 }}>{providerLabel(providerView, group.options)}</Typography>
                     </MenuItem>
@@ -282,7 +303,7 @@ export function ModelMenu({ value, models, disabled, thinkingEnabled, thinkingSu
                           selected={selected}
                           onClick={() => selectModel(option.id)}
                           title={`${option.label} · ${option.id}`}
-                          sx={{ minHeight: 40, px: 1.25, borderRadius: 0.75, alignItems: "center" }}
+                          sx={{ minHeight: compact ? 34 : 40, px: compact ? 1 : 1.25, borderRadius: 0.75, alignItems: "center" }}
                         >
                           <ListItemText
                             primary={option.label}

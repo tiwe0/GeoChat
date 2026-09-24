@@ -26,6 +26,7 @@ export type ConversationSummary = {
 };
 
 type ConversationDrawerProps = {
+  viewport?: boolean;
   open: boolean;
   interactionDisabled: boolean;
   loading: boolean;
@@ -40,6 +41,7 @@ type ConversationDrawerProps = {
 };
 
 export function ConversationDrawer({
+  viewport = false,
   open,
   interactionDisabled,
   loading,
@@ -62,7 +64,8 @@ export function ConversationDrawer({
 
   return (
     <Drawer
-      anchor="left"
+      data-fusion-panel={viewport ? "history" : undefined}
+      anchor={viewport ? "right" : "left"}
       open={open}
       onClose={closeDrawer}
       variant="temporary"
@@ -75,21 +78,22 @@ export function ConversationDrawer({
             position: "absolute",
             // Let conversation titles determine the drawer width while keeping
             // long titles readable without allowing the panel to take over.
-            width: "fit-content",
-            minWidth: 220,
-            maxWidth: "min(480px, calc(100% - 40px))",
+            width: viewport ? "100%" : "fit-content",
+            minWidth: viewport ? 0 : 220,
+            maxWidth: viewport ? "100%" : "min(480px, calc(100% - 40px))",
             borderRight: 1,
             borderColor: "divider",
             boxShadow: 6,
             bgcolor: "background.paper",
             overflowX: "hidden",
+            borderRadius: viewport ? 2.5 : 0,
           },
         },
       }}
       sx={{
-        position: "absolute",
-        inset: 0,
-        zIndex: 4,
+        position: viewport ? "fixed" : "absolute",
+        ...(viewport ? { top: 104, right: 18, bottom: 18, left: "auto", width: "min(420px, calc(100vw - 36px))" } : { inset: 0 }),
+        zIndex: viewport ? 1340 : 4,
         "& .MuiDrawer-paper": { position: "absolute" },
         "& .MuiModal-backdrop": { position: "absolute" },
       }}
@@ -102,7 +106,7 @@ export function ConversationDrawer({
           <Typography variant="subtitle2" sx={{ flex: 1, fontWeight: 800 }}>
             {t("history.title")}
           </Typography>
-          <IconButton type="button" size="small" onClick={closeDrawer} aria-label={t("history.close")} title={t("history.close")}>
+          <IconButton data-fusion-panel-close={viewport ? true : undefined} type="button" size="small" onClick={closeDrawer} aria-label={t("history.close")} title={t("history.close")}>
             <CloseRounded fontSize="small" />
           </IconButton>
         </Stack>

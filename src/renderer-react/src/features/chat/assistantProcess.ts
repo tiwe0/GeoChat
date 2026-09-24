@@ -16,10 +16,23 @@ export type AssistantProcess = {
   toolCount: number;
 };
 
+const ASSISTANT_DISPLAY_TOOLS = new Set([
+  "showSolutionSteps",
+  "showTeachingHint",
+  "showAnimationGuide",
+  "showChoiceAnalysis",
+  "showSelectedElements",
+]);
+
 function asPart(value: unknown): AssistantProcessPart | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const part = value as Partial<AssistantProcessPart>;
   return typeof part.type === "string" ? part as AssistantProcessPart : null;
+}
+
+export function isAssistantDisplayToolPart(part: unknown): part is AssistantProcessPart {
+  const candidate = asPart(part);
+  return Boolean(candidate?.type.startsWith("tool-") && ASSISTANT_DISPLAY_TOOLS.has(candidate.type.slice(5)));
 }
 
 export function assistantToolStatus(part: AssistantProcessPart) {

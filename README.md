@@ -5,263 +5,152 @@
 <h1 align="center">GeoChat Desktop</h1>
 
 <p align="center">
-  本地优先的 AI 数学可视化工作台。输入题目，GeoChat 自动构造、作图并解释。
+  让 AI 对话真正融入 GeoGebra 画板。随处唤起、就地作图、空间化讲解。
 </p>
 
 <p align="center">
   <a href="README.en.md">English</a>
   ·
-  <a href="https://geochat.ivory.cafe">官网</a>
+  <a href="https://chat-with-geogebra.com">官方网站</a>
   ·
-  <a href="https://github.com/tiwe0/GeoChat/releases/latest">下载</a>
+  <a href="https://github.com/tiwe0/GeoChat/releases/latest">下载 GeoChat</a>
   ·
-  <a href="#预览">预览</a>
-  ·
-  <a href="#快速开始">快速开始</a>
-  ·
-  <a href="#功能">功能</a>
-  ·
-  <a href="#star-history">Star History</a>
+  <a href="#产品亮点">产品亮点</a>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/tiwe0/GeoChat"></a>
   <a href="https://github.com/tiwe0/GeoChat/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/tiwe0/GeoChat?style=social"></a>
-  <img alt="Tauri" src="https://img.shields.io/badge/Tauri-2.x-24C8DB">
-  <img alt="Bun" src="https://img.shields.io/badge/Bun-runtime-black">
-  <img alt="React" src="https://img.shields.io/badge/React-UI-149ECA">
+  <img alt="macOS" src="https://img.shields.io/badge/macOS-supported-black">
+  <img alt="Windows" src="https://img.shields.io/badge/Windows-supported-0078D4">
 </p>
 
-当前稳定版：[`v0.5.0`](https://github.com/tiwe0/GeoChat/releases/tag/v0.5.0) · 官网：<https://geochat.ivory.cafe>
+`v0.6.0` · 默认启用全新的融合模式
 
-## 预览
+## 认识 GeoChat
 
-### 截图
+GeoChat 是一款面向数学学习、教学与探索的 AI GeoGebra 助手。
 
-<img src="docs/media/geochat-desktop-zh.png" alt="GeoChat Desktop 中文界面">
+你只需要描述题目、图形或作图意图，GeoChat 就会理解当前画板，完成构造、验证结果，
+并把关键关系和解题过程展示在图形附近。对话不再与画板分离，而是成为画板的一部分。
 
-### 视频
+## 产品预览
 
-#### 演示视频 1
+### 融合模式
+
+<img src="docs/media/geochat-fusion-mode.png" alt="GeoChat v0.6.0 融合模式：对话、工具过程和输入框直接分布在 GeoGebra 画板上">
+
+输入框可以在画板任意位置唤起。每轮回答会围绕对应的作图位置展开，较早的消息逐渐
+淡出，既保留上下文，也尽量不遮挡正在观察的图形。
+
+### 窗口模式
+
+<img src="docs/media/geochat-desktop-zh.png" alt="GeoChat Desktop 窗口模式中文界面">
+
+偏好传统聊天体验时，可以随时切换回窗口模式。当前对话、画板状态和正在使用的功能
+都会继续保留。
+
+### 视频演示
 
 <video src="https://raw.githubusercontent.com/tiwe0/GeoChat/master/docs/media/geochat-desktop-demo-1080p.mp4" controls width="100%"></video>
 
-[无法播放时打开视频文件](docs/media/geochat-desktop-demo-1080p.mp4)
+[无法播放时打开演示视频](docs/media/geochat-desktop-demo-1080p.mp4)
 
-#### 演示视频 2
+## 产品亮点
 
-<video src="https://raw.githubusercontent.com/tiwe0/GeoChat/master/docs/media/geochat-desktop-demo-en.mp4" controls width="100%"></video>
+### 对着画板直接提问
 
-[无法播放时打开视频文件](docs/media/geochat-desktop-demo-en.mp4)
+GeoChat 能读取当前画板和选中的对象。你可以直接说“让这条线经过 A 点”、
+“解释这个交点为什么存在”或“把当前图形整理得更清楚”，无需反复描述整个场景。
 
-## 项目介绍
+### 用自然语言完成 2D 与 3D 作图
 
-GeoChat Desktop 是一个本地优先的 AI 数学可视化工作台，核心是内嵌的
-GeoGebra 画板。它把 Tauri 2 桌面外壳、React 渲染层、本地 Bun 后端
-sidecar、SQLite 持久化，以及 `@geochat-ai/app` 中的共享 Agent 协议组合在
-一起。
+从基础函数、平面几何到空间几何，都可以通过自然语言发起构造。GeoChat 会组织作图
+步骤、调用 GeoGebra、检查结果，再给出说明。
 
-这个仓库面向可本地运行的桌面版本。你可以使用自己的模型供应商密钥运行本地
-工作区，不需要在线校验才能使用核心桌面功能。
+### 对话与图形保持空间关联
 
-## 功能
+在融合模式中，输入框可以拖动，也可以在指定位置重新唤起。回答会固定在本轮问题附近，
+可收起、固定、关闭或从原位置继续追问。
 
-| 能力 | 说明 |
+### 看得见的思考与工具过程
+
+模型的思考状态、工具调用和结果验证会以紧凑的过程卡片显示。你可以看到 GeoChat 正在
+读取画板、执行构造还是检查结果，而不必面对大段原始日志。
+
+### 面向讲解的答案卡片
+
+解题步骤、教学提示、动画操作说明、选项分析和关键对象会使用适合阅读的卡片展示，
+数学公式支持 LaTeX 排版。
+
+### 内置题库
+
+在不离开画板的情况下浏览题库、查看题目与解析，并按需下载题库内容。题目可以作为
+新的对话起点，继续作图、分析和讲解。
+
+### 数学技能自动匹配
+
+GeoChat 会根据题目自动选择相关的数学与 GeoGebra 技能，也允许你在设置中决定启用
+哪些技能以及偏好的可视化风格。
+
+### 多模型与自定义服务
+
+支持 DeepSeek、OpenAI、Anthropic Claude、Google Gemini、OpenRouter、通义千问，
+也可以添加兼容 OpenAI、Anthropic 或 Google 协议的自定义服务和模型。
+
+### 中英文界面
+
+应用支持中文和英文，可在使用过程中快速切换。
+
+## 融合模式怎么用
+
+1. 按 `⌘K`（macOS）或 `Ctrl+K`（Windows）在最近使用的位置唤起输入框。
+2. 直接输入题目、作图要求或针对当前图形的问题。
+3. 拖动输入框，或使用顶栏定位按钮，把下一轮对话放到合适位置。
+4. 在回答卡片上收起、固定、关闭，或者从原位置继续追问。
+
+顶栏可以随时打开完整对话、历史记录、黑板、题库和设置。你也可以一键切换到窗口模式。
+
+## 适合这些场景
+
+| 场景 | GeoChat 可以做什么 |
 | --- | --- |
-| 数学画板 | 本地 2D/3D 数学可视化画布，适合构造、验证和讲解几何关系。 |
-| AI 作图流程 | 输入题目后生成构造步骤、写入画板，并解释关键关系。 |
-| 自带模型密钥 | 用户在本机配置模型供应商 API key，不需要在线校验才能使用核心桌面功能。 |
-| 本地持久化 | 使用 SQLite 保存本地对话、黑板和 Agent 运行记录。 |
-| 题库工具 | 包含本地题库数据模型、导入工具和回归测试。 |
-| 桌面调试 | 内置桌面调试 MCP 工具，便于本地检查和 smoke testing。 |
-| Tauri 打包 | 桌面外壳集成 Bun runtime sidecar 和可替换 app-bundle 资源。 |
+| 数学学习 | 把抽象题目变成可观察、可操作的图形，并逐步解释。 |
+| 课堂教学 | 快速生成构造、动画与讲解步骤，帮助展示关键关系。 |
+| 几何探索 | 修改条件、移动对象、比较多种构造并观察结果变化。 |
+| 题目分析 | 从题库或自定义题目出发，结合图形完成推导与验证。 |
+| GeoGebra 使用 | 用自然语言调用常用和高阶功能，减少查找命令的成本。 |
 
-## 仓库内容
+## 下载与开始使用
 
-```text
-backend/          本地 Bun 后端、HTTP 路由、SQLite 仓库和服务。
-packages/app/     共享 schema、Agent 协议、策略和 GeoGebra 辅助逻辑。
-src/renderer-react/ React 桌面工作台 UI。
-src/shared/       渲染层和后端共享的 TypeScript 工具。
-src-tauri/        Tauri 外壳、Rust 命令桥、打包和 sidecar 控制。
-tests/            合同测试和回归测试。
-tools/            本地数据导入、smoke 和桌面调试工具。
-vendor/geogebra/  桌面应用使用的 GeoGebra runtime 资源。
-docs/             架构、产品和开发说明。
-scripts/          本地构建、bundle 和验证脚本。
-```
+1. 前往 [GeoChat 下载页面](https://chat-with-geogebra.com) 或
+   [GitHub Releases](https://github.com/tiwe0/GeoChat/releases/latest)。
+2. 下载适用于 macOS 或 Windows 的版本并完成安装。
+3. 在设置中填写你所使用的模型服务 API Key。
+4. 回到画板，输入题目或作图需求即可开始。
 
-## 环境要求
+GeoChat 采用自带密钥模式，模型费用由所选择的模型服务商按照其规则收取。
 
-- Bun `1.3.11` 或兼容版本。
-- Rust stable toolchain。
-- Tauri 2 所需的平台构建工具。
-  - macOS: Xcode Command Line Tools。
-  - Windows: Microsoft C++ Build Tools 和 WebView2 runtime。
-  - Linux: Tauri 所需的 WebKitGTK 和原生构建包。
+## 本地优先
 
-本项目使用 Bun 作为包管理器，并用 Bun 运行本地后端。
+GeoChat 的核心桌面功能不要求登录在线账户。模型密钥、对话记录、题库缓存和个人设置
+由当前设备管理。只有在请求模型服务或主动获取在线内容时，相关数据才会发送到对应服务。
 
-## 快速开始
+## 开源与致谢
 
-```sh
-bun install
-bun run dev
-```
+GeoChat 自有源代码和文档使用
+[Apache License 2.0](LICENSE)。项目内包含的第三方组件遵循各自的许可证，详情见
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
-`bun run dev` 会启动 Tauri 桌面应用。开发模式下，除非
-`GEOCHAT_DESKTOP_BACKEND_URL` 指向已有后端，否则桌面外壳会自动启动本地
-Bun 后端。
+感谢 GeoGebra 提供强大的数学可视化能力，也感谢所有贡献者、测试者和支持者。
 
-默认 SQLite 数据库路径：
+## 参与改进
 
-```text
-./data/geochat-desktop.sqlite
-```
-
-需要时可以覆盖：
-
-```sh
-GEOCHAT_DESKTOP_DB_PATH=./data/dev.sqlite bun run dev
-```
-
-## 模型配置
-
-打开应用设置，只配置并保存各模型供应商的 API key。密钥会保存在当前设备的桌面配置中。
-
-在对话页面选择供应商和具体模型；配置页不负责选择模型。共享模型注册表会根据
-已保存的供应商 key 提供可用选项。
-
-## 常用命令
-
-```sh
-bun run dev                 # 启动 Tauri 桌面开发应用。
-bun run backend:dev         # 只启动本地后端。
-bun run typecheck           # 检查共享、Node 和渲染层 TypeScript。
-bun test tests              # 运行 Bun 测试套件。
-bun run tauri:check         # 对 Tauri 外壳运行 cargo check。
-bun run tauri:prepare       # 构建后端、渲染层、vendor、runtime 和 manifest。
-bun run build               # 类型检查并准备 app bundle。
-bun run dist                # 构建本地 Tauri 应用包。
-```
-
-桌面 MCP 批量测试需要两个进程使用同一个本地 token：
-
-```sh
-GEOCHAT_DESKTOP_LOCAL_AUTH_TOKEN=dev-batch-token bun run dev
-GEOCHAT_DESKTOP_LOCAL_AUTH_TOKEN=dev-batch-token bun tools/run-desktop-problem-batch.ts
-```
-
-## App Bundle 边界
-
-打包后的桌面应用是围绕 app-bundle 资源运行的 Tauri 外壳。外壳负责原生命令、
-窗口生命周期、固定 Bun runtime sidecar 和打包流程。app bundle 负责已编译
-的后端代码、已编译的渲染层文件和 vendor 资源。
-
-`bun run tauri:prepare` 会生成：
-
-```text
-dist/backend/backend.bundle.js
-dist/renderer/index.html
-dist/vendor/**
-dist/runtime/bun
-dist/app-bundle-manifest.json
-```
-
-app-bundle manifest 只列出 `backend`、`renderer` 和 `vendor` 资源，不应包含
-`dist/runtime`；Bun 是固定的 runtime sidecar。
-
-常用本地检查：
-
-```sh
-bun run tauri:prepare
-bun run bundle:smoke
-bun run package:backend-smoke
-```
-
-## 开发说明
-
-- GeoGebra runtime 资源从 `vendor/geogebra` 本地提供。
-- 本地后端提供桌面健康检查、资源、对话、题库、供应商代理和 Agent 运行路由。
-- 用户应在运行时提供模型 API key。不要提交本地凭据、`.env`、`.dev.vars`、
-  SQLite 数据库或生成产物。
-- GeoGebra 集成说明见 `docs/geogebra-applet.md`。
-- AI SDK 原生 Agent 架构见 `docs/ai-sdk-native-migration.md`。
-- Tauri 外壳说明见 `docs/tauri2-shell-migration-plan.md`。
-
-## 发布前验证
-
-推送发布分支或公开镜像前运行：
-
-```sh
-bun run typecheck
-bun run tauri:prepare
-bun run tauri:check
-bun test tests
-```
-
-### 发布桌面版
-
-使用根目录的发布脚本统一更新 `package.json`、`src-tauri/Cargo.toml`、
-`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json` 和官网的 fallback 版本。默认只修改本地文件并执行检查，
-不会创建提交、tag 或推送远程：
-
-```sh
-bun run release -- --version 0.5.1
-```
-
-确认版本和检查结果后，可以分步提交和打 tag：
-
-```sh
-bun run release -- --version 0.5.1 --commit --tag
-git push origin master
-git push origin v0.5.1
-```
-
-也可以在确认工作区干净且当前分支为 `master` 后一次完成推送：
-
-```sh
-bun run release -- --version 0.5.1 --commit --tag --push
-```
-
-`--push` 会触发 `.github/workflows/tauri-package.yml`：它先运行验证，随后构建
-Windows/macOS 安装包、创建 GitHub Release，并在配置了 R2 时上传安装包和
-`latest.json`；同一个发布提交还会触发 `website.yml` 构建并部署 Cloudflare Pages。
-脚本会等待并检查 Actions、Release、R2 manifest、Pages 部署，以及官网首页和
-下载页的版本同步。使用 `--no-watch` 可跳过远程等待，`--dry-run` 可预览动作，
-`--skip-checks` 仅适用于明确知道风险的本地调试场景。R2 和官网检查分别使用
-`GEOCHAT_DOWNLOADS_BASE_URL`、`GEOCHAT_SITE_URL` 环境变量。
-
-当前 `v0.5.0` 发布已验证 Windows/macOS 安装包、GitHub Release、Cloudflare R2
-镜像和 Cloudflare Pages 部署链路。官网自定义域名需要在 Cloudflare Pages 中将
-`geochat.ivory.cafe` 绑定到 `geochat-7l8.pages.dev`。
-
-发布到新的公开远程仓库前，建议再运行一次外部历史敏感信息扫描。普通本地模式
-扫描有帮助，但不能替代完整历史扫描。
-
-## 版权和作者
-
-- Copyright (c) 2026 Ivory.
-- Author: Ivory <contact@ivory.cafe>
-- GeoChat 自有源代码和文档使用 Apache License, Version 2.0。见
-  `LICENSE` 和 `NOTICE`。
-- 本仓库也包含使用各自许可证的第三方组件。尤其是 `vendor/geogebra/` 不会被
-  重新授权为 GeoChat 自有的 Apache-2.0 代码。重新分发包含 GeoGebra runtime
-  的构建前，请阅读 `THIRD_PARTY_NOTICES.md` 和 GeoGebra 许可证条款。
-
-## 贡献
-
-保持改动聚焦且可验证：
-
-- 优先沿用现有项目模式。
-- 行为变化需要新增或更新测试。
-- 运行上面列出的相关检查。
-- 不要提交凭据、本地数据库或生成产物。
-
-安全相关报告不要在 issue 文本、日志、截图或复现数据中包含真实凭据。
+欢迎通过 [GitHub Issues](https://github.com/tiwe0/GeoChat/issues) 提交问题和建议。
+请不要在 issue、日志或截图中公开 API Key 等敏感信息。
 
 ## Star History
 
-如果这个项目对你有帮助，欢迎给一个 Star。它能帮助我们判断哪些方向值得继续投入。
+如果 GeoChat 对你有帮助，欢迎给项目一个 Star。
 
 [![Star History Chart](https://api.star-history.com/chart?repos=tiwe0/GeoChat&type=date&legend=top-left&sealed_token=oLgvpSYDuR0sPwlHMJv5pUNWFalPacI6ExWrttKg2zYQ9hin9c-CxY9b18RI0rfy97R4_bA4Z56afgMTJ9_-k_p_MoBqB6A3-mU4YUchikyRgRfD7JJO4mX6tqwCINW-sm4HPupk3C0Ku5H0vRNrOhbombQb7PDykT-gzkXxFPKRf6zBljrBAfOEEL3V)](https://www.star-history.com/?type=date&repos=tiwe0%2FGeoChat)

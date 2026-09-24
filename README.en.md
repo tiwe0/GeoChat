@@ -5,287 +5,156 @@
 <h1 align="center">GeoChat Desktop</h1>
 
 <p align="center">
-  AI conversation, fully integrated with the GeoGebra canvas. Summon it
-  anywhere, draw in place, and keep explanations spatially connected.
+  AI conversation, drawing, and explanation—directly on the GeoGebra canvas.
 </p>
 
 <p align="center">
-  <a href="README.md">中文</a>
+  <a href="README.md">简体中文</a>
   ·
   <a href="https://chat-with-geogebra.com">Website</a>
   ·
-  <a href="https://github.com/tiwe0/GeoChat/releases/latest">Download</a>
+  <a href="https://github.com/tiwe0/GeoChat/releases/latest">Download GeoChat</a>
   ·
-  <a href="#preview">Preview</a>
-  ·
-  <a href="#quick-start">Quick Start</a>
-  ·
-  <a href="#features">Features</a>
-  ·
-  <a href="#star-history">Star History</a>
+  <a href="#highlights">Highlights</a>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/tiwe0/GeoChat"></a>
   <a href="https://github.com/tiwe0/GeoChat/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/tiwe0/GeoChat?style=social"></a>
-  <img alt="Tauri" src="https://img.shields.io/badge/Tauri-2.x-24C8DB">
-  <img alt="Bun" src="https://img.shields.io/badge/Bun-runtime-black">
-  <img alt="React" src="https://img.shields.io/badge/React-UI-149ECA">
+  <img alt="macOS" src="https://img.shields.io/badge/macOS-supported-black">
+  <img alt="Windows" src="https://img.shields.io/badge/Windows-supported-0078D4">
 </p>
 
-Next release: `v0.6.0` · Fusion mode is the default · Website: <https://chat-with-geogebra.com>
+`v0.6.0` · The new Fusion Mode is enabled by default
+
+## Meet GeoChat
+
+GeoChat is an AI GeoGebra assistant for learning, teaching, and exploring mathematics.
+
+Describe a problem, a figure, or a construction goal. GeoChat understands the current canvas,
+builds and verifies the construction, and presents the important relationships and solution steps
+next to the geometry itself. Conversation becomes part of the canvas instead of a separate window.
 
 ## Preview
 
-### Fusion mode
+### Fusion Mode
 
-<img src="docs/media/geochat-fusion-mode.png" alt="GeoChat v0.6.0 Fusion mode with the composer, agent process, and responses placed directly on the GeoGebra canvas">
+<img src="docs/media/geochat-fusion-mode.png" alt="GeoChat v0.6.0 Fusion Mode with conversation, tool progress, and a composer placed directly on the GeoGebra canvas">
 
-The composer is no longer confined to a separate chat window. Summon it
-anywhere on the canvas and keep each response close to the construction it
-describes. Older turns fade to preserve the working area, while the complete
-transcript remains one click away.
+Summon the composer anywhere on the canvas. Each response stays close to the construction it belongs
+to, while older turns gradually fade to preserve context without covering your work.
 
-### Window mode
+### Window Mode
 
-<img src="docs/media/geochat-desktop-en.png" alt="GeoChat Desktop English interface">
+<img src="docs/media/geochat-desktop-zh.png" alt="GeoChat Desktop in Window Mode">
 
-### Videos
+Prefer a familiar chat layout? Switch back to Window Mode at any time without losing the current
+conversation, canvas, or open workspace features.
 
-#### Demo video 1
+### Demo Video
 
 <video src="https://raw.githubusercontent.com/tiwe0/GeoChat/master/docs/media/geochat-desktop-demo-1080p.mp4" controls width="100%"></video>
 
-[Open the video file if playback is unavailable](docs/media/geochat-desktop-demo-1080p.mp4)
+[Open the demo video if playback is unavailable](docs/media/geochat-desktop-demo-1080p.mp4)
 
-#### Demo video 2
+## Highlights
 
-<video src="https://raw.githubusercontent.com/tiwe0/GeoChat/master/docs/media/geochat-desktop-demo-en.mp4" controls width="100%"></video>
+### Ask the canvas directly
 
-[Open the video file if playback is unavailable](docs/media/geochat-desktop-demo-en.mp4)
+GeoChat can read the current construction and selected objects. Ask it to move a line through point A,
+explain why an intersection exists, or clean up the current figure without describing the whole scene again.
 
-## Introduction
+### Draw 2D and 3D mathematics with natural language
 
-GeoChat Desktop is a canvas-first, local-first AI mathematics workbench built
-around an embedded GeoGebra canvas. v0.6.0 defaults to **Fusion mode**: the
-composer, reasoning progress, tool calls, and answers appear beside the
-relevant construction instead of occupying a fixed chat window. The classic
-window mode remains available and can be entered without losing state.
+Create anything from functions and plane geometry to solid geometry. GeoChat plans the construction,
+operates GeoGebra, checks the result, and then explains what happened.
 
-It combines a Tauri 2 desktop shell, a React renderer, a local Bun backend
-sidecar, SQLite persistence, and shared agent contracts in `@geochat-ai/app`.
+### Keep conversation spatially connected to geometry
 
-This repository is designed for a desktop build that runs locally. You can use
-bring-your-own-key model providers for the local workspace, and the core desktop
-workflow does not require online checks.
+In Fusion Mode, the composer can be dragged or summoned at a chosen position. Each answer stays near
+its turn and can be collapsed, pinned, dismissed, or continued from the same location.
 
-## Features
+### See reasoning and tool progress without raw logs
 
-| Capability | What it does |
+Compact process cards show whether GeoChat is reading the canvas, constructing objects, or verifying
+the result. You get useful progress without pages of implementation details.
+
+### Read answers designed for teaching
+
+Solution steps, teaching hints, animation guides, choice analysis, and selected objects appear as
+purpose-built cards. Mathematical notation is rendered with LaTeX.
+
+### Explore the built-in problem library
+
+Browse problems and solutions without leaving the canvas, and download collections only when needed.
+Any problem can become the starting point for a new visual explanation.
+
+### Match mathematical skills automatically
+
+GeoChat selects relevant mathematics and GeoGebra skills for each problem. You can choose which skills
+are enabled and set your preferred visualization style.
+
+### Choose your model or connect your own service
+
+Use DeepSeek, OpenAI, Anthropic Claude, Google Gemini, OpenRouter, or Qwen. You can also add custom
+models through OpenAI-compatible, Anthropic, or Google protocols.
+
+### Work in Chinese or English
+
+The interface supports Chinese and English and can be switched while you work.
+
+## Using Fusion Mode
+
+1. Press `⌘K` on macOS or `Ctrl+K` on Windows to summon the composer near your latest position.
+2. Enter a problem, construction request, or question about the current figure.
+3. Drag the composer, or use the positioning button to place the next turn where it belongs.
+4. Collapse, pin, dismiss, or continue a response from its original location.
+
+The top toolbar keeps full conversation history, the blackboard, problem library, language settings,
+and preferences close at hand. Window Mode is always one click away.
+
+## Built for these workflows
+
+| Scenario | What GeoChat helps you do |
 | --- | --- |
-| Default Fusion mode | Summon the composer anywhere and keep each turn spatially connected to its construction. |
-| Spatial conversation | Stream answers, reasoning progress, and tool calls as lightweight bubbles; older turns fade instead of covering the canvas. |
-| Two interaction modes | Switch between Fusion and window modes with a circular reveal while preserving the conversation, active run, and business panels. |
-| Canvas context | Capture the currently selected GeoGebra objects when a prompt is submitted. |
-| Math canvas | Local 2D/3D mathematics visualization canvas for construction, verification, and explanation. |
-| AI drawing workflow | Turns a problem into construction steps, writes them to the canvas, and explains the key relationships. |
-| Bring your own key | Configure model provider API keys on your own device; core desktop workflows do not require online checks. |
-| Local persistence | Stores conversations, blackboards, and agent-run records in SQLite. |
-| Problem-bank tooling | Includes local problem-bank data models, import tools, and regression tests. |
-| Desktop debugging | Includes desktop debug MCP tools for local inspection and smoke testing. |
-| Tauri packaging | Ships a desktop shell with a Bun runtime sidecar and replaceable app-bundle resources. |
+| Learning mathematics | Turn abstract problems into visual, interactive explanations. |
+| Teaching | Create constructions, animations, and structured explanations quickly. |
+| Exploring geometry | Change conditions, move objects, compare constructions, and observe results. |
+| Solving problems | Start from the library or your own question, then derive and verify visually. |
+| Using GeoGebra | Access everyday and advanced capabilities through natural language. |
 
-## Repository Contents
+## Download and Get Started
 
-```text
-backend/          Local Bun backend, HTTP routes, SQLite repositories, services.
-packages/app/     Shared schemas, agent contracts, policies, and GeoGebra helpers.
-src/renderer-react/ React desktop workbench UI.
-src/shared/       Shared renderer/backend TypeScript helpers.
-src-tauri/        Tauri shell, Rust command bridge, packaging, sidecar control.
-tests/            Contract and regression tests.
-tools/            Local data import, smoke, and desktop-debug tooling.
-vendor/geogebra/  Vendored GeoGebra runtime assets used by the desktop app.
-docs/             Architecture, product, and development notes.
-scripts/          Local build, bundle, and verification scripts.
-```
+1. Visit the [GeoChat website](https://chat-with-geogebra.com) or
+   [GitHub Releases](https://github.com/tiwe0/GeoChat/releases/latest).
+2. Download and install the macOS or Windows edition.
+3. Add the API key for your preferred model provider in Settings.
+4. Return to the canvas and enter a problem or construction request.
 
-## Prerequisites
+GeoChat uses a bring-your-own-key model. Model usage is billed by the provider you choose according
+to that provider's pricing.
 
-- Bun `1.3.11` or compatible.
-- Rust stable toolchain.
-- Platform build tools required by Tauri 2.
-  - macOS: Xcode Command Line Tools.
-  - Windows: Microsoft C++ Build Tools and WebView2 runtime.
-  - Linux: the WebKitGTK and native build packages required by Tauri.
+## Local First
 
-The project uses Bun as the package manager and runtime for the local backend.
+The core desktop experience does not require an online GeoChat account. Model credentials,
+conversation history, problem-library cache, and preferences are managed on your device. Data is sent
+to an external service only when you request a model response or intentionally load online content.
 
-## Quick Start
+## Open Source and Acknowledgements
 
-```sh
-bun install
-bun run dev
-```
+GeoChat-owned source code and documentation are available under the
+[Apache License 2.0](LICENSE). Third-party components remain under their respective licenses; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for details.
 
-`bun run dev` starts the Tauri shell. During development, the shell starts the
-local Bun backend automatically unless `GEOCHAT_DESKTOP_BACKEND_URL` points at
-an existing backend.
+Thank you to GeoGebra for its powerful mathematics platform, and to every contributor, tester, and supporter.
 
-The default SQLite database path is:
+## Help Improve GeoChat
 
-```text
-./data/geochat-desktop.sqlite
-```
-
-Override it when needed:
-
-```sh
-GEOCHAT_DESKTOP_DB_PATH=./data/dev.sqlite bun run dev
-```
-
-## Model Configuration
-
-Open the app settings to save API keys for your model providers. Keys are stored
-in the desktop configuration on the current device.
-
-Choose the provider and concrete model on the conversation page; the settings
-page only stores provider keys. The shared model registry exposes models for the
-providers whose keys are configured.
-
-## Fusion Mode
-
-Fusion mode is the default interaction model in v0.6.0:
-
-- Press `⌘K` on macOS or `Ctrl+K` on Windows/Linux to summon the composer at
-  the most recently used canvas position.
-- Use the position action in the top toolbar, then click the canvas to place
-  the next turn precisely.
-- Drag the composer freely. After submission, the turn remains anchored near
-  that location.
-- Collapse, pin, dismiss, retry, or continue a turn in place.
-- Open the full transcript, history, blackboard, problem bank, or settings from
-  the compact toolbar.
-- Switching modes preserves the conversation, in-flight model run, and open
-  business panel.
-
-Use the top-right mode button or the Interaction mode setting to return to the
-classic window layout at any time.
-
-## Common Commands
-
-```sh
-bun run dev                 # Start the Tauri desktop app in development mode.
-bun run backend:dev         # Start only the local backend.
-bun run typecheck           # Type-check shared, Node, and renderer TypeScript.
-bun test tests              # Run the Bun test suite.
-bun run tauri:check         # Run cargo check for the Tauri shell.
-bun run tauri:prepare       # Build backend, renderer, vendor, runtime, manifest.
-bun run build               # Type-check and prepare the app bundle.
-bun run dist                # Build a local Tauri app package.
-```
-
-For desktop MCP batch testing, use the same local token in both processes:
-
-```sh
-GEOCHAT_DESKTOP_LOCAL_AUTH_TOKEN=dev-batch-token bun run dev
-GEOCHAT_DESKTOP_LOCAL_AUTH_TOKEN=dev-batch-token bun tools/run-desktop-problem-batch.ts
-```
-
-## App-Bundle Boundary
-
-The packaged desktop app is a Tauri shell around app-bundle resources. The shell
-owns native commands, window lifecycle, the fixed Bun runtime sidecar, and
-packaging. The app bundle owns compiled backend code, compiled renderer files,
-and vendored resources.
-
-`bun run tauri:prepare` produces:
-
-```text
-dist/backend/backend.bundle.js
-dist/renderer/index.html
-dist/vendor/**
-dist/runtime/bun
-dist/app-bundle-manifest.json
-```
-
-The app-bundle manifest lists only `backend`, `renderer`, and `vendor` assets.
-It must not include `dist/runtime`; Bun is the fixed runtime sidecar.
-
-Useful local gates:
-
-```sh
-bun run tauri:prepare
-bun run bundle:smoke
-bun run package:backend-smoke
-```
-
-## Development Notes
-
-- GeoGebra runtime assets are served locally from `vendor/geogebra`.
-- The local backend serves desktop health, assets, conversations, problem-bank
-  records, provider proxying, and agent-run routes.
-- Provider API keys should be supplied by users at runtime. Do not commit local
-  credentials, `.env`, `.dev.vars`, SQLite databases, or generated build output.
-- See `docs/geogebra-applet.md` for GeoGebra integration notes.
-- See `docs/ai-sdk-native-migration.md` for the native AI SDK agent architecture.
-- See `docs/tauri2-shell-migration-plan.md` for Tauri shell notes.
-
-## Verification Before Publishing
-
-Run the public checks before pushing a release branch or public mirror:
-
-```sh
-bun run typecheck
-bun run tauri:prepare
-bun run tauri:check
-bun test tests
-```
-
-### Desktop release
-
-The root release script keeps the desktop versions and website fallback version
-in sync, then can commit, tag, push, and watch the GitHub Actions pipeline:
-
-```sh
-bun run release -- --version 0.5.1
-bun run release -- --version 0.5.1 --commit --tag --push
-```
-
-The pipeline builds Windows/macOS installers, publishes a GitHub Release,
-mirrors installers to Cloudflare R2 when configured, and deploys the website to
-Cloudflare Pages. The v0.6.0 release pipeline verifies each of those stages.
-
-Run an external history secret scanner before publishing a new public remote.
-Local pattern scans are useful, but they are not a substitute for a full history
-scanner.
-
-## Copyright and Author
-
-- Copyright (c) 2026 Ivory.
-- Author: Ivory <contact@ivory.cafe>
-- GeoChat-owned source code and documentation are licensed under the Apache
-  License, Version 2.0. See `LICENSE` and `NOTICE`.
-- This repository also includes third-party components under their own license
-  terms. In particular, `vendor/geogebra/` is not relicensed as GeoChat-owned
-  Apache-2.0 code. See `THIRD_PARTY_NOTICES.md` and the GeoGebra license terms
-  before redistributing builds that include the vendored GeoGebra runtime.
-
-## Contributing
-
-Keep changes focused and verifiable:
-
-- Prefer existing project patterns over new abstractions.
-- Add or update tests for behavior changes.
-- Run the relevant checks listed above.
-- Do not commit credentials, local databases, or generated build artifacts.
-
-Security-sensitive reports should avoid including live credentials in issue
-text, logs, screenshots, or reproduction data.
+Questions and suggestions are welcome in [GitHub Issues](https://github.com/tiwe0/GeoChat/issues).
+Please never include API keys or other sensitive information in issues, logs, or screenshots.
 
 ## Star History
 
-If GeoChat is useful to you, a Star helps us understand which directions are
-worth continuing to invest in.
+If GeoChat is useful to you, consider giving the project a Star.
 
 [![Star History Chart](https://api.star-history.com/chart?repos=tiwe0/GeoChat&type=date&legend=top-left&sealed_token=oLgvpSYDuR0sPwlHMJv5pUNWFalPacI6ExWrttKg2zYQ9hin9c-CxY9b18RI0rfy97R4_bA4Z56afgMTJ9_-k_p_MoBqB6A3-mU4YUchikyRgRfD7JJO4mX6tqwCINW-sm4HPupk3C0Ku5H0vRNrOhbombQb7PDykT-gzkXxFPKRf6zBljrBAfOEEL3V)](https://www.star-history.com/?type=date&repos=tiwe0%2FGeoChat)

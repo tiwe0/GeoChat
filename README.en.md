@@ -5,14 +5,14 @@
 <h1 align="center">GeoChat Desktop</h1>
 
 <p align="center">
-  A local-first AI mathematics visualization workspace. Enter a problem, and
-  GeoChat constructs, draws, and explains it.
+  AI conversation, fully integrated with the GeoGebra canvas. Summon it
+  anywhere, draw in place, and keep explanations spatially connected.
 </p>
 
 <p align="center">
   <a href="README.md">中文</a>
   ·
-  <a href="https://geochat.ivory.cafe">Website</a>
+  <a href="https://chat-with-geogebra.com">Website</a>
   ·
   <a href="https://github.com/tiwe0/GeoChat/releases/latest">Download</a>
   ·
@@ -33,11 +33,20 @@
   <img alt="React" src="https://img.shields.io/badge/React-UI-149ECA">
 </p>
 
-Latest stable release: [`v0.5.0`](https://github.com/tiwe0/GeoChat/releases/tag/v0.5.0) · Website: <https://geochat.ivory.cafe>
+Next release: `v0.6.0` · Fusion mode is the default · Website: <https://chat-with-geogebra.com>
 
 ## Preview
 
-### Screenshots
+### Fusion mode
+
+<img src="docs/media/geochat-fusion-mode.png" alt="GeoChat v0.6.0 Fusion mode with the composer, agent process, and responses placed directly on the GeoGebra canvas">
+
+The composer is no longer confined to a separate chat window. Summon it
+anywhere on the canvas and keep each response close to the construction it
+describes. Older turns fade to preserve the working area, while the complete
+transcript remains one click away.
+
+### Window mode
 
 <img src="docs/media/geochat-desktop-en.png" alt="GeoChat Desktop English interface">
 
@@ -57,10 +66,14 @@ Latest stable release: [`v0.5.0`](https://github.com/tiwe0/GeoChat/releases/tag/
 
 ## Introduction
 
-GeoChat Desktop is a local-first AI mathematics workbench built around an
-embedded GeoGebra canvas. It combines a Tauri 2 desktop shell, a React
-renderer, a local Bun backend sidecar, SQLite persistence, and shared agent
-contracts in `@geochat-ai/app`.
+GeoChat Desktop is a canvas-first, local-first AI mathematics workbench built
+around an embedded GeoGebra canvas. v0.6.0 defaults to **Fusion mode**: the
+composer, reasoning progress, tool calls, and answers appear beside the
+relevant construction instead of occupying a fixed chat window. The classic
+window mode remains available and can be entered without losing state.
+
+It combines a Tauri 2 desktop shell, a React renderer, a local Bun backend
+sidecar, SQLite persistence, and shared agent contracts in `@geochat-ai/app`.
 
 This repository is designed for a desktop build that runs locally. You can use
 bring-your-own-key model providers for the local workspace, and the core desktop
@@ -70,6 +83,10 @@ workflow does not require online checks.
 
 | Capability | What it does |
 | --- | --- |
+| Default Fusion mode | Summon the composer anywhere and keep each turn spatially connected to its construction. |
+| Spatial conversation | Stream answers, reasoning progress, and tool calls as lightweight bubbles; older turns fade instead of covering the canvas. |
+| Two interaction modes | Switch between Fusion and window modes with a circular reveal while preserving the conversation, active run, and business panels. |
+| Canvas context | Capture the currently selected GeoGebra objects when a prompt is submitted. |
 | Math canvas | Local 2D/3D mathematics visualization canvas for construction, verification, and explanation. |
 | AI drawing workflow | Turns a problem into construction steps, writes them to the canvas, and explains the key relationships. |
 | Bring your own key | Configure model provider API keys on your own device; core desktop workflows do not require online checks. |
@@ -135,6 +152,25 @@ in the desktop configuration on the current device.
 Choose the provider and concrete model on the conversation page; the settings
 page only stores provider keys. The shared model registry exposes models for the
 providers whose keys are configured.
+
+## Fusion Mode
+
+Fusion mode is the default interaction model in v0.6.0:
+
+- Press `⌘K` on macOS or `Ctrl+K` on Windows/Linux to summon the composer at
+  the most recently used canvas position.
+- Use the position action in the top toolbar, then click the canvas to place
+  the next turn precisely.
+- Drag the composer freely. After submission, the turn remains anchored near
+  that location.
+- Collapse, pin, dismiss, retry, or continue a turn in place.
+- Open the full transcript, history, blackboard, problem bank, or settings from
+  the compact toolbar.
+- Switching modes preserves the conversation, in-flight model run, and open
+  business panel.
+
+Use the top-right mode button or the Interaction mode setting to return to the
+classic window layout at any time.
 
 ## Common Commands
 
@@ -218,7 +254,7 @@ bun run release -- --version 0.5.1 --commit --tag --push
 
 The pipeline builds Windows/macOS installers, publishes a GitHub Release,
 mirrors installers to Cloudflare R2 when configured, and deploys the website to
-Cloudflare Pages. The current `v0.5.0` release completed all of those checks.
+Cloudflare Pages. The v0.6.0 release pipeline verifies each of those stages.
 
 Run an external history secret scanner before publishing a new public remote.
 Local pattern scans are useful, but they are not a substitute for a full history

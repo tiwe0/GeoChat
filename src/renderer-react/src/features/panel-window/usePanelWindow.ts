@@ -47,7 +47,7 @@ export function clampPanelGeometry(
   };
 }
 
-function panelHost(handle: HTMLElement) {
+export function resolvePanelWindowHost(handle: HTMLElement) {
   const root = handle.getRootNode();
   if (root instanceof ShadowRoot && root.host instanceof HTMLElement) return root.host;
   return handle.closest<HTMLElement>("#geochat-panel-host") ?? handle.parentElement;
@@ -83,7 +83,7 @@ export function parsePersistedPanelWindow(value: unknown): PersistedPanelWindow 
   };
 }
 
-export function usePanelWindow(view: PanelView) {
+export function usePanelWindow(view: PanelView, enabled = true) {
   const [collapsed, setCollapsed] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [resizing, setResizing] = useState<ResizeDirection | null>(null);
@@ -96,8 +96,9 @@ export function usePanelWindow(view: PanelView) {
   const expandedHeightRef = useRef<string | null>(null);
 
   function persist() {
+    if (!enabled) return;
     const panel = panelRef.current;
-    const host = panel ? panelHost(panel) : null;
+    const host = panel ? resolvePanelWindowHost(panel) : null;
     if (!panel || !host) return;
     const position = readPanelPosition(host);
     void browser.storage.local.set({
@@ -112,13 +113,14 @@ export function usePanelWindow(view: PanelView) {
   }
 
   useEffect(() => {
+    if (!enabled) return;
     let disposed = false;
     const frame = window.requestAnimationFrame(() => {
       void browser.storage.local.get(PANEL_WINDOW_STORAGE_KEY).then((stored) => {
         if (disposed) return;
         const saved = parsePersistedPanelWindow(stored[PANEL_WINDOW_STORAGE_KEY]);
         const panel = panelRef.current;
-        const host = panel ? panelHost(panel) : null;
+        const host = panel ? resolvePanelWindowHost(panel) : null;
         if (!saved || !panel || !host) return;
         if (saved.width) panel.style.width = `${saved.width}px`;
         if (saved.height) panel.style.height = `${saved.height}px`;
@@ -139,13 +141,13 @@ export function usePanelWindow(view: PanelView) {
       disposed = true;
       window.cancelAnimationFrame(frame);
     };
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
-    if (collapsed) return;
+    if (!enabled || collapsed) return;
     const keepPanelInViewport = () => {
       const panel = panelRef.current;
-      const host = panel ? panelHost(panel) : null;
+      const host = panel ? resolvePanelWindowHost(panel) : null;
       if (!panel || !host || !host.style.left || !host.style.top) return;
       const bounds = panel.getBoundingClientRect();
       if (panel.style.width && bounds.width > window.innerWidth - VIEWPORT_GUTTER * 2) panel.style.width = `${Math.max(0, window.innerWidth - VIEWPORT_GUTTER * 2)}px`;
@@ -159,26 +161,39 @@ export function usePanelWindow(view: PanelView) {
       window.cancelAnimationFrame(frame);
       window.removeEventListener("resize", keepPanelInViewport);
     };
-  }, [collapsed]);
+  }, [collapsed, enabled]);
 
   useEffect(() => {
-    if (collapsed || !expandedHeightRef.current) return;
+    if (!enabled || collapsed || !expandedHeightRef.current) return;
     const panel = panelRef.current;
     if (!panel) return;
     if (expandedWidthRef.current) panel.style.width = expandedWidthRef.current;
     panel.style.height = expandedHeightRef.current;
     panel.style.maxHeight = "none";
-  }, [collapsed]);
+  }, [collapsed, enabled]);
+
+  useEffect(() => {
+    if (enabled) return;
+    if (dragRef.current) dragRef.current.host.style.willChange = "";
+    if (resizeRef.current) {
+      resizeRef.current.host.style.willChange = "";
+      resizeRef.current.panel.style.willChange = "";
+    }
+    dragRef.current = null;
+    resizeRef.current = null;
+    setDragging(false);
+    setResizing(null);
+  }, [enabled]);
 
   function startDragging(event: PointerEvent<HTMLElement>, allowInteractive = false) {
-    if (!event.isPrimary || event.button !== 0) return;
+    if (!enabled || !event.isPrimary || event.button !== 0) return;
     if (!allowInteractive && event.target instanceof Element && event.target.closest("button, input, textarea, select, a, [data-copilot-no-drag]")) return;
     // The collapsed restore control is also the only draggable surface. Keep
     // the click alive when the pointer does not move, but let pointer capture
     // take over when the user drags from the button or its image.
     const interactiveClick = allowInteractive && event.target instanceof Element
       && Boolean(event.target.closest("button, input, textarea, select, a"));
-    const host = panelHost(event.currentTarget);
+    const host = resolvePanelWindowHost(event.currentTarget);
     if (!host) return;
     const bounds = host.getBoundingClientRect();
     host.style.transition = "none";
@@ -194,6 +209,7 @@ export function usePanelWindow(view: PanelView) {
   }
 
   function moveDragging(event: PointerEvent<HTMLElement>) {
+    if (!enabled) return;
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 4) drag.moved = true;
@@ -202,6 +218,7 @@ export function usePanelWindow(view: PanelView) {
   }
 
   function stopDragging(event: PointerEvent<HTMLElement>) {
+    if (!enabled) return;
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
@@ -224,8 +241,9 @@ export function usePanelWindow(view: PanelView) {
   }
 
   function toggleCollapsed() {
+    if (!enabled) return;
     const panel = panelRef.current;
-    const host = panel ? panelHost(panel) : null;
+    const host = panel ? resolvePanelWindowHost(panel) : null;
     const transition = "left 240ms cubic-bezier(0.22, 1, 0.36, 1), top 240ms cubic-bezier(0.22, 1, 0.36, 1)";
     if (!collapsed && host) {
       const position = expandedPositionRef.current ?? readPanelPosition(host);
@@ -270,9 +288,9 @@ export function usePanelWindow(view: PanelView) {
 
   function startResizing(direction: ResizeDirection) {
     return (event: PointerEvent<HTMLElement>) => {
-      if (!event.isPrimary || event.button !== 0) return;
+      if (!enabled || !event.isPrimary || event.button !== 0) return;
       const panel = panelRef.current;
-      const host = panel ? panelHost(panel) : null;
+      const host = panel ? resolvePanelWindowHost(panel) : null;
       if (!panel || !host) return;
       const panelBounds = panel.getBoundingClientRect();
       const hostBounds = host.getBoundingClientRect();
@@ -294,6 +312,7 @@ export function usePanelWindow(view: PanelView) {
   }
 
   function moveResizing(event: PointerEvent<HTMLElement>) {
+    if (!enabled) return;
     const resize = resizeRef.current;
     if (!resize || resize.pointerId !== event.pointerId) return;
     const deltaX = event.clientX - resize.startX;
@@ -319,6 +338,7 @@ export function usePanelWindow(view: PanelView) {
   }
 
   function stopResizing(event: PointerEvent<HTMLElement>) {
+    if (!enabled) return;
     const resize = resizeRef.current;
     if (!resize || resize.pointerId !== event.pointerId) return;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);

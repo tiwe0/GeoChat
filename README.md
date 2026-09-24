@@ -5,13 +5,13 @@
 <h1 align="center">GeoChat Desktop</h1>
 
 <p align="center">
-  本地优先的 AI 数学可视化工作台。输入题目，GeoChat 自动构造、作图并解释。
+  让 AI 对话真正融入 GeoGebra 画板。随处唤起、就地作图、空间化讲解。
 </p>
 
 <p align="center">
   <a href="README.en.md">English</a>
   ·
-  <a href="https://geochat.ivory.cafe">官网</a>
+  <a href="https://chat-with-geogebra.com">官网</a>
   ·
   <a href="https://github.com/tiwe0/GeoChat/releases/latest">下载</a>
   ·
@@ -32,11 +32,18 @@
   <img alt="React" src="https://img.shields.io/badge/React-UI-149ECA">
 </p>
 
-当前稳定版：[`v0.5.0`](https://github.com/tiwe0/GeoChat/releases/tag/v0.5.0) · 官网：<https://geochat.ivory.cafe>
+下一版本：`v0.6.0` · 默认启用融合模式 · 官网：<https://chat-with-geogebra.com>
 
 ## 预览
 
-### 截图
+### 融合模式
+
+<img src="docs/media/geochat-fusion-mode.png" alt="GeoChat v0.6.0 融合模式：对话、工具过程和输入框直接分布在 GeoGebra 画板上">
+
+输入框不再被固定在单独窗口中。你可以在画板任意位置唤起它，回答会围绕本轮
+作图位置展开；更早的消息会逐渐淡出，完整记录仍可随时从顶栏打开。
+
+### 窗口模式
 
 <img src="docs/media/geochat-desktop-zh.png" alt="GeoChat Desktop 中文界面">
 
@@ -56,10 +63,13 @@
 
 ## 项目介绍
 
-GeoChat Desktop 是一个本地优先的 AI 数学可视化工作台，核心是内嵌的
-GeoGebra 画板。它把 Tauri 2 桌面外壳、React 渲染层、本地 Bun 后端
-sidecar、SQLite 持久化，以及 `@geochat-ai/app` 中的共享 Agent 协议组合在
-一起。
+GeoChat Desktop 是一个画板优先、本地优先的 AI 数学可视化工作台。v0.6.0
+默认使用**融合模式**：输入框、思考过程、工具调用和回答不再占据固定聊天窗口，
+而是直接出现在相关的 GeoGebra 构造附近。传统窗口模式仍然保留，并可随时无损
+切换。
+
+应用把 Tauri 2 桌面外壳、React 渲染层、本地 Bun 后端 sidecar、SQLite
+持久化，以及 `@geochat-ai/app` 中的共享 Agent 协议组合在一起。
 
 这个仓库面向可本地运行的桌面版本。你可以使用自己的模型供应商密钥运行本地
 工作区，不需要在线校验才能使用核心桌面功能。
@@ -68,6 +78,10 @@ sidecar、SQLite 持久化，以及 `@geochat-ai/app` 中的共享 Agent 协议�
 
 | 能力 | 说明 |
 | --- | --- |
+| 默认融合模式 | 在画板任意位置唤起输入框，让每轮回答与对应构造保持空间关联。 |
+| 空间化对话 | 流式回答、思考和工具调用以轻量气泡展示；旧消息自动淡出，避免遮挡画板。 |
+| 双模式切换 | 融合模式与窗口模式通过圆形扩散动画切换，并保留当前会话、运行状态和业务面板。 |
+| 画板上下文 | 发送时读取当前选中的 GeoGebra 对象，让追问指向具体图形。 |
 | 数学画板 | 本地 2D/3D 数学可视化画布，适合构造、验证和讲解几何关系。 |
 | AI 作图流程 | 输入题目后生成构造步骤、写入画板，并解释关键关系。 |
 | 自带模型密钥 | 用户在本机配置模型供应商 API key，不需要在线校验才能使用核心桌面功能。 |
@@ -131,6 +145,19 @@ GEOCHAT_DESKTOP_DB_PATH=./data/dev.sqlite bun run dev
 
 在对话页面选择供应商和具体模型；配置页不负责选择模型。共享模型注册表会根据
 已保存的供应商 key 提供可用选项。
+
+## 融合模式
+
+融合模式是 v0.6.0 的默认交互方式：
+
+- 按 `⌘K`（macOS）或 `Ctrl+K`（Windows/Linux）在最近使用的位置唤起输入框。
+- 使用顶栏的定位按钮，再点击画板，可把下一轮对话放在指定位置。
+- 输入框可以直接拖动；提交后，本轮消息会固定在对应锚点附近。
+- 可收起、固定、关闭或在原位置继续某一轮回答；失败的轮次可就地重试。
+- 顶栏仍可打开完整对话、历史记录、黑板、题库和设置。
+- 模式切换不会丢失当前对话、模型运行状态或已打开的业务面板。
+
+如果更偏好传统布局，可通过右上角模式按钮或设置中的“交互模式”切换回窗口模式。
 
 ## 常用命令
 
@@ -232,9 +259,8 @@ Windows/macOS 安装包、创建 GitHub Release，并在配置了 R2 时上传�
 `--skip-checks` 仅适用于明确知道风险的本地调试场景。R2 和官网检查分别使用
 `GEOCHAT_DOWNLOADS_BASE_URL`、`GEOCHAT_SITE_URL` 环境变量。
 
-当前 `v0.5.0` 发布已验证 Windows/macOS 安装包、GitHub Release、Cloudflare R2
-镜像和 Cloudflare Pages 部署链路。官网自定义域名需要在 Cloudflare Pages 中将
-`geochat.ivory.cafe` 绑定到 `geochat-7l8.pages.dev`。
+v0.6.0 发布流程将验证 Windows/macOS 安装包、GitHub Release、Cloudflare R2
+镜像和 Cloudflare Pages 部署链路。官网域名为 `chat-with-geogebra.com`。
 
 发布到新的公开远程仓库前，建议再运行一次外部历史敏感信息扫描。普通本地模式
 扫描有帮助，但不能替代完整历史扫描。

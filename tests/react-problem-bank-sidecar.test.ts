@@ -56,6 +56,8 @@ describe("problem-bank sidecar", () => {
     expect(panelSource).toContain("onPointerDown={panelWindow.startDragging}");
     expect(panelSource).toContain("onPointerMove={movePanel}");
     expect(panelSource).toContain("problemBankRestorePositionRef.current = null;");
+    expect(panelSource).toContain("resolvePanelWindowHost(panel)");
+    expect(panelSource).not.toContain("const host = panel?.parentElement;");
     expect(sidecarSource).toContain("loadProblemBankPage");
     expect(sidecarSource).toContain("onScroll={handleBodyScroll}");
     expect(sidecarSource).toContain("syncProblemBankMetadata");

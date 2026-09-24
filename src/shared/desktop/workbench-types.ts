@@ -121,12 +121,19 @@ export type VisualProfileName =
   | "proof-highlight"
   | "spatial-3d";
 
+export type InteractionMode = "window" | "fusion";
+
+export type InteractionConfig = {
+  mode: InteractionMode;
+};
+
 export type DesktopConfig = {
   model: ModelConfig;
   visionModel: ModelConfig;
   providerCredentials: Record<string, ProviderCredentialConfig>;
   customProvider: CustomProviderConfig;
   skills: SkillConfig;
+  interaction: InteractionConfig;
   debug: DebugConfig;
   locale: Locale;
 };

@@ -8,6 +8,7 @@ import { useLoggingState } from "../useLoggingState";
 import { ProblemBankCacheSettings } from "./ProblemBankCacheSettings";
 import { SettingsDisclosure } from "./SettingsDisclosure";
 import { SettingsSection } from "./SettingsSection";
+import { InteractionModeSettings } from "../../fusion-mode/InteractionModeSettings";
 
 const LOG_LEVELS: DesktopLogLevel[] = ["error", "warn", "info", "debug", "trace"];
 
@@ -16,8 +17,12 @@ const LOG_LEVELS: DesktopLogLevel[] = ["error", "warn", "info", "debug", "trace"
  * what version is running, and whether the local MCP server is listening.
  */
 export function GeneralSettings({ mcp, onRestartTour }: { mcp: McpController; onRestartTour: () => void }) {
+  const { t } = useTranslation();
   return (
     <Box className="settings-page settings-general-page">
+      <SettingsSection title={t("settings.interactionMode")} description={t("settings.interactionModeDescription")}>
+        <InteractionModeSettings />
+      </SettingsSection>
       <TourSection onRestartTour={onRestartTour} />
       <UpdateSection />
       <LoggingSection />

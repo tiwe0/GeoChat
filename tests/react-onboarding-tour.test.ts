@@ -15,6 +15,10 @@ const targetSource = [
 ].map((source) => source.endsWith(".tsx")
   ? readFileSync(new URL(`../src/renderer-react/src/components/${source}`, import.meta.url), "utf8")
   : source).join("\n");
+const fusionTourSource = readFileSync(
+  new URL("../src/renderer-react/src/features/fusion-mode/FusionOnboardingTour.tsx", import.meta.url),
+  "utf8",
+);
 
 describe("initial onboarding tour", () => {
   test("covers every current toolbar feature in visual order", () => {
@@ -42,9 +46,30 @@ describe("initial onboarding tour", () => {
   });
 
   test("versions completion so the expanded tutorial is shown once after upgrade", () => {
-    expect(panelSource).toContain("const ONBOARDING_TOUR_VERSION = 2;");
+    expect(panelSource).toContain("const ONBOARDING_TOUR_VERSION = 3;");
     expect(panelSource).toContain("stored[ONBOARDING_TOUR_STORAGE_KEY] !== ONBOARDING_TOUR_VERSION");
     expect(panelSource).toContain("[ONBOARDING_TOUR_STORAGE_KEY]: ONBOARDING_TOUR_VERSION");
+  });
+
+  test("covers the fusion workflow without relying on the window toolbar", () => {
+    for (const target of [
+      "fusion-summon",
+      "fusion-position",
+      "fusion-composer",
+      "fusion-model",
+      "fusion-attachments",
+      "fusion-send",
+      "fusion-new",
+      "fusion-history",
+      "fusion-transcript",
+      "fusion-blackboard",
+      "fusion-problem-bank",
+      "fusion-language",
+      "fusion-settings",
+    ]) {
+      expect(fusionTourSource).toContain(`data-copilot-tour=\"${target}\"`);
+    }
+    expect(fusionTourSource).toContain("data-interaction-mode-toggle");
   });
 
   test("localizes every new tour step in both languages", () => {

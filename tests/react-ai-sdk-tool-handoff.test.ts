@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  AgentRunSubmissionError,
   completeInterruptedToolParts,
   isRetryableNativeChatError,
   messagesWithSkillPolicy,
@@ -7,6 +8,8 @@ import {
   queueToolOutput,
   shouldAutomaticallyContinueNativeRun,
   shouldCompleteNativeRun,
+  unwrapAgentRunSubmissionError,
+  wasAgentRunMessageAccepted,
   type AddToolOutput,
 } from "../src/renderer-react/src/hooks/useAgentRunChat";
 import { createDefaultDesktopConfig } from "../src/shared/desktop/desktop-config";
@@ -45,6 +48,17 @@ describe("native AI SDK renderer-tool handoff", () => {
     expect(isRetryableNativeChatError(new Error("ECONNRESET"))).toBe(true);
     expect(isRetryableNativeChatError(new Error("HTTP 400 invalid_request"))).toBe(false);
     expect(isRetryableNativeChatError(new Error("Agent run is already terminal"))).toBe(false);
+  });
+
+  test("distinguishes a rejected draft from a message already accepted by AI SDK", () => {
+    const original = new Error("transport failed");
+    const beforeAcceptance = new AgentRunSubmissionError(original, false);
+    const afterAcceptance = new AgentRunSubmissionError(original, true);
+
+    expect(wasAgentRunMessageAccepted(beforeAcceptance)).toBe(false);
+    expect(wasAgentRunMessageAccepted(afterAcceptance)).toBe(true);
+    expect(unwrapAgentRunSubmissionError(afterAcceptance)).toBe(original);
+    expect(unwrapAgentRunSubmissionError(original)).toBe(original);
   });
 
   test("defers addToolOutput until the SDK onToolCall task has exited", async () => {

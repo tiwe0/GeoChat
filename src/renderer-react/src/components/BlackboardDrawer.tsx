@@ -25,6 +25,7 @@ import { STREAMDOWN_PLUGINS } from "../features/chat/streamdownPlugins";
 import { useStreamdownTranslations } from "../i18n/useStreamdownTranslations";
 
 type BlackboardDrawerProps = {
+  viewport?: boolean;
   open: boolean;
   conversationId: string | null;
   loading: boolean;
@@ -35,6 +36,7 @@ type BlackboardDrawerProps = {
 };
 
 export function BlackboardDrawer({
+  viewport = false,
   open,
   conversationId,
   loading,
@@ -58,7 +60,8 @@ export function BlackboardDrawer({
 
   return (
     <Drawer
-      anchor="left"
+      data-fusion-panel={viewport ? "blackboard" : undefined}
+      anchor={viewport ? "right" : "left"}
       open={open}
       onClose={onClose}
       variant="temporary"
@@ -75,20 +78,21 @@ export function BlackboardDrawer({
           className: "geochat-blackboard",
           sx: {
             position: "absolute",
-            width: "min(380px, calc(100% - 72px))",
+            width: viewport ? "100%" : "min(380px, calc(100% - 72px))",
             maxWidth: "100%",
             borderRight: 1,
             borderColor: "#092920",
             boxShadow: 6,
             bgcolor: "#173f35",
             color: chalk,
+            borderRadius: viewport ? 2.5 : 0,
           },
         },
       }}
       sx={{
-        position: "absolute",
-        inset: 0,
-        zIndex: 4,
+        position: viewport ? "fixed" : "absolute",
+        ...(viewport ? { top: 104, right: 18, bottom: 18, left: "auto", width: "min(420px, calc(100vw - 36px))" } : { inset: 0 }),
+        zIndex: viewport ? 1340 : 4,
         "& .MuiDrawer-paper": { position: "absolute" },
         "& .MuiModal-backdrop": { position: "absolute" },
         "& .blackboard-markdown": {
@@ -153,6 +157,7 @@ export function BlackboardDrawer({
             <RefreshRounded fontSize="small" sx={{ animation: loading ? "copilot-spin 900ms linear infinite" : "none" }} />
           </IconButton>
           <IconButton
+            data-fusion-panel-close={viewport ? true : undefined}
             type="button"
             onClick={onClose}
             aria-label={t("blackboard.close")}

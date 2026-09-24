@@ -9,15 +9,8 @@ import {
 import type { Locale } from "../../../shared/desktop/locale";
 import { Streamdown } from "streamdown";
 import { STREAMDOWN_PLUGINS } from "../features/chat/streamdownPlugins";
+import { isAssistantDisplayToolPart } from "../features/chat/assistantProcess";
 import { useStreamdownTranslations } from "../i18n/useStreamdownTranslations";
-
-const DISPLAY_TOOLS = new Set([
-  "showSolutionSteps",
-  "showTeachingHint",
-  "showAnimationGuide",
-  "showChoiceAnalysis",
-  "showSelectedElements",
-]);
 
 type ToolPart = {
   type: string;
@@ -187,8 +180,7 @@ function Verdict({ value, copy }: { value?: string; copy: CardLabels }) {
 }
 
 export function isAgentDisplayToolPart(part: unknown): part is ToolPart {
-  if (!isRecord(part) || typeof part.type !== "string" || !part.type.startsWith("tool-")) return false;
-  return DISPLAY_TOOLS.has(part.type.slice(5));
+  return isAssistantDisplayToolPart(part);
 }
 
 export function AgentToolResult({ part, locale, statusLabel }: { part: ToolPart; locale: "zh-CN" | "en-US"; statusLabel: string }) {

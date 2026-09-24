@@ -8,6 +8,7 @@ import { useReducedMotion } from "motion/react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Streamdown } from "streamdown";
+import { AgentDisplayToolResult } from "../chat/AgentDisplayToolResult";
 import {
   assistantToolStatus,
   collectAssistantProcessRuns,
@@ -102,6 +103,7 @@ function ProcessCard({ process, active }: { process: AssistantProcess; active: b
 }
 
 export function FusionAssistantMessage({ message, active }: { message: FusionChatMessage; active: boolean }) {
+  const { i18n, t } = useTranslation();
   const translations = useStreamdownTranslations();
   const processRuns = collectAssistantProcessRuns(
     message.parts,
@@ -129,7 +131,16 @@ export function FusionAssistantMessage({ message, active }: { message: FusionCha
     if (part.type === "file") {
       return <Typography key={`file:${index}`} variant="caption" color="text.secondary">{part.filename ?? part.mediaType}</Typography>;
     }
-    if (isAssistantDisplayToolPart(part)) return <ToolRow key={`tool:${index}`} part={part} />;
+    if (isAssistantDisplayToolPart(part)) {
+      return (
+        <AgentDisplayToolResult
+          key={`tool:${index}`}
+          part={part}
+          locale={i18n.language.startsWith("en") ? "en-US" : "zh-CN"}
+          statusLabel={t(`tools.${assistantToolStatus(part)}`)}
+        />
+      );
+    }
     return null;
   });
 }

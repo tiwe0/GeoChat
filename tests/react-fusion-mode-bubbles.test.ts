@@ -22,6 +22,32 @@ describe("fusion-mode bubble projection", () => {
     expect(assistant).not.toContain("active && <CircularProgress");
   });
 
+  test("keeps completed display-tool messages in the spatial bubble projection", () => {
+    const messages = [{
+      id: "display-1",
+      role: "assistant",
+      parts: [{
+        type: "tool-showSolutionSteps",
+        state: "output-available",
+        output: { title: "Solution", steps: [{ label: "1", body: "Draw the circle" }] },
+      }],
+    }] as unknown as FusionChatMessage[];
+
+    expect(deriveFusionBubbles({ messages, status: "ready", labels })).toEqual([{
+      id: "display-1",
+      role: "assistant",
+      content: "",
+      message: messages[0],
+    }]);
+  });
+
+  test("renders display tools with the shared rich-card renderer", () => {
+    const assistant = readFileSync(join(import.meta.dir, "../src/renderer-react/src/features/fusion-mode/FusionAssistantMessage.tsx"), "utf8");
+    expect(assistant).toContain('from "../chat/AgentDisplayToolResult"');
+    expect(assistant).toContain("<AgentDisplayToolResult");
+    expect(assistant).not.toContain('isAssistantDisplayToolPart(part)) return <ToolRow');
+  });
+
   test("projects the recent conversation into a bounded bubble stack", () => {
     const messages = [
       { id: "u1", role: "user", parts: [{ type: "text", text: "first" }] },
@@ -51,6 +77,8 @@ describe("fusion-mode bubble projection", () => {
     expect(stack).toContain("px: 2.5");
     expect(stack).toContain("pb: 3");
     expect(stack).toContain('scrollPaddingBlock: "12px 24px"');
+    expect(stack).toContain('justifyContent: "flex-start"');
+    expect(stack).not.toContain('props.placement === "above" ? "flex-end" : "flex-start"');
   });
 
   test("visually joins the composer-attached conversation into one floating cluster", () => {

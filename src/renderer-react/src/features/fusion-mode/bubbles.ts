@@ -1,4 +1,5 @@
 import { getToolName, isToolUIPart } from "ai";
+import { isAssistantDisplayToolPart } from "../chat/assistantProcess";
 import type { FusionBubble, FusionChatMessage, FusionChatStatus } from "./types";
 
 export type FusionBubbleLabels = {
@@ -43,6 +44,10 @@ export function deriveFusionBubbles(input: {
       continue;
     }
     if (message.role === "assistant") {
+      if (message.parts.some(isAssistantDisplayToolPart)) {
+        historyBubbles.push({ id: message.id, role: "assistant", content: "", message });
+        continue;
+      }
       const status = assistantStatus(message, input.labels);
       if (status) historyBubbles.push({ id: message.id, role: "status", content: status, pending: input.status !== "ready", message });
     }

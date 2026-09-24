@@ -80,7 +80,12 @@ export function FusionBubbleStack(props: {
           ? "translate(-50%, calc(-100% + 16px))"
           : "translate(-50%, 68px)",
         alignItems: "stretch",
-        justifyContent: props.placement === "above" ? "flex-end" : "flex-start",
+        // `flex-end` creates negative start overflow when an above-placed
+        // answer grows taller than maxHeight, permanently clipping the real
+        // rounded top edge. The container is auto-height until maxHeight, so
+        // flex-start preserves the same placement while keeping the full card
+        // reachable and its top corners visible.
+        justifyContent: "flex-start",
         pointerEvents: "auto",
         zIndex: 1320 + (props.visualOrder ?? 0),
         opacity: props.visualOpacity ?? 1,

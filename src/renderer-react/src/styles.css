@@ -124,6 +124,55 @@ html.interaction-mode-view-transition::view-transition-new(root) {
 .frontend-canvas-host .applet_scaler, .frontend-canvas-host .GeoGebraFrame { width: 100% !important; height: 100% !important; }
 .frontend-canvas-host .applet_scaler, .frontend-canvas-host .GeoGebraFrame { display: block !important; visibility: visible !important; opacity: 1 !important; }
 .frontend-canvas-host .GeoGebraFrame { position: relative !important; z-index: 0; overflow: hidden; }
+.frontend-canvas-host.is-toolbar-collapsed .GeoGebraFrame .toolBPanel,
+.frontend-canvas-host.is-toolbar-collapsed .GeoGebraFrame .submenuScrollPanel {
+  display: none !important;
+}
+.frontend-canvas-host.is-toolbar-collapsed .GeoGebraFrame .toolbarPanelNorth {
+  display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+.frontend-canvas-host.is-toolbar-collapsed .GeoGebraFrame .rightButtonPanel {
+  position: absolute !important;
+  top: 0 !important;
+  right: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+.frontend-canvas-host.is-toolbar-collapsed .menuBtn {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+.frontend-canvas-host.is-toolbar-collapsed .GeoGebraHeader {
+  display: none !important;
+}
+.frontend-canvas-host.is-toolbar-collapsed .GeoGebraFrame tr:has(.GeoGebraHeader),
+.frontend-canvas-host.is-toolbar-collapsed .GeoGebraFrame tr:has(.toolbarPanelNorth),
+.frontend-canvas-host.is-toolbar-collapsed .GeoGebraFrame tr:has(.AlgebraInput),
+.frontend-canvas-host.is-toolbar-collapsed .GeoGebraFrame tr:has(.AlgebraInput2),
+.frontend-canvas-host.is-toolbar-collapsed .GeoGebraFrame tr:has(.inputPanel) {
+  display: none !important;
+  height: 0 !important;
+}
+.frontend-canvas-host.is-toolbar-collapsed .TitleBarPanel,
+.frontend-canvas-host.is-toolbar-collapsed .toggleStyleBar {
+  display: none !important;
+}
+.frontend-canvas-host .GeoGebraMenuBar,
+.frontend-canvas-host .mowMenubar,
+.frontend-canvas-host .menuPanel {
+  left: 0 !important;
+  right: auto !important;
+}
+.frontend-canvas-host .geochat-native-menu-cell .menuBarClassic {
+  border-right: 1px solid #dcdcdc !important;
+  border-left: 0 !important;
+}
 .frontend-canvas-host canvas { display: block !important; visibility: visible !important; opacity: 1 !important; max-width: none; }
 .frontend-canvas-intro {
   position: absolute;
@@ -141,22 +190,9 @@ html.interaction-mode-view-transition::view-transition-new(root) {
      guidance visibly anchored to the board instead of underneath that layer. */
   z-index: 1320;
 }
-.frontend-canvas-intro-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 5px 10px;
-  border: 1px solid #d6e7dc;
-  border-radius: 999px;
-  color: #18794e;
-  background: rgba(255, 255, 255, .9);
-  box-shadow: 0 3px 12px rgba(24, 59, 36, .08);
-  font-size: 12px;
-  font-weight: 750;
-  letter-spacing: .01em;
-}
 .frontend-canvas-intro h1 {
   max-width: 480px;
-  margin: 14px 0 8px;
+  margin: 0 0 8px;
   color: #18231e;
   font-size: clamp(28px, 3vw, 42px);
   font-weight: 800;
@@ -170,48 +206,32 @@ html.interaction-mode-view-transition::view-transition-new(root) {
   font-size: 16px;
   line-height: 1.55;
 }
-.frontend-canvas-status {
-  position: absolute;
-  left: 20px;
-  bottom: 20px;
-  z-index: 6;
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  padding: 9px 13px;
-  border: 1px solid rgba(214, 227, 218, .95);
-  border-radius: 999px;
-  color: #607168;
-  background: rgba(255, 255, 255, .92);
-  box-shadow: 0 5px 16px rgba(24, 59, 36, .14);
-  backdrop-filter: blur(8px);
-  font-size: 12px;
-  font-weight: 700;
-}
-.frontend-canvas-status-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.frontend-canvas-status-item i { width: 7px; height: 7px; border-radius: 50%; background: #8fa099; }
-.frontend-canvas-status-ready .frontend-canvas-status-item i { background: #42a564; box-shadow: 0 0 0 3px rgba(66, 165, 100, .12); }
-.frontend-canvas-status-error .frontend-canvas-status-item i { background: #d65d54; box-shadow: 0 0 0 3px rgba(214, 93, 84, .12); }
-.frontend-canvas-reset {
+.frontend-canvas-controls {
   position: absolute;
   right: 20px;
   bottom: 20px;
   z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.frontend-canvas-control {
   width: 38px;
   height: 38px;
   display: grid;
   place-items: center;
-  border: 1px solid #dce6df;
+  border: 1px solid transparent;
   border-radius: 50%;
   color: #52645a;
-  background: rgba(255, 255, 255, .94);
-  box-shadow: 0 5px 16px rgba(24, 59, 36, .18);
+  background: transparent;
+  box-shadow: none;
   cursor: pointer;
   transition: background-color .15s ease, color .15s ease, transform .15s ease;
 }
-.frontend-canvas-reset:hover:not(:disabled) { color: #078d48; background: #effaf3; transform: translateY(-1px); }
-.frontend-canvas-reset:focus-visible { outline: 2px solid #07c160; outline-offset: 2px; }
-.frontend-canvas-reset:disabled { cursor: not-allowed; opacity: .5; }
+.frontend-canvas-control:hover:not(:disabled) { color: #078d48; background: rgba(239, 250, 243, .88); transform: translateY(-1px); }
+.frontend-canvas-control:focus-visible { outline: 2px solid #07c160; outline-offset: 2px; }
+.frontend-canvas-control:disabled { cursor: not-allowed; opacity: .5; }
+.frontend-canvas-toolbar.is-active { color: #078d48; background: #e7f8ed; border-color: #b8dfc5; }
 .frontend-canvas-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #607168; background: #fff; font-size: 13px; }
 .frontend-canvas-overlay span { max-width: min(560px, calc(100vw - 40px)); color: #a64d44; font-size: 11px; text-align: center; overflow-wrap: anywhere; }
 .frontend-loader { width: 24px; height: 24px; border: 2px solid #d6eadd; border-top-color: #07c160; border-radius: 50%; animation: frontend-spin .8s linear infinite; }
@@ -220,41 +240,6 @@ html.interaction-mode-view-transition::view-transition-new(root) {
 .frontend-canvas-error::after { transform: rotate(-45deg); }
 @keyframes frontend-spin { to { transform: rotate(360deg); } }
 .geochat-panel-host { position: fixed; z-index: 20; right: 20px; bottom: 20px; }
-/* Window titlebar.
-   Transparent, and floating over the canvas rather than pushing it down, so
-   no drawing area is lost — the canvas shows straight through.
-
-   z-index 15 is deliberate: it sits above the canvas but BELOW the assistant
-   panel (20). A titlebar drawn over the panel would swallow the pointer the
-   moment the panel was dragged up here, and the panel could never be dragged
-   back out. Below the panel, the bar keeps every pixel the panel is not
-   covering, and the panel stays grabbable everywhere. */
-.window-titlebar {
-  position: fixed;
-  inset: 0 0 auto 0;
-  z-index: 15;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  /* Clears the traffic lights, which the shell places at x=18. */
-  padding: 0 12px 0 84px;
-  background: transparent;
-  /* The only affordance a transparent bar has: the pointer says "grab me". */
-  cursor: grab;
-  user-select: none;
-  -webkit-user-select: none;
-}
-.window-titlebar:active { cursor: grabbing; }
-/* Windows draws no traffic lights, and its controls sit on the right. */
-.window-titlebar-windows { padding-left: 16px; }
-.window-titlebar-spacer { flex: 1; min-width: 0; align-self: stretch; }
-.window-titlebar-controls { display: flex; align-items: center; gap: 2px; }
-.window-titlebar-controls button { cursor: pointer; width: 34px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: #35433b; }
-.window-titlebar-controls button:hover { background: #18231e0f; }
-.window-titlebar-controls button:focus-visible { outline: 2px solid #07c160; outline-offset: -2px; }
-.window-titlebar-controls .window-titlebar-close:hover { background: #df574d; color: #fff; }
-.window-titlebar-controls svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.2; }
 
 .geochat-panel-host > .MuiPaper-root {
   box-shadow: 0 20px 54px rgba(24, 59, 36, .18), 0 2px 8px rgba(24, 59, 36, .08);
@@ -362,7 +347,10 @@ html.interaction-mode-view-transition::view-transition-new(root) {
 .problem-bank-waterfall { padding-bottom: 4px; }
 .problem-bank-problem-card {
   width: 100%;
-  padding: 12px;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 14px;
+  overflow: hidden;
   border: 1px solid rgba(185, 201, 191, .62);
   border-radius: 12px;
   background: rgba(255, 255, 255, .72);
@@ -376,24 +364,50 @@ html.interaction-mode-view-transition::view-transition-new(root) {
 .problem-bank-problem-card .MuiChip-root { height: 18px; font-size: 10px; }
 .problem-bank-index-skeleton { pointer-events: none; }
 .problem-bank-problem-markdown {
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
   font-size: .875rem;
-  font-weight: 630;
-  line-height: 1.55;
+  font-weight: 580;
+  line-height: 1.72;
+  word-break: break-word;
   overflow-wrap: anywhere;
+  overflow-x: clip;
 }
+.problem-bank-problem-markdown p { margin: 0 0 10px; }
 .problem-bank-problem-markdown > :first-child { margin-top: 0; }
 .problem-bank-problem-markdown > :last-child { margin-bottom: 0; }
 .problem-bank-problem-markdown .katex {
+  max-width: 100%;
+  font-size: 1em;
+  line-height: 1.25;
+  vertical-align: baseline;
   white-space: nowrap;
   overflow-wrap: normal;
   word-break: normal;
 }
 .problem-bank-problem-markdown .katex-display {
-  margin: .65em 0;
-  overflow-x: auto;
-  overflow-y: hidden;
+  max-width: 100%;
+  margin: .8em 0;
+  overflow: clip;
 }
+.problem-bank-problem-markdown pre {
+  max-width: 100%;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: hidden;
+}
+.problem-bank-problem-markdown table {
+  width: 100%;
+  table-layout: fixed;
+}
+.problem-bank-problem-markdown :is(th, td) { overflow-wrap: anywhere; }
+.problem-bank-sidecar,
+.problem-bank-sidecar-content,
+.problem-bank-sidecar-body,
+.problem-bank-view-transition,
+.problem-bank-waterfall,
+.problem-bank-detail { min-width: 0; max-width: 100%; overflow-x: hidden; }
 .problem-bank-page-status {
   min-height: 54px;
   display: flex;
@@ -405,7 +419,9 @@ html.interaction-mode-view-transition::view-transition-new(root) {
 .problem-bank-detail,
 .problem-bank-detail-skeleton { padding-bottom: 6px; }
 .problem-bank-detail-section {
-  padding: 14px;
+  min-width: 0;
+  padding: 16px;
+  overflow: hidden;
   border: 1px solid rgba(185, 201, 191, .62);
   border-radius: 12px;
   background: rgba(255, 255, 255, .76);
@@ -1050,10 +1066,21 @@ html.interaction-mode-view-transition::view-transition-new(root) {
 .copilot-markdown > :first-child { margin-top: 0; }
 .copilot-markdown > :last-child { margin-bottom: 0; }
 .copilot-markdown pre { max-width: 100%; overflow-x: auto; }
+.static-message-markdown {
+  min-width: 0;
+  max-width: 100%;
+  color: inherit;
+  line-height: 1.58;
+  overflow-wrap: anywhere;
+}
+.static-message-markdown p { margin: 0 0 7px; }
+.static-message-markdown > :first-child { margin-top: 0; }
+.static-message-markdown > :last-child { margin-bottom: 0; }
+.user-message-markdown .katex { color: inherit; }
+.user-message-markdown .katex-display { max-width: 100%; margin: .45em 0; overflow: clip; }
 @media (max-width: 700px) { .geochat-panel-host { right: 10px; bottom: 10px; left: 10px; } }
 @media (max-width: 700px) {
   .frontend-canvas-intro { top: 62px; left: 20px; max-width: calc(100vw - 40px); }
   .frontend-canvas-intro h1 { font-size: clamp(25px, 8vw, 34px); }
   .frontend-canvas-intro p { font-size: 14px; }
-  .frontend-canvas-status { left: 12px; bottom: 12px; gap: 8px; padding: 8px 10px; font-size: 11px; }
 }

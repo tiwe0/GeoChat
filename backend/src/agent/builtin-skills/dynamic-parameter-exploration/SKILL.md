@@ -6,7 +6,7 @@ parent: function-graph
 level: 2
 maturity: default
 tags: [二级技能, 滑块, 动画, 参数探究, 分步演示, 动态可见性, 教学演示]
-tools: [getCanvasContext, searchGeoGebraCommands, executeGeoGebraCommands, showAnimationGuide, showSolutionSteps, showTeachingHint]
+tools: [getCanvasContext, searchGeoGebraCommands, executeGeoGebraCommands, configureGeoGebraAnimation, controlGeoGebraAnimation, inspectGeoGebraObjects, showAnimationGuide, showSolutionSteps, showTeachingHint]
 ---
 
 # 动态参数探究
@@ -18,10 +18,10 @@ tools: [getCanvasContext, searchGeoGebraCommands, executeGeoGebraCommands, showA
 1. 选择一个主参数 `t` 或 `n`，明确范围、增量和数学含义；其他量尽量由它派生，而不是堆叠多个互相独立的滑块。
 2. 先构造静态基准对象，再构造由主参数驱动的对象，最后添加轨迹、测量值或结论提示。
 3. 分步演示用整数滑块配合 `If` 或 `SetConditionToShowObject` 控制阶段，保证任意时刻只突出当前步骤。
-4. 自动播放前先确认滑块范围有限、增量合理；使用 `StartAnimation` 后仍要保留手动拖动能力。
+4. 自动播放前判断主参数是有限过程还是持续时钟；构造验证后使用 `configureGeoGebraAnimation` 配置平滑时间轴，有限教学过程默认 `once`、单程 20 秒且不自动播放。时钟、天体公转和长期仿真使用 `continuous`，让主时间持续单调增长并把周期性放在依赖表达式中；有限区间重复演示使用 `loop`，往复过程使用 `ping_pong`，同时保留手动拖动能力。
 5. 教学交互遵循“预测—观察—解释”：先让用户猜变化，再播放或拖动，最后显示不变量和结论。
 
-常用 GeoGebra 方向：`Slider`、`StartAnimation`、`SetValue`、`If`、`SetConditionToShowObject`、`Locus`、`Text`。
+常用 GeoGebra 方向：`Slider`、`SetValue`、`If`、`SetConditionToShowObject`、`Locus`、`Text`；播放、暂停和重置使用业务动画工具，不写 XML。
 
 约束：
 

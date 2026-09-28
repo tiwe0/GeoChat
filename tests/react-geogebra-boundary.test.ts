@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { evaluateCommand, normalizeCommandResult } from "../src/renderer-react/src/geogebra/command-executor";
 import { GeoGebraController } from "../src/renderer-react/src/geogebra/controller";
-import type { GeoGebraApi } from "../src/renderer-react/src/geogebra/ggbdeploy-wrapper";
+import {
+  COLLAPSED_GEOGEBRA_TOOLBAR_HEIGHT,
+  DEFAULT_GEOGEBRA_FILE_FEATURES_ENABLED,
+  DEFAULT_GEOGEBRA_MENU_VISIBLE,
+  DEFAULT_GEOGEBRA_TOOLBAR_VISIBLE,
+  geoGebraRuntimeHeight,
+  type GeoGebraApi,
+} from "../src/renderer-react/src/geogebra/ggbdeploy-wrapper";
 
 /**
  * The applet boundary, headless.
@@ -91,10 +98,39 @@ describe("command evaluation across the available applet APIs", () => {
 });
 
 describe("controller tool boundary", () => {
+  test("starts with the GeoGebra menu visible and construction toolbar collapsed", () => {
+    expect(DEFAULT_GEOGEBRA_FILE_FEATURES_ENABLED).toBe(true);
+    expect(DEFAULT_GEOGEBRA_MENU_VISIBLE).toBe(true);
+    expect(DEFAULT_GEOGEBRA_TOOLBAR_VISIBLE).toBe(false);
+  });
+
+  test("reclaims the hidden native toolbar row for the drawing canvas", () => {
+    expect(geoGebraRuntimeHeight(620, false)).toBe(620);
+    expect(geoGebraRuntimeHeight(620, true)).toBe(620 + COLLAPSED_GEOGEBRA_TOOLBAR_HEIGHT);
+  });
+
   test("refuses every tool before the applet is mounted", async () => {
     const controller = new GeoGebraController();
     expect(controller.ready).toBe(false);
     await expect(controller.executeTool("getCanvasContext", {})).rejects.toThrow();
+  });
+
+  test("opens the original toolbar without letting its close API remove the native file menu", () => {
+    const visibility: boolean[] = [];
+    const controller = new GeoGebraController();
+    controller.setApi(api({
+      showToolBar: (visible: boolean) => { visibility.push(visible); },
+    }));
+
+    expect(controller.setToolbarVisible(true)).toBe(true);
+    expect(controller.setToolbarVisible(false)).toBe(false);
+    expect(visibility).toEqual([true]);
+  });
+
+  test("reports an unavailable toolbar API instead of faking UI state", () => {
+    const controller = new GeoGebraController();
+    controller.setApi(api({}));
+    expect(() => controller.setToolbarVisible(true)).toThrow(/工具栏切换 API/);
   });
 
   test("clamps PNG export options rather than passing them through", async () => {
@@ -170,5 +206,67 @@ describe("controller tool boundary", () => {
     const controller = new GeoGebraController();
     controller.setApi(api({ evalCommand: () => true }));
     await expect(controller.executeTool("notATool", {})).rejects.toThrow();
+  });
+
+  test("configures business animation and inspects objects through public applet APIs", async () => {
+    const values = new Map<string, number>([["t", 0]]);
+    const nativeAnimationUpdates: Array<[string, boolean]> = [];
+    const controller = new GeoGebraController();
+    controller.setApi(api({
+      exists: (name: string) => values.has(name),
+      getObjectType: () => "numeric",
+      getValue: (name: string) => values.get(name),
+      getValueString: (name: string) => String(values.get(name)),
+      getVisible: () => true,
+      setAnimating: (name: string, enabled: boolean) => { nativeAnimationUpdates.push([name, enabled]); },
+      setValue: (name: string, value: number) => { values.set(name, value); }
+    }));
+
+    const configured = await controller.executeTool("configureGeoGebraAnimation", {
+      object: "t", from: 0, to: 6, durationMs: 20_000, mode: "once", autoplay: false
+    }) as Record<string, unknown>;
+    expect(configured.ok).toBe(true);
+    expect(values.get("t")).toBe(0);
+    expect(nativeAnimationUpdates).toEqual([["t", false]]);
+    expect((configured.clientMeta as Record<string, unknown>).xmlUsed).toBe(false);
+
+    const inspected = await controller.executeTool("inspectGeoGebraObjects", { objects: ["t", "missing"] }) as Record<string, unknown>;
+    const objects = inspected.objects as Array<Record<string, unknown>>;
+    expect(objects[0]).toMatchObject({ name: "t", exists: true, objectType: "numeric", value: 0, visible: true });
+    expect(objects[1]).toEqual({ name: "missing", exists: false });
+  });
+
+  test("autoplays a configured business animation by default", async () => {
+    const values = new Map<string, number>([["t", 0]]);
+    const controller = new GeoGebraController();
+    controller.setApi(api({
+      exists: (name: string) => values.has(name),
+      getObjectType: () => "numeric",
+      setAnimating: () => undefined,
+      setValue: (name: string, value: number) => { values.set(name, value); }
+    }));
+
+    const configured = await controller.executeTool("configureGeoGebraAnimation", {
+      object: "t", from: 0, to: 6, durationMs: 20_000, mode: "once"
+    }) as { animation: { status: string } };
+
+    expect(configured.animation.status).toBe("running");
+  });
+
+  test("accepts continuous mode for a monotonically increasing applet parameter", async () => {
+    const values = new Map<string, number>([["time", 0]]);
+    const controller = new GeoGebraController();
+    controller.setApi(api({
+      exists: (name: string) => values.has(name),
+      getObjectType: () => "numeric",
+      setAnimating: () => undefined,
+      setValue: (name: string, value: number) => { values.set(name, value); }
+    }));
+
+    const configured = await controller.executeTool("configureGeoGebraAnimation", {
+      object: "time", from: 0, to: 1, durationMs: 20_000, mode: "continuous", easing: "ease_in_out", autoplay: false
+    }) as { animation: { mode: string; easing: string; status: string } };
+
+    expect(configured.animation).toMatchObject({ mode: "continuous", easing: "linear", status: "configured" });
   });
 });

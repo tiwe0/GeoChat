@@ -15,6 +15,7 @@ import {
   filterBusinessReadyAgentSkills,
   listAvailableAgentSkills,
   searchAvailableAgentSkills,
+  type ActivatedAgentSkill,
   type AgentSkillBrief,
   type AgentSkillSummary
 } from "./skills";
@@ -32,11 +33,11 @@ const skillSelectorOutputSchema = z.object({
   curriculumNodes: z.array(z.object({
     id: z.string().min(1),
     reason: z.string().min(1),
-  })).max(3),
+  })).max(2),
   selectedSkills: z.array(z.object({
     name: z.string().min(1),
     reason: z.string().min(1),
-  })).max(3),
+  })).max(2),
   selectorReason: z.string().min(1),
 });
 
@@ -77,12 +78,24 @@ export type AgentSkillSelectionPacket = {
   visualProfile?: string;
   curriculumNodes: AgentCurriculumSelectionItem[];
   selectedSkills: AgentSkillSelectionItem[];
+  /** Skills whose SKILL.md content was actually loaded for prompt injection. */
+  loadedSkills?: AgentLoadedSkillItem[];
+  /** Selected skills that could not be loaded and therefore were not injected. */
+  failedSkillLoads?: AgentFailedSkillLoadItem[];
   enabledAdvancedTools: string[];
   selectorReason: string;
   injectedContext: string;
   error?: string;
   modelCallCount?: number;
   usage?: AgentRunUsage | null;
+  cacheHit?: boolean;
+};
+
+export type AgentLoadedSkillItem = Pick<ActivatedAgentSkill, "name" | "source" | "maturity">;
+
+export type AgentFailedSkillLoadItem = {
+  name: string;
+  error: string;
 };
 
 type SkillSelectorCandidateContext = {
@@ -105,7 +118,7 @@ export async function selectAgentSkillsForRun(input: {
   const cached = skillSelectionCache.get(cacheKey);
   if (cached) {
     const packet = await cached;
-    return { ...packet, modelCallCount: 0, usage: null };
+    return { ...packet, modelCallCount: 0, usage: null, cacheHit: true };
   }
 
   const selection = !policy.enabled || !policy.autoActivate || skillSelectionToolsDisabled(input.disabledToolNames)
@@ -114,6 +127,8 @@ export async function selectAgentSkillsForRun(input: {
       visualProfile: policy.visualProfile,
       curriculumNodes: [],
       selectedSkills: [],
+      loadedSkills: [],
+      failedSkillLoads: [],
       enabledAdvancedTools: [],
       selectorReason: !policy.enabled
         ? "Agent Skills are disabled for this run."
@@ -127,15 +142,18 @@ export async function selectAgentSkillsForRun(input: {
         timeout: Math.min(input.timeout ?? 120_000, SKILL_SELECTOR_TIMEOUT_MS)
       }, policy);
   const loggedSelection = selection.then((packet) => {
+    const completed = { ...packet, cacheHit: false };
     console.info("[INFO] Agent skill selection completed", JSON.stringify({
       runId: input.run.runId,
       conversationId: input.run.conversationId,
-      status: packet.status,
-      skills: packet.selectedSkills.map((skill) => skill.name),
-      curriculumNodes: packet.curriculumNodes.map((node) => node.id),
-      enabledAdvancedTools: packet.enabledAdvancedTools,
+      status: completed.status,
+      selectedSkills: completed.selectedSkills.map((skill) => skill.name),
+      loadedSkills: completed.loadedSkills?.map((skill) => skill.name) ?? [],
+      failedSkillLoads: completed.failedSkillLoads ?? [],
+      curriculumNodes: completed.curriculumNodes.map((node) => node.id),
+      enabledAdvancedTools: completed.enabledAdvancedTools,
     }));
-    return packet;
+    return completed;
   });
   skillSelectionCache.set(cacheKey, loggedSelection);
   return loggedSelection;
@@ -156,6 +174,8 @@ async function runSkillSelector(input: {
         visualProfile: policy.visualProfile,
         curriculumNodes: [],
         selectedSkills: [],
+        loadedSkills: [],
+        failedSkillLoads: [],
         enabledAdvancedTools: [],
         selectorReason: "No curriculum node or skill candidate matched this run.",
         injectedContext: ""
@@ -207,7 +227,7 @@ async function runSkillSelector(input: {
     if (candidateContext) {
       return {
         ...await enrichSkillSelectionPacket(
-        deterministicSkillSelectionPacket(candidateContext, policy, error),
+        failedSkillSelectionPacket(candidateContext, policy, error),
         policy,
         candidateContext,
         input.run.locale
@@ -220,6 +240,8 @@ async function runSkillSelector(input: {
       visualProfile: policy.visualProfile,
       curriculumNodes: [],
       selectedSkills: [],
+      loadedSkills: [],
+      failedSkillLoads: [],
       enabledAdvancedTools: [],
       selectorReason: "Temporary skill selector failed; continue without a preloaded skill packet.",
       injectedContext: "",
@@ -236,7 +258,7 @@ async function buildSkillSelectorCandidateContext(
   const routingPrompt = agentRoutingPrompt(run.prompt);
   const catalogs = listCurriculumCatalogs();
   const curriculumMatches = searchCurriculum({ query: routingPrompt, limit: 5 });
-  const curriculumNodes = curriculumMatches.slice(0, 3).map((match): AgentCurriculumSelectionItem => ({
+  const curriculumNodes = curriculumMatches.slice(0, 2).map((match): AgentCurriculumSelectionItem => ({
     id: match.id,
     source: match.source,
     stage: match.stage,
@@ -341,22 +363,22 @@ export function skillSelectorSystemPrompt(locale?: AgentRunLedgerRecord["locale"
       "You are GeoChat's temporary SkillSelector.",
       "Your job is to choose from a compact Candidate Skill Context before the main agent solves the problem.",
       "The backend has already run the deterministic list/search/load pipeline: curriculum search, skill inventory filtering, skill search, and short SKILL.md constraint extraction. Do not ask for tools and do not invent skills outside the provided skillBriefs.",
-      "Choose skills as a complementary set: prefer one broad parent skill plus one or two precise second-layer skills/recipes when that improves drawing, explanation, or verification. If the broad parent adds no useful rule beyond the precise skill, select only the precise skill.",
+      "Default to one precise domain skill. Add one secondary skill only when it contributes a distinct orthogonal capability such as animation or verification. Never select a broad parent merely to accompany a precise child skill.",
       "The main agent must not receive the full catalog. The backend will load selected SKILL.md files and build the compressed guidance after your choice.",
       "Do not solve the problem. Do not plan concrete GeoGebra command batches. Do not include chain-of-thought.",
       "Fill the requested structured output fields with a compact selection.",
-      "Select at most three curriculum nodes and at most three skills. If no skill is useful after listing/searching, use status not_needed and explain why no skill is needed."
+      "Select at most two curriculum nodes and at most two skills. If the base GeoGebra workflow is sufficient, use status not_needed; skills must supplement rather than replace the base drawing workflow."
     ].join("\n");
   }
   return [
     "你是 GeoChat 的临时 SkillSelector。",
     "你的任务是在主 agent 解题前，从压缩 Candidate Skill Context 中选择技能。",
     "后端已经用代码完成确定性的 list/search/load 流程：教材章节检索、技能库存过滤、技能检索，以及从 SKILL.md 提取短约束。不要请求工具，也不要选择 skillBriefs 之外的技能。",
-    "技能选择要按互补关系装配：优先选择一个宽领域父技能加一到两个精确二级技能/recipe；如果父技能没有额外规则，只选择精确技能。",
+    "默认只选择一个最精确的领域技能；仅当第二个技能提供动画、验证等独立正交能力时才追加。不要为了陪衬精确子技能而选择宽泛父技能。",
     "主 agent 不应收到完整技能目录；后端会在你选择后读取对应 SKILL.md 并生成压缩指导。",
     "不要解题，不要规划具体 GeoGebra 命令批次，不要输出思维链。",
     "按请求的结构化输出字段返回精简的选择结果。",
-    "最多选择三个教材节点和三个技能；列出/检索后仍无明显帮助时返回 status=not_needed，并说明为什么不需要技能。"
+    "最多选择两个教材节点和两个技能；基础 GeoGebra 工作流已足够时返回 status=not_needed。技能只能补充领域约束，不能替代基础作图流程。"
   ].join("\n");
 }
 
@@ -403,13 +425,13 @@ function normalizeSkillSelectionPacket(value: unknown, policy: AgentSkillRuntime
     ? record.curriculumNodes
         .map(normalizeSelectedCurriculumNode)
         .filter((item): item is AgentCurriculumSelectionItem => Boolean(item))
-        .slice(0, 3)
+        .slice(0, 2)
     : [];
   const selectedSkills = Array.isArray(record.selectedSkills)
     ? record.selectedSkills
         .map(normalizeSelectedSkill)
         .filter((skill): skill is AgentSkillSelectionItem => Boolean(skill))
-        .slice(0, 3)
+        .slice(0, 2)
     : [];
   const status = selectedSkills.length || curriculumNodes.length ? "selected" : "not_needed";
   return {
@@ -423,29 +445,20 @@ function normalizeSkillSelectionPacket(value: unknown, policy: AgentSkillRuntime
   };
 }
 
-function deterministicSkillSelectionPacket(
-  context: SkillSelectorCandidateContext,
+function failedSkillSelectionPacket(
+  _context: SkillSelectorCandidateContext,
   policy: AgentSkillRuntimePolicy,
   error?: unknown
 ): AgentSkillSelectionPacket {
-  const selectedSkills = context.skillBriefs.slice(0, 3).map((skill): AgentSkillSelectionItem => ({
-    name: skill.name,
-    ...(skill.category ? { category: skill.category } : {}),
-    ...(skill.parent ? { parent: skill.parent } : {}),
-    ...(skill.level ? { level: skill.level } : {}),
-    recipes: skill.recipeIds,
-    reason: "Selected by deterministic fallback from the prebuilt skill candidate context."
-  }));
-  const status = selectedSkills.length || context.curriculumNodes.length ? "selected" : "failed";
   return {
-    status,
+    status: "failed",
     visualProfile: policy.visualProfile,
-    curriculumNodes: context.curriculumNodes.slice(0, 3),
-    selectedSkills,
+    curriculumNodes: [],
+    selectedSkills: [],
+    loadedSkills: [],
+    failedSkillLoads: [],
     enabledAdvancedTools: [],
-    selectorReason: status === "selected"
-      ? "Temporary skill selector failed; deterministic candidate context was used."
-      : "Temporary skill selector failed and no candidate context was available.",
+    selectorReason: "Temporary skill selector failed; continue with the base GeoGebra workflow without injecting candidate skills.",
     injectedContext: "",
     error: error instanceof Error ? error.message : error ? String(error) : undefined
   };
@@ -504,15 +517,27 @@ async function enrichSkillSelectionPacket(
   const activatedSkills = await Promise.all(
     selectedSkills.map(async (skill) => {
       try {
-        return await activateAgentSkill(skill.name);
+        const activated = await activateAgentSkill(skill.name);
+        return activated
+          ? { ok: true as const, skill: activated }
+          : { ok: false as const, name: skill.name, error: "Skill definition was not found." };
       } catch (caughtError) {
         console.error("[ERROR] Caught exception at backend/src/agent/skill-selector.ts:474", caughtError);
-        return undefined;
+        return {
+          ok: false as const,
+          name: skill.name,
+          error: caughtError instanceof Error ? caughtError.message : String(caughtError)
+        };
       }
     })
   );
+  const loadedSkillDefinitions = activatedSkills.flatMap((result) => result.ok ? [result.skill] : []);
+  const loadedSkills = loadedSkillDefinitions.map(({ name, source, maturity }) => ({ name, source, maturity }));
+  const failedSkillLoads = activatedSkills.flatMap((result) => !result.ok
+    ? [{ name: result.name, error: result.error }]
+    : []);
   const enabledAdvancedTools = enabledAdvancedToolsFromActivatedSkills(
-    activatedSkills.filter((skill): skill is NonNullable<typeof skill> => Boolean(skill))
+    loadedSkillDefinitions
   );
   if (!selectedSkills.length) {
     if (curriculumNodes.length) {
@@ -521,14 +546,12 @@ async function enrichSkillSelectionPacket(
         status: "selected",
         curriculumNodes,
         selectedSkills: [],
+        loadedSkills: [],
+        failedSkillLoads: [],
         enabledAdvancedTools: [],
         injectedContext: buildSkillSelectionInjectedContext({
           locale,
-          curriculumNodes,
-          selectedSkills: [],
-          activatedSkills: [],
-          visualProfile: policy.visualProfile,
-          selectorContext: packet.injectedContext
+          activatedSkills: []
         })
       };
     }
@@ -537,24 +560,25 @@ async function enrichSkillSelectionPacket(
       status: "not_needed",
       curriculumNodes,
       selectedSkills: [],
+      loadedSkills: [],
+      failedSkillLoads: [],
       enabledAdvancedTools: [],
       selectorReason: "The selector did not return a valid allowed skill.",
       injectedContext: ""
     };
   }
+  const status = loadedSkills.length || curriculumNodes.length ? "selected" : failedSkillLoads.length ? "failed" : "not_needed";
   return {
     ...packet,
-    status: "selected",
+    status,
     curriculumNodes,
     selectedSkills,
+    loadedSkills,
+    failedSkillLoads,
     enabledAdvancedTools,
     injectedContext: buildSkillSelectionInjectedContext({
       locale,
-      curriculumNodes,
-      selectedSkills,
-      activatedSkills: activatedSkills.filter((skill): skill is NonNullable<typeof skill> => Boolean(skill)),
-      visualProfile: policy.visualProfile,
-      selectorContext: packet.injectedContext
+      activatedSkills: loadedSkillDefinitions
     })
   };
 }
@@ -582,7 +606,7 @@ function candidateSkillSelectionsFromCurriculum(
       recipes: summary.recipes,
       reason: "Selected from matched curriculum node skillIds."
     });
-    if (selections.length >= 3) break;
+    if (selections.length >= 2) break;
   }
   return selections;
 }
@@ -596,41 +620,20 @@ function enabledAdvancedToolsFromActivatedSkills(skills: readonly { advancedTool
 
 function buildSkillSelectionInjectedContext(input: {
   locale?: AgentRunLedgerRecord["locale"];
-  curriculumNodes: readonly AgentCurriculumSelectionItem[];
-  selectedSkills: readonly AgentSkillSelectionItem[];
   activatedSkills: readonly { name: string; markdown: string }[];
-  visualProfile?: string;
-  selectorContext?: string;
 }) {
-  const visualProfiles = Array.from(new Set([
-    ...(input.visualProfile ? [input.visualProfile] : []),
-    ...input.curriculumNodes.flatMap((node) => node.visualProfiles)
-  ]));
   const constraints = input.activatedSkills.flatMap((skill) =>
-    extractAgentSkillConstraintBrief(skill.markdown, 4).map((line) => `${skill.name}: ${line}`)
-  ).slice(0, 10);
-  const recipeLines = input.selectedSkills
-    .filter((skill) => skill.recipes.length)
-    .map((skill) => `${skill.name}: ${skill.recipes.slice(0, 4).join(", ")}`);
+    extractAgentSkillConstraintBrief(skill.markdown, 2).map((line) => `${skill.name}: ${line}`)
+  ).slice(0, 4);
   if (isEnglishLocale(input.locale)) {
     return [
-      input.curriculumNodes.length
-        ? `Curriculum localization: ${input.curriculumNodes.map((node) => `${node.edition} ${node.book} / ${node.chapter}${node.section ? ` / ${node.section}` : ""}`).join("; ")}.`
-        : "",
-      recipeLines.length ? `Recipe hints: ${recipeLines.join("; ")}.` : "",
-      visualProfiles.length ? `Visual profile hints: ${visualProfiles.join(", ")}.` : "",
       constraints.length ? `Skill constraints: ${constraints.join(" | ")}` : "",
-      input.selectorContext ? `Selector note: ${input.selectorContext}` : ""
+      "These constraints supplement the base GeoGebra workflow; when they conflict, preserve a verifiable dependency-based construction."
     ].filter(Boolean).join("\n");
   }
   return [
-    input.curriculumNodes.length
-      ? `教材定位：${input.curriculumNodes.map((node) => `${node.edition}${node.book} / ${node.chapter}${node.section ? ` / ${node.section}` : ""}`).join("；")}。`
-      : "",
-    recipeLines.length ? `题型策略：${recipeLines.join("；")}。` : "",
-    visualProfiles.length ? `可视化策略：${visualProfiles.join("、")}。` : "",
     constraints.length ? `技能约束：${constraints.join(" | ")}` : "",
-    input.selectorContext ? `选择器补充：${input.selectorContext}` : ""
+    "这些约束只补充基础 GeoGebra 工作流；发生冲突时，优先保持可验证、基于依赖关系的构造。"
   ].filter(Boolean).join("\n");
 }
 
@@ -669,101 +672,48 @@ function normalizeSelectedSkill(value: unknown): AgentSkillSelectionItem | undef
 }
 
 export function formatSkillSelectionPacketPrompt(packet: AgentSkillSelectionPacket, locale?: AgentRunLedgerRecord["locale"]) {
+  if (packet.status !== "selected" || (!packet.selectedSkills.length && !packet.enabledAdvancedTools.length && !packet.injectedContext)) {
+    if (packet.status === "failed") {
+      return isEnglishLocale(locale)
+        ? "Skill preselection was unavailable. Continue with the base GeoGebra workflow and do not inject guessed skills."
+        : "技能预选不可用。本轮直接使用基础 GeoGebra 工作流，不注入猜测的技能。";
+    }
+    return "";
+  }
   if (isEnglishLocale(locale)) {
     return [
-      "[Preselected Agent Skill packet]",
-      `Status: ${packet.status}.`,
-      `Visual profile: ${packet.visualProfile ?? "unspecified"}.`,
+      "[Agent Skill supplement]",
       packet.selectedSkills.length
         ? [
             "Selected skills:",
             ...packet.selectedSkills.map((skill) =>
-              `- ${skill.name}${skill.recipes.length ? ` (recipes: ${skill.recipes.join(", ")})` : ""}: ${skill.reason}`
+              `- ${skill.name}: ${skill.reason}`
             )
           ].join("\n")
-        : "Selected skills: none.",
-      packet.curriculumNodes.length
-        ? [
-            "Curriculum localization:",
-            ...packet.curriculumNodes.map((item) =>
-              `- ${item.edition} ${item.book} / ${item.chapter}${item.section ? ` / ${item.section}` : ""}: ${item.reason}`
-            )
-          ].join("\n")
-        : "Curriculum localization: none.",
+        : "",
       packet.enabledAdvancedTools.length
-        ? [
-            "Unlocked advanced drawing commands:",
-            ...packet.enabledAdvancedTools.map((name) => {
-              const definition = getAdvancedDrawingToolDefinitions([name])[0];
-              return formatAdvancedDrawingDefinitionForPacket(name, definition, "en-US");
-            })
-          ].join("\n")
-        : "Unlocked advanced drawing commands: none.",
-      packet.injectedContext ? `Compressed guidance: ${packet.injectedContext}` : "",
-      `Selector reason: ${packet.selectorReason}`,
-      packet.error ? `Selector error: ${packet.error}` : "",
-      "Use this packet as guidance only. It is not a mathematical fact source. Do not call listSkills, searchSkills, loadSkill, or activateSkill again unless this packet is missing, failed, or clearly insufficient."
+        ? `Available advanced tools: ${packet.enabledAdvancedTools.join(", ")}.`
+        : "",
+      packet.injectedContext,
+      "Use this supplement only for domain constraints. The base GeoGebra construction and verification workflow remains authoritative."
     ].filter(Boolean).join("\n");
   }
   return [
-    "【预选 Agent Skill Packet】",
-    `状态：${packet.status}。`,
-    `可视化表达策略：${packet.visualProfile ?? "未指定"}。`,
+    "【Agent Skill 补充】",
     packet.selectedSkills.length
       ? [
           "已选技能：",
           ...packet.selectedSkills.map((skill) =>
-            `- ${skill.name}${skill.recipes.length ? `（recipes：${skill.recipes.join("、")}）` : ""}：${skill.reason}`
+            `- ${skill.name}：${skill.reason}`
           )
         ].join("\n")
-      : "已选技能：无。",
-    packet.curriculumNodes.length
-      ? [
-          "教材定位：",
-          ...packet.curriculumNodes.map((item) =>
-            `- ${item.edition}${item.book} / ${item.chapter}${item.section ? ` / ${item.section}` : ""}：${item.reason}`
-          )
-        ].join("\n")
-      : "教材定位：无。",
+      : "",
     packet.enabledAdvancedTools.length
-        ? [
-            "已解锁高级绘图命令：",
-            ...packet.enabledAdvancedTools.map((name) => {
-              const definition = getAdvancedDrawingToolDefinitions([name])[0];
-              return formatAdvancedDrawingDefinitionForPacket(name, definition, "zh-CN");
-            })
-          ].join("\n")
-        : "已解锁高级绘图命令：无。",
-    packet.injectedContext ? `压缩指导：${packet.injectedContext}` : "",
-    `选择理由：${packet.selectorReason}`,
-    packet.error ? `选择器错误：${packet.error}` : "",
-    "该 packet 只作为策略提示，不是数学事实来源。除非 packet 缺失、失败或明显不足，否则主 agent 不要再次调用 listSkills、searchSkills、loadSkill 或 activateSkill。"
+      ? `可用高级工具：${packet.enabledAdvancedTools.join("、")}。`
+      : "",
+    packet.injectedContext,
+    "技能只补充领域约束，基础 GeoGebra 构造与验证流程仍具有优先级。"
   ].filter(Boolean).join("\n");
-}
-
-function formatAdvancedDrawingDefinitionForPacket(
-  name: string,
-  definition: ReturnType<typeof getAdvancedDrawingToolDefinitions>[number] | undefined,
-  locale: "zh-CN" | "en-US"
-) {
-  if (!definition) return locale === "en-US" ? `- ${name}: High-level drawing command.` : `- ${name}：高级绘图命令。`;
-  const parameters = definition.parameters
-    .map((parameter) => `${parameter.name}:${parameter.kind}${"required" in parameter && parameter.required ? "*" : ""}`)
-    .join(", ");
-  if (locale === "en-US") {
-    return [
-      `- ${name}: ${definition.description}`,
-      `  Parameters: ${parameters || "none"}.`,
-      `  Assumptions: ${definition.assumptions.join("; ")}`,
-      `  Invariants: ${definition.invariants.join("; ")}`
-    ].join("\n");
-  }
-  return [
-    `- ${name}：${definition.description}`,
-    `  参数：${parameters || "无"}。`,
-    `  前提：${definition.assumptions.join("；")}`,
-    `  不变量：${definition.invariants.join("；")}`
-  ].join("\n");
 }
 
 function isEnglishLocale(locale: AgentRunLedgerRecord["locale"] | undefined) {

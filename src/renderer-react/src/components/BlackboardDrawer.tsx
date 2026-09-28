@@ -1,6 +1,4 @@
-import CloseRounded from "@mui/icons-material/CloseRounded";
-import FactCheckRounded from "@mui/icons-material/FactCheckRounded";
-import RefreshRounded from "@mui/icons-material/RefreshRounded";
+import { ClipboardCheckIcon, RefreshCwIcon, XIcon } from "lucide-react";
 import {
   Alert,
   Box,
@@ -136,7 +134,7 @@ export function BlackboardDrawer({
           spacing={1}
           sx={{ minHeight: 56, px: 1.5, alignItems: "center", borderBottom: 1, borderColor: chalkLine, bgcolor: "#12362e" }}
         >
-          <FactCheckRounded sx={{ fontSize: 20, color: "#f7e7a8" }} />
+          <ClipboardCheckIcon size={20} color="#f7e7a8" />
           <Typography variant="subtitle2" sx={{ minWidth: 0, flex: 1, fontFamily: chalkFont, fontSize: 17, fontWeight: 700 }}>
             {t("blackboard.title")}
           </Typography>
@@ -154,7 +152,7 @@ export function BlackboardDrawer({
               "&:hover": { bgcolor: "rgba(244, 241, 223, 0.1)" },
             }}
           >
-            <RefreshRounded fontSize="small" sx={{ animation: loading ? "copilot-spin 900ms linear infinite" : "none" }} />
+            <RefreshCwIcon size={18} style={{ animation: loading ? "copilot-spin 900ms linear infinite" : "none" }} />
           </IconButton>
           <IconButton
             data-fusion-panel-close={viewport ? true : undefined}
@@ -164,7 +162,7 @@ export function BlackboardDrawer({
             title={t("blackboard.close")}
             sx={{ width: 40, height: 40, color: chalk, "&:hover": { bgcolor: "rgba(244, 241, 223, 0.1)" } }}
           >
-            <CloseRounded fontSize="small" />
+            <XIcon size={18} />
           </IconButton>
         </Stack>
 

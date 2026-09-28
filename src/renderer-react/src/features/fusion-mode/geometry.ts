@@ -22,6 +22,14 @@ export const FUSION_VIEWPORT_GUTTER = 12;
 export const FUSION_TITLEBAR_SAFE_TOP = 56;
 export const FUSION_COMPOSER_WIDTH = 360;
 export const FUSION_COMPOSER_HEIGHT = 72;
+export const FUSION_BUBBLE_MAX_WIDTH = 430;
+export const FUSION_BUBBLE_MAX_HEIGHT = 420;
+export const FUSION_BUBBLE_VIEWPORT_HEIGHT_RATIO = 0.48;
+export const FUSION_BUBBLE_COMPOSER_GAP = 12;
+export const FUSION_BUBBLE_ABOVE_OFFSET = -FUSION_BUBBLE_COMPOSER_GAP;
+export const FUSION_BUBBLE_BELOW_OFFSET = FUSION_COMPOSER_HEIGHT + FUSION_BUBBLE_COMPOSER_GAP;
+export const FUSION_BUBBLE_Z_INDEX_BASE = 1320;
+export const FUSION_COMPOSER_Z_INDEX = 1330;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), Math.max(min, max));
@@ -29,6 +37,46 @@ function clamp(value: number, min: number, max: number) {
 
 export function defaultFusionPoint(viewport: FusionViewport): FusionPoint {
   return clampFusionPoint({ x: viewport.width / 2, y: viewport.height - 116 }, viewport);
+}
+
+export function fusionActiveBubbleSize(viewport: FusionViewport): FusionSurfaceSize {
+  return {
+    width: Math.min(FUSION_BUBBLE_MAX_WIDTH, Math.max(1, viewport.width - 8)),
+    height: Math.min(
+      FUSION_BUBBLE_MAX_HEIGHT,
+      Math.max(1, viewport.height * FUSION_BUBBLE_VIEWPORT_HEIGHT_RATIO),
+    ),
+  };
+}
+
+/**
+ * Size the live response against the space around its composer. Keeping the
+ * shared anchor fixed is important: moving only the response to fit the
+ * viewport would place it over the composer that it visually belongs to.
+ */
+export function fusionAttachedBubbleLayout(
+  point: FusionPoint,
+  viewport: FusionViewport,
+  insets: FusionSafeInsets = {},
+): { placement: FusionPlacement; size: FusionSurfaceSize } {
+  const naturalSize = fusionActiveBubbleSize(viewport);
+  const safeTop = Math.max(FUSION_TITLEBAR_SAFE_TOP, insets.top ?? FUSION_TITLEBAR_SAFE_TOP);
+  const safeBottom = viewport.height - Math.max(FUSION_VIEWPORT_GUTTER, insets.bottom ?? FUSION_VIEWPORT_GUTTER);
+  const availableAbove = Math.max(1, point.y - FUSION_BUBBLE_COMPOSER_GAP - safeTop);
+  const availableBelow = Math.max(
+    1,
+    safeBottom - point.y - FUSION_COMPOSER_HEIGHT - FUSION_BUBBLE_COMPOSER_GAP,
+  );
+  const placement = availableAbove >= Math.min(naturalSize.height, 220)
+    ? "above"
+    : availableBelow > availableAbove ? "below" : "above";
+  return {
+    placement,
+    size: {
+      ...naturalSize,
+      height: Math.min(naturalSize.height, placement === "above" ? availableAbove : availableBelow),
+    },
+  };
 }
 
 export function clampFusionPoint(

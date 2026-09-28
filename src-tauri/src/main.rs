@@ -28,6 +28,7 @@ use commands::app_bundle_update::{
     check_app_bundle_update, get_app_bundle_update_state, install_app_bundle_update,
     rollback_app_bundle_update,
 };
+use commands::graphics::{get_graphics_preferences, set_graphics_preferences, DesktopGraphicsMode};
 use commands::improvement::{
     get_improvement_plan_preferences, set_improvement_plan_preferences,
     upload_improvement_plan_samples,
@@ -87,6 +88,9 @@ struct DesktopState {
     resource_dir: PathBuf,
     active_app_bundle: Mutex<Option<ActiveAppBundle>>,
     settings: Mutex<DesktopSettings>,
+    hardware_acceleration_applied: bool,
+    hardware_acceleration_configurable: bool,
+    graphics_mode: DesktopGraphicsMode,
     local_backend_auth_token: String,
     runtime_authorized: AtomicBool,
     renderer_ready: AtomicBool,
@@ -122,6 +126,8 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             get_runtime_info,
+            get_graphics_preferences,
+            set_graphics_preferences,
             get_mcp_status,
             set_mcp_enabled,
             get_access_state,
@@ -182,14 +188,7 @@ fn main() {
 /// rendering only inside WSL; native Linux and Windows keep their defaults.
 #[cfg(target_os = "linux")]
 fn configure_linux_graphics_for_wsl() {
-    let is_wsl = env::var_os("WSL_DISTRO_NAME").is_some()
-        || fs::read_to_string("/proc/version")
-            .map(|version| {
-                let normalized = version.to_ascii_lowercase();
-                normalized.contains("microsoft") || normalized.contains("wsl")
-            })
-            .unwrap_or(false);
-    if !is_wsl {
+    if !is_wsl() {
         return;
     }
 
@@ -204,8 +203,24 @@ fn configure_linux_graphics_for_wsl() {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn is_wsl() -> bool {
+    env::var_os("WSL_DISTRO_NAME").is_some()
+        || fs::read_to_string("/proc/version")
+            .map(|version| {
+                let normalized = version.to_ascii_lowercase();
+                normalized.contains("microsoft") || normalized.contains("wsl")
+            })
+            .unwrap_or(false)
+}
+
 #[cfg(not(target_os = "linux"))]
 fn configure_linux_graphics_for_wsl() {}
+
+#[cfg(not(target_os = "linux"))]
+fn is_wsl() -> bool {
+    false
+}
 
 fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
     let app_data_dir = desktop_app_data_dir(app)?;
@@ -227,6 +242,8 @@ fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
     let settings_path = app_data_dir.join("settings.json");
     let database_path = desktop_database_path(&app_data_dir);
     let settings = load_settings(&settings_path)?;
+    let (hardware_acceleration_applied, hardware_acceleration_configurable, graphics_mode) =
+        initial_graphics_state(&settings);
     logging::configure_logging(&settings.logging_preferences);
     log::info!(target: "geochat::lifecycle", "GeoChat desktop shell is starting");
     let local_backend_auth_token = local_runtime_auth_token();
@@ -257,6 +274,9 @@ fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
         active_app_bundle: Mutex::new(active_app_bundle),
         update_preferences: Mutex::new(settings.update_preferences.clone()),
         settings: Mutex::new(settings),
+        hardware_acceleration_applied,
+        hardware_acceleration_configurable,
+        graphics_mode,
         local_backend_auth_token,
         runtime_authorized: AtomicBool::new(runtime_authorized),
         renderer_ready: AtomicBool::new(false),
@@ -282,15 +302,72 @@ fn initialize_main_window(app: &AppHandle) -> Result<(), String> {
             .active_app_bundle
             .lock()
             .map_err(|error| error.to_string())?;
+        let hardware_acceleration_enabled = state
+            .settings
+            .lock()
+            .map_err(|error| error.to_string())?
+            .graphics_preferences
+            .hardware_acceleration;
         let mut window_config = app.config().app.windows[0].clone();
         window_config.url = initial_window_url(active_app_bundle.as_ref())?;
         let window_builder = tauri::WebviewWindowBuilder::from_config(app, &window_config)
             .map_err(|error| error.to_string())?;
         #[cfg(target_os = "windows")]
-        let window_builder = window_builder.decorations(false);
-        window_builder.build().map_err(|error| error.to_string())?;
+        let window_builder = if hardware_acceleration_enabled {
+            window_builder
+        } else {
+            window_builder.additional_browser_args(
+                "--disable-gpu --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection",
+            )
+        };
+        let window = window_builder.build().map_err(|error| error.to_string())?;
+        apply_linux_hardware_acceleration(&window, hardware_acceleration_enabled)?;
     }
     show_main_window(app);
+    Ok(())
+}
+
+fn initial_graphics_state(settings: &DesktopSettings) -> (bool, bool, DesktopGraphicsMode) {
+    if cfg!(target_os = "macos") {
+        return (true, false, DesktopGraphicsMode::SystemManaged);
+    }
+    if is_wsl() {
+        return (false, false, DesktopGraphicsMode::Compatibility);
+    }
+    (
+        settings.graphics_preferences.hardware_acceleration,
+        true,
+        DesktopGraphicsMode::Configurable,
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn apply_linux_hardware_acceleration(
+    window: &tauri::WebviewWindow,
+    enabled: bool,
+) -> Result<(), String> {
+    if is_wsl() {
+        return Ok(());
+    }
+    window
+        .with_webview(move |webview| {
+            use webkit2gtk::{HardwareAccelerationPolicy, SettingsExt, WebViewExt};
+            if let Some(settings) = webview.inner().settings() {
+                settings.set_hardware_acceleration_policy(if enabled {
+                    HardwareAccelerationPolicy::Always
+                } else {
+                    HardwareAccelerationPolicy::Never
+                });
+            }
+        })
+        .map_err(|error| error.to_string())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn apply_linux_hardware_acceleration(
+    _window: &tauri::WebviewWindow,
+    _enabled: bool,
+) -> Result<(), String> {
     Ok(())
 }
 

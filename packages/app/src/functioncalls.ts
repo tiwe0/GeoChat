@@ -48,6 +48,28 @@ export type ExecuteGeoGebraCommandsArgs = FunctionCallAuditFields & {
   restoreOnError?: boolean | null;
 };
 
+export type GeoGebraAnimationMode = "once" | "loop" | "ping_pong" | "continuous";
+export type GeoGebraAnimationEasing = "linear" | "ease_in_out";
+
+export type ConfigureGeoGebraAnimationArgs = FunctionCallAuditFields & {
+  object: string;
+  from: number;
+  to: number;
+  durationMs?: number | null;
+  mode?: GeoGebraAnimationMode | null;
+  easing?: GeoGebraAnimationEasing | null;
+  autoplay?: boolean | null;
+};
+
+export type ControlGeoGebraAnimationArgs = FunctionCallAuditFields & {
+  action: "play" | "pause" | "stop" | "reset";
+  objects: string[];
+};
+
+export type InspectGeoGebraObjectsArgs = FunctionCallAuditFields & {
+  objects: string[];
+};
+
 export type ResetCanvasArgs = FunctionCallAuditFields & {
   perspective?: string | null;
   /** Required only for manual/remote destructive requests. */
@@ -173,6 +195,9 @@ export type FunctionCallArgsByName = {
   createGeometryPlan: CreateGeometryPlanArgs;
   executeAdvancedDrawingCommand: ExecuteAdvancedDrawingCommandArgs;
   executeGeoGebraCommands: ExecuteGeoGebraCommandsArgs;
+  configureGeoGebraAnimation: ConfigureGeoGebraAnimationArgs;
+  controlGeoGebraAnimation: ControlGeoGebraAnimationArgs;
+  inspectGeoGebraObjects: InspectGeoGebraObjectsArgs;
   resetCanvas: ResetCanvasArgs;
   getCanvasContext: GetCanvasContextArgs;
   getPNGBase64: GetPNGBase64Args;

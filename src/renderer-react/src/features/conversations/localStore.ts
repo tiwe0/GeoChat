@@ -3,6 +3,8 @@ import { parseConversationParts, parseConversationSummaries, type ConversationSu
 
 const LOCAL_CONVERSATIONS_KEY = "geochatDesktopConversations";
 const LOCAL_CONVERSATIONS_VERSION = 1;
+const LARGE_BINARY_STRING_THRESHOLD = 4_096;
+const LOCAL_BINARY_OMISSION = "[binary content omitted from local cache]";
 
 type LocalConversation = {
   summary: ConversationSummary;
@@ -39,12 +41,37 @@ function writeAll(conversations: LocalConversation[]) {
   try {
     globalThis.localStorage?.setItem(LOCAL_CONVERSATIONS_KEY, JSON.stringify({
       version: LOCAL_CONVERSATIONS_VERSION,
-      conversations,
+      conversations: conversations.map((conversation) => ({
+        ...conversation,
+        messages: compactLocalMessages(conversation.messages),
+      })),
     }));
   } catch (caughtError) {
     console.error("[ERROR] Caught exception at src/renderer-react/src/features/conversations/localStore.ts:32", caughtError);
     throw caughtError;
   }
+}
+
+function compactLocalMessages(messages: ChatMessage[]): ChatMessage[] {
+  return messages.map((message) => ({
+    ...message,
+    parts: message.parts.map((part) => compactLocalValue(part) as typeof part),
+  }));
+}
+
+function compactLocalValue(value: unknown, key = ""): unknown {
+  if (typeof value === "string") {
+    const isBinaryField = /(?:base64|dataurl|imagedata|filedata|binary)$/i.test(key);
+    return isBinaryField && value.length > LARGE_BINARY_STRING_THRESHOLD
+      ? LOCAL_BINARY_OMISSION
+      : value;
+  }
+  if (Array.isArray(value)) return value.map((item) => compactLocalValue(item));
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value).map(([childKey, childValue]) => [
+    childKey,
+    compactLocalValue(childValue, childKey),
+  ]));
 }
 
 export function listLocalConversations() {

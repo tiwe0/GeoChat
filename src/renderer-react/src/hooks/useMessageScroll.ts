@@ -12,6 +12,16 @@ import {
 const BOTTOM_THRESHOLD = 8;
 
 export type MessageScrollMode = "browse" | "follow";
+export type MessageScrollEvent = "follow-latest" | "reached-bottom" | "user-browse";
+
+export function nextMessageScrollMode(
+  current: MessageScrollMode,
+  event: MessageScrollEvent,
+): MessageScrollMode {
+  if (event === "user-browse") return "browse";
+  if (event === "follow-latest" || event === "reached-bottom") return "follow";
+  return current;
+}
 
 type UseMessageScrollOptions = {
   active: boolean;
@@ -51,12 +61,15 @@ export function useMessageScroll({ active }: UseMessageScrollOptions) {
     if (modeRef.current === "browse") return;
     cancelScheduledScroll();
     autoScrollingRef.current = false;
-    changeMode("browse");
+    changeMode(nextMessageScrollMode(modeRef.current, "user-browse"));
   }, [cancelScheduledScroll, changeMode]);
 
   const scrollToLatest = useCallback(() => {
     if (!activeRef.current || modeRef.current !== "follow") return;
-    if (scrollFrameRef.current !== null) cancelAnimationFrame(scrollFrameRef.current);
+    // Coalesce rapid streaming updates into one scroll per animation frame.
+    // Cancelling and rescheduling here can starve the scroll indefinitely
+    // while tokens arrive faster than the browser paints.
+    if (scrollFrameRef.current !== null) return;
     scrollFrameRef.current = requestAnimationFrame(() => {
       scrollFrameRef.current = null;
       const viewport = viewportRef.current;
@@ -74,7 +87,7 @@ export function useMessageScroll({ active }: UseMessageScrollOptions) {
   }, []);
 
   const followLatest = useCallback(() => {
-    changeMode("follow");
+    changeMode(nextMessageScrollMode(modeRef.current, "follow-latest"));
     scrollToLatest();
   }, [changeMode, scrollToLatest]);
 
@@ -123,8 +136,10 @@ export function useMessageScroll({ active }: UseMessageScrollOptions) {
       enterBrowseMode();
       return;
     }
-    if (modeRef.current === "browse" && isAtBottom(viewport)) followLatest();
-  }, [enterBrowseMode, followLatest]);
+    if (modeRef.current === "browse" && isAtBottom(viewport)) {
+      changeMode(nextMessageScrollMode(modeRef.current, "reached-bottom"));
+    }
+  }, [changeMode, enterBrowseMode]);
 
   const handleWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
     if (event.deltaY < 0) enterBrowseMode();

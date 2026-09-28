@@ -1,3 +1,4 @@
+import { MessageCircleIcon, Trash2Icon, XIcon } from "lucide-react";
 import {
   Alert,
   Box,
@@ -10,9 +11,6 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
-import ChatBubbleOutlineRounded from "@mui/icons-material/ChatBubbleOutlineRounded";
-import CloseRounded from "@mui/icons-material/CloseRounded";
-import DeleteOutlineRounded from "@mui/icons-material/DeleteOutlineRounded";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -107,7 +105,7 @@ export function ConversationDrawer({
             {t("history.title")}
           </Typography>
           <IconButton data-fusion-panel-close={viewport ? true : undefined} type="button" size="small" onClick={closeDrawer} aria-label={t("history.close")} title={t("history.close")}>
-            <CloseRounded fontSize="small" />
+            <XIcon size={18} />
           </IconButton>
         </Stack>
 
@@ -168,7 +166,7 @@ export function ConversationDrawer({
                           size="small"
                           color="error"
                           disabled={deleting}
-                          startIcon={deleting ? <CircularProgress size={14} color="inherit" /> : <DeleteOutlineRounded fontSize="small" />}
+                          startIcon={deleting ? <CircularProgress size={14} color="inherit" /> : <Trash2Icon size={18} />}
                           onClick={async () => {
                             if (await onDelete(conversation)) setConfirmingId(null);
                           }}
@@ -218,7 +216,7 @@ export function ConversationDrawer({
                         "&:focus-visible": { outline: "2px solid", outlineColor: "primary.main", outlineOffset: -2 },
                       }}
                     >
-                      <ChatBubbleOutlineRounded sx={{ flex: "0 0 auto", fontSize: 17 }} />
+                      <MessageCircleIcon size={17} style={{ flex: "0 0 auto" }} />
                       <Typography variant="body2" noWrap sx={{ minWidth: 0, flex: 1, fontWeight: selected ? 700 : 500 }}>
                         {conversation.title || t("history.untitled")}
                       </Typography>
@@ -233,7 +231,7 @@ export function ConversationDrawer({
                       title={t("history.deleteConversation", { title: conversation.title || t("history.untitled") })}
                       sx={{ flex: "0 0 auto", mr: 0.25 }}
                     >
-                      <DeleteOutlineRounded sx={{ fontSize: 18 }} />
+                      <Trash2Icon size={18} />
                     </IconButton>
                   </Box>
                 );

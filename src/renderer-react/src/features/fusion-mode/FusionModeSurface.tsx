@@ -2,13 +2,20 @@ import { Box, Typography } from "@mui/material";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { deriveFusionBubbles } from "./bubbles";
+import { deriveFusionBubbles, isFusionRenderableMessage } from "./bubbles";
 import { FusionBubbleStack } from "./FusionBubbleStack";
 import { FusionComposer } from "./FusionComposer";
 import { FusionToolbar } from "./FusionToolbar";
 import type { FusionAttachment, FusionChatMessage, FusionChatStatus } from "./types";
 import type { FusionModeController } from "./useFusionModeController";
-import { clampFusionPoint, FUSION_COMPOSER_HEIGHT, FUSION_COMPOSER_WIDTH, type FusionPoint, type FusionSurfaceSize } from "./geometry";
+import {
+  clampFusionPoint,
+  FUSION_COMPOSER_HEIGHT,
+  FUSION_COMPOSER_WIDTH,
+  fusionAttachedBubbleLayout,
+  type FusionPoint,
+  type FusionSurfaceSize,
+} from "./geometry";
 import {
   fusionSelectionObjectNamesForSubmit,
   type GeoGebraSelectionContext,
@@ -25,6 +32,7 @@ export function FusionModeSurface(props: {
   status: FusionChatStatus;
   error?: string | null;
   input: string;
+  inputHistory: readonly string[];
   attachments: FusionAttachment[];
   canvasReady: boolean;
   modelLabel: string;
@@ -57,7 +65,9 @@ export function FusionModeSurface(props: {
   const synchronizeTurns = props.controller.synchronizeTurns;
   useEffect(() => {
     synchronizeTurns(
-      props.messages.map(({ id, role }) => ({ id, role })),
+      props.messages
+        .filter(isFusionRenderableMessage)
+        .map(({ id, role }) => ({ id, role })),
       props.status,
     );
   }, [synchronizeTurns, props.messages, props.status]);
@@ -73,6 +83,11 @@ export function FusionModeSurface(props: {
     { width: FUSION_COMPOSER_WIDTH, height: FUSION_COMPOSER_HEIGHT },
     safeInsets,
   ), [props.controller.composerPoint, props.controller.viewport, safeInsets]);
+  const activeBubbleLayout = useMemo(
+    () => fusionAttachedBubbleLayout(composerPoint, props.controller.viewport, safeInsets),
+    [composerPoint, props.controller.viewport, safeInsets],
+  );
+  const activeBubbleSize = activeBubbleLayout.size;
   useEffect(() => {
     const previousStatus = previousStatusRef.current;
     previousStatusRef.current = props.status;
@@ -101,11 +116,14 @@ export function FusionModeSurface(props: {
       // the latest conversation away when the composer is dragged.
       active: turn.id === props.controller.activeTurnId,
       createdAt: turn.createdAt,
-      size: turnSizes[turn.id],
+      // Streaming content changes height on nearly every token. Reserve the
+      // final viewport footprint instead of feeding every ResizeObserver tick
+      // back into collision resolution, which visibly shakes the whole stack.
+      size: turn.status === "active" ? activeBubbleSize : turnSizes[turn.id],
     })),
     props.controller.viewport,
     safeInsets,
-  ).map((layout) => [layout.id, layout])), [composerPoint, props.controller.activeTurnId, props.controller.viewport, safeInsets, turnSizes, visibleTurns]);
+  ).map((layout) => [layout.id, layout])), [activeBubbleSize, composerPoint, props.controller.activeTurnId, props.controller.viewport, safeInsets, turnSizes, visibleTurns]);
   const recordTurnSize = useCallback((turnId: string, size: FusionSurfaceSize) => {
     setTurnSizes((current) => {
       const previous = current[turnId];
@@ -228,7 +246,9 @@ export function FusionModeSurface(props: {
         const layout = turnLayouts.get(turn.id);
         const displayAnchor = fusionTurnDisplayAnchor(turn, props.controller.activeTurnId, composerPoint);
         const turnMessages = props.messages.filter((message) => turn.messageIds.includes(message.id));
-        const turnChatStatus: FusionChatStatus = turn.status === "active" ? props.status : turn.status === "error" ? "error" : "ready";
+        const turnChatStatus: FusionChatStatus = turn.status === "active"
+          ? props.status === "submitted" ? "submitted" : "streaming"
+          : turn.status === "error" ? "error" : "ready";
         const bubbles = deriveFusionBubbles({
           messages: turnMessages,
           status: turnChatStatus,
@@ -247,7 +267,7 @@ export function FusionModeSurface(props: {
             anchor={layout?.anchor ?? displayAnchor}
             placement={layout?.placement ?? props.controller.bubblePlacement}
             bubbles={bubbles}
-            streaming={turn.status === "active" && props.status === "streaming"}
+            streaming={turn.status === "active"}
             turnStatus={turn.status}
             collapsed={turn.collapsed}
             pinned={turn.pinned}
@@ -261,6 +281,7 @@ export function FusionModeSurface(props: {
             dismissLabel={t("fusion.dismissTurn")}
             continueLabel={t("fusion.continueTurn")}
             retryLabel={t("fusion.retryTurn")}
+            collapsedSummaryLabel={t("fusion.collapsedTurn")}
             onToggleCollapsed={() => props.controller.toggleTurnCollapsed(turn.id)}
             onTogglePinned={() => props.controller.toggleTurnPinned(turn.id)}
             onDismiss={() => props.controller.dismissTurn(turn.id)}
@@ -274,10 +295,12 @@ export function FusionModeSurface(props: {
               }
               : undefined}
             onOpenTranscript={props.onOpenTranscript}
-            onSizeChange={(size) => recordTurnSize(turn.id, size)}
-            connectedToComposer={turn.id === props.controller.activeTurnId}
+            onSizeChange={turn.status === "active" ? undefined : (size) => recordTurnSize(turn.id, size)}
             visualOpacity={fusionTurnVisualOpacity(turnIndex, visibleTurns.length, turn.status === "active")}
             visualOrder={turnIndex}
+            maxHeight={turn.id === props.controller.activeTurnId && !turn.collapsed
+              ? activeBubbleSize.height
+              : undefined}
           />
         );
       })}
@@ -289,9 +312,12 @@ export function FusionModeSurface(props: {
             x={composerPoint.x}
             y={composerPoint.y}
             value={props.input}
+            history={props.inputHistory}
             attachments={props.attachments}
             busy={busy}
             disabled={!props.canvasReady}
+            canvasConnected={props.canvasReady}
+            canvasConnectedLabel={t("canvasStatus.canvas.ready")}
             modelLabel={props.modelLabel}
             focusSignal={props.controller.summonVersion}
             modelControl={props.modelControl}

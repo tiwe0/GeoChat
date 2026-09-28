@@ -1,8 +1,4 @@
-import CheckCircleRounded from "@mui/icons-material/CheckCircleRounded";
-import ConstructionRounded from "@mui/icons-material/ConstructionRounded";
-import ErrorOutlineRounded from "@mui/icons-material/ErrorOutlineRounded";
-import KeyboardArrowDownRounded from "@mui/icons-material/KeyboardArrowDownRounded";
-import PsychologyRounded from "@mui/icons-material/PsychologyRounded";
+import { BrainIcon, ChevronDownIcon, CircleAlertIcon, CircleCheckBigIcon, ConstructionIcon } from "lucide-react";
 import { Box, ButtonBase, CircularProgress, Collapse, Stack, Typography } from "@mui/material";
 import { useReducedMotion } from "motion/react";
 import { useState } from "react";
@@ -25,8 +21,8 @@ import type { FusionChatMessage } from "./types";
 
 function ToolStatus({ status }: { status: "running" | "done" | "failed" }) {
   if (status === "running") return <CircularProgress size={12} thickness={5} color="inherit" />;
-  if (status === "failed") return <ErrorOutlineRounded sx={{ fontSize: 15 }} />;
-  return <CheckCircleRounded sx={{ fontSize: 14 }} />;
+  if (status === "failed") return <CircleAlertIcon size={15} />;
+  return <CircleCheckBigIcon size={14} />;
 }
 
 function ToolRow({ part }: { part: AssistantProcessPart }) {
@@ -61,7 +57,7 @@ function ToolRow({ part }: { part: AssistantProcessPart }) {
         <Typography component="code" variant="caption" sx={{ fontWeight: 750 }}>{toolName}</Typography>
         <Typography variant="caption" noWrap sx={{ minWidth: 0, flex: 1, color: "text.secondary" }}>{preview}</Typography>
         <Typography variant="caption" sx={{ flex: "0 0 auto" }}>{t(`tools.${status}`)}</Typography>
-        {details && <KeyboardArrowDownRounded sx={{ fontSize: 16, transform: expanded ? "rotate(180deg)" : "none" }} />}
+        {details && <ChevronDownIcon size={16} style={{ transform: expanded ? "rotate(180deg)" : "none" }} />}
       </ButtonBase>
       <Collapse in={expanded} timeout={reduceMotion ? 0 : 160} unmountOnExit>
         <Box component="pre" sx={{ m: 0.5, p: 0.75, maxHeight: 180, overflow: "auto", borderRadius: 1, bgcolor: "action.hover", fontSize: 10.5, lineHeight: 1.45, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
@@ -83,10 +79,10 @@ function ProcessCard({ process, active }: { process: AssistantProcess; active: b
     <Box sx={{ mb: 0.5, border: 1, borderColor: process.hasFailure ? "error.light" : "divider", borderRadius: 1.25, bgcolor: process.hasFailure ? "rgba(211,47,47,.06)" : "background.default", overflow: "hidden" }}>
       <ButtonBase component="button" type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} sx={{ width: "100%", minHeight: 30, px: 0.75, justifyContent: "space-between", color: process.hasFailure ? "error.main" : "text.secondary" }}>
         <Stack direction="row" spacing={0.55} sx={{ minWidth: 0, alignItems: "center" }}>
-          {process.reasoningCount > 0 ? <PsychologyRounded sx={{ fontSize: 15 }} /> : <ConstructionRounded sx={{ fontSize: 15 }} />}
+          {process.reasoningCount > 0 ? <BrainIcon size={15} /> : <ConstructionIcon size={15} />}
           <Typography variant="caption" noWrap sx={{ fontWeight: 750 }}>{summary}</Typography>
         </Stack>
-        <KeyboardArrowDownRounded sx={{ fontSize: 17, transform: expanded ? "rotate(180deg)" : "none" }} />
+        <ChevronDownIcon size={17} style={{ transform: expanded ? "rotate(180deg)" : "none" }} />
       </ButtonBase>
       <Collapse in={expanded} timeout={reduceMotion ? 0 : 170} unmountOnExit>
         <Box sx={{ px: 0.5, pb: 0.5, borderTop: 1, borderColor: "divider" }}>
@@ -102,8 +98,19 @@ function ProcessCard({ process, active }: { process: AssistantProcess; active: b
   );
 }
 
-export function FusionAssistantMessage({ message, active }: { message: FusionChatMessage; active: boolean }) {
+export function FusionDisplayToolCard({ part }: { part: AssistantProcessPart }) {
   const { i18n, t } = useTranslation();
+  return (
+    <AgentDisplayToolResult
+      part={part}
+      locale={i18n.language.startsWith("en") ? "en-US" : "zh-CN"}
+      statusLabel={t(`tools.${assistantToolStatus(part)}`)}
+    />
+  );
+}
+
+export function FusionAssistantMessage({ message, active }: { message: FusionChatMessage; active: boolean }) {
+  const { t } = useTranslation();
   const translations = useStreamdownTranslations();
   const processRuns = collectAssistantProcessRuns(
     message.parts,
@@ -133,12 +140,7 @@ export function FusionAssistantMessage({ message, active }: { message: FusionCha
     }
     if (isAssistantDisplayToolPart(part)) {
       return (
-        <AgentDisplayToolResult
-          key={`tool:${index}`}
-          part={part}
-          locale={i18n.language.startsWith("en") ? "en-US" : "zh-CN"}
-          statusLabel={t(`tools.${assistantToolStatus(part)}`)}
-        />
+        <FusionDisplayToolCard key={`tool:${index}`} part={part} />
       );
     }
     return null;

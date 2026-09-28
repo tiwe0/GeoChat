@@ -19,7 +19,16 @@ export type AgentWorkflowDecision = {
 };
 
 const explanationTools = new Set<FunctionCallToolName>(["showSolutionSteps", "showTeachingHint", "showAnimationGuide", "showChoiceAnalysis", "showSelectedElements"]);
-const verificationTools = new Set<FunctionCallToolName>(["getCanvasContext", "getPNGBase64"]);
+export const agentWorkflowCanvasMutationTools = new Set<FunctionCallToolName>([
+  "executeGeoGebraCommands",
+  "configureGeoGebraAnimation",
+  "controlGeoGebraAnimation"
+]);
+export const agentWorkflowCanvasVerificationTools = new Set<FunctionCallToolName>([
+  "getCanvasContext",
+  "getPNGBase64",
+  "inspectGeoGebraObjects"
+]);
 const blackboardTools = new Set<FunctionCallToolName>(["readBlackboard", "patchBlackboard"]);
 const skillTools = new Set<FunctionCallToolName>(["listSkills", "searchSkills", "loadSkill", "activateSkill"]);
 
@@ -44,6 +53,9 @@ const allowedToolsByPhase = {
     "createGeometryPlan",
     "executeAdvancedDrawingCommand",
     "executeGeoGebraCommands",
+    "configureGeoGebraAnimation",
+    "controlGeoGebraAnimation",
+    "inspectGeoGebraObjects",
     "resetCanvas",
     "getCanvasContext",
     "getPNGBase64",
@@ -56,7 +68,7 @@ const allowedToolsByPhase = {
     "setPerspective"
   ]),
   writing: new Set<FunctionCallToolName>([]),
-  verifying: new Set<FunctionCallToolName>(["getCanvasContext", "getPNGBase64"]),
+  verifying: new Set<FunctionCallToolName>(agentWorkflowCanvasVerificationTools),
   explaining: new Set<FunctionCallToolName>([
     "searchGeoGebraCommands",
     "readBlackboard",
@@ -68,6 +80,9 @@ const allowedToolsByPhase = {
     "createGeometryPlan",
     "executeAdvancedDrawingCommand",
     "executeGeoGebraCommands",
+    "configureGeoGebraAnimation",
+    "controlGeoGebraAnimation",
+    "inspectGeoGebraObjects",
     "resetCanvas",
     "getCanvasContext",
     "getPNGBase64",
@@ -113,7 +128,7 @@ export function evaluateAgentWorkflowToolCall(state: AgentWorkflowState, toolNam
     if (state.phase === "verifying") {
       return {
         allowed: false,
-        reason: "画布构造写入后必须先通过 getCanvasContext 或 getPNGBase64 验证，再继续构造或生成解释。"
+        reason: "画布写入后必须先通过 getCanvasContext、getPNGBase64 或 inspectGeoGebraObjects 验证，再继续构造或生成解释。"
       };
     }
     return {
@@ -121,10 +136,10 @@ export function evaluateAgentWorkflowToolCall(state: AgentWorkflowState, toolNam
       reason: `当前工作流阶段 ${state.phase} 不允许调用 ${toolName}。`
     };
   }
-  if (state.hasCanvasWrite && !state.hasVerificationAfterWrite && !verificationTools.has(toolName)) {
+  if (state.hasCanvasWrite && !state.hasVerificationAfterWrite && !agentWorkflowCanvasVerificationTools.has(toolName)) {
     return {
       allowed: false,
-      reason: "画布构造写入后必须先通过 getCanvasContext 或 getPNGBase64 验证，再继续构造或生成解释。"
+      reason: "画布写入后必须先通过 getCanvasContext、getPNGBase64 或 inspectGeoGebraObjects 验证，再继续构造或生成解释。"
     };
   }
   return { allowed: true };
@@ -144,14 +159,14 @@ export function advanceAgentWorkflowState(
       hasVerificationAfterWrite: state.hasCanvasWrite ? true : state.hasVerificationAfterWrite
     };
   }
-  if (toolName === "getPNGBase64") {
+  if (toolName === "getPNGBase64" || toolName === "inspectGeoGebraObjects") {
     return {
       ...state,
       phase: state.hasCanvasWrite ? "explaining" : state.phase,
       hasVerificationAfterWrite: state.hasCanvasWrite ? true : state.hasVerificationAfterWrite
     };
   }
-  if (toolName === "executeGeoGebraCommands") {
+  if (agentWorkflowCanvasMutationTools.has(toolName)) {
     return {
       ...state,
       phase: "verifying",

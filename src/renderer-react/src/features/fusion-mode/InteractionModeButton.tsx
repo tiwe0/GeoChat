@@ -1,5 +1,4 @@
-import CropSquareRounded from "@mui/icons-material/CropSquareRounded";
-import HubRounded from "@mui/icons-material/HubRounded";
+import { CombineIcon, SquareIcon } from "lucide-react";
 import { IconButton, Tooltip } from "@mui/material";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { InteractionMode } from "../../../../shared/desktop/workbench-types";
@@ -43,7 +42,7 @@ export function InteractionModeButton(props: {
             whileHover={reduceMotion ? undefined : { scale: 1.12, rotate: targetMode === "fusion" ? 10 : -8 }}
             whileTap={reduceMotion ? undefined : { scale: 0.72, rotate: targetMode === "fusion" ? 42 : -36 }}
           >
-            {targetMode === "fusion" ? <HubRounded fontSize="small" /> : <CropSquareRounded fontSize="small" />}
+            {targetMode === "fusion" ? <CombineIcon size={18} /> : <SquareIcon size={18} />}
           </motion.span>
         </AnimatePresence>
       </IconButton>

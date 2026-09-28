@@ -1,4 +1,4 @@
-import ContentCopyRounded from "@mui/icons-material/ContentCopyRounded";
+import { CopyIcon } from "lucide-react";
 import {
   Alert,
   IconButton,
@@ -58,7 +58,7 @@ export function ErrorToast({ message }: ErrorToastProps) {
               aria-label={copied ? t("common.copied") : t("common.copyError")}
               onClick={() => void copyError()}
             >
-              <ContentCopyRounded fontSize="small" />
+              <CopyIcon size={18} />
             </IconButton>
           </Tooltip>
         )}

@@ -1,7 +1,5 @@
+import { PlusIcon, Trash2Icon, WifiIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import AddRounded from "@mui/icons-material/AddRounded";
-import DeleteOutlineRounded from "@mui/icons-material/DeleteOutlineRounded";
-import NetworkCheckRounded from "@mui/icons-material/NetworkCheckRounded";
 import {
   Button,
   Box,
@@ -250,7 +248,7 @@ export function ModelSettings() {
                 <Button
                   size="small"
                   variant="outlined"
-                  startIcon={<AddRounded />}
+                  startIcon={<PlusIcon />}
                   onClick={() => updateCustomProvider({
                     ...customProvider,
                     models: [...customProvider.models, { name: "", callName: "", supportsImages: false }],
@@ -302,7 +300,7 @@ export function ModelSettings() {
                             models: customProvider.models.filter((_, modelIndex) => modelIndex !== index),
                           })}
                         >
-                          <DeleteOutlineRounded fontSize="small" />
+                          <Trash2Icon size={18} />
                         </IconButton>
                       </Tooltip>
                     </Stack>
@@ -399,7 +397,7 @@ function ApiKeyField(props: {
           >
             {props.keyProbe.status === "probing"
               ? <CircularProgress size={18} color="inherit" />
-              : <NetworkCheckRounded fontSize="small" />}
+              : <WifiIcon size={18} />}
           </IconButton>
         </span>
       </Tooltip>

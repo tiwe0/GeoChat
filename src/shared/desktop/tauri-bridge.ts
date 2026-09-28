@@ -1,6 +1,7 @@
 import type {
   DesktopAccessState,
   DesktopAppBundleUpdateState,
+  DesktopGraphicsState,
   DesktopImprovementPlanPreferences,
   DesktopLogLevel,
   DesktopLoggingState,
@@ -36,6 +37,10 @@ export const TAURI_DESKTOP_COMMANDS = {
   runtime: {
     getRuntimeInfo: "get_runtime_info",
     markRendererReady: "mark_renderer_ready"
+  },
+  graphics: {
+    getGraphicsPreferences: "get_graphics_preferences",
+    setGraphicsPreferences: "set_graphics_preferences"
   },
   mcp: {
     getMcpStatus: "get_mcp_status",
@@ -94,38 +99,18 @@ export const TAURI_DESKTOP_EVENTS = {
 export async function installTauriDesktopBridge() {
   if (window.geochatDesktop || !window.__TAURI_INTERNALS__) return;
   document.documentElement.classList.add("geochat-tauri-shell");
-  if (navigator.userAgent.includes("Windows")) {
-    document.documentElement.classList.add("geochat-tauri-windows");
-  }
 
-  const [{ invoke }, { listen }, { getCurrentWindow }] = await Promise.all([
+  const [{ invoke }, { listen }] = await Promise.all([
     import("@tauri-apps/api/core"),
-    import("@tauri-apps/api/event"),
-    import("@tauri-apps/api/window")
+    import("@tauri-apps/api/event")
   ]);
 
   const tauriInvoke = invoke as TauriInvoke;
   window.geochatDesktop = createTauriDesktopApi(tauriInvoke, listen);
-  const currentWindow = getCurrentWindow();
-  installTauriDragRegions(() => currentWindow.startDragging());
 }
 
 export function installedDesktopApi() {
   return window.geochatDesktop;
-}
-
-function installTauriDragRegions(startDragging: () => Promise<void>) {
-  document.addEventListener("pointerdown", (event) => {
-    if (event.button !== 0) return;
-    const target = event.target as Element | null;
-    const dragRegion = target?.closest("[data-tauri-drag-region]");
-    if (!dragRegion) return;
-    if (target?.closest("button, input, textarea, select, a, [role='button'], [data-tauri-no-drag]")) return;
-    event.preventDefault();
-    void startDragging().catch((error) => {
-      console.error("[ERROR] Failed to start native window dragging", error);
-    });
-  });
 }
 
 export function createTauriDesktopApi(
@@ -134,6 +119,7 @@ export function createTauriDesktopApi(
 ): GeoChatDesktopApi {
   return {
     ...createRuntimeBridge(invoke),
+    ...createGraphicsBridge(invoke),
     ...createMcpBridge(invoke),
     ...createAccessBridge(invoke),
     ...createShellUpdateBridge(invoke, listen),
@@ -141,6 +127,17 @@ export function createTauriDesktopApi(
     ...createImprovementBridge(invoke),
     ...createLoggingBridge(invoke),
     ...createProblemBankBridge(invoke, listen)
+  };
+}
+
+function createGraphicsBridge(
+  invoke: TauriInvoke
+): BridgeSlice<"getGraphicsPreferences" | "setGraphicsPreferences"> {
+  const commands = TAURI_DESKTOP_COMMANDS.graphics;
+  return {
+    getGraphicsPreferences: () => invoke<DesktopGraphicsState>(commands.getGraphicsPreferences),
+    setGraphicsPreferences: (preferences: { hardwareAcceleration: boolean }) =>
+      invoke<DesktopGraphicsState>(commands.setGraphicsPreferences, { preferences })
   };
 }
 

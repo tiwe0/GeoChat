@@ -6,6 +6,7 @@ import {
   catalogToProblemSets,
   filterProblemSets,
   normalizeProblemMarkdown,
+  problemComposerText,
   shouldPredictivelyPrefetch,
 } from "../src/renderer-react/src/components/ProblemBankSidecar";
 
@@ -47,12 +48,12 @@ describe("problem-bank sidecar", () => {
       new URL("../src/renderer-react/src/components/ProblemBankSidecar.tsx", import.meta.url),
       "utf8",
     );
-    expect(panelSource).toContain("<LibraryBooksOutlined");
+    expect(panelSource).toContain("<LibraryBigIcon");
     expect(panelSource).toContain('aria-expanded={problemBankOpen}');
     expect(sidecarSource).toContain('id="copilot-problem-bank-sidecar"');
     expect(panelSource).toContain("<AnimatePresence");
     expect(panelSource).toContain('height: "100%"');
-    expect(panelSource).toContain("<ProblemBankSidecar onClose={closeProblemBank} />");
+    expect(panelSource).toContain("<ProblemBankSidecar onClose={closeProblemBank} onUseProblem={useProblemInComposer} />");
     expect(panelSource).toContain("onPointerDown={panelWindow.startDragging}");
     expect(panelSource).toContain("onPointerMove={movePanel}");
     expect(panelSource).toContain("problemBankRestorePositionRef.current = null;");
@@ -72,8 +73,13 @@ describe("problem-bank sidecar", () => {
     expect(sidecarSource).toContain("<ProblemIndexSkeleton />");
     expect(sidecarSource).toContain("<ProblemDetailSkeleton />");
     expect(sidecarSource).toContain("onPointerEnter={() => onPrefetchProblem(problem)}");
-    expect(sidecarSource).toContain("pagePrefetches.current");
-    expect(sidecarSource).toContain("detailPrefetches.current");
+    expect(sidecarSource).toContain("problemBankSession.pageResults");
+    expect(sidecarSource).toContain("problemBankSession.detailResults");
+    expect(sidecarSource).toContain("export async function preloadProblemBankSidecar");
+    expect(panelSource).toContain("void preloadProblemBankSidecar()");
+    expect(sidecarSource).toContain('t("problemBank.useInComposer")');
+    expect(panelSource).toContain("fusionController.summonAt(fusionController.composerPoint)");
+    expect(panelSource).toContain("focusComposerAfterProblemBankCloseRef.current = true");
     expect(sidecarSource).not.toContain('t("problemBank.cloudLazyDescription")');
   });
 
@@ -136,5 +142,27 @@ describe("problem-bank sidecar", () => {
       .toBe("**Solution:** result  \nnext");
     expect(normalizeProblemMarkdown("$A=\\{x|| x \\mid \\leqslant 2\\}$"))
       .toBe("$A=\\{x \\mid |x| \\leqslant 2\\}$");
+  });
+
+  test("keeps the problem view stable while cached content replaces its loader", () => {
+    const sidecarSource = readFileSync(
+      new URL("../src/renderer-react/src/components/ProblemBankSidecar.tsx", import.meta.url),
+      "utf8",
+    );
+    const styles = readFileSync(
+      new URL("../src/renderer-react/src/styles.css", import.meta.url),
+      "utf8",
+    );
+    expect(sidecarSource).toContain('`bank:${selectedBank.id}`');
+    expect(sidecarSource).not.toContain('problems.length === 0 ? pageState : "ready"');
+    expect(styles).toContain(".problem-bank-sidecar-body,");
+    expect(styles).toContain("overflow-x: hidden;");
+    expect(styles).not.toContain(".problem-bank-problem-markdown .katex-display {\n  margin: .65em 0;\n  overflow-x: auto;");
+  });
+
+  test("prepares a complete problem prompt for the composer with sensible fallbacks", () => {
+    expect(problemComposerText("  $x=1$  ", "preview", "fallback")).toBe("$x=1$");
+    expect(problemComposerText("", "  preview  ", "fallback")).toBe("preview");
+    expect(problemComposerText(null, null, "  fallback  ")).toBe("fallback");
   });
 });

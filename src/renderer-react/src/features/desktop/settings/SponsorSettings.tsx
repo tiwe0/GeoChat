@@ -1,4 +1,4 @@
-import VolunteerActivismOutlined from "@mui/icons-material/VolunteerActivismOutlined";
+import { HandHeartIcon } from "lucide-react";
 import { Box, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
@@ -9,7 +9,7 @@ export function SponsorSettings() {
     <Box className="settings-page settings-sponsor-page">
       <Box className="settings-sponsor-placeholder">
         <Box className="settings-sponsor-mark" aria-hidden="true">
-          <VolunteerActivismOutlined />
+          <HandHeartIcon />
         </Box>
         <Typography variant="h6" sx={{ fontWeight: 700 }}>
           {t("settings.sponsorPlaceholder")}

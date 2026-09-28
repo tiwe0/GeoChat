@@ -8,6 +8,7 @@ export type JsonSchemaProperty = {
   minimum?: number;
   maximum?: number;
   minItems?: number;
+  maxItems?: number;
   default?: unknown;
   description?: string;
   items?: JsonSchemaProperty;

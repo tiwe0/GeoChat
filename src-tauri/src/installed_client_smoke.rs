@@ -5,8 +5,8 @@ use crate::{
         sha256_hex, AppBundleInstallResult,
     },
     check_app_bundle_update, configured_string, desktop_database_path,
-    initial_app_bundle_update_state, initial_shell_update_state, install_app_bundle_update,
-    load_settings, local_runtime_auth_token, now_iso,
+    initial_app_bundle_update_state, initial_graphics_state, initial_shell_update_state,
+    install_app_bundle_update, load_settings, local_runtime_auth_token, now_iso,
     problem_bank_cache::ProblemBankCacheRuntime,
     project_root, stable_device_id, AppBundleUpdateRuntime, BackendRuntime, DesktopState,
     McpRuntime, ShellUpdateRuntime,
@@ -95,6 +95,8 @@ pub(crate) fn run_installed_client_update_smoke_cli() -> Result<(), String> {
     let resource_dir = packaged_resource_dir()?;
     let settings_path = app_data_dir.join("settings.json");
     let settings = load_settings(&settings_path)?;
+    let (hardware_acceleration_applied, hardware_acceleration_configurable, graphics_mode) =
+        initial_graphics_state(&settings);
     let active_app_bundle =
         resolve_active_app_bundle(&app_data_dir, &resource_dir, env!("CARGO_PKG_VERSION"));
     let state = DesktopState {
@@ -123,6 +125,9 @@ pub(crate) fn run_installed_client_update_smoke_cli() -> Result<(), String> {
         resource_dir,
         active_app_bundle: Mutex::new(active_app_bundle),
         settings: Mutex::new(settings.clone()),
+        hardware_acceleration_applied,
+        hardware_acceleration_configurable,
+        graphics_mode,
         local_backend_auth_token: local_runtime_auth_token(),
         runtime_authorized: AtomicBool::new(access_allows_runtime_use()),
         renderer_ready: AtomicBool::new(true),

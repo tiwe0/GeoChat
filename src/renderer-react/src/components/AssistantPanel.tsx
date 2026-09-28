@@ -1,3 +1,4 @@
+import { ArrowLeftIcon, CalculatorIcon, ChevronDownIcon, CircleHelpIcon, CirclePlusIcon, ClipboardCheckIcon, LibraryBigIcon, MessageSquarePlusIcon, MinusIcon, SettingsIcon, SquareIcon } from "lucide-react";
 import {
   Box,
   ButtonBase,
@@ -11,21 +12,11 @@ import {
   Typography,
   useTheme,
 } from "@mui/material";
-import AddCircleOutlineRounded from "@mui/icons-material/AddCircleOutlineRounded";
-import ArrowBackRounded from "@mui/icons-material/ArrowBackRounded";
-import CalculateRounded from "@mui/icons-material/CalculateRounded";
-import CropSquareRounded from "@mui/icons-material/CropSquareRounded";
-import FactCheckRounded from "@mui/icons-material/FactCheckRounded";
-import HelpOutlineRounded from "@mui/icons-material/HelpOutlineRounded";
-import AddCommentRounded from "@mui/icons-material/AddCommentRounded";
-import MinimizeRounded from "@mui/icons-material/MinimizeRounded";
-import SettingsRounded from "@mui/icons-material/SettingsRounded";
-import KeyboardArrowDownRounded from "@mui/icons-material/KeyboardArrowDownRounded";
-import LibraryBooksOutlined from "@mui/icons-material/LibraryBooksOutlined";
 import { Joyride, STATUS, type Step } from "react-joyride";
 import {
   useLayoutEffect,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -41,6 +32,8 @@ import {
 } from "../hooks/useAgentRunChat";
 import { formatAgentRunError } from "../features/agent-run/errorMessage";
 import { STREAMDOWN_PLUGINS } from "../features/chat/streamdownPlugins";
+import { StaticMessageMarkdown } from "../features/chat/StaticMessageMarkdown";
+import { composerHistoryFromMessages } from "../features/chat/composerHistory";
 import { isInternalToolResultEcho } from "../features/chat/toolResultEcho";
 import { collectAssistantProcessRuns } from "../features/chat/assistantProcess";
 import { useLocalSession } from "../features/local-session/useLocalSession";
@@ -73,7 +66,7 @@ import { BlackboardDrawer } from "./BlackboardDrawer";
 import { OnboardingTooltip } from "./OnboardingTooltip";
 import { ErrorToast } from "./ErrorToast";
 import { BrandIcon } from "./BrandIcon";
-import { ProblemBankSidecar } from "./ProblemBankSidecar";
+import { preloadProblemBankSidecar, ProblemBankSidecar } from "./ProblemBankSidecar";
 import { ModelMenu, type ThinkingEffort } from "./ModelMenu";
 import { createDesktopDebugActionExecutor } from "../features/desktop/mcpDebugActions";
 import { useMcpState } from "../features/desktop/useMcpState";
@@ -172,38 +165,6 @@ function toolPartStatus(part: unknown): string {
   return "running";
 }
 
-function TypewriterText({ text }: { text: string }) {
-  const [visibleText, setVisibleText] = useState("");
-
-  useEffect(() => {
-    let cursor = 0;
-    let timer: number | undefined;
-    const tick = () => {
-      if (cursor >= text.length) {
-        setVisibleText(text);
-        return;
-      }
-      const remaining = text.length - cursor;
-      const step = remaining > 120 ? 4 : remaining > 60 ? 2 : 1;
-      cursor = Math.min(text.length, cursor + step);
-      setVisibleText(text.slice(0, cursor));
-      timer = window.setTimeout(tick, remaining > 60 ? 12 : 18);
-    };
-
-    setVisibleText("");
-    timer = window.setTimeout(tick, 10);
-    return () => {
-      if (timer !== undefined) window.clearTimeout(timer);
-    };
-  }, [text]);
-
-  return (
-    <Typography component="span" variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
-      {visibleText}
-    </Typography>
-  );
-}
-
 export function AssistantPanel({
   canvasReady = true,
   selectionContext = { status: "unavailable", objectNames: [] },
@@ -223,6 +184,7 @@ export function AssistantPanel({
   const fusionController = useFusionModeController(interaction.mode === "fusion");
   const streamdownTranslations = useStreamdownTranslations();
   const [input, setInput] = useState("");
+  const [composerFocusSignal, setComposerFocusSignal] = useState(0);
   const [contextMenu, setContextMenu] = useState<PanelContextMenuState | null>(null);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
@@ -230,6 +192,7 @@ export function AssistantPanel({
   const [problemBankOpen, setProblemBankOpen] = useState(false);
   const problemBankTriggerRef = useRef<HTMLButtonElement>(null);
   const problemBankRestorePositionRef = useRef<{ left: number; top: number } | null>(null);
+  const focusComposerAfterProblemBankCloseRef = useRef(false);
   const [modelOptions, setModelOptions] = useState<RuntimeModelOption[]>(loadModelCatalog());
   const modelOptionsRef = useRef<RuntimeModelOption[]>(loadModelCatalog());
   modelOptionsRef.current = modelOptions;
@@ -251,6 +214,19 @@ export function AssistantPanel({
     if (fusionPanelFocusRestoreTimerRef.current !== null) {
       globalThis.clearTimeout(fusionPanelFocusRestoreTimerRef.current);
     }
+  }, []);
+  useEffect(() => {
+    const warm = () => { void preloadProblemBankSidecar(); };
+    const idleWindow = window as unknown as {
+      requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    if (idleWindow.requestIdleCallback) {
+      const idleId = idleWindow.requestIdleCallback(warm, { timeout: 1_500 });
+      return () => idleWindow.cancelIdleCallback?.(idleId);
+    }
+    const timer = window.setTimeout(warm, 900);
+    return () => window.clearTimeout(timer);
   }, []);
   const panelChatRef = useRef(new PanelChatState());
   const selectedModelOption = modelOptions.find((option) => option.id === selectedModel);
@@ -285,6 +261,7 @@ export function AssistantPanel({
     onRendererToolSettled: () => onRefreshSelection?.("tool-complete"),
     locale: i18n.language.startsWith("en") ? "en-US" : "zh-CN",
     onFinish: () => {
+      fusionController.completeActiveTurn();
       void conversationHistory.load(true);
       if (blackboardOpen) void blackboard.load();
     },
@@ -301,6 +278,7 @@ export function AssistantPanel({
     },
   });
   const isStreaming = status === "streaming" || status === "submitted";
+  const composerHistory = useMemo(() => composerHistoryFromMessages(messages), [messages]);
 
   // The MCP server queues actions and waits for the renderer to run them, so
   // the poll loop belongs here, where the app is mounted, rather than in the
@@ -580,6 +558,7 @@ export function AssistantPanel({
   }
 
   async function retryFailedRun() {
+    messageScroll.followLatest();
     setSubmissionError(null);
     try {
       return await retry();
@@ -688,6 +667,18 @@ export function AssistantPanel({
     setProblemBankOpen(false);
   }
 
+  function useProblemInComposer(problem: string) {
+    setSubmissionError(null);
+    setInput(problem);
+    if (interaction.mode === "fusion") {
+      closeFusionPanel({ restoreFocus: false });
+      fusionController.summonAt(fusionController.composerPoint);
+      return;
+    }
+    focusComposerAfterProblemBankCloseRef.current = true;
+    closeProblemBank();
+  }
+
   function movePanel(event: ReactPointerEvent<HTMLElement>) {
     const isActiveDrag = event.currentTarget.hasPointerCapture(event.pointerId);
     panelWindow.moveDragging(event);
@@ -716,11 +707,17 @@ export function AssistantPanel({
 
   function restorePanelAfterProblemBankClose() {
     if (problemBankOpen) return;
+    const restoreComposerFocus = () => {
+      if (!focusComposerAfterProblemBankCloseRef.current) return false;
+      focusComposerAfterProblemBankCloseRef.current = false;
+      setComposerFocusSignal((signal) => signal + 1);
+      return true;
+    };
     const restore = problemBankRestorePositionRef.current;
     const panel = panelRef.current;
     const host = panel ? resolvePanelWindowHost(panel) : null;
     if (!restore || !host) {
-      problemBankTriggerRef.current?.focus({ preventScroll: true });
+      if (!restoreComposerFocus()) problemBankTriggerRef.current?.focus({ preventScroll: true });
       return;
     }
     host.style.transition = reduceMotion
@@ -732,7 +729,7 @@ export function AssistantPanel({
     window.setTimeout(() => {
       if (host.style.transition.includes("left 220ms")) host.style.transition = "";
     }, 240);
-    problemBankTriggerRef.current?.focus({ preventScroll: true });
+    if (!restoreComposerFocus()) problemBankTriggerRef.current?.focus({ preventScroll: true });
   }
 
   async function transitionLanguage(changeLanguage: () => Promise<void>) {
@@ -843,6 +840,7 @@ export function AssistantPanel({
         status={status}
         error={toastError}
         input={input}
+        inputHistory={composerHistory}
         attachments={attachments}
         canvasReady={canvasReady}
         modelLabel={selectedModelOption?.label ?? selectedModel}
@@ -923,8 +921,8 @@ export function AssistantPanel({
           </FusionViewportCard>
         )}
         {fusionPanel === "problem-bank" && (
-          <FusionViewportCard key="fusion-problem-bank" panelId="problem-bank" title={t("problemBank.title")} closeLabel={t("problemBank.close")} onClose={closeFusionPanel}>
-            <ProblemBankSidecar onClose={closeFusionPanel} />
+          <FusionViewportCard key="fusion-problem-bank" panelId="problem-bank" title={t("problemBank.title")} closeLabel={t("problemBank.close")} onClose={closeFusionPanel} hideHeader>
+            <ProblemBankSidecar onClose={closeFusionPanel} onUseProblem={useProblemInComposer} />
           </FusionViewportCard>
         )}
         {fusionPanel === "settings" && (
@@ -1106,7 +1104,7 @@ export function AssistantPanel({
               <Typography variant="subtitle2" sx={{ minWidth: 0, flex: "0 1 auto", maxWidth: "min(320px, 100%)", fontWeight: 700 }} noWrap>
                 {panelTitle}
               </Typography>
-              <KeyboardArrowDownRounded sx={{ flex: "0 0 auto", fontSize: 18, color: "text.secondary" }} />
+              <ChevronDownIcon size={18} style={{ flex: "0 0 auto", color: "#526079" }} />
             </ButtonBase>
           ) : (
             <Typography variant="subtitle2" sx={{ minWidth: 0, flex: 1, fontWeight: 700 }} noWrap title={panelTitle}>
@@ -1127,7 +1125,7 @@ export function AssistantPanel({
                 data-copilot-tour="new-conversation"
                 data-copilot-no-drag
               >
-                <AddCommentRounded fontSize="small" />
+                <MessageSquarePlusIcon size={18} />
               </IconButton>
               <IconButton
                 type="button"
@@ -1147,7 +1145,7 @@ export function AssistantPanel({
                   "&:hover": { bgcolor: "rgba(31, 90, 73, 0.12)" },
                 }}
               >
-                <FactCheckRounded fontSize="small" />
+                <ClipboardCheckIcon size={18} />
               </IconButton>
               <IconButton
                 ref={problemBankTriggerRef}
@@ -1160,12 +1158,14 @@ export function AssistantPanel({
                 aria-controls={problemBankOpen ? "copilot-problem-bank-sidecar" : undefined}
                 data-copilot-no-drag
                 data-copilot-tour="problem-bank"
+                onPointerEnter={() => { void preloadProblemBankSidecar(); }}
+                onFocus={() => { void preloadProblemBankSidecar(); }}
                 sx={{
                   color: problemBankOpen ? "primary.main" : undefined,
                   bgcolor: problemBankOpen ? "action.selected" : undefined,
                 }}
               >
-                <LibraryBooksOutlined fontSize="small" />
+                <LibraryBigIcon size={18} />
               </IconButton>
               <InteractionModeButton
                 mode="window"
@@ -1182,7 +1182,7 @@ export function AssistantPanel({
                 data-copilot-no-drag
                 data-copilot-tour="settings"
               >
-                <SettingsRounded fontSize="small" />
+                <SettingsIcon size={18} />
               </IconButton>
             </>
           )}
@@ -1195,7 +1195,7 @@ export function AssistantPanel({
               title={t("settings.back")}
               data-copilot-no-drag
             >
-              <ArrowBackRounded fontSize="small" />
+              <ArrowLeftIcon size={18} />
             </IconButton>
           )}
           <IconButton
@@ -1211,7 +1211,7 @@ export function AssistantPanel({
             title={collapsed ? t("panel.restoreWindow") : t("panel.minimizeWindow")}
             data-copilot-tour="minimize"
           >
-            {collapsed ? <CropSquareRounded fontSize="small" /> : <MinimizeRounded fontSize="small" />}
+            {collapsed ? <SquareIcon size={18} /> : <MinusIcon size={18} />}
           </IconButton>
         </Stack>
       </Box>
@@ -1347,9 +1347,9 @@ export function AssistantPanel({
                     </Box>
                     <Stack direction="row" spacing={0.75} sx={{ width: "100%", alignItems: "stretch" }}>
                     {[
-                      { key: "circle", icon: <AddCircleOutlineRounded fontSize="small" /> },
-                      { key: "construction", icon: <CalculateRounded fontSize="small" /> },
-                      { key: "explain", icon: <HelpOutlineRounded fontSize="small" /> },
+                      { key: "circle", icon: <CirclePlusIcon size={18} /> },
+                      { key: "construction", icon: <CalculatorIcon size={18} /> },
+                      { key: "explain", icon: <CircleHelpIcon size={18} /> },
                     ].map((example, index) => (
                       <motion.div
                         key={example.key}
@@ -1474,7 +1474,11 @@ export function AssistantPanel({
                           </Streamdown>
                         );
                       }
-                      return <TypewriterText key={index} text={part.text} />;
+                      return (
+                        <StaticMessageMarkdown key={index} className="user-message-markdown">
+                          {part.text}
+                        </StaticMessageMarkdown>
+                      );
                     }
                     if (part.type === "file") return <MessageAttachment key={index} part={part} />;
                     if (isAgentDisplayToolPart(part)) {
@@ -1524,6 +1528,8 @@ export function AssistantPanel({
           </Box>
           <ChatComposer
             value={input}
+            history={composerHistory}
+            focusSignal={composerFocusSignal}
             attachments={attachments}
             busy={isStreaming}
             model={selectedModel}
@@ -1680,7 +1686,7 @@ export function AssistantPanel({
             },
           }}
         >
-          <ProblemBankSidecar onClose={closeProblemBank} />
+          <ProblemBankSidecar onClose={closeProblemBank} onUseProblem={useProblemInComposer} />
         </MotionPaper>
       ) : null}
     </AnimatePresence>

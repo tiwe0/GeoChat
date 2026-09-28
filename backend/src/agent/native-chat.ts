@@ -1,6 +1,8 @@
 import {
   agentModelSupportsReasoning,
   agentThinkingProviderOptions,
+  agentWorkflowCanvasMutationTools,
+  agentWorkflowCanvasVerificationTools,
   createAgentRunLedger,
   finishAgentRunLedger,
   getAgentModelPolicy,
@@ -9,11 +11,13 @@ import {
   isFunctionCallArgs,
   isFunctionCallToolName,
   deriveAgentWorkflowStateFromTools,
+  evaluateAgentWorkflowToolCall,
   normalizeAgentRunThinkingEffort,
   mergeAgentRunUsage,
   upsertAgentRunTool,
   type AgentModelConfig,
   type AgentRunLedgerRecord,
+  type AgentRunSkillSelectionRecord,
   type AgentRunToolRecord,
   type FunctionCallToolName,
   type PatchBlackboardArgs,
@@ -23,7 +27,6 @@ import {
   createAgentUIStreamResponse,
   generateText,
   getToolName,
-  hasToolCall,
   isToolUIPart,
   NoSuchToolError,
   safeValidateUIMessages,
@@ -39,7 +42,10 @@ import { executeBackendToolRequest } from "./backend-tools";
 import { buildCommandReferencePacketForRun } from "./command-searcher";
 import { createBackendLanguageModel } from "./ai-sdk-models";
 import { createBackendPlanningTools } from "./ai-sdk-tools";
-import { selectAgentSkillsForRun } from "./skill-selector";
+import {
+  selectAgentSkillsForRun,
+  type AgentSkillSelectionPacket,
+} from "./skill-selector";
 import { systemPromptForRun } from "./agent-prompt";
 import { refineExecuteGeoGebraCommands } from "./native-tool-policy";
 import { AgentRunLedgerConflictError } from "../db/agent-run-repository";
@@ -126,8 +132,12 @@ export async function createNativeChatResponse(
   if (skillSelection.modelCallCount) {
     for (let index = 0; index < skillSelection.modelCallCount; index += 1) run = incrementAgentRunModelStep(run);
     run = { ...run, usage: mergeAgentRunUsage(run.usage, skillSelection.usage) };
-    run = await persistClaimedRun(context, run);
   }
+  run = {
+    ...run,
+    skillSelection: skillSelectionRecord(skillSelection, run.skillSelection?.recordedAt),
+  };
+  run = await persistClaimedRun(context, run);
   const remainingModelSteps = maxModelSteps - (run.modelStepCount ?? 0);
   if (remainingModelSteps <= 0) {
     run = finishAgentRunLedger(run, { status: "failed", error: `Model step budget exhausted (${maxModelSteps}).` });
@@ -172,7 +182,13 @@ export async function createNativeChatResponse(
     executeBackendTool: async (toolName, args, toolContext) => {
       const startedAt = new Date().toISOString();
       const tool = toolName === "setFinished"
-        ? completedNativeControlTool(toolContext.toolCallId, toolName, args, startedAt)
+        ? nativeControlTool(
+            toolContext.toolCallId,
+            toolName,
+            args,
+            startedAt,
+            evaluateAgentWorkflowToolCall(deriveAgentWorkflowStateFromTools(run.tools), toolName),
+          )
         : await executeBackendToolRequest(
             { toolCallId: toolContext.toolCallId, toolName, args, requestedAt: startedAt },
             executionContext,
@@ -192,7 +208,10 @@ export async function createNativeChatResponse(
     toolChoice: "auto",
     stopWhen: [
       stepCountIs(remainingModelSteps),
-      hasToolCall("setFinished"),
+      // A visible setFinished call may be rejected by workflow policy (for
+      // example, when canvas verification is still required). Stop only after
+      // its execution has actually committed a successful control record.
+      () => hasCompletedControlTool(run),
     ],
     // Let the AI SDK retry transient provider/network failures with its native
     // exponential backoff. A model turn is idempotent until a tool executes,
@@ -206,7 +225,13 @@ export async function createNativeChatResponse(
     }),
     prepareStep: () => {
       if ((run.modelStepCount ?? 0) >= maxModelSteps) throw new Error(`Model step budget exhausted (${maxModelSteps}).`);
-      return { activeTools: activeNativeToolNames(run, Object.keys(tools)) };
+      const convergenceInstruction = nativeConvergenceInstruction(run, maxModelSteps);
+      return {
+        activeTools: activeNativeToolNames(run, Object.keys(tools)),
+        ...(convergenceInstruction
+          ? { instructions: `${system}\n\n${convergenceInstruction}` }
+          : {}),
+      };
     },
     repairToolCall: async ({ toolCall, tools: repairTools, error, messages: repairMessages, instructions, abortSignal }) => {
       if (NoSuchToolError.isInstance(error)) return null;
@@ -272,9 +297,9 @@ export async function createNativeChatResponse(
     },
   });
 
-  let resolveTerminalPersistence!: () => void;
+  let resolveTerminalPersistence!: (result: NativeChatTerminalPersistence) => void;
   let rejectTerminalPersistence!: (error: unknown) => void;
-  const terminalPersistence = new Promise<void>((resolve, reject) => {
+  const terminalPersistence = new Promise<NativeChatTerminalPersistence>((resolve, reject) => {
     resolveTerminalPersistence = resolve;
     rejectTerminalPersistence = reject;
   });
@@ -290,7 +315,7 @@ export async function createNativeChatResponse(
     },
     onEnd: async ({ messages: finalMessages, isAborted, outcome }) => {
       try {
-        await commitRun((current) => {
+        const persisted = await commitRun((current) => {
           // The request signal represents the browser/desktop HTTP stream, not
           // user intent. A Wi-Fi drop aborts that signal too. Keep the run
           // resumable and only release its continuation lease; the explicit
@@ -317,7 +342,7 @@ export async function createNativeChatResponse(
               options.dataScope,
               next.usage,
             ));
-        resolveTerminalPersistence();
+        resolveTerminalPersistence({ status: persisted.status, error: persisted.error });
       } catch (error) {
         console.error(`[ERROR] Failed to persist native AI SDK chat runId=${run.runId}`, error);
         try {
@@ -340,7 +365,12 @@ export async function createNativeChatResponse(
   return gateTerminalStreamEvent(response, terminalPersistence);
 }
 
-function gateTerminalStreamEvent(response: Response, terminalPersistence: Promise<void>) {
+type NativeChatTerminalPersistence = Pick<AgentRunLedgerRecord, "status" | "error">;
+
+function gateTerminalStreamEvent(
+  response: Response,
+  terminalPersistence: Promise<NativeChatTerminalPersistence>,
+) {
   if (!response.body) return response;
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
   const encoder = new TextEncoder();
@@ -349,8 +379,13 @@ function gateTerminalStreamEvent(response: Response, terminalPersistence: Promis
   const flushTerminal = async (controller: ReadableStreamDefaultController<Uint8Array>) => {
     if (!terminalEvents) return;
     try {
-      await terminalPersistence;
-      controller.enqueue(encoder.encode(terminalEvents));
+      const terminal = await terminalPersistence;
+      if (terminal.status === "failed") {
+        const errorText = terminal.error ?? "Agent run failed.";
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "error", errorText })}\n\ndata: [DONE]\n\n`));
+      } else {
+        controller.enqueue(encoder.encode(terminalEvents));
+      }
     } catch (error) {
       const errorText = error instanceof Error ? error.message : "Failed to persist the completed agent run.";
       controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "error", errorText })}\n\ndata: [DONE]\n\n`));
@@ -516,18 +551,71 @@ export function activeNativeToolNames(
   run: Pick<AgentRunLedgerRecord, "tools">,
   availableToolNames: readonly string[],
 ) {
-  const state = deriveAgentWorkflowStateFromTools(run.tools);
-  return availableToolNames.filter((name): name is FunctionCallToolName => {
-    if (!isFunctionCallToolName(name)) return false;
-    if (name === "setFinished") {
-      return state.hasInitialCanvasRead && (!state.hasCanvasWrite || state.hasVerificationAfterWrite);
+  void run;
+  // Keep every registered tool visible throughout the native AI SDK loop.
+  // Hiding a documented tool from one step turns a recoverable workflow-policy
+  // rejection into AI SDK NoSuchToolError before the tool can return guidance.
+  return availableToolNames.filter(isFunctionCallToolName);
+}
+
+export function nativeConvergenceInstruction(
+  run: Pick<AgentRunLedgerRecord, "locale" | "modelStepCount" | "tools">,
+  maxModelSteps: number,
+) {
+  const verifiedMutationCycles = countVerifiedCanvasMutationCycles(run.tools);
+  const remainingSteps = Math.max(0, maxModelSteps - (run.modelStepCount ?? 0));
+  const isEnglish = run.locale === "en-US";
+  if (verifiedMutationCycles >= 6 || remainingSteps <= 4) {
+    return isEnglish
+      ? "[Convergence guard] Stop repeated local sign/angle patches. Re-derive the dependency chain from the original construction once. Make at most one final corrective canvas mutation, verify it immediately, then produce the user-facing explanation and call setFinished. If an invariant still fails, report the limitation explicitly instead of starting another repair loop."
+      : "【收敛保护】停止反复局部修改符号或角度。仅从原始构造重新推导一次依赖链；最多再执行一次最终修正，随后立即验证、输出用户可读说明并调用 setFinished。若不变量仍不成立，明确说明限制，不要开启新一轮修补。";
+  }
+  if (verifiedMutationCycles >= 4) {
+    return isEnglish
+      ? "[Convergence warning] Multiple verified canvas mutation cycles have not completed the task. Before another mutation, re-check the mathematical invariants and dependency graph from the original construction; do not continue by changing only signs or angles."
+      : "【收敛提醒】已经历多轮写入与验证但任务仍未完成。再次写入前，必须从原始构造重新检查数学不变量和依赖图；不要只靠继续调整符号或角度推进。";
+  }
+  return "";
+}
+
+export function countVerifiedCanvasMutationCycles(
+  tools: readonly Pick<AgentRunToolRecord, "toolName" | "status">[],
+) {
+  let pendingMutation = false;
+  let cycles = 0;
+  for (const tool of tools) {
+    if (tool.status !== "succeeded") continue;
+    if (agentWorkflowCanvasMutationTools.has(tool.toolName)) {
+      pendingMutation = true;
+      continue;
     }
-    // Operational tools stay visible throughout the native AI SDK loop. If a
-    // documented tool is removed from one step, compatible models may still
-    // call it and AI SDK will fail with NoSuchToolError before the renderer can
-    // return a recoverable tool result. Only terminal completion is gated.
-    return true;
-  });
+    if (pendingMutation && agentWorkflowCanvasVerificationTools.has(tool.toolName)) {
+      cycles += 1;
+      pendingMutation = false;
+    }
+  }
+  return cycles;
+}
+
+export function skillSelectionRecord(
+  packet: AgentSkillSelectionPacket,
+  recordedAt = new Date().toISOString(),
+): AgentRunSkillSelectionRecord {
+  return {
+    status: packet.status,
+    visualProfile: packet.visualProfile ?? null,
+    selectedSkills: packet.selectedSkills.map(({ name, reason }) => ({ name, reason })),
+    loadedSkills: (packet.loadedSkills ?? []).map(({ name, source, maturity }) => ({ name, source, maturity })),
+    failedSkillLoads: (packet.failedSkillLoads ?? []).map(({ name, error }) => ({ name, error })),
+    curriculumNodeIds: packet.curriculumNodes.map((node) => node.id),
+    enabledAdvancedTools: [...packet.enabledAdvancedTools],
+    selectorReason: packet.selectorReason,
+    selectorError: packet.error ?? null,
+    injectedContextLength: packet.injectedContext.length,
+    cacheHit: Boolean(packet.cacheHit),
+    modelCallCount: packet.modelCallCount ?? 0,
+    recordedAt,
+  };
 }
 
 function hasCompletedControlTool(run: Pick<AgentRunLedgerRecord, "tools">) {
@@ -553,13 +641,33 @@ function usageRecord(usage: LanguageModelUsage) {
   };
 }
 
-function completedNativeControlTool(
+function nativeControlTool(
   toolCallId: string,
   toolName: FunctionCallToolName,
   args: unknown,
   startedAt: string,
+  decision: { allowed: boolean; reason?: string },
 ): AgentRunToolRecord {
   const completedAt = new Date().toISOString();
+  if (!decision.allowed) {
+    const error = decision.reason ?? `Workflow policy rejected ${toolName}.`;
+    return {
+      toolCallId,
+      toolName,
+      status: "failed",
+      args,
+      result: {
+        ok: false,
+        results: [],
+        error,
+        clientMeta: { source: "ai-sdk-native-control", recoverable: true },
+      },
+      error,
+      startedAt,
+      completedAt,
+      durationMs: Math.max(0, Date.parse(completedAt) - Date.parse(startedAt)),
+    };
+  }
   return {
     toolCallId,
     toolName,
@@ -676,17 +784,19 @@ function mergeCompletedUITools(run: AgentRunLedgerRecord, messages: UIMessage[])
         continue;
       }
       const now = new Date().toISOString();
+      const output = part.state === "output-available" && "output" in part ? part.output : previous?.result;
+      const outputError = toolOutputError(output);
       const tool: AgentRunToolRecord = {
         toolCallId: part.toolCallId,
         toolName: toolName as FunctionCallToolName,
-        status: part.state === "output-available" ? "succeeded" : "failed",
+        status: part.state === "output-available" && !outputError ? "succeeded" : "failed",
         args,
-        result: part.state === "output-available" && "output" in part ? part.output : previous?.result,
+        result: output,
         error: part.state === "output-error" && "errorText" in part && typeof part.errorText === "string"
           ? part.errorText
           : part.state === "output-denied"
             ? "Tool output was denied."
-            : null,
+            : outputError,
         startedAt: previous?.startedAt ?? now,
         completedAt: previous?.completedAt ?? now,
         durationMs: previous?.durationMs ?? 0,
@@ -696,6 +806,15 @@ function mergeCompletedUITools(run: AgentRunLedgerRecord, messages: UIMessage[])
     }
   }
   return next;
+}
+
+function toolOutputError(output: unknown) {
+  if (!output || typeof output !== "object" || Array.isArray(output)) return null;
+  const payload = output as Record<string, unknown>;
+  if (payload.ok !== false) return null;
+  return typeof payload.error === "string" && payload.error.trim()
+    ? payload.error
+    : "Tool execution failed.";
 }
 
 function bindRunAssistantMessage(run: AgentRunLedgerRecord, messages: UIMessage[]) {

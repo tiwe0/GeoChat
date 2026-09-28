@@ -43,7 +43,7 @@ GEOCHAT_DESKTOP_MCP_DB_PATH="/Users/ivory/Library/Application Support/GeoChat De
 - `GEOCHAT_DESKTOP_MCP_DB_PATH` or `GEOCHAT_DESKTOP_DB_PATH`: SQLite database path. Defaults to `./data/geochat-desktop.sqlite`.
 - `GEOCHAT_DESKTOP_MCP_BACKEND_BASE_URL` or `GEOCHAT_DESKTOP_BACKEND_BASE_URL`: local backend base URL. Defaults to `http://127.0.0.1:${GEOCHAT_DESKTOP_BACKEND_PORT || 17365}`.
 - `GEOCHAT_DESKTOP_BACKEND_AUTH_TOKEN`: bearer token for the local backend when the desktop dev runtime was started with local auth enabled.
-- `GEOCHAT_DESKTOP_MCP_AUTH_TOKEN`: bearer token required by the HTTP MCP endpoint.
+- `GEOCHAT_DESKTOP_MCP_AUTH_TOKEN`: optional bearer token for the HTTP MCP endpoint. Leave unset for the default localhost-only, user-owned MCP service; set it explicitly when an additional authorization layer is desired.
 - `GEOCHAT_DESKTOP_MCP_DEFAULT_LIMIT`, `GEOCHAT_DESKTOP_MCP_MAX_LIMIT`, and `GEOCHAT_DESKTOP_MCP_CONTENT_LIMIT`: output limits.
 - `GEOCHAT_DESKTOP_MCP_ALLOW_SENSITIVE=1`: allow sensitive output when a tool call also sets `includeSensitive: true`.
 
@@ -73,7 +73,7 @@ MCP client example:
 - `send_desktop_message`: enqueue a real desktop UI send-message action.
 - `run_single_problem_test`: resolve a local problem-bank prompt, send it through the real desktop chat path, and wait for the correlated conversation run.
 - `execute_geogebra_commands`: execute GeoGebra commands directly in the open desktop canvas, without invoking the model.
-- Internal GeoGebra tools are also exposed one-to-one: `executeGeoGebraCommands`, `resetCanvas`, `getCanvasContext`, `getPNGBase64`, `setPerspective`, `getValue`, `getValueString`, `setValue`, `exists`, and `getObjectType`.
+- Internal GeoGebra tools are also exposed one-to-one: `executeGeoGebraCommands`, `configureGeoGebraAnimation`, `controlGeoGebraAnimation`, `inspectGeoGebraObjects`, `resetCanvas`, `getCanvasContext`, `getPNGBase64`, `setPerspective`, `getValue`, `getValueString`, `setValue`, `exists`, and `getObjectType`.
 - `export_desktop_canvas_png`: enqueue a real desktop GeoGebra PNG export action; read the completed action result for `base64` or `dataUrl`.
 - `list_desktop_debug_actions`: inspect queued/claimed/succeeded/failed desktop control actions.
 - `get_sqlite_overview`: table counts, Agent run status, remote tool status, recent errors, problem bank counts.

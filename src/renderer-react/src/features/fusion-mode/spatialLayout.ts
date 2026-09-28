@@ -1,4 +1,6 @@
 import {
+  FUSION_BUBBLE_ABOVE_OFFSET,
+  FUSION_BUBBLE_BELOW_OFFSET,
   FUSION_TITLEBAR_SAFE_TOP,
   FUSION_VIEWPORT_GUTTER,
   fusionBubblePlacement,
@@ -29,11 +31,6 @@ type Rect = { left: number; top: number; right: number; bottom: number };
 
 const DEFAULT_EXPANDED_SIZE = { width: 420, height: 300 };
 const DEFAULT_COLLAPSED_SIZE = { width: 300, height: 56 };
-// The current conversation and composer form one visual cluster. The bubble
-// scroll area carries transparent shadow padding, so its outer box overlaps
-// the gap while the visible card remains 8px away from the composer.
-const BUBBLE_OUTER_BOTTOM_OFFSET = 16;
-const COMPOSER_CLEARANCE = 68;
 const COLLISION_GAP = 10;
 
 function clamp(value: number, min: number, max: number) {
@@ -61,15 +58,17 @@ function normalizedSize(input: FusionSpatialLayoutInput, viewport: FusionViewpor
 function rectFor(anchor: FusionPoint, placement: FusionPlacement, size: FusionSurfaceSize): Rect {
   const left = anchor.x - size.width / 2;
   const top = placement === "above"
-    ? anchor.y + BUBBLE_OUTER_BOTTOM_OFFSET - size.height
-    : anchor.y + COMPOSER_CLEARANCE;
+    ? anchor.y + FUSION_BUBBLE_ABOVE_OFFSET - size.height
+    : anchor.y + FUSION_BUBBLE_BELOW_OFFSET;
   return { left, top, right: left + size.width, bottom: top + size.height };
 }
 
 function anchorForRect(rect: Rect, placement: FusionPlacement, size: FusionSurfaceSize): FusionPoint {
   return {
     x: rect.left + size.width / 2,
-    y: placement === "above" ? rect.bottom - BUBBLE_OUTER_BOTTOM_OFFSET : rect.top - COMPOSER_CLEARANCE,
+    y: placement === "above"
+      ? rect.bottom - FUSION_BUBBLE_ABOVE_OFFSET
+      : rect.top - FUSION_BUBBLE_BELOW_OFFSET,
   };
 }
 

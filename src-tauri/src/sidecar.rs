@@ -127,10 +127,6 @@ pub(crate) fn start_desktop_mcp(state: &DesktopState) -> Result<(Child, u16), St
             "GEOCHAT_DESKTOP_BACKEND_AUTH_TOKEN",
             &state.local_backend_auth_token,
         )
-        .env(
-            "GEOCHAT_DESKTOP_MCP_AUTH_TOKEN",
-            &state.local_backend_auth_token,
-        )
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());

@@ -1,5 +1,4 @@
-import CropSquareRounded from "@mui/icons-material/CropSquareRounded";
-import HubRounded from "@mui/icons-material/HubRounded";
+import { SquareIcon, WaypointsIcon } from "lucide-react";
 import { Stack, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import type { InteractionMode } from "../../../../shared/desktop/workbench-types";
@@ -20,11 +19,11 @@ export function InteractionModeSettings() {
         aria-label={t("settings.interactionMode")}
       >
         <ToggleButton value="window" sx={{ gap: 0.75, textTransform: "none" }}>
-          <CropSquareRounded fontSize="small" />
+          <SquareIcon size={18} />
           {t("settings.interactionWindow")}
         </ToggleButton>
         <ToggleButton value="fusion" sx={{ gap: 0.75, textTransform: "none" }}>
-          <HubRounded fontSize="small" />
+          <WaypointsIcon size={18} />
           {t("settings.interactionFusion")}
         </ToggleButton>
       </ToggleButtonGroup>

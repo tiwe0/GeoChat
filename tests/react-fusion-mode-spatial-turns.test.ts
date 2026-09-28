@@ -31,10 +31,11 @@ describe("fusion spatial turns", () => {
       fallbackAnchor: anchorB,
       now: 2,
     });
+    state = completeActiveFusionTurn(state);
     state = beginFusionSpatialTurn(state, { id: "run-2", anchor: anchorB, createdAt: 3 });
 
     expect(state.turns).toMatchObject([
-      { id: "run-1", anchor: anchorA, messageIds: ["user-1", "assistant-1"], collapsed: true },
+      { id: "run-1", anchor: anchorA, messageIds: ["user-1", "assistant-1"], collapsed: false },
       { id: "run-2", anchor: anchorB, messageIds: [], status: "active", collapsed: false },
     ]);
     expect(state.activeTurnId).toBe("run-2");
@@ -64,6 +65,46 @@ describe("fusion spatial turns", () => {
       status: "active",
     });
     expect(state.activeTurnId).toBe("run-stable");
+  });
+
+  test("does not treat a transient ready status as spatial run completion", () => {
+    let state = beginFusionSpatialTurn(EMPTY_FUSION_SPATIAL_STATE, { id: "run-tools", anchor: anchorA });
+    state = synchronizeFusionSpatialTurns(state, {
+      messages: [{ id: "user-1", role: "user" }, { id: "assistant-1", role: "assistant" }],
+      chatStatus: "ready",
+      fallbackAnchor: anchorB,
+    });
+    expect(state.turns[0]).toMatchObject({ id: "run-tools", status: "active" });
+
+    state = completeActiveFusionTurn(state);
+    expect(state.turns[0]).toMatchObject({ id: "run-tools", status: "completed" });
+  });
+
+  test("does not reactivate an explicitly completed turn while the chat status is settling", () => {
+    let state = beginFusionSpatialTurn(EMPTY_FUSION_SPATIAL_STATE, { id: "run-finished", anchor: anchorA });
+    const messages = [
+      { id: "user-1", role: "user" as const },
+      { id: "assistant-1", role: "assistant" as const },
+    ];
+    state = synchronizeFusionSpatialTurns(state, {
+      messages,
+      chatStatus: "streaming",
+      fallbackAnchor: anchorB,
+    });
+    state = completeActiveFusionTurn(state);
+    state = synchronizeFusionSpatialTurns(state, {
+      messages,
+      chatStatus: "streaming",
+      fallbackAnchor: anchorB,
+    });
+
+    expect(state.turns).toHaveLength(1);
+    expect(state.turns[0]).toMatchObject({
+      id: "run-finished",
+      messageIds: ["user-1", "assistant-1"],
+      status: "completed",
+      collapsed: false,
+    });
   });
 
   test("adopts a window-mode run as an active fusion turn without overwriting completed anchors", () => {
@@ -143,6 +184,7 @@ describe("fusion spatial turns", () => {
       chatStatus: "ready",
       fallbackAnchor: anchorA,
     });
+    state = completeActiveFusionTurn(state);
 
     state = toggleFusionTurnCollapsed(state, "run-1");
     expect(state.turns[0]?.collapsed).toBe(true);
@@ -152,11 +194,34 @@ describe("fusion spatial turns", () => {
     expect(state.turns[0]).toMatchObject({ pinned: true, dismissed: true });
   });
 
-  test("does not collapse or dismiss an active run", () => {
+  test("toggles an active response between expanded and collapsed without allowing pin or dismiss", () => {
     const state = beginFusionSpatialTurn(EMPTY_FUSION_SPATIAL_STATE, { id: "run-active", anchor: anchorA });
-    expect(toggleFusionTurnCollapsed(state, "run-active")).toBe(state);
+    const collapsed = toggleFusionTurnCollapsed(state, "run-active");
+    expect(collapsed.turns[0]).toMatchObject({ status: "active", collapsed: true });
+    const expanded = toggleFusionTurnCollapsed(collapsed, "run-active");
+    expect(expanded.turns[0]).toMatchObject({ status: "active", collapsed: false });
     expect(toggleFusionTurnPinned(state, "run-active")).toBe(state);
     expect(dismissFusionTurn(state, "run-active")).toBe(state);
+  });
+
+  test("preserves the user-selected collapsed state through streaming updates and completion", () => {
+    let state = beginFusionSpatialTurn(EMPTY_FUSION_SPATIAL_STATE, { id: "run-collapsed", anchor: anchorA });
+    state = toggleFusionTurnCollapsed(state, "run-collapsed");
+    state = synchronizeFusionSpatialTurns(state, {
+      messages: [
+        { id: "user-collapsed", role: "user" },
+        { id: "assistant-collapsed", role: "assistant" },
+      ],
+      chatStatus: "streaming",
+      fallbackAnchor: anchorB,
+    });
+    expect(state.turns[0]).toMatchObject({ status: "active", collapsed: true });
+
+    state = completeActiveFusionTurn(state);
+    expect(state.turns[0]).toMatchObject({ status: "completed", collapsed: true });
+
+    state = toggleFusionTurnCollapsed(state, "run-collapsed");
+    expect(state.turns[0]).toMatchObject({ status: "completed", collapsed: false });
   });
 
   test("preserves a pinned completed turn when the next run starts", () => {
@@ -166,6 +231,7 @@ describe("fusion spatial turns", () => {
       chatStatus: "ready",
       fallbackAnchor: anchorA,
     });
+    state = completeActiveFusionTurn(state);
     state = toggleFusionTurnPinned(state, "run-1");
     state = beginFusionSpatialTurn(state, { id: "run-2", anchor: anchorB });
     expect(state.turns[0]).toMatchObject({ pinned: true, collapsed: false, dismissed: false });

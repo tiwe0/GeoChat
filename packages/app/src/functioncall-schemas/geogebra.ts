@@ -121,6 +121,84 @@ export const GEOGEBRA_FUNCTION_CALL_INPUT_JSON_SCHEMAS = {
       ...auditProperties
     }
   },
+  configureGeoGebraAnimation: {
+    type: "object",
+    additionalProperties: false,
+    required: ["object", "from", "to"],
+    properties: {
+      object: {
+        type: "string",
+        minLength: 1,
+        description: "要连续驱动的自由数值、角度或滑块对象名。对象必须已经存在且可通过 GeoGebra Applet API setValue 更新。"
+      },
+      from: { type: "number", description: "起始值。continuous 模式从此值持续递增或递减。" },
+      to: { type: "number", description: "参考终值，必须与 from 不同。continuous 模式不会在此处停止，而是用 to - from 定义一个时间跨度内的增量。" },
+      durationMs: {
+        type: "number",
+        nullable: true,
+        minimum: 2_000,
+        maximum: 120_000,
+        default: 20_000,
+        description: "从 from 运行到 to 的参考时长（毫秒）。continuous 模式会在每个该时长内继续增加一个 to - from，而不会回到起点。教学观察默认 20000；复杂轨迹通常使用 12000 到 30000，避免过快。"
+      },
+      mode: {
+        type: "string",
+        nullable: true,
+        enum: ["once", "loop", "ping_pong", "continuous"],
+        default: "once",
+        description: "播放方式：once 单次到终点停止；loop 到终点后从起点继续；ping_pong 在两端之间往返；continuous 越过 to 后仍按相同速率持续增长，适合时钟、天体公转和长期仿真。"
+      },
+      easing: {
+        type: "string",
+        nullable: true,
+        enum: ["linear", "ease_in_out"],
+        default: "linear",
+        description: "插值方式。周期运动和匀速参数优先 linear；强调起止观察时可用 ease_in_out。continuous 为保持单调和匀速会固定使用 linear。"
+      },
+      autoplay: {
+        type: "boolean",
+        nullable: true,
+        default: true,
+        description: "配置完成后是否立即播放。默认 true；只有用户明确要求先观察初始状态或手动启动时才设为 false。"
+      },
+      ...auditProperties
+    }
+  },
+  controlGeoGebraAnimation: {
+    type: "object",
+    additionalProperties: false,
+    required: ["action", "objects"],
+    properties: {
+      action: {
+        type: "string",
+        enum: ["play", "pause", "stop", "reset"],
+        description: "play 从当前进度播放/继续；pause 保留当前进度；stop 停止并保留当前值；reset 停止并回到 from。"
+      },
+      objects: {
+        type: "array",
+        minItems: 1,
+        maxItems: 16,
+        items: { type: "string", minLength: 1 },
+        description: "已通过 configureGeoGebraAnimation 配置的对象名。"
+      },
+      ...auditProperties
+    }
+  },
+  inspectGeoGebraObjects: {
+    type: "object",
+    additionalProperties: false,
+    required: ["objects"],
+    properties: {
+      objects: {
+        type: "array",
+        minItems: 1,
+        maxItems: 20,
+        items: { type: "string", minLength: 1 },
+        description: "要通过稳定 Applet API 检查的对象名；返回存在性、类型、定义、值、坐标、可见性和动画状态等可用字段。"
+      },
+      ...auditProperties
+    }
+  },
   resetCanvas: {
     type: "object",
     additionalProperties: false,
@@ -181,6 +259,9 @@ export const GEOGEBRA_FUNCTION_CALL_INPUT_JSON_SCHEMAS = {
   | "createGeometryPlan"
   | "executeAdvancedDrawingCommand"
   | "executeGeoGebraCommands"
+  | "configureGeoGebraAnimation"
+  | "controlGeoGebraAnimation"
+  | "inspectGeoGebraObjects"
   | "resetCanvas"
   | "getCanvasContext"
   | "getPNGBase64"

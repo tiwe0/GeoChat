@@ -1,3 +1,4 @@
+import { BrainIcon, ChevronDownIcon, CircleAlertIcon, CircleCheckBigIcon, ConstructionIcon } from "lucide-react";
 import {
   Box,
   ButtonBase,
@@ -6,11 +7,6 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
-import CheckCircleRounded from "@mui/icons-material/CheckCircleRounded";
-import ConstructionRounded from "@mui/icons-material/ConstructionRounded";
-import ErrorOutlineRounded from "@mui/icons-material/ErrorOutlineRounded";
-import KeyboardArrowDownRounded from "@mui/icons-material/KeyboardArrowDownRounded";
-import PsychologyRounded from "@mui/icons-material/PsychologyRounded";
 import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "motion/react";
 import {
@@ -38,8 +34,8 @@ type ProcessLabels = {
 
 function ToolStatusIcon({ status }: { status: "running" | "done" | "failed" }) {
   if (status === "running") return <CircularProgress size={13} thickness={5} color="inherit" />;
-  if (status === "failed") return <ErrorOutlineRounded sx={{ fontSize: 16 }} />;
-  return <CheckCircleRounded sx={{ fontSize: 15 }} />;
+  if (status === "failed") return <CircleAlertIcon size={16} />;
+  return <CircleCheckBigIcon size={15} />;
 }
 
 function Payload({ label, value }: { label: string; value: unknown }) {
@@ -125,10 +121,10 @@ function ToolCallRow({ labels, part }: { labels: ProcessLabels; part: AssistantP
           {labels.status(status)}
         </Typography>
         {hasDetails && (
-          <KeyboardArrowDownRounded
-            sx={{
-              ml: 0.25,
-              fontSize: 17,
+          <ChevronDownIcon
+            size={17}
+            style={{
+              marginLeft: 2,
               flex: "0 0 auto",
               transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
               transition: reduceMotion ? "none" : "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)",
@@ -202,16 +198,16 @@ export function AssistantProcess({ active, labels, process }: {
       >
         <Stack direction="row" spacing={0.65} sx={{ alignItems: "center", minWidth: 0 }}>
           {process.reasoningCount > 0
-            ? <PsychologyRounded sx={{ fontSize: 16 }} />
-            : <ConstructionRounded sx={{ fontSize: 16 }} />}
+            ? <BrainIcon size={16} />
+            : <ConstructionIcon size={16} />}
           <Typography variant="caption" sx={{ fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {summary}
           </Typography>
         </Stack>
-        <KeyboardArrowDownRounded
-          sx={{
-            ml: 0.75,
-            fontSize: 18,
+        <ChevronDownIcon
+          size={18}
+          style={{
+            marginLeft: 6,
             flex: "0 0 auto",
             transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
             transition: reduceMotion ? "none" : "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)",
@@ -223,7 +219,7 @@ export function AssistantProcess({ active, labels, process }: {
           {process.entries.map(({ index, part }) => part.type === "reasoning" ? (
             <Box key={index} sx={{ pt: 0.8, pb: 0.5 }}>
               <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", mb: 0.35, color: "text.secondary" }}>
-                <PsychologyRounded sx={{ fontSize: 15 }} />
+                <BrainIcon size={15} />
                 <Typography variant="caption" sx={{ fontWeight: 700 }}>{labels.reasoning}</Typography>
               </Stack>
               <Typography

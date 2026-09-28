@@ -1222,6 +1222,7 @@ dependencies = [
  "time",
  "url",
  "uuid",
+ "webkit2gtk",
 ]
 
 [[package]]

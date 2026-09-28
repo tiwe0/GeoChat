@@ -1,10 +1,11 @@
-import FolderOpenRounded from "@mui/icons-material/FolderOpenRounded";
+import { FolderOpenIcon } from "lucide-react";
 import { Box, Stack, Typography, FormControlLabel, Switch, Button, IconButton, MenuItem, TextField, Tooltip } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import type { DesktopLogLevel } from "../../../../../shared/desktop-api";
 import { UpdateSection } from "../UpdateSection";
 import type { McpController } from "../useMcpState";
 import { useLoggingState } from "../useLoggingState";
+import { useGraphicsState } from "../useGraphicsState";
 import { ProblemBankCacheSettings } from "./ProblemBankCacheSettings";
 import { SettingsDisclosure } from "./SettingsDisclosure";
 import { SettingsSection } from "./SettingsSection";
@@ -26,9 +27,56 @@ export function GeneralSettings({ mcp, onRestartTour }: { mcp: McpController; on
       <TourSection onRestartTour={onRestartTour} />
       <UpdateSection />
       <LoggingSection />
-      <ProblemBankCacheSettings />
       <McpSection mcp={mcp} />
+      <ProblemBankCacheSettings />
+      <GraphicsSection />
     </Box>
+  );
+}
+
+function GraphicsSection() {
+  const { t } = useTranslation();
+  const graphics = useGraphicsState();
+  const { status } = graphics;
+  const stateLabel = status.mode === "system_managed"
+    ? t("settings.hardwareAccelerationSystemManaged")
+    : status.mode === "compatibility"
+      ? t("settings.hardwareAccelerationCompatibility")
+      : status.enabled
+        ? t("settings.hardwareAccelerationEnabled")
+        : t("settings.hardwareAccelerationDisabled");
+  const detail = graphics.error ? (
+    <Typography variant="caption" color="error.main">{graphics.error}</Typography>
+  ) : status.restartRequired ? (
+    <Typography variant="caption" color="text.secondary">{t("settings.hardwareAccelerationRestart")}</Typography>
+  ) : status.mode === "system_managed" ? (
+    <Typography variant="caption" color="text.secondary">{t("settings.hardwareAccelerationSystemManagedDetail")}</Typography>
+  ) : status.mode === "compatibility" ? (
+    <Typography variant="caption" color="text.secondary">{t("settings.hardwareAccelerationCompatibilityDetail")}</Typography>
+  ) : null;
+
+  return (
+    <SettingsSection
+      title={t("settings.hardwareAccelerationTitle")}
+      description={t("settings.hardwareAccelerationDescription")}
+    >
+      <FormControlLabel
+        className="settings-toggle-row"
+        labelPlacement="start"
+        control={
+          <Switch
+            size="small"
+            checked={status.enabled}
+            disabled={!graphics.available || graphics.busy || !status.configurable}
+            onChange={(event) => void graphics.setEnabled(event.target.checked)}
+          />
+        }
+        label={<Typography variant="body2" sx={{ fontWeight: 600 }}>{stateLabel}</Typography>}
+      />
+      <SettingsDisclosure open={detail !== null}>
+        <Box className="settings-inline-detail">{detail}</Box>
+      </SettingsDisclosure>
+    </SettingsSection>
   );
 }
 
@@ -87,7 +135,7 @@ function LoggingSection() {
                 disabled={!logging.available}
                 onClick={() => void logging.openDirectory()}
               >
-                <FolderOpenRounded fontSize="small" />
+                <FolderOpenIcon size={18} />
               </IconButton>
             </span>
           </Tooltip>

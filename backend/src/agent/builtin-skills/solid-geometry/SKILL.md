@@ -3,8 +3,8 @@ name: solid-geometry
 description: 高中立体几何题的空间关系、截面、投影、体积和角度可视化技能。
 category: high-school-solid-geometry
 maturity: default
-tags: [立体几何, 空间几何, 截面, 投影, 体积, 二面角]
-tools: [searchGeoGebraCommands, executeGeoGebraCommands, showSolutionSteps, showTeachingHint, showSelectedElements, setPerspective]
+tags: [立体几何, 空间几何, 多面体, 展开图, 折叠, 铰链, 截面, 投影, 体积, 二面角]
+tools: [getCanvasContext, searchGeoGebraCommands, executeGeoGebraCommands, configureGeoGebraAnimation, controlGeoGebraAnimation, inspectGeoGebraObjects, showSolutionSteps, showTeachingHint, showAnimationGuide, showSelectedElements, setPerspective]
 ---
 
 # 立体几何
@@ -20,3 +20,16 @@ tools: [searchGeoGebraCommands, executeGeoGebraCommands, showSolutionSteps, show
 2. 把空间关系拆成点、线、平面、垂直、平行、投影和截面。
 3. 对二面角、线面角、点面距离，构造辅助垂线、投影点和测量对象。
 4. 命令检索必须确认 GeoGebra 5 可用，避免使用 GeoGebra 6 专属命令。
+
+## 多面体展开与折叠模型
+
+这类任务先建拓扑和刚体依赖，再选择坐标；不能从“看起来像折起来了”的坐标反推几何关系。
+
+1. 用面邻接图描述展开图：每个面是节点，共享边是铰链；明确根面、父子面和折叠顺序。坐标只负责实现该图，不得替代邻接关系。
+2. 每个面先在自己的局部坐标中保持刚性，再通过父面当前状态中的共享边派生到全局位置。子面不能直接引用原始展开图里已经移动过的铰链坐标。
+3. 位于旋转轴上的点在旋转后必须保持不变；真正离轴的顶点才参与旋转。移动铰链必须由已折叠父面的两个端点导出。
+4. 开始态、中间态和闭合态都验证：顶点不意外重合、每个面面积非零、面内边长与角度保持、共享边两侧端点一致、父子折叠链连续。
+5. 闭合目标还要验证拓扑闭合：预期重合的顶点和边在容差内重合，非相邻面不发生错误穿插，最终面数、边数和顶点对应关系符合目标多面体。
+6. 同一不变量连续失败两次时，不继续试角度正负号或补静态点；回滚到原始展开态，只重建违反不变量的依赖子图，并保留已经验证正确的根面和父级链。
+
+展示层与正确性分离：骨架、半透明面、配色和标签用于讲解，但不能作为面刚性、铰链连续或闭合成立的证据。

@@ -1,11 +1,14 @@
-import { useEffect, useRef, useState } from "react";
-import RestartAltRounded from "@mui/icons-material/RestartAltRounded";
+import { MenuIcon, RotateCcwIcon, WrenchIcon } from "lucide-react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { CircularProgress } from "@mui/material";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { AssistantPanel } from "./components/AssistantPanel";
 import { GeoGebraController } from "./geogebra/controller";
-import { mountGeoGebra } from "./geogebra/ggbdeploy-wrapper";
+import {
+  DEFAULT_GEOGEBRA_TOOLBAR_VISIBLE,
+  mountGeoGebra,
+  openGeoGebraNativeMenu,
+} from "./geogebra/ggbdeploy-wrapper";
 import {
   createGeoGebraSelectionContextBridge,
   type GeoGebraSelectionContext,
@@ -13,10 +16,13 @@ import {
   type GeoGebraSelectionRefreshReason,
 } from "./geogebra/selection-context";
 import { setFrontendGeoGebraController } from "./geogebra/runtime";
-import { WindowTitleBar } from "./features/desktop/WindowTitleBar";
 import { useInteractionMode } from "./features/fusion-mode";
 import { backendOrigin, desktopRuntimeError } from "./features/desktop/runtime";
 import { desktopLogger } from "./features/desktop/desktopLogger";
+
+const AssistantPanel = lazy(async () => ({
+  default: (await import("./components/AssistantPanel")).AssistantPanel,
+}));
 
 export default function App() {
   const { t } = useTranslation();
@@ -29,6 +35,7 @@ export default function App() {
   const [canvasState, setCanvasState] = useState<"loading" | "ready" | "error">("loading");
   const [canvasError, setCanvasError] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
+  const [toolbarVisible, setToolbarVisible] = useState(DEFAULT_GEOGEBRA_TOOLBAR_VISIBLE);
   const [canvasIntroVisible, setCanvasIntroVisible] = useState(true);
 
   // A shell that will not report its backend is a hard failure, not something
@@ -54,6 +61,7 @@ export default function App() {
         selectionBridgeRef.current = createGeoGebraSelectionContextBridge(api, { onChange: setSelectionContext });
         setSelectionContext(selectionBridgeRef.current.getSnapshot());
         setFrontendGeoGebraController(controllerRef.current);
+        setToolbarVisible(DEFAULT_GEOGEBRA_TOOLBAR_VISIBLE);
         setCanvasState("ready");
       },
     }).then((mounted) => {
@@ -92,11 +100,37 @@ export default function App() {
     }
   }
 
+  function toggleGeoGebraToolbar() {
+    if (canvasState !== "ready") return;
+    const nextVisible = !toolbarVisible;
+    try {
+      controllerRef.current.setToolbarVisible(nextVisible);
+      setToolbarVisible(nextVisible);
+    } catch (error) {
+      console.error("[ERROR] Failed to toggle the GeoGebra toolbar", error);
+      desktopLogger.warn(error);
+    }
+  }
+
+  function openGeoGebraMenu() {
+    const container = canvasRef.current;
+    if (canvasState !== "ready" || !container) return;
+    if (openGeoGebraNativeMenu(container)) {
+      setCanvasIntroVisible(false);
+      return;
+    }
+    const error = new Error("GeoGebra 原生菜单尚未就绪。");
+    console.error("[ERROR] Failed to open the GeoGebra native menu", error);
+    desktopLogger.warn(error);
+  }
+
   return (
     <main className="frontend-shell">
-      <WindowTitleBar />
       <section className="frontend-canvas" aria-label="GeoGebra 画板">
-        <div ref={canvasRef} className="frontend-canvas-host" />
+        <div
+          ref={canvasRef}
+          className={`frontend-canvas-host${toolbarVisible ? "" : " is-toolbar-collapsed"}`}
+        />
         <AnimatePresence initial={false}>
           {canvasState === "ready" && canvasIntroVisible && (
             <motion.div
@@ -109,32 +143,44 @@ export default function App() {
               transition={{ duration: reduceMotion ? 0.12 : 0.38, ease: [0.22, 1, 0.36, 1] }}
               aria-live="polite"
             >
-              <span className="frontend-canvas-intro-badge">{t("canvasIntro.badge")}</span>
               <h1>{t("canvasIntro.title")}</h1>
               <p>{t("canvasIntro.description")}</p>
             </motion.div>
           )}
         </AnimatePresence>
-        <div
-          className={`frontend-canvas-status frontend-canvas-status-${canvasState}`}
-          role="status"
-          aria-live="polite"
-        >
-          <span className="frontend-canvas-status-item">
-            <i aria-hidden="true" />
-            {t(`canvasStatus.canvas.${canvasState}`)}
-          </span>
+        <div className="frontend-canvas-controls">
+          <button
+            type="button"
+            className="frontend-canvas-control frontend-canvas-menu"
+            onClick={openGeoGebraMenu}
+            disabled={canvasState !== "ready"}
+            aria-label={t("canvasControls.openMenu")}
+            title={t("canvasControls.openMenu")}
+          >
+            <MenuIcon size={18} />
+          </button>
+          <button
+            type="button"
+            className={`frontend-canvas-control frontend-canvas-toolbar${toolbarVisible ? " is-active" : ""}`}
+            onClick={toggleGeoGebraToolbar}
+            disabled={canvasState !== "ready"}
+            aria-label={toolbarVisible ? t("canvasControls.hideToolbar") : t("canvasControls.showToolbar")}
+            title={toolbarVisible ? t("canvasControls.hideToolbar") : t("canvasControls.showToolbar")}
+            aria-pressed={toolbarVisible}
+          >
+            <WrenchIcon size={18} />
+          </button>
+          <button
+            type="button"
+            className="frontend-canvas-control frontend-canvas-reset"
+            onClick={() => void resetCanvas()}
+            disabled={canvasState !== "ready" || resetting}
+            aria-label={t("canvasControls.reset")}
+            title={t("canvasControls.reset")}
+          >
+            {resetting ? <CircularProgress size={18} color="inherit" /> : <RotateCcwIcon size={18} />}
+          </button>
         </div>
-        <button
-          type="button"
-          className="frontend-canvas-reset"
-          onClick={() => void resetCanvas()}
-          disabled={canvasState !== "ready" || resetting}
-          aria-label="重置 GeoGebra 画板"
-          title="重置画板"
-        >
-          {resetting ? <CircularProgress size={18} color="inherit" /> : <RestartAltRounded fontSize="small" />}
-        </button>
         {canvasState !== "ready" && (
           <div className="frontend-canvas-overlay" role={canvasState === "error" ? "alert" : "status"}>
             <div className={canvasState === "error" ? "frontend-canvas-error" : "frontend-loader"} />
@@ -145,16 +191,18 @@ export default function App() {
         )}
       </section>
       <div id="geochat-panel-host" className="geochat-panel-host">
-        <AssistantPanel
-          canvasReady={canvasState === "ready"}
-          selectionContext={selectionContext}
-          onRefreshSelection={(reason: GeoGebraSelectionRefreshReason) => {
-            const next = selectionBridgeRef.current?.refresh(reason);
-            if (next) setSelectionContext(next);
-            return next;
-          }}
-          onConversationStarted={() => setCanvasIntroVisible(false)}
-        />
+        <Suspense fallback={null}>
+          <AssistantPanel
+            canvasReady={canvasState === "ready"}
+            selectionContext={selectionContext}
+            onRefreshSelection={(reason: GeoGebraSelectionRefreshReason) => {
+              const next = selectionBridgeRef.current?.refresh(reason);
+              if (next) setSelectionContext(next);
+              return next;
+            }}
+            onConversationStarted={() => setCanvasIntroVisible(false)}
+          />
+        </Suspense>
       </div>
     </main>
   );

@@ -28,6 +28,11 @@ describe("desktop locale defaults", () => {
     // key string, which typecheck cannot see.
     expect(copyShape(zhCN)).toEqual(copyShape(en));
   });
+
+  test("uses thinking copy while a fusion request is being submitted", () => {
+    expect(zhCN.fusion.connecting).toBe("正在思考");
+    expect(en.fusion.connecting).toBe("Thinking");
+  });
 });
 
 function copyShape(value: unknown): unknown {

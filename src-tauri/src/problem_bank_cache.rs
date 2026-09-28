@@ -1066,9 +1066,9 @@ fn resolve_url(base: &str, candidate: &str) -> Result<Url, String> {
     let candidate = candidate.trim_start_matches('/');
     if let Some(public_path) = candidate.strip_prefix("problem-bank/") {
         if base.path().starts_with("/problem-bank/") {
-            return base
-                .join(&format!("/{candidate}"))
-                .map_err(|error| format!("manifest_invalid: invalid release manifest URL: {error}"));
+            return base.join(&format!("/{candidate}")).map_err(|error| {
+                format!("manifest_invalid: invalid release manifest URL: {error}")
+            });
         }
         // Production manifests store bucket-root-relative R2 keys. The dedicated
         // public origin already represents the problem-bank namespace, so avoid

@@ -5,7 +5,7 @@ const executeGeoGebraCommandsDescriptionZh = [
   "让前端 GeoGebra applet 按 GeoGebra 5 兼容性执行一组绘图命令。不要使用只在 GeoGebra 6 或记忆中存在的命令/参数形态。不要用 Delete(...) 清理旧画布；开始新题、用户要求清空或旧画布无关时必须先调用 resetCanvas。移除辅助对象默认应隐藏，不要删除依赖对象。",
   "复杂构造要分阶段执行并验证；单批命令优先控制在 100 条以内。多对象返回命令必须先验证实际 label，再做样式或标注后处理。",
   "角度标注必须注意点序，具体方向约定由当前题型 skill 决定。隐藏辅助对象优先使用 SetConditionToShowObject(object, false)。",
-  "如果本轮已创建滑块、动点或轨迹参数，且动态播放能帮助观察变化关系，可以用 StartAnimation(参数或动点, true) 打开动画；静态图形不要强行播放。",
+  "动态构造只负责创建自由数值/角度参数及其依赖对象；需要可控播放时，构造并验证完成后调用 configureGeoGebraAnimation，不要通过 XML 或粗粒度 StartAnimation 拼装播放逻辑。",
   geogebraCanvasVisualGuidance("zh-CN")
 ].join(" ");
 
@@ -13,7 +13,7 @@ const executeGeoGebraCommandsDescriptionEn = [
   "Run a list of drawing commands in the frontend GeoGebra applet under GeoGebra 5 compatibility. Do not use command names or argument shapes that exist only in GeoGebra 6 or in memory. Do not use Delete(...) to clear stale canvas objects; call resetCanvas first when starting a new problem, when the user asks to clear the canvas, or when the existing canvas is unrelated. Removing auxiliary objects should hide them by default, not delete dependency objects.",
   "Stage complex constructions and verify each stage; prefer at most 100 commands per batch. For multi-object commands, verify actual labels before styling or labeling.",
   "Angle labels are order-sensitive; direction conventions belong to the active task skill. Prefer SetConditionToShowObject(object, false) when hiding helper objects.",
-  "When this run creates a slider, moving point, or locus parameter and playback clarifies the changing relationship, use StartAnimation(parameter or moving point, true) to start animation; do not force playback for static diagrams.",
+  "Dynamic construction should only create the free numeric/angle parameter and dependent objects. After construction is verified, call configureGeoGebraAnimation for controlled playback instead of assembling animation through XML or coarse StartAnimation steps.",
   geogebraCanvasVisualGuidance("en-US")
 ].join(" ");
 
@@ -187,6 +187,36 @@ export const FUNCTION_CALL_REGISTRY = {
       metric: "构造",
       detailsLabel: "查看构造命令"
     }
+  },
+  configureGeoGebraAnimation: {
+    name: "configureGeoGebraAnimation",
+    label: "配置 GeoGebra 教学动画",
+    description: "为已经存在的自由数值或角度对象配置平滑业务动画。支持单次、循环、往返、持续增长和缓动；continuous 模式越过参考终值后仍保持线性增长，适合时钟、天体公转和长期仿真。durationMs 表示单程或一个参考跨度的时长，教学观察推荐 12000 到 30000 毫秒。内部使用 requestAnimationFrame 和 GeoGebra Applet setValue 公共 API，不写 XML。默认配置后立即播放；只有用户明确要求时才关闭自动播放。",
+    executor: "frontend",
+    sideEffectLevel: "write",
+    timeoutMs: 30_000,
+    rollbackPolicy: "none",
+    display: { label: "配置动画", running: "配置中", done: "动画已配置", error: "动画配置失败", metric: "动画", detailsLabel: "查看动画配置" }
+  },
+  controlGeoGebraAnimation: {
+    name: "controlGeoGebraAnimation",
+    label: "控制 GeoGebra 教学动画",
+    description: "统一播放、暂停、停止或重置一组已配置的业务动画。播放和继续保留时间轴进度；重置会回到起始值。内部仅调用 GeoGebra Applet setValue 公共 API。",
+    executor: "frontend",
+    sideEffectLevel: "write",
+    timeoutMs: 30_000,
+    rollbackPolicy: "none",
+    display: { label: "控制动画", running: "处理中", done: "动画状态已更新", error: "动画控制失败", metric: "动画", detailsLabel: "查看动画状态" }
+  },
+  inspectGeoGebraObjects: {
+    name: "inspectGeoGebraObjects",
+    label: "检查 GeoGebra 对象",
+    description: "通过 GeoGebra Applet 公共 API 批量读取指定对象的存在性、类型、定义状态、数值、坐标、可见性和动画状态。用于精确验证业务对象，不读取或解析 XML。",
+    executor: "frontend",
+    sideEffectLevel: "read",
+    timeoutMs: 30_000,
+    rollbackPolicy: "none",
+    display: { label: "检查对象", running: "检查中", done: "对象检查完成", error: "对象检查失败", metric: "对象", detailsLabel: "查看对象状态" }
   },
   resetCanvas: {
     name: "resetCanvas",
@@ -488,6 +518,21 @@ const FUNCTION_CALL_ENGLISH_OVERRIDES = {
       metric: "operations",
       detailsLabel: "View construction commands"
     }
+  },
+  configureGeoGebraAnimation: {
+    label: "Configure GeoGebra teaching animation",
+    description: "Configure a smooth business-level animation for an existing free numeric or angle object. Supports once, loop, ping-pong, continuous, and easing modes. Continuous mode advances beyond the reference end value without wrapping, making it suitable for clocks, orbital motion, and ongoing simulations. durationMs is one traversal or reference span; 12000-30000 ms is recommended for teaching observation. It uses requestAnimationFrame and the public GeoGebra Applet setValue API, never XML. Configuration autoplays by default; disable autoplay only when the user explicitly requests it.",
+    display: { label: "Configure animation", running: "Configuring", done: "Animation configured", error: "Animation configuration failed", metric: "animation", detailsLabel: "View animation configuration" }
+  },
+  controlGeoGebraAnimation: {
+    label: "Control GeoGebra teaching animation",
+    description: "Play, pause, stop, or reset configured business animations. Play resumes the timeline, while reset returns to the configured start value. Uses only the public GeoGebra Applet setValue API.",
+    display: { label: "Control animation", running: "Updating", done: "Animation state updated", error: "Animation control failed", metric: "animation", detailsLabel: "View animation state" }
+  },
+  inspectGeoGebraObjects: {
+    label: "Inspect GeoGebra objects",
+    description: "Read object existence, type, definition state, value, coordinates, visibility, and animation state through public GeoGebra Applet APIs. It does not read or parse XML.",
+    display: { label: "Inspect objects", running: "Inspecting", done: "Inspection complete", error: "Inspection failed", metric: "objects", detailsLabel: "View object state" }
   },
   resetCanvas: {
     label: "Reset GeoGebra canvas",

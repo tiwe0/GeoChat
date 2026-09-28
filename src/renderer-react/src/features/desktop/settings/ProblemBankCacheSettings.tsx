@@ -1,6 +1,5 @@
+import { EraserIcon, FolderOpenIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import DeleteSweepOutlined from "@mui/icons-material/DeleteSweepOutlined";
-import FolderOpenOutlined from "@mui/icons-material/FolderOpenOutlined";
 import {
   Button,
   CircularProgress,
@@ -116,7 +115,7 @@ export function ProblemBankCacheSettings() {
               <Button
                 size="small"
                 variant="outlined"
-                startIcon={action === "opening" ? <CircularProgress size={15} /> : <FolderOpenOutlined />}
+                startIcon={action === "opening" ? <CircularProgress size={15} /> : <FolderOpenIcon />}
                 disabled={action !== null || !cacheState}
                 onClick={() => void openCacheDirectory()}
               >
@@ -126,7 +125,7 @@ export function ProblemBankCacheSettings() {
                 size="small"
                 color="error"
                 variant="text"
-                startIcon={action === "clearing" ? <CircularProgress size={15} /> : <DeleteSweepOutlined />}
+                startIcon={action === "clearing" ? <CircularProgress size={15} /> : <EraserIcon />}
                 disabled={action !== null || cachedBytes === 0 || downloadInProgress}
                 onClick={() => setClearDialogOpen(true)}
               >

@@ -25,7 +25,7 @@
   <img alt="Windows" src="https://img.shields.io/badge/Windows-supported-0078D4">
 </p>
 
-`v0.6.0` · The new Fusion Mode is enabled by default
+`v0.6.1` · The new Fusion Mode is enabled by default
 
 ## Meet GeoChat
 
@@ -39,7 +39,7 @@ next to the geometry itself. Conversation becomes part of the canvas instead of 
 
 ### Fusion Mode
 
-<img src="docs/media/geochat-fusion-mode.png" alt="GeoChat v0.6.0 Fusion Mode with conversation, tool progress, and a composer placed directly on the GeoGebra canvas">
+<img src="docs/media/geochat-fusion-mode.png" alt="GeoChat v0.6.1 Fusion Mode with conversation, tool progress, and a composer placed directly on the GeoGebra canvas">
 
 Summon the composer anywhere on the canvas. Each response stays close to the construction it belongs
 to, while older turns gradually fade to preserve context without covering your work.

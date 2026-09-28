@@ -1,8 +1,4 @@
-import AttachFileRounded from "@mui/icons-material/AttachFileRounded";
-import CloseRounded from "@mui/icons-material/CloseRounded";
-import DragIndicatorRounded from "@mui/icons-material/DragIndicatorRounded";
-import SendRounded from "@mui/icons-material/SendRounded";
-import StopRounded from "@mui/icons-material/StopRounded";
+import { GripVerticalIcon, PaperclipIcon, SendIcon, SquareIcon, XIcon } from "lucide-react";
 import {
   Box,
   Chip,
@@ -33,7 +29,9 @@ import {
   isSupportedAgentFile,
 } from "../attachments/capabilities";
 import { imageFilesFromClipboard, insertTextAtSelection } from "../chat/composerPaste";
+import { useComposerHistory } from "../../hooks/useComposerHistory";
 import type { FusionAttachment } from "./types";
+import { FUSION_COMPOSER_Z_INDEX } from "./geometry";
 
 const MotionPaper = motion.create(Paper);
 
@@ -54,9 +52,12 @@ export function FusionComposer(props: {
   x: number;
   y: number;
   value: string;
+  history: readonly string[];
   attachments: FusionAttachment[];
   busy: boolean;
   disabled: boolean;
+  canvasConnected: boolean;
+  canvasConnectedLabel: string;
   modelLabel: string;
   focusSignal: number;
   modelControl?: ReactNode;
@@ -86,6 +87,12 @@ export function FusionComposer(props: {
   const [preparing, setPreparing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textInputRef = useRef<HTMLInputElement>(null);
+  const inputHistory = useComposerHistory({
+    entries: props.history,
+    value: props.value,
+    disabled: props.busy || props.disabled,
+    onChange: props.onChange,
+  });
 
   useEffect(() => {
     textInputRef.current?.focus({ preventScroll: true });
@@ -156,6 +163,7 @@ export function FusionComposer(props: {
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (inputHistory.handleKeyDown(event)) return;
     if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
     event.preventDefault();
     event.currentTarget.closest("form")?.requestSubmit();
@@ -167,6 +175,7 @@ export function FusionComposer(props: {
       onSubmit={(event) => {
         event.preventDefault();
         if (props.busy || preparing || !canSubmit) return;
+        inputHistory.reset();
         props.onSend();
       }}
       sx={{
@@ -176,6 +185,7 @@ export function FusionComposer(props: {
         width: "min(390px, calc(100vw - 24px))",
         transform: "translateX(-50%)",
         pointerEvents: "auto",
+        zIndex: FUSION_COMPOSER_Z_INDEX,
       }}
     >
     <MotionPaper
@@ -184,6 +194,7 @@ export function FusionComposer(props: {
       transition={{ duration: reduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}
       elevation={8}
       sx={{
+        position: "relative",
         border: 1,
         borderColor: "divider",
         borderRadius: 3,
@@ -192,10 +203,28 @@ export function FusionComposer(props: {
         backdropFilter: "blur(22px)",
       }}
     >
+      {props.canvasConnected && (
+        <Box
+          role="status"
+          aria-label={props.canvasConnectedLabel}
+          title={props.canvasConnectedLabel}
+          sx={{
+            position: "absolute",
+            top: 10,
+            right: 11,
+            zIndex: 2,
+            width: 8,
+            height: 8,
+            borderRadius: "50%",
+            bgcolor: "#42a564",
+            boxShadow: "0 0 0 3px rgba(66, 165, 100, 0.14)",
+          }}
+        />
+      )}
       <Stack
         data-copilot-tour="fusion-composer"
         direction="row"
-        spacing={0.75}
+        spacing={0.5}
         onPointerDown={(event) => {
           const target = event.target instanceof Element ? event.target : null;
           if (target?.closest("button, input, textarea, select, [role='button'], [role='menuitem']")) return;
@@ -205,10 +234,10 @@ export function FusionComposer(props: {
         onPointerUp={props.onDragStop}
         onPointerCancel={props.onDragStop}
         onLostPointerCapture={props.onDragStop}
-        sx={{ alignItems: "center", px: 1, pt: 0.625, cursor: "grab", touchAction: "none", userSelect: "none" }}
+        sx={{ alignItems: "center", pl: 1, pr: 3.5, py: 0.5, cursor: "grab", touchAction: "none", userSelect: "none" }}
         aria-label={props.dragLabel}
       >
-        <DragIndicatorRounded sx={{ fontSize: 16, color: "text.disabled" }} />
+        <GripVerticalIcon size={16} color="#9ca3af" />
         <Box sx={{ minWidth: 0, flex: 1 }}>{props.modelControl ?? <Typography variant="caption" color="text.secondary" noWrap>{props.modelLabel}</Typography>}</Box>
         {props.selectionLabel && (
           <Typography variant="caption" color="primary.main" noWrap sx={{ maxWidth: 180, fontWeight: 650 }} title={props.selectionLabel}>
@@ -224,20 +253,20 @@ export function FusionComposer(props: {
               size="small"
               label={attachment.part.filename}
               onDelete={() => props.onAttachmentsChange(props.attachments.filter((item) => item.id !== attachment.id))}
-              deleteIcon={<CloseRounded />}
+              deleteIcon={<XIcon />}
               aria-label={`${props.removeAttachmentLabel}: ${attachment.part.filename ?? ""}`}
             />
           ))}
         </Stack>
       )}
-      <Stack direction="row" spacing={0.5} sx={{ alignItems: "flex-end", p: 0.75, pt: 0.25 }}>
+      <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", px: 1, py: 0.5 }}>
         <input ref={fileInputRef} hidden type="file" multiple accept={AGENT_ATTACHMENT_ACCEPT} onChange={handleInputFiles} />
         <Tooltip title={props.attachLabel} arrow>
-          <span>
+          <Box component="span" sx={{ display: "inline-flex", alignItems: "center" }}>
             <IconButton size="small" disabled={props.busy || preparing} onClick={() => fileInputRef.current?.click()} aria-label={props.attachLabel} data-copilot-tour="fusion-attachments">
-              {preparing ? <CircularProgress size={17} /> : <AttachFileRounded fontSize="small" />}
+              {preparing ? <CircularProgress size={17} /> : <PaperclipIcon size={18} />}
             </IconButton>
-          </span>
+          </Box>
         </Tooltip>
         <TextField
           inputRef={textInputRef}
@@ -250,15 +279,25 @@ export function FusionComposer(props: {
           value={props.value}
           placeholder={props.placeholder}
           disabled={props.disabled}
-          onChange={(event) => props.onChange(event.target.value)}
+          onChange={(event) => inputHistory.changeValue(event.target.value)}
           onFocus={props.onFocus}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           slotProps={{ input: { disableUnderline: true } }}
-          sx={{ py: 0.5, "& textarea": { lineHeight: 1.45 } }}
+          sx={{
+            minWidth: 0,
+            "& .MuiInputBase-root": {
+              minHeight: 28,
+              p: 0,
+              alignItems: "center",
+            },
+            "& textarea": {
+              lineHeight: "24px",
+            },
+          }}
         />
         <Tooltip title={props.busy ? props.stopLabel : props.sendLabel} arrow>
-          <span>
+          <Box component="span" sx={{ display: "inline-flex", alignItems: "center" }}>
             <IconButton
               type={props.busy ? "button" : "submit"}
               data-copilot-tour="fusion-send"
@@ -268,13 +307,13 @@ export function FusionComposer(props: {
               onClick={props.busy ? props.onStop : undefined}
               aria-label={props.busy ? props.stopLabel : props.sendLabel}
             >
-              {props.busy ? <StopRounded fontSize="small" /> : <SendRounded fontSize="small" />}
+              {props.busy ? <SquareIcon size={18} /> : <SendIcon size={18} />}
             </IconButton>
-          </span>
+          </Box>
         </Tooltip>
       </Stack>
       {attachmentError && (
-        <Box sx={{ px: 1.25, pb: 0.75 }}>
+        <Box sx={{ px: 1, pb: 0.5 }}>
           <Typography variant="caption" color="error.main">{attachmentError}</Typography>
         </Box>
       )}

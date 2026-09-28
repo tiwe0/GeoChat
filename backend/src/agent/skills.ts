@@ -27,7 +27,7 @@ const BUILTIN_SKILL_RECIPES: Record<string, string[]> = {
   "geometric-transformations": ["source-image-correspondence", "rotation-center-angle-mark", "symmetry-axis-pairing"],
   "geometric-construction": ["ruler-compass-step-replay", "bisector-locus-explain", "tangent-construction-verify"],
   "dynamic-construction-validation": ["free-dependent-object-plan", "drag-test-invariants", "under-over-constraint-check"],
-  "solid-geometry": ["3d-skeleton-first", "projection-auxiliary-triangle", "angle-distance-measurement-check"],
+  "solid-geometry": ["3d-skeleton-first", "face-adjacency-hinge-graph", "rigid-face-fold-chain", "key-state-closure-invariants", "projection-auxiliary-triangle", "angle-distance-measurement-check"],
   "solid-section": ["section-plane-through-points", "intersection-edge-ordering", "section-polygon-highlight"],
   "parametric-surface-revolution": ["bounded-parametric-surface", "curve-revolution-model", "section-and-viewpoint-check"],
   prism: ["coordinate-prism-skeleton", "section-face-intersection", "volume-base-height-mark"],

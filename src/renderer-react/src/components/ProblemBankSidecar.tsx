@@ -1,13 +1,6 @@
+import { ArrowLeftIcon, CloudDownloadIcon, CloudIcon, ImageIcon, LibraryBigIcon, MessageSquarePlusIcon, RefreshCwIcon, SearchIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import ArrowBackRounded from "@mui/icons-material/ArrowBackRounded";
-import CloseRounded from "@mui/icons-material/CloseRounded";
-import CloudDownloadOutlined from "@mui/icons-material/CloudDownloadOutlined";
-import CloudOutlined from "@mui/icons-material/CloudOutlined";
-import ImageOutlined from "@mui/icons-material/ImageOutlined";
-import LibraryBooksOutlined from "@mui/icons-material/LibraryBooksOutlined";
-import RefreshRounded from "@mui/icons-material/RefreshRounded";
-import SearchRounded from "@mui/icons-material/SearchRounded";
 import {
   Box,
   Button,
@@ -46,6 +39,21 @@ type NetworkInformationLike = { saveData?: boolean; effectiveType?: string };
 const PAGE_PREFETCH_LIMIT = 8;
 const DETAIL_PREFETCH_LIMIT = 12;
 
+type ProblemBankSessionSnapshot = {
+  localSets: ProblemBankListItem[];
+  cacheState: DesktopProblemBankCacheState | null;
+  catalog: DesktopProblemBankCatalog | null;
+};
+
+const problemBankSession = {
+  snapshot: null as ProblemBankSessionSnapshot | null,
+  snapshotRequest: null as Promise<ProblemBankSessionSnapshot> | null,
+  pageRequests: new Map<string, Promise<DesktopProblemBankPage>>(),
+  pageResults: new Map<string, DesktopProblemBankPage>(),
+  detailRequests: new Map<string, Promise<DesktopProblemDetail>>(),
+  detailResults: new Map<string, DesktopProblemDetail>(),
+};
+
 export function shouldPredictivelyPrefetch(
   connection?: NetworkInformationLike,
   online = true,
@@ -54,12 +62,19 @@ export function shouldPredictivelyPrefetch(
   return connection?.effectiveType !== "slow-2g" && connection?.effectiveType !== "2g";
 }
 
-function retainPrefetch<T>(cache: Map<string, Promise<T>>, key: string, request: Promise<T>, limit: number) {
+function retainPrefetch<T>(
+  cache: Map<string, Promise<T>>,
+  results: Map<string, T>,
+  key: string,
+  request: Promise<T>,
+  limit: number,
+) {
   cache.set(key, request);
   while (cache.size > limit) {
     const oldest = cache.keys().next().value;
     if (typeof oldest !== "string") break;
     cache.delete(oldest);
+    results.delete(oldest);
   }
   return request;
 }
@@ -96,6 +111,105 @@ export function catalogToProblemSets(catalog: DesktopProblemBankCatalog | null):
   }));
 }
 
+function pageCacheKey(bank: ProblemBankListItem, cursor: string | null) {
+  return `${bank.releaseId ?? "local"}:${bank.bankSlug ?? bank.slug}:${cursor ?? "0"}`;
+}
+
+function detailCacheKey(bank: ProblemBankListItem, problemId: string) {
+  return `${bank.releaseId ?? "local"}:${bank.bankSlug ?? bank.slug}:${problemId}`;
+}
+
+function requestProblemPage(bank: ProblemBankListItem, cursor: string | null) {
+  const desktopApi = desktopProblemBankApi();
+  if (!desktopApi) return Promise.reject(new Error("Problem-bank desktop API is unavailable"));
+  const key = pageCacheKey(bank, cursor);
+  const cached = problemBankSession.pageResults.get(key);
+  if (cached) return Promise.resolve(cached);
+  const pending = problemBankSession.pageRequests.get(key);
+  if (pending) return pending;
+  const request = desktopApi.loadProblemBankPage(bank.bankSlug ?? bank.slug, cursor)
+    .then((page) => {
+      problemBankSession.pageResults.set(key, page);
+      return page;
+    })
+    .catch((caughtError) => {
+      problemBankSession.pageRequests.delete(key);
+      throw caughtError;
+    });
+  return retainPrefetch(
+    problemBankSession.pageRequests,
+    problemBankSession.pageResults,
+    key,
+    request,
+    PAGE_PREFETCH_LIMIT,
+  );
+}
+
+function requestProblemDetail(bank: ProblemBankListItem, problem: ProblemRow) {
+  const desktopApi = desktopProblemBankApi();
+  if (!desktopApi) return Promise.reject(new Error("Problem-bank desktop API is unavailable"));
+  const key = detailCacheKey(bank, problem.id);
+  const cached = problemBankSession.detailResults.get(key);
+  if (cached) return Promise.resolve(cached);
+  const pending = problemBankSession.detailRequests.get(key);
+  if (pending) return pending;
+  const request = desktopApi.loadProblemDetail(bank.bankSlug ?? bank.slug, problem.id)
+    .then((detail) => {
+      problemBankSession.detailResults.set(key, detail);
+      preloadFirstProblemMedia(detail);
+      return detail;
+    })
+    .catch((caughtError) => {
+      problemBankSession.detailRequests.delete(key);
+      throw caughtError;
+    });
+  return retainPrefetch(
+    problemBankSession.detailRequests,
+    problemBankSession.detailResults,
+    key,
+    request,
+    DETAIL_PREFETCH_LIMIT,
+  );
+}
+
+function loadProblemBankSnapshot() {
+  if (problemBankSession.snapshot) return Promise.resolve(problemBankSession.snapshot);
+  if (problemBankSession.snapshotRequest) return problemBankSession.snapshotRequest;
+  const desktopApi = desktopProblemBankApi();
+  const request = Promise.all([
+    fetchProblemSets(backendOrigin(), backendAuthToken()),
+    desktopApi?.getProblemBankCacheState() ?? Promise.resolve(null),
+    desktopApi?.getProblemBankCatalog().catch((caughtError) => {
+      console.error("[ERROR] Failed to read the cached cloud problem-bank catalog", caughtError);
+      return null;
+    }) ?? Promise.resolve(null),
+  ]).then(([localResult, cacheState, catalog]) => {
+    const snapshot: ProblemBankSessionSnapshot = {
+      localSets: localResult.sets.map((set) => ({ ...set, source: "local" as const })),
+      cacheState,
+      catalog,
+    };
+    problemBankSession.snapshot = snapshot;
+    return snapshot;
+  }).finally(() => {
+    problemBankSession.snapshotRequest = null;
+  });
+  problemBankSession.snapshotRequest = request;
+  return request;
+}
+
+export async function preloadProblemBankSidecar() {
+  try {
+    const snapshot = await loadProblemBankSnapshot();
+    const firstCloudBank = catalogToProblemSets(snapshot.catalog)[0];
+    if (firstCloudBank && networkAllowsPrefetch()) {
+      await requestProblemPage(firstCloudBank, "0");
+    }
+  } catch (caughtError) {
+    console.debug("[DEBUG] Problem-bank preload was skipped", caughtError);
+  }
+}
+
 export function appendProblemPage(existing: ProblemRow[], page: DesktopProblemBankPage): ProblemRow[] {
   const ids = new Set(existing.map((item) => item.id));
   return [...existing, ...page.items.filter((item) => !ids.has(item.id))];
@@ -116,14 +230,25 @@ export function normalizeProblemMarkdown(value: string) {
     .join("\n\n");
 }
 
-export function ProblemBankSidecar({ onClose }: { onClose: () => void }) {
+export function problemComposerText(prompt?: string | null, preview?: string | null, fallback = "") {
+  return normalizeProblemMarkdown(prompt?.trim() || preview?.trim() || fallback.trim());
+}
+
+export function ProblemBankSidecar({
+  onClose,
+  onUseProblem,
+}: {
+  onClose: () => void;
+  onUseProblem: (problem: string) => void;
+}) {
   const { t } = useTranslation();
   const reduceMotion = useReducedMotion();
-  const [localSets, setLocalSets] = useState<ProblemBankListItem[]>([]);
-  const [catalog, setCatalog] = useState<DesktopProblemBankCatalog | null>(null);
-  const [cacheState, setCacheState] = useState<DesktopProblemBankCacheState | null>(null);
+  const initialSnapshot = problemBankSession.snapshot;
+  const [localSets, setLocalSets] = useState<ProblemBankListItem[]>(initialSnapshot?.localSets ?? []);
+  const [catalog, setCatalog] = useState<DesktopProblemBankCatalog | null>(initialSnapshot?.catalog ?? null);
+  const [cacheState, setCacheState] = useState<DesktopProblemBankCacheState | null>(initialSnapshot?.cacheState ?? null);
   const [query, setQuery] = useState("");
-  const [loadState, setLoadState] = useState<LoadState>("loading");
+  const [loadState, setLoadState] = useState<LoadState>(initialSnapshot ? "ready" : "loading");
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [selectedBank, setSelectedBank] = useState<ProblemBankListItem | null>(null);
@@ -140,30 +265,20 @@ export function ProblemBankSidecar({ onClose }: { onClose: () => void }) {
   const pageRequestVersion = useRef(0);
   const detailRequestVersion = useRef(0);
   const pageLoadingRef = useRef(false);
-  const pagePrefetches = useRef(new Map<string, Promise<DesktopProblemBankPage>>());
-  const detailPrefetches = useRef(new Map<string, Promise<DesktopProblemDetail>>());
 
-  const load = useCallback(async (signal?: AbortSignal) => {
+  const load = useCallback(async () => {
     const version = ++requestVersion.current;
-    setLoadState("loading");
+    if (!problemBankSession.snapshot) setLoadState("loading");
     setError(null);
-    const desktopApi = desktopProblemBankApi();
     try {
-      const [localResult, nextCacheState, nextCatalog] = await Promise.all([
-        fetchProblemSets(backendOrigin(), backendAuthToken(), { signal }),
-        desktopApi?.getProblemBankCacheState() ?? Promise.resolve(null),
-        desktopApi?.getProblemBankCatalog().catch((caughtError) => {
-          console.error("[ERROR] Failed to read the cached cloud problem-bank catalog", caughtError);
-          return null;
-        }) ?? Promise.resolve(null),
-      ]);
-      if (signal?.aborted || version !== requestVersion.current) return;
-      setLocalSets(localResult.sets.map((set) => ({ ...set, source: "local" })));
-      setCacheState(nextCacheState);
-      setCatalog(nextCatalog);
+      const snapshot = await loadProblemBankSnapshot();
+      if (version !== requestVersion.current) return;
+      setLocalSets(snapshot.localSets);
+      setCacheState(snapshot.cacheState);
+      setCatalog(snapshot.catalog);
       setLoadState("ready");
     } catch (caughtError) {
-      if (signal?.aborted || version !== requestVersion.current) return;
+      if (version !== requestVersion.current) return;
       console.error("[ERROR] Failed to load the problem-bank sidecar", caughtError);
       setError(caughtError instanceof Error ? caughtError.message : String(caughtError));
       setLoadState("error");
@@ -171,12 +286,10 @@ export function ProblemBankSidecar({ onClose }: { onClose: () => void }) {
   }, []);
 
   useEffect(() => {
-    const controller = new AbortController();
-    void load(controller.signal);
+    void load();
     closeButtonRef.current?.focus({ preventScroll: true });
     const dispose = desktopProblemBankApi()?.onProblemBankCacheState(setCacheState);
     return () => {
-      controller.abort();
       requestVersion.current += 1;
       pageRequestVersion.current += 1;
       detailRequestVersion.current += 1;
@@ -220,6 +333,15 @@ export function ProblemBankSidecar({ onClose }: { onClose: () => void }) {
     try {
       const nextState = await desktopApi.syncProblemBankMetadata();
       const nextCatalog = await desktopApi.getProblemBankCatalog();
+      problemBankSession.snapshot = {
+        localSets,
+        cacheState: nextState,
+        catalog: nextCatalog,
+      };
+      problemBankSession.pageRequests.clear();
+      problemBankSession.pageResults.clear();
+      problemBankSession.detailRequests.clear();
+      problemBankSession.detailResults.clear();
       setCacheState(nextState);
       setCatalog(nextCatalog);
       setLoadState("ready");
@@ -229,37 +351,14 @@ export function ProblemBankSidecar({ onClose }: { onClose: () => void }) {
     } finally {
       setSyncing(false);
     }
-  }, [syncing]);
+  }, [localSets, syncing]);
 
   const getProblemPage = useCallback((bank: ProblemBankListItem, cursor: string | null) => {
-    const desktopApi = desktopProblemBankApi();
-    if (!desktopApi) return Promise.reject(new Error("Problem-bank desktop API is unavailable"));
-    const bankSlug = bank.bankSlug ?? bank.slug;
-    const key = `${bank.releaseId ?? "local"}:${bankSlug}:${cursor ?? "0"}`;
-    const prefetched = pagePrefetches.current.get(key);
-    if (prefetched) return prefetched;
-    const request = desktopApi.loadProblemBankPage(bankSlug, cursor).catch((caughtError) => {
-      pagePrefetches.current.delete(key);
-      throw caughtError;
-    });
-    return retainPrefetch(pagePrefetches.current, key, request, PAGE_PREFETCH_LIMIT);
+    return requestProblemPage(bank, cursor);
   }, []);
 
   const getProblemDetail = useCallback((bank: ProblemBankListItem, problem: ProblemRow) => {
-    const desktopApi = desktopProblemBankApi();
-    if (!desktopApi) return Promise.reject(new Error("Problem-bank desktop API is unavailable"));
-    const bankSlug = bank.bankSlug ?? bank.slug;
-    const key = `${bank.releaseId ?? "local"}:${bankSlug}:${problem.id}`;
-    const prefetched = detailPrefetches.current.get(key);
-    if (prefetched) return prefetched;
-    const request = desktopApi.loadProblemDetail(bankSlug, problem.id).then((detail) => {
-      preloadFirstProblemMedia(detail);
-      return detail;
-    }).catch((caughtError) => {
-      detailPrefetches.current.delete(key);
-      throw caughtError;
-    });
-    return retainPrefetch(detailPrefetches.current, key, request, DETAIL_PREFETCH_LIMIT);
+    return requestProblemDetail(bank, problem);
   }, []);
 
   const prefetchBank = useCallback((bank: ProblemBankListItem) => {
@@ -304,14 +403,15 @@ export function ProblemBankSidecar({ onClose }: { onClose: () => void }) {
     detailRequestVersion.current += 1;
     pageLoadingRef.current = false;
     setSelectedBank(bank);
-    setProblems([]);
-    setNextCursor("0");
-    setPageState("idle");
+    const cachedPage = problemBankSession.pageResults.get(pageCacheKey(bank, "0"));
+    setProblems(cachedPage?.items ?? []);
+    setNextCursor(cachedPage?.nextCursor ?? "0");
+    setPageState(cachedPage ? (cachedPage.nextCursor ? "idle" : "complete") : "idle");
     setPageError(null);
     setSelectedProblem(null);
     setProblemDetail(null);
     setDetailError(null);
-    void loadProblemPage(bank, "0");
+    if (!cachedPage) void loadProblemPage(bank, "0");
   }, [loadProblemPage]);
 
   const switchBank = useCallback((bankSlug: string) => {
@@ -322,10 +422,12 @@ export function ProblemBankSidecar({ onClose }: { onClose: () => void }) {
   const openProblem = useCallback(async (problem: ProblemRow) => {
     if (!desktopProblemBankApi() || !selectedBank) return;
     const version = ++detailRequestVersion.current;
+    const cachedDetail = problemBankSession.detailResults.get(detailCacheKey(selectedBank, problem.id));
     setSelectedProblem(problem);
-    setProblemDetail(null);
-    setDetailState("loading");
+    setProblemDetail(cachedDetail ?? null);
+    setDetailState(cachedDetail ? "ready" : "loading");
     setDetailError(null);
+    if (cachedDetail) return;
     try {
       const detail = await getProblemDetail(selectedBank, problem);
       if (version !== detailRequestVersion.current) return;
@@ -389,10 +491,10 @@ export function ProblemBankSidecar({ onClose }: { onClose: () => void }) {
     ? t("problemBank.updateCloud")
     : t("problemBank.loadCloud");
   const viewTransitionKey = selectedProblem
-    ? `detail:${selectedProblem.id}:${detailState}`
+    ? `detail:${selectedProblem.id}`
     : selectedBank
-      ? `bank:${selectedBank.id}:${problems.length === 0 ? pageState : "ready"}`
-      : `catalog:${loading ? "loading" : "ready"}`;
+      ? `bank:${selectedBank.id}`
+      : "catalog";
 
   useEffect(() => {
     const firstCloudBank = cloudSets[0];
@@ -419,12 +521,12 @@ export function ProblemBankSidecar({ onClose }: { onClose: () => void }) {
                 onClick={selectedProblem ? closeProblem : closeBank}
                 aria-label={selectedProblem ? t("problemBank.backToProblems") : t("problemBank.backToBanks")}
               >
-                <ArrowBackRounded fontSize="small" />
+                <ArrowLeftIcon size={18} />
               </IconButton>
             </Tooltip>
           ) : (
             <Box className="problem-bank-sidecar-mark" aria-hidden="true">
-              <LibraryBooksOutlined fontSize="small" />
+              <LibraryBigIcon size={18} />
             </Box>
           )}
           <Box sx={{ minWidth: 0, flex: 1 }}>
@@ -463,14 +565,14 @@ export function ProblemBankSidecar({ onClose }: { onClose: () => void }) {
             <Tooltip title={t("problemBank.refresh")} arrow>
               <span>
                 <IconButton size="small" disabled={loading || syncing} onClick={() => void load()} aria-label={t("problemBank.refresh")}>
-                  {loading ? <CircularProgress size={16} /> : <RefreshRounded fontSize="small" />}
+                  {loading ? <CircularProgress size={16} /> : <RefreshCwIcon size={18} />}
                 </IconButton>
               </span>
             </Tooltip>
           ) : null}
           <Tooltip title={t("problemBank.close")} arrow>
-            <IconButton ref={closeButtonRef} size="small" onClick={onClose} aria-label={t("problemBank.close")}>
-              <CloseRounded fontSize="small" />
+            <IconButton data-fusion-panel-close ref={closeButtonRef} size="small" onClick={onClose} aria-label={t("problemBank.close")}>
+              <XIcon size={18} />
             </IconButton>
           </Tooltip>
         </Stack>
@@ -489,7 +591,7 @@ export function ProblemBankSidecar({ onClose }: { onClose: () => void }) {
               input: {
                 startAdornment: (
                   <InputAdornment position="start">
-                    <SearchRounded fontSize="small" />
+                    <SearchIcon size={18} />
                   </InputAdornment>
                 ),
               },
@@ -515,6 +617,7 @@ export function ProblemBankSidecar({ onClose }: { onClose: () => void }) {
                 state={detailState}
                 error={detailError}
                 onRetry={() => void openProblem(selectedProblem)}
+                onUseProblem={onUseProblem}
               />
             ) : selectedBank ? (
               <ProblemWaterfall
@@ -533,7 +636,7 @@ export function ProblemBankSidecar({ onClose }: { onClose: () => void }) {
             {desktopProblemBankApi() && (!cloudReady || cacheState?.updateAvailable) ? (
               <Box className="problem-bank-cloud-loader" role="status">
                 <Stack direction="row" spacing={1} sx={{ minWidth: 0, alignItems: "center" }}>
-                  <CloudDownloadOutlined color="primary" fontSize="small" />
+                  <CloudDownloadIcon color="#2563eb" size={18} />
                   <Typography variant="body2" sx={{ minWidth: 0, flex: 1, fontWeight: 700 }}>
                     {cloudReady ? t("problemBank.cloudUpdateAvailable") : t("problemBank.cloudNotLoaded")}
                   </Typography>
@@ -551,7 +654,7 @@ export function ProblemBankSidecar({ onClose }: { onClose: () => void }) {
               </Box>
             ) : sets.length === 0 ? (
               <Box className="problem-bank-sidecar-state">
-                <LibraryBooksOutlined color="disabled" />
+                <LibraryBigIcon color="#9ca3af" />
                 <Typography variant="body2" sx={{ fontWeight: 700 }}>{t("problemBank.emptyTitle")}</Typography>
                 <Typography variant="caption" color="text.secondary">{t("problemBank.emptyDescription")}</Typography>
               </Box>
@@ -574,7 +677,7 @@ export function ProblemBankSidecar({ onClose }: { onClose: () => void }) {
                   >
                     <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start" }}>
                       <Box className="problem-bank-sidecar-source" aria-hidden="true">
-                        {set.source === "cloud" ? <CloudOutlined fontSize="small" /> : <LibraryBooksOutlined fontSize="small" />}
+                        {set.source === "cloud" ? <CloudIcon size={18} /> : <LibraryBigIcon size={18} />}
                       </Box>
                       <Box sx={{ minWidth: 0, flex: 1, textAlign: "left" }}>
                         <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
@@ -670,7 +773,7 @@ function ProblemWaterfall({
   const { t } = useTranslation();
   if (state === "loading" && problems.length === 0) return <ProblemIndexSkeleton />;
   return (
-    <Stack className="problem-bank-waterfall" spacing={0.75}>
+    <Stack className="problem-bank-waterfall" spacing={1}>
       {problems.map((problem, index) => (
         <Box
           key={problem.id}
@@ -684,7 +787,7 @@ function ProblemWaterfall({
           <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", mb: 0.55 }}>
             <Typography variant="caption" color="text.secondary">#{index + 1}</Typography>
             {problem.difficulty ? <Chip size="small" variant="outlined" label={problem.difficulty} /> : null}
-            {problem.hasMedia ? <ImageOutlined color="action" sx={{ fontSize: 16 }} /> : null}
+            {problem.hasMedia ? <ImageIcon color="#6b7280" size={16} /> : null}
           </Stack>
           <ProblemMarkdown>{problem.promptPreview || problem.id}</ProblemMarkdown>
           {problem.knowledge?.length ? (
@@ -714,12 +817,14 @@ function ProblemDetailView({
   state,
   error,
   onRetry,
+  onUseProblem,
 }: {
   summary: ProblemRow;
   detail: DesktopProblemDetail | null;
   state: LoadState;
   error: string | null;
   onRetry: () => void;
+  onUseProblem: (problem: string) => void;
 }) {
   const { t } = useTranslation();
   if (state === "loading") return <ProblemDetailSkeleton />;
@@ -735,6 +840,7 @@ function ProblemDetailView({
   const problem = detail.problem;
   const answer = problem.answer;
   const media = problem.media ?? [];
+  const composerText = problemComposerText(problem.prompt, summary.promptPreview, summary.id);
   return (
     <Stack className="problem-bank-detail" spacing={1.25}>
       <Box className="problem-bank-detail-section">
@@ -743,6 +849,17 @@ function ProblemDetailView({
           <Typography variant="caption" color="text.secondary">{problem.source?.datasetId ?? summary.id}</Typography>
         </Stack>
         <ProblemMarkdown>{problem.prompt || summary.promptPreview || summary.id}</ProblemMarkdown>
+        <Stack direction="row" sx={{ justifyContent: "flex-end", mt: 1.25 }}>
+          <Button
+            size="small"
+            variant="contained"
+            disableElevation
+            startIcon={<MessageSquarePlusIcon size={18} />}
+            onClick={() => onUseProblem(composerText)}
+          >
+            {t("problemBank.useInComposer")}
+          </Button>
+        </Stack>
       </Box>
       {media.map((item, index) => {
         const src = item.r2Url || item.url || item.trackingUrl;
@@ -788,7 +905,7 @@ function ProblemMedia({ src, alt }: { src: string; alt: string }) {
   if (failed) {
     return (
       <Box className="problem-bank-detail-image-fallback" role="alert">
-        <ImageOutlined color="disabled" />
+        <ImageIcon color="#9ca3af" />
         <Typography variant="caption" color="text.secondary">{t("problemBank.imageLoadFailed")}</Typography>
         <Button size="small" onClick={() => { setAttempt((current) => current + 1); setFailed(false); }}>
           {t("problemBank.retry")}

@@ -5,8 +5,8 @@ category: geogebra-workflow
 parent: multi-view-coordination
 level: 2
 maturity: default
-tags: [动画设计, 时间轴, 滑块, 分步演示, 播放暂停, 重置, StartAnimation, 动态几何, 运动可视化]
-tools: [getCanvasContext, searchGeoGebraCommands, executeGeoGebraCommands, showAnimationGuide, showTeachingHint]
+tags: [动画设计, 时间轴, 滑块, 分步演示, 播放暂停, 重置, 动态几何, 运动可视化]
+tools: [getCanvasContext, searchGeoGebraCommands, executeGeoGebraCommands, configureGeoGebraAnimation, controlGeoGebraAnimation, inspectGeoGebraObjects, showAnimationGuide, showTeachingHint]
 ---
 
 # 数学动画设计
@@ -15,20 +15,23 @@ tools: [getCanvasContext, searchGeoGebraCommands, executeGeoGebraCommands, showA
 
 工作顺序：
 
-1. 先选择模式：参数探究优先手动拖动；解释过程使用一次递增的主滑块；周期现象才使用循环或往返；离散证明步骤使用整数滑块和条件显示，而不是伪造连续运动。
+1. 先选择模式：参数探究优先手动拖动；解释过程使用一次递增的主滑块；时钟、天体公转、持续旋转和长期仿真使用持续增长时间轴；有限区间的重复演示才使用循环，往复运动使用往返；离散证明步骤使用整数滑块和条件显示，而不是伪造连续运动。
 2. 建立一个主时间参数 `t` 或步骤参数 `n`，其他对象全部由它派生。不要启动多个彼此独立的滑块；确需相对速度时，让速度表达式依赖同一个主控量。
-3. 默认不自动播放。先显示清晰的初始状态、观察问题和可拖动控制，再由用户主动开始；自动播放不得成为理解课件的唯一方式。
+3. 默认自动播放。构造和关键状态验证通过后，调用 `configureGeoGebraAnimation` 时显式设置 `autoplay: true`，让用户立即看到动态效果；只有用户明确要求先观察初始状态、手动拖动或手动启动时才设置 `autoplay: false`。播放、暂停和重置控制仍必须可用，自动播放不得成为理解课件的唯一方式。
 4. 连续动画至少检查开始、中点、临界点和终点；分步动画保证每一阶段都有稳定停留状态。遇到渐近线、零分母、退化图形或对象短暂未定义时，应重设范围或分段，而不是让对象闪烁消失。
-5. 教学演示默认使用“一次递增”，结束后停在结论状态。只有旋转、振动、周期函数等本质周期过程才使用往返或循环，并避免端点突然跳回起点。
-6. 始终提供暂停、继续和重置路径。可使用 `StartAnimation(slider, true|false)` 控制播放，并用 `SetValue(slider, minimum)` 回到可读首帧；停止后仍应支持手动拖动和键盘步进。
-7. 控制速度，使用户能跟踪关键对象并读取同步文字。GeoGebra 速度 1 大约十秒走完整个滑块区间，可据范围调整；不为了“更有动感”而加快到无法观察不变量。
+5. 教学演示默认使用“一次递增”，结束后停在结论状态。对天体公转等需要长期运行的周期过程，不要让主参数在端点跳回起点；让主时间持续增长，并把周期性放入依赖对象的 `sin`、`cos` 或其他周期表达式。只有有限区间的重复演示才使用循环。
+6. 构造并验证主参数后，使用 `configureGeoGebraAnimation` 配置业务时间轴：讲解过程默认 `once`；时钟、天体公转、持续旋转和长期仿真使用 `continuous`；有限区间重复演示使用 `loop`；往复运动使用 `ping_pong`。`continuous` 中的 `from` 是起点，`to - from` 是每个 `durationMs` 的增量，并非终点；再用 `controlGeoGebraAnimation` 提供播放、暂停、继续和重置。
+7. 控制速度，使用户能跟踪关键对象并读取同步文字。单程默认 20 秒，通常使用 12–30 秒；复杂 3D 或文字密集演示应更慢。动画基于帧时间插值，不通过增大滑块 step 换取速度。
 8. 运动期间只突出当前变化对象，静态参照保持克制。轨迹、残影或 Trace 只有在运动路径本身是学习目标时使用，并提供清除或重置方式。
 9. 动态颜色只能表达明确连续量并配有文字、数值或图例；不要用高频变色、闪烁、缩放或多个对象同时运动吸引注意。
-10. 完成后实际执行一次播放—暂停—继续—结束—重置流程，再调用 `getCanvasContext` 检查对象存在、终态正确且没有残留的错误可见性。
+10. 完成后实际执行一次播放—暂停—继续—结束—重置流程，再调用 `inspectGeoGebraObjects` 检查主参数数值与业务动画状态，并用 `getCanvasContext` 检查依赖对象存在、终态正确且没有残留的错误可见性。
+11. 动态对象必须由主时间参数或显式状态派生；不要在每一帧把依赖对象当成自由对象重新赋值。关键状态的语义不变量来自对应题型技能，本技能只负责时间轴、状态映射和播放控制。
+12. 如果开始态、终态或中间态连续两次违反同一个不变量，停止继续试符号、角度或速度；记录失败不变量和受影响的依赖子图，回滚到最近正确关键状态后重建该子图。不要把改样式或放慢动画当作语义修复。
 
 约束：
 
-- 不生成任意 JavaScript；优先使用 `Slider`、对象依赖、`If`、`SetConditionToShowObject`、`SetValue` 和 `StartAnimation`。
+- 不生成任意 JavaScript，不写 XML。构造使用 `Slider`、对象依赖、`If` 和 `SetConditionToShowObject`；连续播放统一使用基于 Applet `setValue` 的业务动画工具。
+- 持续时间轴强制使用线性插值。不要给持续增长的主时钟套用重复缓动，也不要通过不断扩大滑块上限模拟无界时间。
 - 自动运动持续超过五秒时必须可暂停或停止；避免每秒三次以上的闪烁或强烈明暗切换。
 - 不同时自动播放多个无共同时间轴的动画，不让摄像机运动与核心数学对象运动争夺注意力。
 - 3D 曲面、大列表和密集轨迹先降低对象数量或细节级别，再考虑播放；卡顿时宁可改为手动分步。

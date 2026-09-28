@@ -99,6 +99,14 @@ describe("native AI SDK UI tool loop", () => {
     expect(attempts).toBe(2);
     expect(stream).toContain("网络恢复后完成。");
     expect(ledgers.get("run_native_tool_loop")?.status).toBe("succeeded");
+    expect(ledgers.get("run_native_tool_loop")?.skillSelection).toMatchObject({
+      status: "disabled",
+      selectedSkills: [],
+      loadedSkills: [],
+      failedSkillLoads: [],
+      cacheHit: false,
+      modelCallCount: 0,
+    });
   });
 
   test("keeps an HTTP-disconnected run resumable instead of recording a user cancellation", async () => {
@@ -390,10 +398,119 @@ describe("native AI SDK UI tool loop", () => {
       toolName: "setFinished",
       status: "succeeded",
     }));
+    expect(ledgers.get("run_native_tool_loop")?.skillSelection).toMatchObject({
+      status: "failed",
+      selectedSkills: [],
+      loadedSkills: [],
+      failedSkillLoads: [],
+      injectedContextLength: 0,
+    });
 
     const second = await createNativeChatResponse(request([user, inspected]), context, { model: terminalModel });
     expect(second.status).toBe(409);
     expect(await second.text()).toContain("already terminal");
+  });
+
+  test("keeps setFinished visible and recovers from a premature completion attempt", async () => {
+    const { context, ledgers } = contextWithLedgerStore();
+    const user: UIMessage = {
+      id: "user-premature-finish",
+      role: "user",
+      parts: [{ type: "text", text: "本轮已关闭 Agent Skills。先检查画板，再完成任务。" }],
+    };
+    let modelCalls = 0;
+    const firstModel = new MockLanguageModelV3({
+      doStream: async () => {
+        modelCalls += 1;
+        return {
+          stream: simulateReadableStream({ chunks: modelCalls === 1
+            ? [
+                {
+                  type: "tool-call",
+                  toolCallId: "finish-too-early",
+                  toolName: "setFinished",
+                  input: JSON.stringify({ summary: "过早结束。" }),
+                },
+                { type: "finish", finishReason: { unified: "tool-calls", raw: "tool_calls" }, usage },
+              ]
+            : [
+                {
+                  type: "tool-call",
+                  toolCallId: "canvas-after-rejection",
+                  toolName: "getCanvasContext",
+                  input: "{}",
+                },
+                { type: "finish", finishReason: { unified: "tool-calls", raw: "tool_calls" }, usage },
+              ] }),
+        };
+      },
+    });
+
+    const first = await createNativeChatResponse(request([user]), context, { model: firstModel });
+    const firstStream = await first.text();
+    const pending = ledgers.get("run_native_tool_loop")!;
+
+    expect(modelCalls).toBe(2);
+    expect(firstStream).not.toContain("NoSuchToolError");
+    expect(firstStream).toContain('"toolName":"setFinished"');
+    expect(firstStream).toContain('"toolName":"getCanvasContext"');
+    expect(pending.status).toBe("running");
+    expect(pending.tools).toContainEqual(expect.objectContaining({
+      toolCallId: "finish-too-early",
+      toolName: "setFinished",
+      status: "failed",
+      error: expect.stringContaining("第一步必须读取"),
+    }));
+
+    const assistant: UIMessage = {
+      id: pending.assistantMessageId!,
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-setFinished",
+          toolCallId: "finish-too-early",
+          state: "output-available",
+          input: { summary: "过早结束。" },
+          output: {
+            ok: false,
+            results: [],
+            error: "工作流要求第一步必须读取 GeoGebra 画布上下文。",
+          },
+        } as never,
+        {
+          type: "tool-getCanvasContext",
+          toolCallId: "canvas-after-rejection",
+          state: "output-available",
+          input: {},
+          output: { ok: true, objects: [] },
+        } as never,
+      ],
+    };
+    const finalModel = new MockLanguageModelV3({
+      doStream: async () => ({
+        stream: simulateReadableStream({ chunks: [
+          {
+            type: "tool-call",
+            toolCallId: "finish-after-read",
+            toolName: "setFinished",
+            input: JSON.stringify({ summary: "检查后完成。" }),
+          },
+          { type: "finish", finishReason: { unified: "tool-calls", raw: "tool_calls" }, usage },
+        ] }),
+      }),
+    });
+
+    const second = await createNativeChatResponse(request([user, assistant]), context, { model: finalModel });
+    const secondStream = await second.text();
+    const completed = ledgers.get("run_native_tool_loop")!;
+
+    expect(secondStream).not.toContain("NoSuchToolError");
+    expect(completed.status).toBe("succeeded");
+    expect(completed.tools).toContainEqual(expect.objectContaining({
+      toolCallId: "finish-after-read",
+      toolName: "setFinished",
+      status: "succeeded",
+    }));
   });
 
   test("enforces the model-step budget across renderer continuations", async () => {
@@ -437,10 +554,13 @@ describe("native AI SDK UI tool loop", () => {
       }),
     });
     limited.messages = [user, firstOutput];
-    await (await createNativeChatResponse(limited, context, { model: secondModel })).text();
+    const secondStream = await (await createNativeChatResponse(limited, context, { model: secondModel })).text();
     expect(ledgers.get(limited.runId)?.modelStepCount).toBe(2);
     expect(ledgers.get(limited.runId)?.status).toBe("failed");
     expect(ledgers.get(limited.runId)?.error).toContain("budget exhausted");
+    expect(secondStream).toContain("Model step budget exhausted (2)");
+    expect(secondStream).toContain('"type":"error"');
+    expect(secondStream).not.toContain('"type":"finish"');
 
     const third = await createNativeChatResponse(limited, context, { model: secondModel });
     expect(third.status).toBe(409);

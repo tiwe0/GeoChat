@@ -6,6 +6,8 @@ use std::{env, fs, path::Path, path::PathBuf};
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DesktopSettings {
     pub(crate) device_id: Option<String>,
+    #[serde(default = "default_graphics_preferences")]
+    pub(crate) graphics_preferences: DesktopGraphicsPreferences,
     #[serde(default = "default_update_preferences")]
     pub(crate) update_preferences: DesktopUpdatePreferences,
     #[serde(default = "default_improvement_plan_preferences")]
@@ -44,6 +46,12 @@ pub(crate) struct DesktopUpdatePreferences {
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct DesktopGraphicsPreferences {
+    pub(crate) hardware_acceleration: bool,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct DesktopImprovementPlanPreferences {
     pub(crate) enabled: bool,
 }
@@ -51,10 +59,17 @@ pub(crate) struct DesktopImprovementPlanPreferences {
 pub(crate) fn default_settings() -> DesktopSettings {
     DesktopSettings {
         device_id: None,
+        graphics_preferences: default_graphics_preferences(),
         update_preferences: default_update_preferences(),
         improvement_plan_preferences: default_improvement_plan_preferences(),
         logging_preferences: default_logging_preferences(),
         extra: serde_json::Map::new(),
+    }
+}
+
+pub(crate) fn default_graphics_preferences() -> DesktopGraphicsPreferences {
+    DesktopGraphicsPreferences {
+        hardware_acceleration: true,
     }
 }
 
@@ -115,7 +130,19 @@ pub(crate) fn default_improvement_plan_preferences() -> DesktopImprovementPlanPr
 
 #[cfg(test)]
 mod tests {
-    use super::{default_settings, default_update_preferences, DesktopSettings};
+    use super::{
+        default_graphics_preferences, default_settings, default_update_preferences, DesktopSettings,
+    };
+
+    #[test]
+    fn hardware_acceleration_is_enabled_by_default() {
+        assert!(default_graphics_preferences().hardware_acceleration);
+        assert!(
+            default_settings()
+                .graphics_preferences
+                .hardware_acceleration
+        );
+    }
 
     #[test]
     fn default_update_preferences_enable_silent_check_and_download() {
@@ -131,6 +158,7 @@ mod tests {
             r#"{"deviceId":null,"updatePreferences":{"autoCheck":true,"autoDownload":true,"installOnQuit":false},"improvementPlanPreferences":{"enabled":true},"license":{"status":"active"}}"#,
         )
         .expect("older settings should migrate");
+        assert!(settings.graphics_preferences.hardware_acceleration);
         assert!(!settings.logging_preferences.enabled);
         assert_eq!(
             settings.logging_preferences,

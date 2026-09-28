@@ -1,4 +1,4 @@
-import CloseRounded from "@mui/icons-material/CloseRounded";
+import { XIcon } from "lucide-react";
 import { Box, IconButton, Paper, Stack, Typography } from "@mui/material";
 import FocusTrap from "@mui/material/Unstable_TrapFocus";
 import { motion, useReducedMotion } from "motion/react";
@@ -38,6 +38,7 @@ export function FusionViewportCard(props: {
   onClose: () => void;
   children: ReactNode;
   wide?: boolean;
+  hideHeader?: boolean;
   panelId: string;
 }) {
   const reduceMotion = useReducedMotion();
@@ -87,12 +88,14 @@ export function FusionViewportCard(props: {
           keepViewportTabFocusInside(event);
         }}
       >
-        <Stack direction="row" sx={{ minHeight: 52, px: 1.5, alignItems: "center", borderBottom: 1, borderColor: "divider" }}>
-          <Typography variant="subtitle2" sx={{ flex: 1, fontWeight: 800 }}>{props.title}</Typography>
-          <IconButton data-fusion-panel-close size="small" onClick={() => props.onClose()} aria-label={props.closeLabel} title={props.closeLabel}>
-            <CloseRounded fontSize="small" />
-          </IconButton>
-        </Stack>
+        {!props.hideHeader ? (
+          <Stack direction="row" sx={{ minHeight: 52, px: 1.5, alignItems: "center", borderBottom: 1, borderColor: "divider" }}>
+            <Typography variant="subtitle2" sx={{ flex: 1, fontWeight: 800 }}>{props.title}</Typography>
+            <IconButton data-fusion-panel-close size="small" onClick={() => props.onClose()} aria-label={props.closeLabel} title={props.closeLabel}>
+              <XIcon size={18} />
+            </IconButton>
+          </Stack>
+        ) : null}
         <Box sx={{ minHeight: 0, flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {props.children}
         </Box>

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFile } from "node:fs/promises";
 import {
   createMcpDebugActionPolling,
   desktopMcpHttpBase,
@@ -13,6 +14,17 @@ function tick() {
 }
 
 describe("MCP debug-action transport", () => {
+  test("keeps localhost MCP authorization opt-in instead of reusing the backend token", async () => {
+    const source = await readFile("src-tauri/src/sidecar.rs", "utf8");
+    const start = source.indexOf("pub(crate) fn start_desktop_mcp");
+    const end = source.indexOf("\nfn capture_child_output", start);
+    const launcher = source.slice(start, end);
+
+    expect(launcher).toContain('.env("GEOCHAT_DESKTOP_MCP_HOST", "127.0.0.1")');
+    expect(launcher).toContain('"GEOCHAT_DESKTOP_BACKEND_AUTH_TOKEN"');
+    expect(launcher).not.toContain('"GEOCHAT_DESKTOP_MCP_AUTH_TOKEN"');
+  });
+
   test("derives the HTTP base from the MCP endpoint", () => {
     expect(desktopMcpHttpBase("http://127.0.0.1:17369/mcp")).toBe("http://127.0.0.1:17369");
     expect(desktopMcpHttpBase("http://127.0.0.1:17369/mcp/")).toBe("http://127.0.0.1:17369");

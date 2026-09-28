@@ -62,6 +62,22 @@ const FUNCTION_CALL_INPUT_JSON_SCHEMA_ENGLISH_OVERRIDES = {
   executeGeoGebraCommands: {
     commands: executeCommandsDescriptionEn
   },
+  configureGeoGebraAnimation: {
+    object: "Existing free numeric, angle, or slider object controlled through the public GeoGebra Applet setValue API.",
+    from: "Start value. In continuous mode, the value keeps increasing or decreasing from here.",
+    to: "Reference end value; it must differ from from. In continuous mode, to - from defines the change per reference duration rather than a stopping point.",
+    durationMs: "Reference duration in milliseconds from from to to. In continuous mode, each duration advances by another to - from without wrapping. Defaults to 20000; use roughly 12000-30000 for observable teaching animation.",
+    mode: "Playback mode: once stops at the end, loop wraps to the start, ping_pong reverses at each endpoint, and continuous keeps moving beyond to for clocks, orbits, and ongoing simulations.",
+    easing: "Interpolation easing. Use linear for uniform or periodic motion and ease_in_out when the endpoints deserve extra observation time. Continuous mode always uses linear motion to remain monotonic.",
+    autoplay: "Whether to play immediately after configuration. Defaults to true; use false only when the user explicitly asks to inspect the initial state or start playback manually."
+  },
+  controlGeoGebraAnimation: {
+    action: "play resumes from current progress; pause preserves progress; stop preserves the current value; reset returns to from.",
+    objects: "Objects previously configured with configureGeoGebraAnimation."
+  },
+  inspectGeoGebraObjects: {
+    objects: "GeoGebra object names to inspect through public Applet APIs. Returns available type, value, coordinates, visibility, and animation state fields."
+  },
   resetCanvas: {
     perspective: "Optional GeoGebra SetPerspective view or layout to switch to after reset. Defaults to G for Graphics; use T for 3D Graphics.",
   },
@@ -177,6 +193,19 @@ function localizedFunctionCallInputJsonSchema<TToolName extends FunctionCallTool
   if (toolName === "executeGeoGebraCommands") {
     schema.properties.commands = { ...schema.properties.commands, description: overrides.executeGeoGebraCommands.commands };
   }
+  if (toolName === "configureGeoGebraAnimation") {
+    for (const [key, description] of Object.entries(overrides.configureGeoGebraAnimation)) {
+      schema.properties[key] = { ...schema.properties[key], description };
+    }
+  }
+  if (toolName === "controlGeoGebraAnimation") {
+    for (const [key, description] of Object.entries(overrides.controlGeoGebraAnimation)) {
+      schema.properties[key] = { ...schema.properties[key], description };
+    }
+  }
+  if (toolName === "inspectGeoGebraObjects") {
+    schema.properties.objects = { ...schema.properties.objects, description: overrides.inspectGeoGebraObjects.objects };
+  }
   if (toolName === "resetCanvas") {
     schema.properties.perspective = { ...schema.properties.perspective, description: overrides.resetCanvas.perspective };
   }
@@ -250,6 +279,7 @@ function validateJsonSchemaValue(schema: JsonSchemaProperty | FunctionCallInputJ
   if (schema.type === "array") {
     if (!Array.isArray(value)) return false;
     if (schema.minItems !== undefined && value.length < schema.minItems) return false;
+    if (schema.maxItems !== undefined && value.length > schema.maxItems) return false;
     return schema.items ? value.every((item) => validateJsonSchemaValue(schema.items!, item)) : true;
   }
   if (schema.type === "object") {

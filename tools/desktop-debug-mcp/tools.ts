@@ -210,6 +210,47 @@ export function registerDesktopDebugTools(server: McpServer, { config, actions }
   );
 
   server.registerTool(
+    "configureGeoGebraAnimation",
+    {
+      title: "Configure GeoGebra teaching animation",
+      description: "配置基于 Applet setValue API 的平滑业务动画；支持单次、循环和往返，不写 XML。",
+      inputSchema: {
+        object: z.string().min(1).max(180),
+        from: z.number(),
+        to: z.number(),
+        durationMs: z.number().min(2_000).max(120_000).optional(),
+        mode: z.enum(["once", "loop", "ping_pong"]).optional(),
+        easing: z.enum(["linear", "ease_in_out"]).optional(),
+        autoplay: z.boolean().optional()
+      }
+    },
+    async (args) => queueGeoGebraTool("configureGeoGebraAnimation", args)
+  );
+
+  server.registerTool(
+    "controlGeoGebraAnimation",
+    {
+      title: "Control GeoGebra teaching animation",
+      description: "播放、暂停、停止或重置已配置的业务动画。",
+      inputSchema: {
+        action: z.enum(["play", "pause", "stop", "reset"]),
+        objects: z.array(z.string().min(1).max(180)).min(1).max(16)
+      }
+    },
+    async (args) => queueGeoGebraTool("controlGeoGebraAnimation", args)
+  );
+
+  server.registerTool(
+    "inspectGeoGebraObjects",
+    {
+      title: "Inspect GeoGebra objects",
+      description: "通过 GeoGebra Applet 公共 API 检查指定对象的值、坐标、可见性和动画状态。",
+      inputSchema: { objects: z.array(z.string().min(1).max(180)).min(1).max(20) }
+    },
+    async (args) => queueGeoGebraTool("inspectGeoGebraObjects", args)
+  );
+
+  server.registerTool(
     "resetCanvas",
     {
       title: "Reset GeoGebra canvas",

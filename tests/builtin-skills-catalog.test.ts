@@ -192,9 +192,15 @@ describe("built-in Agent Skill catalog", () => {
     expect(visualStyle.markdown).toContain("颜色只承担一种稳定语义");
     expect(visualStyle.markdown).toContain("#0072B2");
     expect(visualStyle.markdown).toContain("无颜色检查");
-    expect(animation.markdown).toContain("默认不自动播放");
+    expect(animation.markdown).toContain("默认自动播放");
+    expect(animation.markdown).toContain("autoplay: true");
     expect(animation.markdown).toContain("一次递增");
+    expect(animation.markdown).toContain("`continuous`");
+    expect(animation.markdown).toContain("每个 `durationMs` 的增量");
     expect(animation.markdown).toContain("暂停、继续和重置");
+    expect(animation.markdown).toContain("关键状态的语义不变量来自对应题型技能");
+    expect(animation.markdown).not.toContain("移动铰链");
+    expect(animation.markdown).not.toContain("父级端点");
   });
 
   test("finds software-use skills from natural Chinese task descriptions", async () => {
@@ -208,7 +214,8 @@ describe("built-in Agent Skill catalog", () => {
       ["把动态课件整理成手机上也能操作的单屏布局", "dynamic-worksheet-authoring"],
       ["用动态公式和文字做不只靠颜色的正误反馈", "dynamic-text-feedback"],
       ["统一几何图的配色线型标签和视觉层级", "visual-style-system"],
-      ["制作可以播放暂停重置的单时间轴数学动画", "mathematical-animation-design"]
+      ["制作可以播放暂停重置的单时间轴数学动画", "mathematical-animation-design"],
+      ["让多面体展开图沿铰链逐级折叠并验证闭合", "solid-geometry"]
     ] as const;
 
     for (const [query, expectedName] of cases) {
@@ -236,6 +243,13 @@ describe("built-in Agent Skill catalog", () => {
 
     expect(solidGeometry?.markdown).toContain("3D 图必须按教材图标准组织");
     expect(solidGeometry?.markdown).toContain("#0072B2");
+    expect(solidGeometry?.markdown).toContain("用面邻接图描述展开图");
+    expect(solidGeometry?.markdown).toContain("每个面先在自己的局部坐标中保持刚性");
+    expect(solidGeometry?.markdown).toContain("移动铰链必须由已折叠父面的两个端点导出");
+    expect(solidGeometry?.markdown).toContain("展示层与正确性分离");
+    expect(solidGeometry?.recipes).toContain("face-adjacency-hinge-graph");
+    expect(solidGeometry?.recipes).toContain("key-state-closure-invariants");
+    expect(solidGeometry?.tools).toEqual(expect.arrayContaining(["configureGeoGebraAnimation", "inspectGeoGebraObjects", "showAnimationGuide"]));
     expect(prism?.markdown).toContain("三棱柱/棱柱图的最低视觉标准");
     expect(prism?.markdown).toContain("先画 9 条骨架棱线，再画半透明面体");
     expect(prism?.markdown).toContain("截面高亮");

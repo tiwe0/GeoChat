@@ -1,13 +1,9 @@
-import AttachFileRounded from "@mui/icons-material/AttachFileRounded";
-import CloseRounded from "@mui/icons-material/CloseRounded";
-import DescriptionRounded from "@mui/icons-material/DescriptionRounded";
-import PlayArrowRounded from "@mui/icons-material/PlayArrowRounded";
-import StopRounded from "@mui/icons-material/StopRounded";
-import UploadFileRounded from "@mui/icons-material/UploadFileRounded";
+import { FileTextIcon, PaperclipIcon, PlayIcon, SquareIcon, UploadIcon, XIcon } from "lucide-react";
 import { Box, Chip, CircularProgress, IconButton, Stack, TextField, Typography } from "@mui/material";
 import {
   useRef,
   useState,
+  useEffect,
   type ChangeEvent,
   type ClipboardEvent,
   type DragEvent,
@@ -23,6 +19,7 @@ import {
   isSupportedAgentFile,
 } from "../features/attachments/capabilities";
 import { imageFilesFromClipboard, insertTextAtSelection } from "../features/chat/composerPaste";
+import { useComposerHistory } from "../hooks/useComposerHistory";
 import { ModelMenu, type ThinkingEffort } from "./ModelMenu";
 import type { RuntimeModelOption } from "../features/models/modelCatalog";
 
@@ -36,6 +33,7 @@ export type ComposerAttachment = {
 
 type ChatComposerProps = {
   value: string;
+  history: readonly string[];
   attachments: ComposerAttachment[];
   busy: boolean;
   model: string;
@@ -44,6 +42,7 @@ type ChatComposerProps = {
   thinkingSupported: boolean;
   thinkingEffort: ThinkingEffort;
   sendDisabled: boolean;
+  focusSignal?: number;
   error?: string | null;
   onChange: (value: string) => void;
   onAttachmentsChange: (attachments: ComposerAttachment[]) => void;
@@ -78,6 +77,7 @@ function fileToDataUrl(file: File, failureMessage: string) {
 
 export function ChatComposer({
   value,
+  history,
   attachments,
   busy,
   model,
@@ -86,6 +86,7 @@ export function ChatComposer({
   thinkingSupported,
   thinkingEffort,
   sendDisabled,
+  focusSignal = 0,
   error: submissionError,
   onChange,
   onAttachmentsChange,
@@ -101,7 +102,18 @@ export function ChatComposer({
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [isPreparingFiles, setIsPreparingFiles] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textInputRef = useRef<HTMLTextAreaElement>(null);
   const dragDepthRef = useRef(0);
+  const inputHistory = useComposerHistory({
+    entries: history,
+    value,
+    disabled: busy,
+    onChange,
+  });
+
+  useEffect(() => {
+    if (focusSignal > 0) textInputRef.current?.focus({ preventScroll: true });
+  }, [focusSignal]);
 
   async function addFiles(files: Iterable<File>) {
     const fileList = Array.from(files);
@@ -210,6 +222,7 @@ export function ChatComposer({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (inputHistory.handleKeyDown(event)) return;
     if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
     event.preventDefault();
     event.currentTarget.closest("form")?.requestSubmit();
@@ -221,7 +234,10 @@ export function ChatComposer({
       className="geochat-composer"
       onSubmit={(event) => {
         event.preventDefault();
-        if (!sendDisabled && !isPreparingFiles) onSend();
+        if (!sendDisabled && !isPreparingFiles) {
+          inputHistory.reset();
+          onSend();
+        }
       }}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
@@ -295,7 +311,7 @@ export function ChatComposer({
                     "&:hover": { bgcolor: "grey.100" },
                   }}
                 >
-                  <CloseRounded sx={{ fontSize: 15 }} />
+                  <XIcon size={15} />
                 </IconButton>
               </Box>
             ) : (
@@ -303,7 +319,7 @@ export function ChatComposer({
                 key={attachment.id}
                 size="small"
                 variant="outlined"
-                icon={<DescriptionRounded />}
+                icon={<FileTextIcon />}
                 label={filename}
                 title={`${filename} (${formatFileSize(attachment.size)})`}
                 disabled={busy}
@@ -337,11 +353,12 @@ export function ChatComposer({
             "&:hover": { bgcolor: "primary.light", color: "primary.dark" },
           }}
         >
-          {isPreparingFiles ? <CircularProgress size={18} /> : <AttachFileRounded fontSize="small" />}
+          {isPreparingFiles ? <CircularProgress size={18} /> : <PaperclipIcon size={18} />}
         </IconButton>
         <TextField
+          inputRef={textInputRef}
           value={value}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) => inputHistory.changeValue(event.target.value)}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           placeholder={t("composer.placeholder")}
@@ -394,7 +411,7 @@ export function ChatComposer({
             "&.Mui-disabled": { bgcolor: "action.disabledBackground" },
           }}
         >
-          {busy ? <StopRounded fontSize="small" /> : <PlayArrowRounded fontSize="small" />}
+          {busy ? <SquareIcon size={18} /> : <PlayIcon size={18} />}
         </IconButton>
       </Stack>
 
@@ -414,7 +431,7 @@ export function ChatComposer({
             pointerEvents: "none",
           }}
         >
-          <UploadFileRounded />
+          <UploadIcon />
           <Typography variant="body2" sx={{ fontWeight: 700 }}>{t("composer.dropFiles")}</Typography>
         </Stack>
       )}

@@ -1,5 +1,5 @@
+import { BrainCircuitIcon } from "lucide-react";
 import { useId } from "react";
-import PsychologyAltRounded from "@mui/icons-material/PsychologyAltRounded";
 import { Box, Chip, Stack, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import type { ThinkingEffort } from "../../../components/ModelMenu";
@@ -37,7 +37,7 @@ export function ThinkingChainSettings({ enabled, supported, effort, modelLabel }
         <Stack direction="row" className="settings-thinking-header">
           <Stack direction="row" spacing={1.5} className="settings-thinking-heading">
             <Box className="settings-thinking-mark" aria-hidden="true">
-              <PsychologyAltRounded fontSize="small" />
+              <BrainCircuitIcon size={18} />
             </Box>
             <Box sx={{ minWidth: 0 }}>
               <Typography variant="h6">{t("settings.thinkingTitle")}</Typography>

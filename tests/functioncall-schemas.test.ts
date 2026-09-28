@@ -62,6 +62,21 @@ const expectedSchemaShapes = {
     properties: ["commands", "perspective", "resetBefore", "restoreOnError", "reason", "intendedOutcome", "nextExpectedAction"],
     modelRequired: ["commands", "reason"]
   },
+  configureGeoGebraAnimation: {
+    required: ["object", "from", "to"],
+    properties: ["object", "from", "to", "durationMs", "mode", "easing", "autoplay", "reason", "intendedOutcome", "nextExpectedAction"],
+    modelRequired: ["object", "from", "to", "reason"]
+  },
+  controlGeoGebraAnimation: {
+    required: ["action", "objects"],
+    properties: ["action", "objects", "reason", "intendedOutcome", "nextExpectedAction"],
+    modelRequired: ["action", "objects", "reason"]
+  },
+  inspectGeoGebraObjects: {
+    required: ["objects"],
+    properties: ["objects", "reason", "intendedOutcome", "nextExpectedAction"],
+    modelRequired: ["objects", "reason"]
+  },
   resetCanvas: {
     required: [],
     properties: ["perspective", "confirmed", "reason", "intendedOutcome", "nextExpectedAction"],
@@ -132,5 +147,18 @@ describe("function-call input schemas", () => {
     );
 
     expect(actualShapes).toEqual(expectedSchemaShapes);
+  });
+
+  test("defaults configured GeoGebra animations to immediate playback", () => {
+    const schema = getFunctionCallInputJsonSchema("configureGeoGebraAnimation");
+    expect(schema.properties.autoplay?.default).toBe(true);
+    expect(String(schema.properties.autoplay?.description)).toContain("默认 true");
+    expect(schema.properties.mode?.enum).toContain("continuous");
+    expect(String(schema.properties.mode?.description)).toContain("持续增长");
+
+    const englishSchema = getFunctionCallModelInputJsonSchema("configureGeoGebraAnimation", "en-US");
+    expect(String(englishSchema.properties.autoplay?.description)).toContain("Defaults to true");
+    expect(englishSchema.properties.mode?.enum).toContain("continuous");
+    expect(String(englishSchema.properties.mode?.description)).toContain("ongoing simulations");
   });
 });

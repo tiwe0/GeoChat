@@ -1,7 +1,5 @@
 use crate::{
-    app_bundle::{
-        app_bundle_manifest_url, app_bundle_rollback_available,
-    },
+    app_bundle::{app_bundle_manifest_url, app_bundle_rollback_available},
     settings::DesktopUpdatePreferences,
     shell_update::shell_update_configured,
 };

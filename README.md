@@ -25,7 +25,7 @@
   <img alt="Windows" src="https://img.shields.io/badge/Windows-supported-0078D4">
 </p>
 
-`v0.6.0` · 默认启用全新的融合模式
+`v0.6.1` · 默认启用全新的融合模式
 
 ## 认识 GeoChat
 
@@ -38,7 +38,7 @@ GeoChat 是一款面向数学学习、教学与探索的 AI GeoGebra 助手。
 
 ### 融合模式
 
-<img src="docs/media/geochat-fusion-mode.png" alt="GeoChat v0.6.0 融合模式：对话、工具过程和输入框直接分布在 GeoGebra 画板上">
+<img src="docs/media/geochat-fusion-mode.png" alt="GeoChat v0.6.1 融合模式：对话、工具过程和输入框直接分布在 GeoGebra 画板上">
 
 输入框可以在画板任意位置唤起。每轮回答会围绕对应的作图位置展开，较早的消息逐渐
 淡出，既保留上下文，也尽量不遮挡正在观察的图形。

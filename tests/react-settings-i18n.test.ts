@@ -102,6 +102,8 @@ describe("react desktop settings i18n", () => {
     expect(en.settings.tourDescription).toBe("Review the main controls");
     expect(zhCN.settings.mcpDescription).toBe("允许 MCP 客户端连接并操作画板");
     expect(en.settings.mcpDescription).toBe("Allow MCP clients to connect to and control the canvas");
+    expect(zhCN.settings.hardwareAccelerationDescription).toBe("提升画板与动画的渲染性能");
+    expect(en.settings.hardwareAccelerationDescription).toBe("Improve canvas and animation rendering performance");
 
     expect(zhCN.settings.loggingEnabled).toBe("记录中");
     expect(zhCN.settings.loggingDisabled).toBe("已关闭");
@@ -187,7 +189,7 @@ describe("react desktop settings i18n", () => {
       new URL("../src/renderer-react/src/features/desktop/settings/SettingsDisclosure.tsx", import.meta.url),
       "utf8"
     );
-    expect(general.match(/<SettingsDisclosure /g)?.length).toBe(3);
+    expect(general.match(/<SettingsDisclosure /g)?.length).toBe(4);
     expect(update).toContain("<SettingsDisclosure open={!isLatest || downloading}>");
     expect(disclosure).toContain("<AnimatePresence initial={false}>");
     expect(disclosure).toContain('duration: 0.18');

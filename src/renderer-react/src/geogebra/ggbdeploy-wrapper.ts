@@ -1,10 +1,21 @@
 export type GeoGebraApi = Record<string, unknown>;
+export const DEFAULT_GEOGEBRA_TOOLBAR_VISIBLE = false;
+export const DEFAULT_GEOGEBRA_MENU_VISIBLE = true;
+export const DEFAULT_GEOGEBRA_FILE_FEATURES_ENABLED = true;
+// GeoGebra keeps this toolbar row in its internal layout when the native menu
+// is enabled, even if the shell hides the row. Give the runtime back the same
+// height so the Euclidian view reaches the bottom edge of the host.
+export const COLLAPSED_GEOGEBRA_TOOLBAR_HEIGHT = 57;
 export type GeoGebraApplet = GeoGebraApi & {
   inject: (...args: unknown[]) => unknown;
   setHTML5Codebase: (url: string, offline?: boolean) => void;
   resize?: () => unknown;
   removeExistingApplet?: (...args: unknown[]) => unknown;
 };
+
+export function geoGebraRuntimeHeight(containerHeight: number, toolbarCollapsed: boolean) {
+  return containerHeight + (toolbarCollapsed ? COLLAPSED_GEOGEBRA_TOOLBAR_HEIGHT : 0);
+}
 
 declare global {
   interface Window { GGBApplet?: new (...args: unknown[]) => GeoGebraApplet }
@@ -19,6 +30,61 @@ let stylesheetPromise: Promise<void> | undefined;
 // lease per host as well so a stale StrictMode mount can never dispose the
 // newer applet that replaced it.
 const activeMounts = new WeakMap<HTMLElement, symbol>();
+
+/**
+ * Open GeoGebra's own file menu from a shell-owned button.
+ *
+ * The native menu button remains mounted while its visually heavy toolbar row
+ * is collapsed. Forwarding the click preserves GeoGebra's Open/Save/Export
+ * implementation instead of duplicating file behavior in the shell.
+ */
+export function openGeoGebraNativeMenu(container: HTMLElement) {
+  const headerMenuButton = container.querySelector<HTMLElement>(".menuBtn");
+  const toolbarButtons = container.querySelectorAll<HTMLButtonElement>(
+    ".GeoGebraFrame .rightButtonPanel button",
+  );
+  const menuButton = headerMenuButton ?? toolbarButtons.item(toolbarButtons.length - 1);
+  if (!menuButton) return false;
+  menuButton.click();
+  window.requestAnimationFrame(() => alignNativeMenuToLeft(container));
+  return true;
+}
+
+function alignNativeMenuToLeft(container: HTMLElement) {
+  const frame = container.querySelector<HTMLElement>(".GeoGebraFrame") ?? container;
+  const nativeMenu = frame.querySelector<HTMLElement>(
+    ".GeoGebraMenuBar, .mowMenubar, .menuPanel",
+  );
+  if (!nativeMenu) return;
+
+  const menuCell = nativeMenu.closest<HTMLTableCellElement>("td");
+  if (menuCell?.parentElement?.tagName === "TR") {
+    menuCell.style.removeProperty("position");
+    menuCell.style.removeProperty("inset");
+    menuCell.style.removeProperty("left");
+    menuCell.style.removeProperty("right");
+    menuCell.style.removeProperty("transform");
+    menuCell.classList.add("geochat-native-menu-cell");
+    menuCell.parentElement.insertBefore(menuCell, menuCell.parentElement.firstElementChild);
+    return;
+  }
+
+  const frameRect = frame.getBoundingClientRect();
+  let menuPanel: HTMLElement = nativeMenu;
+  for (let parent = nativeMenu.parentElement; parent && parent !== frame; parent = parent.parentElement) {
+    const rect = parent.getBoundingClientRect();
+    const isSidePanel = rect.height >= frameRect.height * 0.7
+      && rect.width >= 220
+      && rect.width <= Math.min(520, frameRect.width * 0.5);
+    if (isSidePanel) menuPanel = parent;
+  }
+
+  menuPanel.style.setProperty("position", "absolute", "important");
+  menuPanel.style.setProperty("inset", "0 auto 0 0", "important");
+  menuPanel.style.setProperty("left", "0px", "important");
+  menuPanel.style.setProperty("right", "auto", "important");
+  menuPanel.style.setProperty("transform", "none", "important");
+}
 
 function loadDeployScript(url: string) {
   if (window.GGBApplet) return Promise.resolve();
@@ -172,6 +238,7 @@ export async function mountGeoGebra(options: {
     if (disposed) return;
     const { width, height } = initialSize();
     const root = options.container;
+    const runtimeHeight = geoGebraRuntimeHeight(height, root.classList.contains("is-toolbar-collapsed"));
     root.style.display = "block";
     root.style.visibility = "visible";
     root.style.opacity = "1";
@@ -210,7 +277,7 @@ export async function mountGeoGebra(options: {
     const parameters = root.querySelector<HTMLElement>(".appletParameters");
     if (parameters) {
       parameters.setAttribute("data-param-width", String(width));
-      parameters.setAttribute("data-param-height", String(height));
+      parameters.setAttribute("data-param-height", String(runtimeHeight));
     }
     const setSize = runtimeApi?.setSize;
     if (typeof setSize === "function") {
@@ -218,7 +285,7 @@ export async function mountGeoGebra(options: {
       // host dimensions. Always forward a scheduled lifecycle resize so that
       // the canvas-ready pass also forces GeoGebra to repaint.
       try {
-        setSize.call(runtimeApi, width, height);
+        setSize.call(runtimeApi, width, runtimeHeight);
         refreshRuntimeViews();
       } catch (caughtError) {
         console.error("[ERROR] Failed to resize the GeoGebra runtime", caughtError);
@@ -245,13 +312,15 @@ export async function mountGeoGebra(options: {
     width: initialSize().width,
     height: initialSize().height,
     appName: "classic",
-    // Start with the Graphics-only layout while keeping GeoGebra's Algebra
-    // input field collapsed by default. Users can reopen it from the applet
-    // controls when needed.
+    // Keep the construction toolbar collapsed by default while exposing
+    // GeoGebra's native menu entry point for applet-level actions.
     perspective: "G",
-    showToolBar: false,
+    showToolBar: DEFAULT_GEOGEBRA_TOOLBAR_VISIBLE,
     showToolBarHelp: false,
-    showMenuBar: false,
+    showMenuBar: DEFAULT_GEOGEBRA_MENU_VISIBLE,
+    // Keep GeoGebra's own file menu fully functional so users can open local
+    // constructions and export the current worksheet as a .ggb file.
+    enableFileFeatures: DEFAULT_GEOGEBRA_FILE_FEATURES_ENABLED,
     showAlgebraInput: false,
     algebraInputPosition: "algebra",
     // Use the shell-owned reset control so it stays reachable above the
@@ -265,14 +334,9 @@ export async function mountGeoGebra(options: {
     appletOnLoad: (api: GeoGebraApi) => {
       if (disposed || !isActiveMount() || options.signal?.aborted) return;
       runtimeApi = api;
-      const showToolBar = api.showToolBar;
-      const setPerspective = api.setPerspective;
-      try { if (typeof showToolBar === "function") showToolBar.call(api, false); } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:279", caughtError); /* initial parameters already hide it */ }
-      try {
-        // This standalone frontend uses the patched applet API directly. The
-        // extension-only switchThroughSubApp bridge must not be used here.
-        if (typeof setPerspective === "function") setPerspective.call(api, "G");
-      } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:284", caughtError); /* perspective: G remains the initialization fallback */ }
+      // Do not reapply the perspective here. GeoGebra's runtime perspective
+      // switch rewrites the menu/toolbar flags and couples two options that
+      // are intentionally independent in the embedding parameters above.
       options.onReady(api);
       scheduleSyncSize();
     },
@@ -288,13 +352,21 @@ export async function mountGeoGebra(options: {
   // On a cold GWT load, GeoGebra can append `.GeoGebraFrame` before its actual
   // drawing canvas exists. Do not treat the frame as readiness: wait for the
   // canvas insertion, then run one deterministic sizing/repaint pass.
-  const mutationObserver = typeof MutationObserver === "undefined" ? null : new MutationObserver(() => {
+  const mutationObserver = typeof MutationObserver === "undefined" ? null : new MutationObserver((mutations) => {
     if (!drawingCanvasObserved && options.container.querySelector(".GeoGebraFrame canvas")) {
       drawingCanvasObserved = true;
       scheduleSyncSize();
     }
+    if (drawingCanvasObserved && mutations.some((mutation) => mutation.target === options.container && mutation.attributeName === "class")) {
+      scheduleSyncSize();
+    }
   });
-  mutationObserver?.observe(options.container, { childList: true, subtree: true });
+  mutationObserver?.observe(options.container, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["class"],
+  });
   syncSize();
 
   return {

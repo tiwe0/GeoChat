@@ -10,6 +10,8 @@ import {
 const expectedCommandByMethod = {
   getRuntimeInfo: "get_runtime_info",
   markRendererReady: "mark_renderer_ready",
+  getGraphicsPreferences: "get_graphics_preferences",
+  setGraphicsPreferences: "set_graphics_preferences",
   getMcpStatus: "get_mcp_status",
   setMcpEnabled: "set_mcp_enabled",
   getAccessState: "get_access_state",
@@ -49,6 +51,10 @@ describe("Tauri desktop bridge contract", () => {
       runtime: {
         getRuntimeInfo: "get_runtime_info",
         markRendererReady: "mark_renderer_ready"
+      },
+      graphics: {
+        getGraphicsPreferences: "get_graphics_preferences",
+        setGraphicsPreferences: "set_graphics_preferences"
       },
       mcp: {
         getMcpStatus: "get_mcp_status",
@@ -116,6 +122,8 @@ describe("Tauri desktop bridge contract", () => {
 
     await api.getRuntimeInfo();
     await api.markRendererReady();
+    await api.getGraphicsPreferences();
+    await api.setGraphicsPreferences({ hardwareAcceleration: false });
     await api.getMcpStatus();
     await api.setMcpEnabled(true);
     await api.getAccessState();
@@ -150,6 +158,9 @@ describe("Tauri desktop bridge contract", () => {
 
     expect(calls.map((call) => call.command)).toEqual(Object.values(expectedCommandByMethod));
     expect(calls.find((call) => call.command === "set_mcp_enabled")?.args).toEqual({ enabled: true });
+    expect(calls.find((call) => call.command === "set_graphics_preferences")?.args).toEqual({
+      preferences: { hardwareAcceleration: false }
+    });
     expect(calls.find((call) => call.command === "set_update_preferences")?.args).toEqual({
       preferences: { autoCheck: false }
     });

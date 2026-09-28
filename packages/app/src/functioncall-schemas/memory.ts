@@ -31,9 +31,9 @@ export const MEMORY_FUNCTION_CALL_INPUT_JSON_SCHEMAS = {
           additionalProperties: false,
           properties: {
             op: { type: "string", enum: ["upsert", "archive"], description: "upsert 写入或更新条目；archive 软归档条目。不能硬删除。" },
-            key: { type: "string", minLength: 1, description: "稳定 key，例如 original_problem、main_goal、cube_construction_plan、failed_lambda_attempt。" },
+            key: { type: "string", minLength: 1, description: "稳定 key，例如 original_problem、main_goal、problem_model、failed_invariant_attempt。不要使用绑定某一道随机题目的 key。" },
             category: { type: "string", nullable: true, enum: blackboardCategoryValues, description: "条目分类。upsert 必填；canvas_state 由系统维护，不要手写。" },
-            value: { type: "string", nullable: true, description: "要保存的关键内容。upsert 必填；只保存后续推理/绘图需要的事实，不保存聊天摘要。" },
+            value: { type: "string", nullable: true, description: "要保存的关键内容。upsert 必填；construction_plan 使用 observationGoal、entities、parameters、dependencies、interaction、encoding、invariants、keyStates、stages、recovery 稳定字段。只保存后续推理/绘图需要的结构化事实，不保存聊天摘要或逐字思维过程。" },
             confidence: { type: "number", nullable: true, minimum: 0, maximum: 1, description: "0 到 1 的置信度。" },
             reason: { type: "string", nullable: true, description: "为什么这个信息值得保存或归档。" },
             sourceMessageId: { type: "string", nullable: true },

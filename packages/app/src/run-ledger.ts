@@ -30,6 +30,9 @@ const agentRunToolNames = new Set<string>([
   "createGeometryPlan",
   "executeAdvancedDrawingCommand",
   "executeGeoGebraCommands",
+  "configureGeoGebraAnimation",
+  "controlGeoGebraAnimation",
+  "inspectGeoGebraObjects",
   "resetCanvas",
   "getCanvasContext",
   "getPNGBase64",
@@ -50,6 +53,34 @@ export type AgentRunUsage = {
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+};
+
+export type AgentRunSkillSelectionStatus = "disabled" | "not_needed" | "selected" | "failed";
+
+export type AgentRunSkillSelectionRecord = {
+  status: AgentRunSkillSelectionStatus;
+  visualProfile?: string | null;
+  selectedSkills: Array<{
+    name: string;
+    reason: string;
+  }>;
+  loadedSkills: Array<{
+    name: string;
+    source: "built-in" | "local" | "remote";
+    maturity: "draft" | "validated" | "default";
+  }>;
+  failedSkillLoads: Array<{
+    name: string;
+    error: string;
+  }>;
+  curriculumNodeIds: string[];
+  enabledAdvancedTools: string[];
+  selectorReason: string;
+  selectorError?: string | null;
+  injectedContextLength: number;
+  cacheHit: boolean;
+  modelCallCount: number;
+  recordedAt: string;
 };
 
 
@@ -103,6 +134,8 @@ export type AgentRunLedgerRecord = {
   durationMs?: number | null;
   usage?: AgentRunUsage | null;
   error?: string | null;
+  /** Persisted preflight Skill selection and actual SKILL.md load outcome. */
+  skillSelection?: AgentRunSkillSelectionRecord | null;
   tools: AgentRunToolRecord[];
 };
 
@@ -154,6 +187,7 @@ export function createAgentRunLedger(input: {
     durationMs: null,
     usage: null,
     error: null,
+    skillSelection: null,
     tools: []
   };
 }
@@ -283,6 +317,30 @@ export function isAgentRunToolRecord(value: unknown): value is AgentRunToolRecor
   );
 }
 
+export function isAgentRunSkillSelectionRecord(value: unknown): value is AgentRunSkillSelectionRecord {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const payload = value as Record<string, unknown>;
+  return (
+    typeof payload.status === "string" &&
+    ["disabled", "not_needed", "selected", "failed"].includes(payload.status) &&
+    isOptionalStringOrNull(payload.visualProfile) &&
+    Array.isArray(payload.selectedSkills) &&
+    payload.selectedSkills.every((item) => isNamedReasonRecord(item)) &&
+    Array.isArray(payload.loadedSkills) &&
+    payload.loadedSkills.every((item) => isLoadedSkillRecord(item)) &&
+    Array.isArray(payload.failedSkillLoads) &&
+    payload.failedSkillLoads.every((item) => isNamedErrorRecord(item)) &&
+    isStringArray(payload.curriculumNodeIds) &&
+    isStringArray(payload.enabledAdvancedTools) &&
+    typeof payload.selectorReason === "string" &&
+    isOptionalStringOrNull(payload.selectorError) &&
+    isNonNegativeInteger(payload.injectedContextLength) &&
+    typeof payload.cacheHit === "boolean" &&
+    isNonNegativeInteger(payload.modelCallCount) &&
+    isAgentRunTimestamp(payload.recordedAt)
+  );
+}
+
 export function isAgentRunFinishInput(value: unknown): value is AgentRunFinishInput {
   if (!value || typeof value !== "object") return false;
   const payload = value as Record<string, unknown>;
@@ -331,6 +389,7 @@ export function isAgentRunLedgerRecord(value: unknown): value is AgentRunLedgerR
     isAgentRunStatusUsageState(payload.status, payload.usage) &&
     isOptionalStringOrNull(payload.error) &&
     isAgentRunStatusErrorState(payload.status, payload.error) &&
+    (payload.skillSelection === undefined || payload.skillSelection === null || isAgentRunSkillSelectionRecord(payload.skillSelection)) &&
     Array.isArray(payload.tools) &&
     payload.tools.every(isAgentRunToolRecord)
   );
@@ -338,6 +397,33 @@ export function isAgentRunLedgerRecord(value: unknown): value is AgentRunLedgerR
 
 function isOptionalStringOrNull(value: unknown) {
   return value === undefined || value === null || typeof value === "string";
+}
+
+function isNamedReasonRecord(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const payload = value as Record<string, unknown>;
+  return typeof payload.name === "string" && Boolean(payload.name.trim()) && typeof payload.reason === "string";
+}
+
+function isNamedErrorRecord(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const payload = value as Record<string, unknown>;
+  return typeof payload.name === "string" && Boolean(payload.name.trim()) && typeof payload.error === "string" && Boolean(payload.error.trim());
+}
+
+function isLoadedSkillRecord(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const payload = value as Record<string, unknown>;
+  return (
+    typeof payload.name === "string" &&
+    Boolean(payload.name.trim()) &&
+    (payload.source === "built-in" || payload.source === "local" || payload.source === "remote") &&
+    (payload.maturity === "draft" || payload.maturity === "validated" || payload.maturity === "default")
+  );
+}
+
+function isStringArray(value: unknown) {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
 

@@ -1,11 +1,5 @@
+import { CircleCheckIcon, CloudDownloadIcon, CloudSyncIcon, DownloadIcon, LibraryBigIcon, RefreshCwIcon, RotateCcwIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import CloudDownloadOutlined from "@mui/icons-material/CloudDownloadOutlined";
-import CheckCircleOutlineRounded from "@mui/icons-material/CheckCircleOutlineRounded";
-import DownloadRounded from "@mui/icons-material/DownloadRounded";
-import LibraryBooksOutlined from "@mui/icons-material/LibraryBooksOutlined";
-import RefreshRounded from "@mui/icons-material/RefreshRounded";
-import ReplayRounded from "@mui/icons-material/ReplayRounded";
-import SyncRounded from "@mui/icons-material/SyncRounded";
 import {
   Box,
   CircularProgress,
@@ -174,7 +168,7 @@ export function ProblemBankSettings() {
         <Box className="settings-problem-bank-header">
           <Stack className="settings-problem-bank-heading" direction="row" spacing={1.25}>
             <Box className="settings-problem-bank-mark" aria-hidden="true">
-              <LibraryBooksOutlined fontSize="small" />
+              <LibraryBigIcon size={18} />
             </Box>
             <Box sx={{ minWidth: 0 }}>
               <Typography variant="subtitle1" sx={{ fontWeight: 760 }}>
@@ -198,7 +192,7 @@ export function ProblemBankSettings() {
                   disabled={busy}
                   onClick={() => void Promise.all([load(), loadCloudCatalog()])}
                 >
-                  {loading ? <CircularProgress size={16} /> : <RefreshRounded fontSize="small" />}
+                  {loading ? <CircularProgress size={16} /> : <RefreshCwIcon size={18} />}
                 </IconButton>
               </span>
             </Tooltip>
@@ -211,7 +205,7 @@ export function ProblemBankSettings() {
                   disabled={busy}
                   onClick={() => void syncCloudCatalog()}
                 >
-                  {cloudSyncing ? <CircularProgress size={16} /> : <CloudDownloadOutlined fontSize="small" />}
+                  {cloudSyncing ? <CircularProgress size={16} /> : <CloudDownloadIcon size={18} />}
                 </IconButton>
               </span>
             </Tooltip>
@@ -224,7 +218,7 @@ export function ProblemBankSettings() {
                   disabled={busy}
                   onClick={() => void reindex()}
                 >
-                  {syncing ? <CircularProgress size={16} /> : <SyncRounded fontSize="small" />}
+                  {syncing ? <CircularProgress size={16} /> : <CloudSyncIcon size={18} />}
                 </IconButton>
               </span>
             </Tooltip>
@@ -399,10 +393,10 @@ function CloudProblemSetRow({
               {downloading
                 ? <CircularProgress size={18} variant={downloadState?.totalBytes ? "determinate" : "indeterminate"} value={progress} />
                 : complete
-                  ? <CheckCircleOutlineRounded fontSize="small" />
+                  ? <CircleCheckIcon size={18} />
                   : canResume
-                    ? <ReplayRounded fontSize="small" />
-                    : <DownloadRounded fontSize="small" />}
+                    ? <RotateCcwIcon size={18} />
+                    : <DownloadIcon size={18} />}
             </IconButton>
           </span>
         </Tooltip>

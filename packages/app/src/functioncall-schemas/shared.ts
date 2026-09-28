@@ -24,7 +24,7 @@ export const executeCommandsDescriptionZh = [
   "不要给 GeoGebra 内置固定坐标轴对象 xAxis、yAxis、zAxis、x轴、y轴、z轴 或 xOyPlane 重新赋值，例如不要写 xAxis = ...、yAxis = ...、zAxis = ... 或 xAxis: ...；函数与坐标轴交点可以用 Intersect(f, xAxis) 或 Root(f, 起始x, 结束x)。需要可操作轴线时先创建 xRef: y = 0 或 yRef: x = 0。",
   "角度标注必须注意点序：GeoGebra 的 Angle(A, O, B) 以 O 为顶点并按点序形成角；具体方向约定由当前题型 skill 决定，不要把局部题型规则当作通用规则。",
   "GeoGebra 某些命令会返回多个对象。不要假设左侧赋值名就是可继续引用的真实对象名；必须先执行核心构造并验证 canvasContext 中实际生成的 label，再对真实 label 调用样式或标注后处理命令。",
-  "如果已经创建滑块、动点或轨迹参数，并且动态播放能帮助用户观察变化关系，可以追加 StartAnimation(参数或动点, true) 打开动画；不要为纯静态图形强行播放。",
+  "如果已经创建自由数值/角度参数及其动态依赖对象，先验证构造，再用 configureGeoGebraAnimation 配置单次、循环、往返或持续增长播放；时钟、天体公转和长期仿真优先使用 continuous，让主时间参数保持单调，周期性只写在依赖表达式中。不要在命令数组中拼接 XML 或依赖粗粒度 StartAnimation。",
   geogebraCanvasVisualGuidance("zh-CN")
 ].join(" ");
 
@@ -34,7 +34,7 @@ export const executeCommandsDescriptionEn = [
   "Do not assign values to GeoGebra built-in fixed axis objects xAxis, yAxis, zAxis, x轴, y轴, z轴, or xOyPlane; do not write xAxis = ..., yAxis = ..., zAxis = ..., or xAxis: .... Function-axis intersections may use Intersect(f, xAxis) or Root(f, startX, endX). If an editable axis line is needed, create xRef: y = 0 or yRef: x = 0 first.",
   "Angle labels are order-sensitive: GeoGebra Angle(A, O, B) uses O as vertex and the point order determines the displayed angle. Direction conventions belong to the active task skill; do not treat local task rules as universal rules.",
   "Some GeoGebra commands return multiple objects. Do not assume the left-hand assignment name is the real object label you can reference later. Execute the core construction first, verify actual labels in canvasContext, and only then call style or label post-processing on real labels.",
-  "If you have created a slider, moving point, or locus parameter and playback helps users observe the changing relationship, you may append StartAnimation(parameter or moving point, true); do not force animation for purely static diagrams.",
+  "After creating a free numeric/angle parameter and its dynamic dependencies, verify the construction and then use configureGeoGebraAnimation for once, loop, ping-pong, or continuous playback. Prefer continuous for clocks, orbital motion, and ongoing simulations so the master time stays monotonic while periodicity lives in dependent expressions. Do not assemble XML or rely on coarse StartAnimation behavior inside the command batch.",
   geogebraCanvasVisualGuidance("en-US")
 ].join(" ");
 

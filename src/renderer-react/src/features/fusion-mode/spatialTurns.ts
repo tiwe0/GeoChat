@@ -79,9 +79,10 @@ export function beginFusionSpatialTurn(
   input: { id: string; anchor: FusionPoint; selectionObjectNames?: readonly string[]; createdAt?: number },
 ): FusionSpatialState {
   if (state.turns.some((turn) => turn.id === input.id)) return state;
-  const turns = state.turns.map((turn) => turn.status === "completed" && !turn.pinned
-    ? { ...turn, collapsed: true }
-    : turn);
+  // Starting a follow-up must not make the previous answer disappear. The
+  // visible-turn selector already bounds canvas clutter, while collapse stays
+  // an explicit user action.
+  const turns = [...state.turns];
   turns.push({
     id: input.id,
     anchor: input.anchor,
@@ -121,16 +122,18 @@ export function synchronizeFusionSpatialTurns(
   const activeIndex = state.activeTurnId
     ? turns.findIndex((turn) => turn.id === state.activeTurnId && turn.status === "active")
     : -1;
+  let settledSelectedGroupId: string | null = null;
 
   if (activeIndex >= 0) {
     const active = turns[activeIndex]!;
     const group = groups.find((candidate) => candidate.messageIds.some((id) => active.messageIds.includes(id)))
       ?? [...groups].reverse().find((candidate) => candidate.messageIds.some((id) => !assignedIds.has(id)));
-    const nextStatus: FusionTurnStatus = input.chatStatus === "error"
-      ? "error"
-      : input.chatStatus === "ready" && Boolean(group)
-        ? "completed"
-        : "active";
+    // `ready` is not a reliable terminal signal while AI SDK is handing a
+    // renderer tool result back into an automatically continued run. Keep the
+    // spatial turn active until the chat lifecycle emits its explicit finish
+    // event (or the user stops it) so the card cannot flicker completed and
+    // active between tool steps.
+    const nextStatus: FusionTurnStatus = input.chatStatus === "error" ? "error" : "active";
     const nextMessageIds = group?.messageIds ?? active.messageIds;
     turns[activeIndex] = {
       ...active,
@@ -141,6 +144,24 @@ export function synchronizeFusionSpatialTurns(
     for (const id of nextMessageIds) assignedIds.add(id);
   }
 
+  if (activeIndex < 0 && state.activeTurnId) {
+    const selectedIndex = turns.findIndex((turn) => turn.id === state.activeTurnId);
+    const selected = selectedIndex >= 0 ? turns[selectedIndex] : undefined;
+    const group = selected?.messageIds.length
+      ? groups.find((candidate) => candidate.messageIds.some((id) => selected.messageIds.includes(id)))
+      : undefined;
+    if (selected && selected.status !== "active" && group) {
+      // `onFinish` can settle the spatial turn one React commit before the AI
+      // SDK publishes its final status/message snapshot. Merge that last
+      // snapshot into the completed turn, but never reopen it as a fresh run.
+      turns[selectedIndex] = sameIds(selected.messageIds, group.messageIds)
+        ? selected
+        : { ...selected, messageIds: group.messageIds };
+      settledSelectedGroupId = group.id;
+      for (const id of group.messageIds) assignedIds.add(id);
+    }
+  }
+
   let activeTurnId = state.activeTurnId;
   const chatIsRunning = input.chatStatus === "submitted" || input.chatStatus === "streaming";
   if (activeIndex < 0 && chatIsRunning) {
@@ -148,8 +169,11 @@ export function synchronizeFusionSpatialTurns(
     // case no spatial turn was frozen by the fusion composer, so adopt the
     // newest unassigned message group without mutating the previously attached
     // completed turn. Retries can reuse the latest matching turn and anchor.
-    const group = [...groups].reverse().find((candidate) => candidate.messageIds.some((id) => !assignedIds.has(id)))
-      ?? groups.at(-1);
+    const group = [...groups].reverse().find((candidate) => (
+      candidate.id !== settledSelectedGroupId
+      && candidate.messageIds.some((id) => !assignedIds.has(id))
+    )) ?? (settledSelectedGroupId ? undefined : groups.at(-1));
+    if (!group) return preserveIdentity(state, { turns, activeTurnId });
     const matchingIndex = group
       ? turns.findIndex((turn) => turn.messageIds.some((id) => group.messageIds.includes(id)))
       : -1;
@@ -210,9 +234,7 @@ function updateTurn(
 }
 
 export function toggleFusionTurnCollapsed(state: FusionSpatialState, turnId: string) {
-  return updateTurn(state, turnId, (turn) => turn.status === "active"
-    ? turn
-    : { ...turn, collapsed: !turn.collapsed });
+  return updateTurn(state, turnId, (turn) => ({ ...turn, collapsed: !turn.collapsed }));
 }
 
 export function toggleFusionTurnPinned(state: FusionSpatialState, turnId: string) {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { MockLanguageModelV3 } from "ai/test";
 import type { AgentModelConfig, AgentRunLedgerRecord, FunctionCallToolName } from "@geochat-ai/app";
-import { activeNativeToolNames } from "../backend/src/agent/native-chat";
+import { activeNativeToolNames, countVerifiedCanvasMutationCycles, nativeConvergenceInstruction } from "../backend/src/agent/native-chat";
 import { createBackendLanguageModel } from "../backend/src/agent/ai-sdk-models";
 import { selectAgentSkillsForRun } from "../backend/src/agent/skill-selector";
 import { createBackendPlanningTools } from "../backend/src/agent/ai-sdk-tools";
@@ -33,13 +33,8 @@ function succeededTool(toolName: FunctionCallToolName, index: number) {
 }
 
 describe("AI SDK native integration boundaries", () => {
-  test("keeps native operational tools visible while gating only terminal completion", () => {
-    expect(activeNativeToolNames(runWithTools([]), availableTools)).toEqual([
-      "getCanvasContext",
-      "createGeometryPlan",
-      "executeGeoGebraCommands",
-      "showSolutionSteps",
-    ]);
+  test("keeps every registered native tool visible and enforces workflow policy during execution", () => {
+    expect(activeNativeToolNames(runWithTools([]), availableTools)).toEqual(availableTools);
 
     const afterRead = [succeededTool("getCanvasContext", 1)];
     expect(activeNativeToolNames(runWithTools(afterRead), availableTools)).toEqual([
@@ -54,7 +49,7 @@ describe("AI SDK native integration boundaries", () => {
     expect(activeNativeToolNames(runWithTools(afterPlan), availableTools)).toContain("executeGeoGebraCommands");
 
     const afterWrite = [...afterPlan, succeededTool("executeGeoGebraCommands", 3)];
-    expect(activeNativeToolNames(runWithTools(afterWrite), availableTools)).not.toContain("setFinished");
+    expect(activeNativeToolNames(runWithTools(afterWrite), availableTools)).toContain("setFinished");
 
     const afterVerification = [...afterWrite, succeededTool("getCanvasContext", 4)];
     expect(activeNativeToolNames(runWithTools(afterVerification), availableTools)).toContain("setFinished");
@@ -63,6 +58,24 @@ describe("AI SDK native integration boundaries", () => {
   test("does not turn documented native tools into unavailable tool errors", () => {
     const afterRead = [succeededTool("getCanvasContext", 1)];
     expect(activeNativeToolNames({ tools: afterRead }, availableTools)).toContain("executeGeoGebraCommands");
+  });
+
+  test("adds a convergence guard after repeated verified canvas mutation cycles", () => {
+    const tools = Array.from({ length: 6 }).flatMap((_, index) => [
+      succeededTool("executeGeoGebraCommands", index * 2),
+      succeededTool("getCanvasContext", index * 2 + 1),
+    ]);
+    expect(countVerifiedCanvasMutationCycles(tools)).toBe(6);
+    expect(nativeConvergenceInstruction({
+      locale: "zh-CN",
+      modelStepCount: 18,
+      tools,
+    }, 32)).toContain("收敛保护");
+    expect(nativeConvergenceInstruction({
+      locale: "en-US",
+      modelStepCount: 1,
+      tools: tools.slice(0, 2),
+    }, 32)).toBe("");
   });
 
   test("uses AI SDK schemas for runtime tool-input validation", async () => {
@@ -168,5 +181,36 @@ describe("AI SDK native integration boundaries", () => {
       schema: expect.objectContaining({ type: "object" }),
     });
     expect(providerOptions).toEqual({ deepseek: { thinking: { type: "disabled" } } });
+  });
+
+  test("fails open to the base GeoGebra workflow when skill selection fails", async () => {
+    const model = new MockLanguageModelV3({
+      doGenerate: async () => {
+        throw new Error("skill selector provider unavailable");
+      },
+    });
+
+    const packet = await selectAgentSkillsForRun({
+      run: {
+        runId: `failed-skill-${crypto.randomUUID()}`,
+        prompt: "绘制一个正方体展开折叠动画。",
+        locale: "zh-CN",
+        attachmentCount: 0,
+        modelProvider: "deepseek",
+      } as AgentRunLedgerRecord,
+      model,
+      temperature: 0,
+    });
+
+    expect(packet).toMatchObject({
+      status: "failed",
+      curriculumNodes: [],
+      selectedSkills: [],
+      loadedSkills: [],
+      failedSkillLoads: [],
+      enabledAdvancedTools: [],
+      injectedContext: "",
+    });
+    expect(packet.selectorReason).toContain("base GeoGebra workflow");
   });
 });

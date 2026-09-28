@@ -122,7 +122,7 @@ export const AGENT_MODEL_REGISTRY = [
     id: "deepseek-flash",
     label: "DeepSeek V4.1 Flash",
     capabilities: ["text", "imageInput", "toolCalling"],
-    maxToolSteps: 24,
+    maxToolSteps: 32,
     defaultTemperature: 0.2
   },
   {

@@ -1,4 +1,4 @@
-import RefreshRounded from "@mui/icons-material/RefreshRounded";
+import { RefreshCwIcon } from "lucide-react";
 import { Box, CircularProgress, IconButton, LinearProgress, Tooltip, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { useUpdateState } from "./useUpdateState";
@@ -96,7 +96,7 @@ export function UpdateSection() {
               disabled={actionBusy}
               onClick={() => void update.check()}
             >
-              {actionBusy ? <CircularProgress size={18} thickness={4.5} /> : <RefreshRounded fontSize="small" />}
+              {actionBusy ? <CircularProgress size={18} thickness={4.5} /> : <RefreshCwIcon size={18} />}
             </IconButton>
           </span>
         </Tooltip>

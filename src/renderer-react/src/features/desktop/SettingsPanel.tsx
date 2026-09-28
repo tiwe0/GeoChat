@@ -1,11 +1,5 @@
+import { BlocksIcon, BrainCircuitIcon, HandHeartIcon, InfoIcon, LibraryBigIcon, SettingsIcon, SlidersHorizontalIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import InfoOutlined from "@mui/icons-material/InfoOutlined";
-import LibraryBooksOutlined from "@mui/icons-material/LibraryBooksOutlined";
-import ExtensionOutlined from "@mui/icons-material/ExtensionOutlined";
-import PsychologyAltOutlined from "@mui/icons-material/PsychologyAltOutlined";
-import SettingsOutlined from "@mui/icons-material/SettingsOutlined";
-import TuneRounded from "@mui/icons-material/TuneRounded";
-import VolunteerActivismOutlined from "@mui/icons-material/VolunteerActivismOutlined";
 import { Box, Stack, Tab, Tabs } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { ModelSettings } from "./settings/ModelSettings";
@@ -49,13 +43,13 @@ export function SettingsPanel(props: SettingsPanelProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const [verticalNavigation, setVerticalNavigation] = useState(true);
   const tabIcons = {
-    model: <TuneRounded fontSize="small" />,
-    problemBank: <LibraryBooksOutlined fontSize="small" />,
-    skills: <ExtensionOutlined fontSize="small" />,
-    thinking: <PsychologyAltOutlined fontSize="small" />,
-    general: <SettingsOutlined fontSize="small" />,
-    about: <InfoOutlined fontSize="small" />,
-    sponsor: <VolunteerActivismOutlined fontSize="small" />,
+    model: <SlidersHorizontalIcon size={18} />,
+    problemBank: <LibraryBigIcon size={18} />,
+    skills: <BlocksIcon size={18} />,
+    thinking: <BrainCircuitIcon size={18} />,
+    general: <SettingsIcon size={18} />,
+    about: <InfoIcon size={18} />,
+    sponsor: <HandHeartIcon size={18} />,
   } as const;
 
   useLayoutEffect(() => {

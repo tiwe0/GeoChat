@@ -1,7 +1,12 @@
 import type { FunctionCallToolName } from "./functioncalls";
 import { geometryVerificationReportFromToolResult } from "./geometry-verifier";
 import type { AgentRunLedgerRecord, AgentRunToolRecord } from "./run-ledger";
-import { deriveAgentWorkflowStateFromTools, evaluateAgentWorkflowToolRecord } from "./workflow-policy";
+import {
+  agentWorkflowCanvasMutationTools,
+  agentWorkflowCanvasVerificationTools,
+  deriveAgentWorkflowStateFromTools,
+  evaluateAgentWorkflowToolRecord
+} from "./workflow-policy";
 
 export type AgentRunReviewRole = "planner" | "verifier" | "critic";
 export type AgentRunReviewSeverity = "info" | "warn" | "error";
@@ -47,17 +52,14 @@ export type AgentRunReviewReport = {
 };
 
 const reviewRoles = ["planner", "verifier", "critic"] as const;
-const canvasWriteTools = new Set<FunctionCallToolName>(["executeGeoGebraCommands"]);
-const canvasVerificationTools = new Set<FunctionCallToolName>(["getCanvasContext", "getPNGBase64"]);
-
 export function reviewAgentRunLedger(run: AgentRunLedgerRecord): AgentRunReviewReport {
   const findings: AgentRunReviewFinding[] = [];
   const metrics: AgentRunReviewMetrics = {
     totalTools: run.tools.length,
     successfulTools: run.tools.filter((tool) => tool.status === "succeeded").length,
     failedTools: run.tools.filter((tool) => tool.status === "failed").length,
-    canvasWriteTools: run.tools.filter((tool) => canvasWriteTools.has(tool.toolName) && tool.status === "succeeded").length,
-    canvasVerificationTools: run.tools.filter((tool) => canvasVerificationTools.has(tool.toolName) && tool.status === "succeeded").length,
+    canvasWriteTools: run.tools.filter((tool) => agentWorkflowCanvasMutationTools.has(tool.toolName) && tool.status === "succeeded").length,
+    canvasVerificationTools: run.tools.filter((tool) => agentWorkflowCanvasVerificationTools.has(tool.toolName) && tool.status === "succeeded").length,
     geometryVerificationReports: 0
   };
 
@@ -133,7 +135,7 @@ function reviewGeometryVerificationTool(
   findings: AgentRunReviewFinding[],
   metrics: AgentRunReviewMetrics
 ) {
-  if (!canvasVerificationTools.has(tool.toolName) || tool.status !== "succeeded") return;
+  if (!agentWorkflowCanvasVerificationTools.has(tool.toolName) || tool.status !== "succeeded") return;
   const report = geometryVerificationReportFromToolResult(tool.result);
   if (!report) return;
   metrics.geometryVerificationReports += 1;

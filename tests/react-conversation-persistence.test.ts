@@ -127,6 +127,41 @@ describe("conversation transcript persistence", () => {
     })).toThrow("quota exceeded");
   });
 
+  test("omits large binary tool payloads from local snapshots", () => {
+    const values = new Map<string, string>();
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => { values.set(key, value); },
+        removeItem: (key: string) => { values.delete(key); },
+      },
+    });
+    const png = "A".repeat(32_000);
+
+    saveLocalConversation({
+      id: "conversation-png",
+      model: "deepseek-chat",
+      title: "PNG",
+      messages: [{
+        id: "assistant-png",
+        role: "assistant",
+        parts: [{
+          type: "tool-getPNGBase64",
+          toolCallId: "png-1",
+          state: "output-available",
+          input: {},
+          output: { ok: true, base64: png, byteEstimate: 24_000 },
+        } as never],
+      }],
+    });
+
+    const raw = values.get("geochatDesktopConversations") ?? "";
+    expect(raw).not.toContain(png);
+    expect(raw).toContain("[binary content omitted from local cache]");
+    expect(readLocalConversation("conversation-png")?.messages).toHaveLength(1);
+  });
+
   test("prefers the freshest conversation summary instead of always shadowing backend history with local data", () => {
     const local = [{ id: "conversation-1", model: "deepseek-chat", title: "local", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:01.000Z", messageCount: 1 }];
     const backend = [{ id: "conversation-1", model: "deepseek-chat", title: "backend", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:02.000Z", messageCount: 4 }];

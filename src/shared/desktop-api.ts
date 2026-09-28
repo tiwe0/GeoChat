@@ -46,6 +46,14 @@ export type DesktopLoggingState = {
   logDirectory: string;
 };
 
+export type DesktopGraphicsState = {
+  enabled: boolean;
+  applied: boolean;
+  configurable: boolean;
+  restartRequired: boolean;
+  mode: "configurable" | "system_managed" | "compatibility";
+};
+
 export type DesktopUpdateErrorCode =
   | "network_unavailable"
   | "metadata_missing"
@@ -216,6 +224,8 @@ export type DesktopUnifiedUpdateState = {
 
 export type GeoChatDesktopApi = {
   getRuntimeInfo: () => Promise<RuntimeInfo>;
+  getGraphicsPreferences: () => Promise<DesktopGraphicsState>;
+  setGraphicsPreferences: (preferences: { hardwareAcceleration: boolean }) => Promise<DesktopGraphicsState>;
   getMcpStatus: () => Promise<DesktopMcpStatus>;
   setMcpEnabled: (enabled: boolean) => Promise<DesktopMcpStatus>;
   getAccessState: () => Promise<DesktopAccessState>;

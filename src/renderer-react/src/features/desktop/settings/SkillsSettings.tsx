@@ -1,7 +1,5 @@
+import { BlocksIcon, SearchIcon, SparklesIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import AutoAwesomeOutlined from "@mui/icons-material/AutoAwesomeOutlined";
-import ExtensionOutlined from "@mui/icons-material/ExtensionOutlined";
-import SearchRounded from "@mui/icons-material/SearchRounded";
 import {
   Box,
   Button,
@@ -156,7 +154,7 @@ export function SkillsSettings() {
     <Box className="settings-page settings-skills-page">
       <Box className="settings-skills-header">
         <Stack className="settings-skills-heading" direction="row" spacing={1.5}>
-          <Box className="settings-skills-mark"><ExtensionOutlined fontSize="small" /></Box>
+          <Box className="settings-skills-mark"><BlocksIcon size={18} /></Box>
           <Box sx={{ minWidth: 0 }}>
             <Typography variant="h6" sx={{ fontWeight: 700 }}>{t("settings.skillsTitle")}</Typography>
             <Typography variant="body2" color="text.secondary">
@@ -220,7 +218,7 @@ export function SkillsSettings() {
               onChange={(event) => setQuery(event.target.value)}
               slotProps={{
                 input: {
-                  startAdornment: <InputAdornment position="start"><SearchRounded fontSize="small" /></InputAdornment>,
+                  startAdornment: <InputAdornment position="start"><SearchIcon size={18} /></InputAdornment>,
                 },
                 htmlInput: { "aria-label": t("settings.skillsSearch") },
               }}
@@ -276,7 +274,7 @@ export function SkillsSettings() {
                       ) : null}
                     </Box>
                     {config.autoActivate && checked ? (
-                      <AutoAwesomeOutlined className="settings-skill-auto-icon" fontSize="small" />
+                      <SparklesIcon className="settings-skill-auto-icon" size={18} />
                     ) : null}
                   </Box>
                 );

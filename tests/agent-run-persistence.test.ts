@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createAgentRunLedger, finishAgentRunLedger, isAgentRunFinishInput, isAgentRunLedgerRecord, isAgentRunToolRecord, isAgentRunUsage, upsertAgentRunTool } from "@geochat-ai/app";
+import { createAgentRunLedger, finishAgentRunLedger, isAgentRunFinishInput, isAgentRunLedgerRecord, isAgentRunSkillSelectionRecord, isAgentRunToolRecord, isAgentRunUsage, upsertAgentRunTool } from "@geochat-ai/app";
 import { createDatabase } from "../backend/src/db/client";
 import { createAgentRunRepository } from "../backend/src/db/agent-run-repository";
 
@@ -36,6 +36,30 @@ describe("AI SDK run ledger", () => {
     });
     expect(JSON.stringify(run)).not.toContain(model.apiKey);
     expect(isAgentRunLedgerRecord(run)).toBe(true);
+  });
+
+  test("validates and persists compact automatic skill-selection evidence", () => {
+    const skillSelection = {
+      status: "selected" as const,
+      visualProfile: "spatial-3d",
+      selectedSkills: [{ name: "solid-geometry", reason: "Matched a folding task." }],
+      loadedSkills: [{ name: "solid-geometry", source: "built-in" as const, maturity: "default" as const }],
+      failedSkillLoads: [{ name: "missing-skill", error: "Skill definition was not found." }],
+      curriculumNodeIds: ["pep-solid-geometry"],
+      enabledAdvancedTools: ["drawPrism"],
+      selectorReason: "The folding task requires solid geometry guidance.",
+      selectorError: null,
+      injectedContextLength: 384,
+      cacheHit: false,
+      modelCallCount: 1,
+      recordedAt: "2026-06-06T00:00:00.000Z",
+    };
+    const run = { ...createRun("run-skill-log"), skillSelection };
+
+    expect(isAgentRunSkillSelectionRecord(skillSelection)).toBe(true);
+    expect(isAgentRunLedgerRecord(run)).toBe(true);
+    expect(JSON.stringify(run)).not.toContain("# solid geometry");
+    expect(isAgentRunSkillSelectionRecord({ ...skillSelection, injectedContextLength: -1 })).toBe(false);
   });
 
   test("validates AI SDK tool records and persists canvas snapshots", () => {

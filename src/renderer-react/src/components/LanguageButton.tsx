@@ -1,4 +1,4 @@
-import TranslateRounded from "@mui/icons-material/TranslateRounded";
+import { LanguagesIcon } from "lucide-react";
 import { IconButton } from "@mui/material";
 import { motion } from "motion/react";
 import { useState } from "react";
@@ -63,7 +63,7 @@ export function LanguageButton({
         animate={{ rotate: rotation }}
         transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
       >
-        <TranslateRounded fontSize="small" />
+        <LanguagesIcon size={18} />
       </motion.span>
     </MotionIconButton>
   );

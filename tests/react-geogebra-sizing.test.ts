@@ -18,7 +18,8 @@ describe("GeoGebra canvas sizing ownership", () => {
     const styles = readFileSync(resolve(root, "src/renderer-react/src/styles.css"), "utf8");
 
     expect(wrapper).toContain('root.querySelector<HTMLElement>(".GeoGebraFrame")');
-    expect(wrapper).toContain("setSize.call(runtimeApi, width, height)");
+    expect(wrapper).toContain("const runtimeHeight = geoGebraRuntimeHeight(");
+    expect(wrapper).toContain("setSize.call(runtimeApi, width, runtimeHeight)");
     expect(wrapper).toContain("new ResizeObserver(scheduleSyncSize)");
     expect(wrapper).toContain('querySelector(".GeoGebraFrame canvas")');
     expect(wrapper).not.toContain('querySelector(".GeoGebraFrame, canvas")');

@@ -1,6 +1,7 @@
-import { Box, Paper, Stack, Typography } from "@mui/material";
+import { Paper, Stack, Typography } from "@mui/material";
 import type { FusionChatMessage } from "./types";
 import { FusionAssistantMessage } from "./FusionAssistantMessage";
+import { StaticMessageMarkdown } from "../chat/StaticMessageMarkdown";
 
 function userMessageText(message: FusionChatMessage) {
   return message.parts.map((part) => {
@@ -39,7 +40,7 @@ export function FusionTranscript(props: {
         >
           {message.role === "assistant"
             ? <FusionAssistantMessage message={message} active={props.streaming && message === props.messages.at(-1)} />
-            : <Box component="span" sx={{ whiteSpace: "pre-wrap" }}>{userMessageText(message)}</Box>}
+            : <StaticMessageMarkdown className="user-message-markdown">{userMessageText(message)}</StaticMessageMarkdown>}
         </Paper>
       ))}
     </Stack>

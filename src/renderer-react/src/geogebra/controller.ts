@@ -2,14 +2,40 @@ import type { GeoGebraApi } from "./ggbdeploy-wrapper";
 import { canvasLabels, getAppletXml, readCanvasContext, tryReadCanvasContext, type CanvasContext } from "./canvas-context";
 import { normalizeGeoGebraCommandSyntax, normalizeGeoGebraFreeParameterCommands } from "@geochat-ai/app/functioncalls";
 import { evaluateCommand, type CommandResult } from "./command-executor";
+import { GeoGebraAnimationRuntime, type AnimationScheduler, type GeoGebraAnimationEasing, type GeoGebraAnimationMode } from "./animation-runtime";
 
 const COMMAND_DELAY_MS = 80;
 
 export class GeoGebraController {
   private api: GeoGebraApi | null = null;
+  private readonly animations: GeoGebraAnimationRuntime;
 
-  setApi(api: GeoGebraApi | null) { this.api = api; }
+  constructor(animationScheduler?: AnimationScheduler) {
+    this.animations = new GeoGebraAnimationRuntime((object, value) => this.call("setValue", object, value), animationScheduler);
+  }
+
+  setApi(api: GeoGebraApi | null) {
+    if (api !== this.api) this.animations.dispose();
+    this.api = api;
+  }
   get ready() { return Boolean(this.api); }
+
+  setToolbarVisible(visible: boolean) {
+    if (!this.api) throw new Error("GeoGebra 画板尚未加载完成。");
+    if (visible && typeof this.api.showToolBar !== "function") {
+      throw new Error("当前 GeoGebra applet 不提供工具栏切换 API。");
+    }
+    // This vendored GeoGebra build couples showToolBar(false) to its native
+    // file menu and removes both. The shell owns the collapsed presentation:
+    // when closing we hide only the construction modes with scoped CSS, so
+    // Open/Save/Export remain available from GeoGebra's menu button.
+    if (visible) {
+      const result = this.call("showToolBar", true);
+      if (result === false) throw new Error("GeoGebra 拒绝了工具栏切换。");
+    }
+    this.refreshVisuals();
+    return visible;
+  }
 
   async executeTool(toolName: string, args: unknown) {
     const input = record(args);
@@ -17,6 +43,12 @@ export class GeoGebraController {
     switch (toolName) {
       case "executeGeoGebraCommands":
         return this.executeCommands(input);
+      case "configureGeoGebraAnimation":
+        return this.configureAnimation(input);
+      case "controlGeoGebraAnimation":
+        return this.controlAnimation(input);
+      case "inspectGeoGebraObjects":
+        return this.inspectObjects(input);
       case "resetCanvas":
         return this.resetCanvas(input);
       case "getCanvasContext":
@@ -143,6 +175,59 @@ export class GeoGebraController {
     };
   }
 
+  private configureAnimation(input: Record<string, unknown>) {
+    const object = requiredString(input.object, "object");
+    if (!Boolean(this.call("exists", object))) throw new Error(`GeoGebra 对象 ${object} 不存在。`);
+    const objectType = String(this.call("getObjectType", object));
+    if (!new Set(["numeric", "angle"]).has(objectType.toLowerCase())) {
+      throw new Error(`对象 ${object} 的类型为 ${objectType}，业务动画目前仅支持数值和角度对象。`);
+    }
+    // A parameter may already be running under GeoGebra's native animation
+    // loop (for example after StartAnimation). Stop that public API loop before
+    // the business timeline starts writing the same value, otherwise the two
+    // schedulers race and the visible motion becomes jerky.
+    if (typeof this.api?.setAnimating === "function") this.call("setAnimating", object, false);
+    const snapshot = this.animations.configure({
+      object,
+      from: requiredNumber(input.from, "from"),
+      to: requiredNumber(input.to, "to"),
+      durationMs: boundedNumber(input.durationMs ?? undefined, 20_000, 2_000, 120_000),
+      mode: animationMode(input.mode),
+      easing: animationEasing(input.easing)
+    }, input.autoplay !== false);
+    return { ok: true, animation: snapshot, clientMeta: { source: "geogebra-applet-setValue", xmlUsed: false } };
+  }
+
+  private controlAnimation(input: Record<string, unknown>) {
+    const action = animationAction(input.action);
+    const objects = requiredStringArray(input.objects, "objects", 16);
+    const animations = this.animations.control(action, objects);
+    return { ok: true, action, animations, clientMeta: { source: "geogebra-applet-setValue", xmlUsed: false } };
+  }
+
+  private inspectObjects(input: Record<string, unknown>) {
+    const objects = requiredStringArray(input.objects, "objects", 20).map((name) => {
+      const exists = Boolean(this.call("exists", name));
+      if (!exists) return { name, exists };
+      return compactRecord({
+        name,
+        exists,
+        defined: this.optionalCall("isDefined", name),
+        objectType: this.optionalCall("getObjectType", name),
+        value: finiteNumber(this.optionalCall("getValue", name)),
+        valueString: this.optionalCall("getValueString", name),
+        commandString: this.optionalCall("getCommandString", name),
+        x: finiteNumber(this.optionalCall("getXcoord", name)),
+        y: finiteNumber(this.optionalCall("getYcoord", name)),
+        z: finiteNumber(this.optionalCall("getZcoord", name)),
+        visible: this.optionalCall("getVisible", name),
+        animating: this.optionalCall("isAnimating", name),
+        businessAnimation: this.animations.snapshot(name)
+      });
+    });
+    return { ok: true, objects, clientMeta: { source: "geogebra-applet", xmlUsed: false } };
+  }
+
   private async resetCanvas(input: Record<string, unknown>) {
     const canvasBefore = tryReadCanvasContext(this.api!, false);
     const resetMeta = await this.resetConstruction(canvasBefore);
@@ -170,6 +255,7 @@ export class GeoGebraController {
   }
 
   private async resetConstruction(canvasBefore: CanvasContext | undefined) {
+    this.animations.dispose();
     const labels = canvasBefore ? canvasLabels(canvasBefore) : [];
     let deleted = 0;
     let failed = 0;
@@ -233,6 +319,13 @@ export class GeoGebraController {
     return Reflect.apply(fn, this.api, args);
   }
 
+  private optionalCall(name: string, ...args: unknown[]) {
+    const fn = this.api?.[name];
+    if (typeof fn !== "function") return undefined;
+    try { return Reflect.apply(fn, this.api, args); }
+    catch (error) { console.error(`[ERROR] GeoGebra optional API ${name} failed`, error); return undefined; }
+  }
+
   private refreshVisuals() {
     const refreshViews = this.api?.refreshViews;
     if (typeof refreshViews === "function") {
@@ -255,4 +348,18 @@ function requiredCommands(value: unknown) {
 function requiredString(value: unknown, field: string) { if (typeof value !== "string" || !value.trim()) throw new Error(`${field} 必须是非空字符串。`); return value.trim(); }
 function requiredNumber(value: unknown, field: string) { if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`${field} 必须是有限数字。`); return value; }
 function boundedNumber(value: unknown, fallback: number, min: number, max: number) { const number = value === undefined ? fallback : requiredNumber(value, "number"); return Math.min(max, Math.max(min, number)); }
+function requiredStringArray(value: unknown, field: string, max: number) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > max) throw new Error(`${field} 必须包含 1 到 ${max} 个对象名。`);
+  return [...new Set(value.map((item, index) => requiredString(item, `${field}[${index}]`)))];
+}
+function animationMode(value: unknown): GeoGebraAnimationMode {
+  return value === "loop" || value === "ping_pong" || value === "continuous" ? value : "once";
+}
+function animationEasing(value: unknown): GeoGebraAnimationEasing { return value === "ease_in_out" ? value : "linear"; }
+function animationAction(value: unknown) {
+  if (value === "play" || value === "pause" || value === "stop" || value === "reset") return value;
+  throw new Error("action 必须是 play、pause、stop 或 reset。");
+}
+function finiteNumber(value: unknown) { const number = Number(value); return Number.isFinite(number) ? number : undefined; }
+function compactRecord(value: Record<string, unknown>) { return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)); }
 function wait(ms: number) { return new Promise((resolve) => setTimeout(resolve, ms)); }

@@ -2,8 +2,8 @@ use crate::{
     app_bundle::{
         app_bundle_manifest_url, app_bundle_requires_shell_update, install_configured_app_bundle,
         is_newer_app_bundle_version, is_shell_version_compatible, normalize_update_error,
-        read_remote_app_bundle_manifest,
-        rollback_app_bundle_installation, shell_update_required_message,
+        read_remote_app_bundle_manifest, rollback_app_bundle_installation,
+        shell_update_required_message,
     },
     installed_client_smoke::{
         installed_client_smoke_current_bundle_version, installed_client_update_smoke_enabled,
@@ -702,15 +702,11 @@ fn current_app_bundle_version(state: &DesktopState) -> Option<String> {
     if let Some(version) = installed_client_smoke_current_bundle_version() {
         return Some(version);
     }
-    state
-        .active_app_bundle
-        .lock()
-        .ok()
-        .and_then(|bundle| {
-            bundle
-                .as_ref()
-                .map(|active| active.manifest.bundle_version.clone())
-        })
+    state.active_app_bundle.lock().ok().and_then(|bundle| {
+        bundle
+            .as_ref()
+            .map(|active| active.manifest.bundle_version.clone())
+    })
 }
 
 fn schedule_app_bundle_restart(app: AppHandle) {

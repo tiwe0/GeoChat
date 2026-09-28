@@ -1,8 +1,4 @@
-import ArrowBackRounded from "@mui/icons-material/ArrowBackRounded";
-import CheckRounded from "@mui/icons-material/CheckRounded";
-import ChevronRightRounded from "@mui/icons-material/ChevronRightRounded";
-import KeyboardArrowDownRounded from "@mui/icons-material/KeyboardArrowDownRounded";
-import ModelTrainingRounded from "@mui/icons-material/ModelTrainingRounded";
+import { ArrowLeftIcon, BrainCircuitIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { Box, ButtonBase, Divider, ListItemIcon, ListItemText, MenuItem, MenuList, Paper, Popper, Slider, Switch, Typography } from "@mui/material";
 import { motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
@@ -151,11 +147,11 @@ export function ModelMenu({ value, models, disabled, thinkingEnabled, thinkingSu
           "&:focus-visible": { outline: "2px solid", outlineColor: "primary.main", outlineOffset: 1 },
         }}
       >
-        <ModelTrainingRounded fontSize="small" />
+        <BrainCircuitIcon size={18} />
         <Typography variant="caption" noWrap sx={{ maxWidth: 118, fontWeight: 600 }}>
           {selectedModel?.label ?? value} · {modeLabel}
         </Typography>
-        <KeyboardArrowDownRounded sx={{ fontSize: 17, transform: open ? "rotate(180deg)" : "none", transition: "transform 160ms ease" }} />
+        <ChevronDownIcon size={17} style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 160ms ease" }} />
       </ButtonBase>
       <Popper
         id="geogebra-copilot-model-menu"
@@ -279,7 +275,7 @@ export function ModelMenu({ value, models, disabled, thinkingEnabled, thinkingSu
                         }}
                         sx={{ minWidth: 0, my: 0 }}
                       />
-                      <ChevronRightRounded fontSize="small" color="disabled" />
+                      <ChevronRightIcon size={18} color="#9ca3af" />
                     </MenuItem>
                   );
                 })}
@@ -291,7 +287,7 @@ export function ModelMenu({ value, models, disabled, thinkingEnabled, thinkingSu
                 return (
                   <>
                     <MenuItem onClick={() => setProviderView(null)} sx={{ minHeight: compact ? 28 : 34, px: 1, color: "text.secondary" }}>
-                      <ArrowBackRounded sx={{ mr: 0.75, fontSize: 17 }} />
+                      <ArrowLeftIcon size={17} style={{ marginRight: 6 }} />
                       <Typography variant="caption" sx={{ fontWeight: 700 }}>{providerLabel(providerView, group.options)}</Typography>
                     </MenuItem>
                     {group.options.map((option) => {
@@ -314,7 +310,7 @@ export function ModelMenu({ value, models, disabled, thinkingEnabled, thinkingSu
                             }}
                             sx={{ minWidth: 0, my: 0 }}
                           />
-                          <ListItemIcon sx={{ minWidth: 24, justifyContent: "flex-end" }}>{selected && <CheckRounded fontSize="small" color="primary" />}</ListItemIcon>
+                          <ListItemIcon sx={{ minWidth: 24, justifyContent: "flex-end" }}>{selected && <CheckIcon size={18} color="#2563eb" />}</ListItemIcon>
                         </MenuItem>
                       );
                     })}

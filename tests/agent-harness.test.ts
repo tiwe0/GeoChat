@@ -259,8 +259,8 @@ describe("function call registry", () => {
       }
     });
     expect(executeCommandsDescriptionZh.includes(geogebraCanvasVisualGuidance("zh-CN"))).toBe(true);
-    expect(executeCommandsDescriptionZh).toContain("StartAnimation");
-    expect(executeCommandsDescriptionZh).toContain("静态图形不要强行播放");
+    expect(executeCommandsDescriptionZh).toContain("configureGeoGebraAnimation");
+    expect(executeCommandsDescriptionZh).toContain("不要通过 XML");
     expect(executeCommandsDescriptionZh).toContain("单批命令优先控制在 100 条以内");
     expect(executeCommandsDescriptionZh).toContain("多对象返回命令必须先验证实际 label");
     expect(executeCommandsDescriptionZh).toContain("具体方向约定由当前题型 skill 决定");
@@ -271,7 +271,7 @@ describe("function call registry", () => {
         geogebraCanvasVisualGuidance("zh-CN")
       )
     ).toBe(true);
-    expect(String(getFunctionCallInputJsonSchema("executeGeoGebraCommands").properties.commands.description)).toContain("StartAnimation");
+    expect(String(getFunctionCallInputJsonSchema("executeGeoGebraCommands").properties.commands.description)).toContain("configureGeoGebraAnimation");
     expect(getFunctionCallSpec("setPerspective").description).toContain("T=3D Graphics");
     expect(getFunctionCallSpec("setPerspective").description).toContain("S/(GA)");
     expect(getFunctionCallSpec("setPerspective").description).toContain("+D");
@@ -285,8 +285,8 @@ describe("function call registry", () => {
       }
     });
     expect(executeCommandsDescriptionEn.includes(geogebraCanvasVisualGuidance("en-US"))).toBe(true);
-    expect(executeCommandsDescriptionEn).toContain("StartAnimation");
-    expect(executeCommandsDescriptionEn).toContain("static diagrams");
+    expect(executeCommandsDescriptionEn).toContain("configureGeoGebraAnimation");
+    expect(executeCommandsDescriptionEn).toContain("assembling animation through XML");
     expect(executeCommandsDescriptionEn).toContain("prefer at most 100 commands per batch");
     expect(executeCommandsDescriptionEn).toContain("verify actual labels before styling");
     expect(executeCommandsDescriptionEn).toContain("direction conventions belong to the active task skill");
@@ -297,7 +297,9 @@ describe("function call registry", () => {
         geogebraCanvasVisualGuidance("en-US")
       )
     ).toBe(true);
-    expect(String(getFunctionCallInputJsonSchema("executeGeoGebraCommands", "en-US").properties.commands.description)).toContain("StartAnimation");
+    expect(String(getFunctionCallInputJsonSchema("executeGeoGebraCommands", "en-US").properties.commands.description)).toContain("configureGeoGebraAnimation");
+    expect(getFunctionCallSpec("configureGeoGebraAnimation").description).toContain("Applet setValue");
+    expect(getFunctionCallSpec("configureGeoGebraAnimation").description).toContain("不写 XML");
     expect(getFunctionCallSpec("setPerspective", "en-US").description).toContain("3D Graphics uses code T");
     expect(getFunctionCallInputJsonSchema("searchGeoGebraCommands", "en-US").properties.query.description).toContain("GeoGebra command search keywords");
     expect(getFunctionCallInputJsonSchema("searchGeoGebraCommands").required).toEqual(["query"]);
@@ -380,20 +382,60 @@ describe("function call registry", () => {
     expect(GEOCHAT_SYSTEM_PROMPT_EN).not.toContain("try to provide a minimal visual expression");
     expect(GEOCHAT_SYSTEM_PROMPT_EN).not.toContain("if dynamic expression is not suitable");
     expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("prefer showAnimationGuide");
-    expect(GEOCHAT_SYSTEM_PROMPT).toContain("StartAnimation(参数或动点, true)");
-    expect(GEOCHAT_SYSTEM_PROMPT).toContain("纯静态图形不要强行播放");
+    expect(GEOCHAT_SYSTEM_PROMPT).toContain("configureGeoGebraAnimation");
+    expect(GEOCHAT_SYSTEM_PROMPT).toContain("显式设置 autoplay: true 立即播放");
+    expect(GEOCHAT_SYSTEM_PROMPT).toContain("主时间参数持续单调增长");
+    expect(GEOCHAT_SYSTEM_PROMPT).toContain("不要写 XML");
     expect(GEOCHAT_SYSTEM_PROMPT).toContain("showChoiceAnalysis");
     expect(GEOCHAT_SYSTEM_PROMPT).toContain("每个选项当作独立 scenario");
     expect(GEOCHAT_SYSTEM_PROMPT).toContain("公共底图独立执行");
     expect(GEOCHAT_SYSTEM_PROMPT).toContain("showSelectedElements");
     expect(GEOCHAT_SYSTEM_PROMPT).toContain("selectedObjects");
-    expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("StartAnimation(parameter or moving point, true)");
-    expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("static diagrams");
+    expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("configureGeoGebraAnimation");
+    expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("explicit autoplay: true so playback starts immediately");
+    expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("keep the master time monotonic");
+    expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("Do not write XML");
     expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("showChoiceAnalysis");
     expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("every choice as its own scenario");
     expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("run independently from the shared base construction");
     expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("showSelectedElements");
     expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("selectedObjects");
+  });
+
+  test("models business problems with orthogonal semantics before commands", () => {
+    expect(GEOCHAT_SYSTEM_PROMPT).toContain("问题建模契约（先建模，后命令）");
+    expect(GEOCHAT_SYSTEM_PROMPT).toContain("观察目标：先说明要观察的变化、关系、轨迹、极值或定理");
+    expect(GEOCHAT_SYSTEM_PROMPT).toContain("固定/题设对象、自由参数或自由对象、依赖对象、派生测量、结果对象");
+    expect(GEOCHAT_SYSTEM_PROMPT).toContain("参数与自由度：优先用最少且有数学意义的参数覆盖一类情况");
+    expect(GEOCHAT_SYSTEM_PROMPT).toContain("原因→中间量→结果");
+    expect(GEOCHAT_SYSTEM_PROMPT).toContain("固定对象弱化、可操作对象突出、当前研究对象最突出");
+    expect(GEOCHAT_SYSTEM_PROMPT).toContain("内部 label 优先使用稳定、可读、能体现数学或业务角色的语义名");
+    expect(GEOCHAT_SYSTEM_PROMPT).toContain("可依据题目语言和领域使用中文或拉丁字符");
+    expect(GEOCHAT_SYSTEM_PROMPT).toContain("可见 caption 使用简洁的用户语义名");
+    expect(GEOCHAT_SYSTEM_PROMPT).toContain("现实或业务实体不得用 P1、P2、obj1 之类编号代替语义");
+    expect(GEOCHAT_SYSTEM_PROMPT).toContain("操作→观察→猜想→验证→解释");
+    expect(GEOCHAT_SYSTEM_PROMPT).toContain("命令执行成功、对象存在或截图看起来合理都不能单独证明语义正确");
+    expect(GEOCHAT_SYSTEM_PROMPT).toContain("受影响的依赖子图、回滚点和剩余修复预算");
+    expect(GEOCHAT_SYSTEM_PROMPT).toContain("createGeometryPlan 只是已登记 deterministic recipe 的可选编译器");
+    expect(GEOCHAT_SYSTEM_PROMPT).toContain("不要把 recipe 当作通用问题本体");
+    expect(GEOCHAT_SYSTEM_PROMPT).toContain("不保存逐字思维过程");
+    expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("Problem-model contract (model first, commands second)");
+    expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("fixed/given objects, free parameters or objects, dependent objects, derived measurements, result objects");
+    expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("cause-to-intermediate-to-result direction");
+    expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("stable, readable internal labels that express each object's mathematical or domain role");
+    expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("Chinese or Latin-character labels are both valid");
+    expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("concise user-facing semantic captions");
+    expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("Never replace real-world or domain entities with opaque numbering");
+    expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("Successful command execution, object existence, or a plausible screenshot alone does not prove semantic correctness");
+    expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("affected dependency subgraph, rollback point, and remaining repair budget");
+    expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("never treat the recipe catalog as the general problem ontology");
+    expect(GEOCHAT_SYSTEM_PROMPT_EN).toContain("not private step-by-step reasoning");
+
+    const blackboardSchema = getFunctionCallInputJsonSchema("patchBlackboard", "zh-CN");
+    const operationSchema = blackboardSchema.properties.ops.items;
+    expect(operationSchema.properties.key.description).toContain("problem_model");
+    expect(operationSchema.properties.key.description).not.toContain("cube_construction_plan");
+    expect(operationSchema.properties.value.description).toContain("observationGoal、entities、parameters、dependencies、interaction、encoding、invariants、keyStates、stages、recovery");
   });
 
   test("derives planning, renderer executable, and client-executable tool sets from the shared registry", () => {
@@ -408,6 +450,9 @@ describe("function call registry", () => {
       "createGeometryPlan",
       "executeAdvancedDrawingCommand",
       "executeGeoGebraCommands",
+      "configureGeoGebraAnimation",
+      "controlGeoGebraAnimation",
+      "inspectGeoGebraObjects",
       "resetCanvas",
       "getCanvasContext",
       "getPNGBase64",
@@ -455,6 +500,9 @@ describe("function call registry", () => {
     ]);
     expect(getFunctionCallToolNames().filter(isFunctionCallRendererExecutable)).toEqual([
       "executeGeoGebraCommands",
+      "configureGeoGebraAnimation",
+      "controlGeoGebraAnimation",
+      "inspectGeoGebraObjects",
       "resetCanvas",
       "getCanvasContext",
       "getPNGBase64",
@@ -462,6 +510,9 @@ describe("function call registry", () => {
     ]);
     expect(getFunctionCallClientExecutableToolNames()).toEqual([
       "executeGeoGebraCommands",
+      "configureGeoGebraAnimation",
+      "controlGeoGebraAnimation",
+      "inspectGeoGebraObjects",
       "resetCanvas",
       "getCanvasContext",
       "getPNGBase64",
@@ -483,6 +534,13 @@ describe("function call registry", () => {
     expect(isFunctionCallArgs("executeGeoGebraCommands", { commands: ["A = (0, 0)"] })).toBe(true);
     expect(isFunctionCallArgs("executeGeoGebraCommands", { commands: [] })).toBe(false);
     expect(isFunctionCallArgs("executeGeoGebraCommands", { commands: "A = (0, 0)" })).toBe(false);
+    expect(isFunctionCallArgs("configureGeoGebraAnimation", { object: "t", from: 0, to: 1, durationMs: 20_000, mode: "once" })).toBe(true);
+    expect(isFunctionCallArgs("configureGeoGebraAnimation", { object: "time", from: 0, to: 1, durationMs: 20_000, mode: "continuous" })).toBe(true);
+    expect(isFunctionCallArgs("configureGeoGebraAnimation", { object: "t", from: 0, to: 1, durationMs: 100 })).toBe(false);
+    expect(isFunctionCallArgs("controlGeoGebraAnimation", { action: "pause", objects: ["t"] })).toBe(true);
+    expect(isFunctionCallArgs("controlGeoGebraAnimation", { action: "reverse", objects: ["t"] })).toBe(false);
+    expect(isFunctionCallArgs("inspectGeoGebraObjects", { objects: ["t", "P"] })).toBe(true);
+    expect(isFunctionCallArgs("inspectGeoGebraObjects", { objects: [] })).toBe(false);
     expect(isFunctionCallArgs("resetCanvas", {})).toBe(true);
     expect(isFunctionCallArgs("resetCanvas", { perspective: "T" })).toBe(true);
     expect(isFunctionCallArgs("createGeometryPlan", { recipeId: "function.parabola.vertex", inputs: { expression: "x^2" } })).toBe(true);
@@ -663,23 +721,32 @@ describe("function call registry", () => {
           reason: "四面体外接球需要先定位球心和等距约束。"
         }
       ],
+      loadedSkills: [
+        {
+          name: "pyramid-circumsphere",
+          source: "built-in",
+          maturity: "default"
+        }
+      ],
+      failedSkillLoads: [],
       enabledAdvancedTools: ["drawTetrahedronCircumsphere"],
       selectorReason: "题目目标直接匹配四面体外接球构造。",
       injectedContext: "优先用底面外心轴和等距方程组织构图。"
     }, "zh-CN");
 
-    expect(prompt).toContain("【预选 Agent Skill Packet】");
-    expect(prompt).toContain("教材定位：");
-    expect(prompt).toContain("人教A版必修第二册 / 立体几何初步");
+    expect(prompt).toContain("【Agent Skill 补充】");
     expect(prompt).toContain("pyramid-circumsphere");
-    expect(prompt).toContain("base-circumcenter-axis");
-    expect(prompt).toContain("已解锁高级绘图命令");
+    expect(prompt).not.toContain("教材定位：");
+    expect(prompt).not.toContain("已成功加载技能");
+    expect(prompt).not.toContain("技能加载失败");
+    expect(prompt).not.toContain("base-circumcenter-axis");
+    expect(prompt).toContain("可用高级工具");
     expect(prompt).toContain("drawTetrahedronCircumsphere");
-    expect(prompt).toContain("参数：sideLength:number, coordinates:point3d-list");
-    expect(prompt).toContain("前提：四个顶点必须构成非退化四面体。");
-    expect(prompt).toContain("不变量：球心到四个顶点距离相等。");
-    expect(prompt).toContain("压缩指导：优先用底面外心轴和等距方程组织构图。");
-    expect(prompt).toContain("不要再次调用 listSkills、searchSkills、loadSkill 或 activateSkill");
+    expect(prompt).not.toContain("参数：sideLength:number, coordinates:point3d-list");
+    expect(prompt).not.toContain("选择器错误");
+    expect(prompt.length).toBeLessThan(900);
+    expect(prompt).toContain("优先用底面外心轴和等距方程组织构图。");
+    expect(prompt).toContain("基础 GeoGebra 构造与验证流程仍具有优先级");
     expect(prompt).not.toContain("可用 Agent Skills");
     expect(prompt).not.toContain("七年级上册");
   });
@@ -948,18 +1015,39 @@ describe("function call registry", () => {
     expect(prompt).toContain("后端已经用代码完成确定性的 list/search/load 流程");
     expect(prompt).toContain("不要请求工具");
     expect(prompt).toContain("不要选择 skillBriefs 之外的技能");
-    expect(prompt).toContain("技能选择要按互补关系装配");
+    expect(prompt).toContain("默认只选择一个最精确的领域技能");
+    expect(prompt).toContain("第二个技能提供动画、验证等独立正交能力时才追加");
     expect(prompt).toContain("后端会在你选择后读取对应 SKILL.md");
-    expect(prompt).toContain("最多选择三个教材节点和三个技能");
+    expect(prompt).toContain("最多选择两个教材节点和两个技能");
+    expect(prompt).toContain("不能替代基础作图流程");
 
     expect(promptEn).toContain("choose from a compact Candidate Skill Context");
     expect(promptEn).toContain("Candidate Skill Context");
     expect(promptEn).toContain("deterministic list/search/load pipeline");
     expect(promptEn).toContain("Do not ask for tools");
     expect(promptEn).toContain("outside the provided skillBriefs");
-    expect(promptEn).toContain("Choose skills as a complementary set");
+    expect(promptEn).toContain("Default to one precise domain skill");
+    expect(promptEn).toContain("distinct orthogonal capability");
     expect(promptEn).toContain("load selected SKILL.md files");
-    expect(promptEn).toContain("at most three curriculum nodes and at most three skills");
+    expect(promptEn).toContain("at most two curriculum nodes and at most two skills");
+    expect(promptEn).toContain("supplement rather than replace the base drawing workflow");
+  });
+
+  test("keeps failed skill selection out of the main-agent prompt", () => {
+    const prompt = formatSkillSelectionPacketPrompt({
+      status: "failed",
+      curriculumNodes: [],
+      selectedSkills: [],
+      loadedSkills: [],
+      failedSkillLoads: [],
+      enabledAdvancedTools: [],
+      selectorReason: "Temporary selector failed.",
+      injectedContext: "",
+      error: "provider unavailable"
+    }, "zh-CN");
+
+    expect(prompt).toBe("技能预选不可用。本轮直接使用基础 GeoGebra 工作流，不注入猜测的技能。");
+    expect(prompt).not.toContain("provider unavailable");
   });
 
   test("loads cached remote skills from bundled and user cache roots", async () => {
@@ -2570,6 +2658,52 @@ describe("agent run review", () => {
     });
   });
 
+  test("reviews animation configuration and object inspection as a complete mutation-verification pair", () => {
+    let run = baseReviewRun("review-animation-run");
+    run = upsertAgentRunTool(run, {
+      toolCallId: "read-animation",
+      toolName: "getCanvasContext",
+      status: "succeeded",
+      args: {},
+      result: { ok: true, canvasContext: { ready: true } },
+      startedAt: "2026-06-06T00:00:01.000Z",
+      completedAt: "2026-06-06T00:00:02.000Z"
+    });
+    run = upsertAgentRunTool(run, {
+      toolCallId: "configure-animation",
+      toolName: "configureGeoGebraAnimation",
+      status: "succeeded",
+      args: { object: "t", from: 0, to: 1, durationMs: 20_000, mode: "once" },
+      result: { ok: true },
+      startedAt: "2026-06-06T00:00:03.000Z",
+      completedAt: "2026-06-06T00:00:04.000Z"
+    });
+    run = upsertAgentRunTool(run, {
+      toolCallId: "inspect-animation",
+      toolName: "inspectGeoGebraObjects",
+      status: "succeeded",
+      args: { objects: ["t"] },
+      result: { ok: true, objects: [{ name: "t", value: 0 }] },
+      startedAt: "2026-06-06T00:00:05.000Z",
+      completedAt: "2026-06-06T00:00:06.000Z"
+    });
+
+    const report = reviewAgentRunLedger(finishAgentRunLedger(run, {
+      status: "succeeded",
+      completedAt: "2026-06-06T00:00:07.000Z",
+      usage: null,
+      error: null
+    }));
+
+    expect(report).toMatchObject({
+      verdict: "pass",
+      metrics: {
+        canvasWriteTools: 1,
+        canvasVerificationTools: 2
+      }
+    });
+  });
+
   test("warns when geometry verification evidence is incomplete rather than treating it as passed", () => {
     const plan = createGeometryPlanFromRecipe("function.parabola.vertex", {
       expression: "x^2"
@@ -2736,6 +2870,25 @@ describe("workflow policy", () => {
 
     state = advanceAgentWorkflowState(state, "getPNGBase64", true);
     expect(evaluateAgentWorkflowToolCall(state, "showSolutionSteps")).toEqual({ allowed: true });
+  });
+
+  test("treats animation configuration and control as canvas mutations that require object inspection", () => {
+    let state = createInitialAgentWorkflowState();
+    state = advanceAgentWorkflowState(state, "getCanvasContext", true);
+    state = advanceAgentWorkflowState(state, "configureGeoGebraAnimation", true);
+
+    expect(state).toMatchObject({
+      phase: "verifying",
+      hasCanvasWrite: true,
+      hasVerificationAfterWrite: false
+    });
+    expect(evaluateAgentWorkflowToolCall(state, "controlGeoGebraAnimation")).toMatchObject({ allowed: false });
+    expect(evaluateAgentWorkflowToolCall(state, "inspectGeoGebraObjects")).toEqual({ allowed: true });
+
+    state = advanceAgentWorkflowState(state, "inspectGeoGebraObjects", true);
+    expect(state).toMatchObject({ phase: "explaining", hasVerificationAfterWrite: true });
+    state = advanceAgentWorkflowState(state, "controlGeoGebraAnimation", true);
+    expect(state).toMatchObject({ phase: "verifying", hasVerificationAfterWrite: false });
   });
 
   test("replays ledger tool records before accepting the next tool event", () => {

@@ -97,7 +97,15 @@ export async function discoverProviderModels(input: {
       }),
       signal: AbortSignal.timeout(15_000)
     });
-    if (!response.ok) return { status: "failed", message: `HTTP ${response.status}` };
+    if (!response.ok) {
+      const failure = await readProviderProxyFailure(response);
+      return {
+        status: "failed",
+        message: failure?.error === "provider_http_error" && typeof failure.status === "number"
+          ? `Provider responded ${failure.status}`
+          : failure?.message ?? `HTTP ${response.status}`
+      };
+    }
     const proxied = await response.json() as { status?: number; bodyBase64?: string };
     if (typeof proxied.status !== "number" || proxied.status >= 400) {
       // A 401 here means the key is wrong, which the caller should say plainly
@@ -121,4 +129,19 @@ function decodeBase64Utf8(value: string) {
   const binary = atob(value);
   const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
   return new TextDecoder().decode(bytes);
+}
+
+async function readProviderProxyFailure(response: Response) {
+  try {
+    const value = await response.json() as unknown;
+    if (!value || typeof value !== "object") return null;
+    const failure = value as Record<string, unknown>;
+    return {
+      error: typeof failure.error === "string" ? failure.error : undefined,
+      message: typeof failure.message === "string" ? failure.message : undefined,
+      status: typeof failure.status === "number" ? failure.status : undefined
+    };
+  } catch {
+    return null;
+  }
 }

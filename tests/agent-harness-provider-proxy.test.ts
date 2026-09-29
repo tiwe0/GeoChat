@@ -12,6 +12,12 @@ import {
   validateProviderProxyMethodBody
 } from "@geochat-ai/app";
 import { sanitizeProviderError } from "../backend/src/agent/provider-error";
+import {
+  ProviderResponseReadError,
+  ProviderResponseTooLargeError,
+  proxyProviderFetch,
+  readBoundedProviderResponseBody
+} from "../backend/src/services/provider-proxy";
 import { createHttpHarness } from "./agent-harness-http-utils";
 
 describe("provider proxy policy", () => {
@@ -450,6 +456,253 @@ describe("provider proxy policy", () => {
       expect(payload.message).toContain("GET requests cannot include");
       expect(JSON.stringify(payload)).not.toContain("sk-proj-abcdefghijklmnopqrstuvwxyz123456");
       expect(upstreamHits).toBe(0);
+    } finally {
+      fakeProvider.stop(true);
+    }
+  });
+
+  test("reads chunked provider responses without content-length at the exact byte limit", async () => {
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array([1, 2]));
+          controller.enqueue(new Uint8Array([3, 4, 5]));
+          controller.close();
+        }
+      })
+    );
+
+    const body = await readBoundedProviderResponseBody(response, 5);
+
+    expect([...body]).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  test("cancels and aborts chunked provider responses as soon as they exceed the byte limit", async () => {
+    let cancelReason: unknown;
+    let abortCalls = 0;
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array([1, 2, 3]));
+          controller.enqueue(new Uint8Array([4, 5, 6]));
+        },
+        cancel(reason) {
+          cancelReason = reason;
+        }
+      })
+    );
+
+    await expect(readBoundedProviderResponseBody(response, 5, () => {
+      abortCalls += 1;
+    })).rejects.toBeInstanceOf(ProviderResponseTooLargeError);
+    expect(cancelReason).toBeInstanceOf(ProviderResponseTooLargeError);
+    expect(abortCalls).toBe(1);
+  });
+
+  test("rejects oversized content-length before pulling the provider response body", async () => {
+    let pullCalls = 0;
+    let cancelReason: unknown;
+    let abortCalls = 0;
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          pullCalls += 1;
+          controller.enqueue(new Uint8Array([1]));
+        },
+        cancel(reason) {
+          cancelReason = reason;
+        }
+      }),
+      { headers: { "content-length": "6" } }
+    );
+
+    await expect(readBoundedProviderResponseBody(response, 5, () => {
+      abortCalls += 1;
+    })).rejects.toBeInstanceOf(ProviderResponseTooLargeError);
+    expect(pullCalls).toBe(0);
+    expect(cancelReason).toBeInstanceOf(ProviderResponseTooLargeError);
+    expect(abortCalls).toBe(1);
+  });
+
+  test("reports provider response stream failures separately from connection failures", async () => {
+    const readFailure = new Error("socket closed while reading");
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        pull() {
+          throw readFailure;
+        }
+      })
+    );
+
+    try {
+      await readBoundedProviderResponseBody(response, 5);
+      throw new Error("Expected provider response reading to fail.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ProviderResponseReadError);
+      expect((error as ProviderResponseReadError).cause).toBe(readFailure);
+    }
+  });
+
+  test("aborts the upstream provider request when the downstream handler request is cancelled", async () => {
+    const { handleRequest } = await createHttpHarness();
+    const downstreamController = new AbortController();
+    let markUpstreamStarted: (() => void) | undefined;
+    let markUpstreamAborted: (() => void) | undefined;
+    const upstreamStarted = new Promise<void>((resolve) => {
+      markUpstreamStarted = resolve;
+    });
+    const upstreamAborted = new Promise<void>((resolve) => {
+      markUpstreamAborted = resolve;
+    });
+    const fakeProvider = Bun.serve({
+      port: 0,
+      fetch: (request) => {
+        markUpstreamStarted?.();
+        return new Promise<Response>((resolve) => {
+          request.signal.addEventListener("abort", () => {
+            markUpstreamAborted?.();
+            resolve(new Response("downstream disconnected"));
+          }, { once: true });
+        });
+      }
+    });
+
+    try {
+      const responsePromise = handleRequest(
+        new Request("http://127.0.0.1:17365/v1/provider-fetch", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            provider: "openai",
+            customBaseUrl: `http://127.0.0.1:${fakeProvider.port}/v1`,
+            url: `http://127.0.0.1:${fakeProvider.port}/v1/models`,
+            method: "GET"
+          }),
+          signal: downstreamController.signal
+        })
+      );
+      await upstreamStarted;
+
+      downstreamController.abort(new DOMException("Renderer request cancelled.", "AbortError"));
+
+      const response = await responsePromise;
+      const payload = await response.json() as { error?: string; message?: string };
+      await upstreamAborted;
+      expect(response.status).toBe(499);
+      expect(payload).toEqual({
+        error: "provider_request_aborted",
+        message: "Provider proxy request was cancelled by the downstream client."
+      });
+    } finally {
+      fakeProvider.stop(true);
+    }
+  });
+
+  test("times out while waiting for provider response headers", async () => {
+    const result = await proxyProviderFetch({
+      provider: "openai",
+      customBaseUrl: "https://llm.local/v1",
+      url: "https://llm.local/v1/models",
+      method: "GET"
+    }, {
+      maxProviderRequestBodyBytes: 1024,
+      maxProviderResponseBodyBytes: 1024
+    }, {
+      timeoutMs: 10,
+      fetch: ((_url, init) => new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+      })) as typeof fetch
+    });
+
+    expect(result).toEqual({
+      httpStatus: 504,
+      body: {
+        error: "provider_fetch_timeout",
+        message: "Provider proxy request timed out."
+      }
+    });
+  });
+
+  test("times out and aborts while reading a stalled provider response body", async () => {
+    let observedAbort = false;
+    const result = await proxyProviderFetch({
+      provider: "openai",
+      customBaseUrl: "https://llm.local/v1",
+      url: "https://llm.local/v1/models",
+      method: "GET"
+    }, {
+      maxProviderRequestBodyBytes: 1024,
+      maxProviderResponseBodyBytes: 1024
+    }, {
+      timeoutMs: 10,
+      fetch: (async (_url, init) => new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          init?.signal?.addEventListener("abort", () => {
+            observedAbort = true;
+            controller.error(init.signal?.reason);
+          }, { once: true });
+        }
+      }))) as typeof fetch
+    });
+
+    expect(observedAbort).toBe(true);
+    expect(result).toEqual({
+      httpStatus: 504,
+      body: {
+        error: "provider_fetch_timeout",
+        message: "Provider proxy request timed out while reading the response."
+      }
+    });
+  });
+
+  test("maps provider non-2xx responses to a distinct error while preserving status and sanitized headers", async () => {
+    const { handleRequest } = await createHttpHarness();
+    const fakeProvider = Bun.serve({
+      port: 0,
+      fetch: () => new Response("upstream unavailable", {
+        status: 503,
+        statusText: "Service Unavailable",
+        headers: {
+          "content-type": "text/plain",
+          "set-cookie": "session=secret",
+          "x-provider-request-id": "provider-failure-1"
+        }
+      })
+    });
+
+    try {
+      const response = await handleRequest(
+        new Request("http://127.0.0.1:17365/v1/provider-fetch", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            provider: "openai",
+            customBaseUrl: `http://127.0.0.1:${fakeProvider.port}/v1`,
+            url: `http://127.0.0.1:${fakeProvider.port}/v1/models`,
+            method: "GET"
+          })
+        })
+      );
+      const payload = await response.json() as {
+        error?: string;
+        status?: number;
+        statusText?: string;
+        headers?: Record<string, string>;
+        bodyBase64?: string;
+      };
+
+      expect(response.status).toBe(502);
+      expect(payload).toMatchObject({
+        error: "provider_http_error",
+        status: 503,
+        statusText: "Service Unavailable",
+        headers: {
+          "content-type": "text/plain",
+          "x-provider-request-id": "provider-failure-1"
+        }
+      });
+      expect(payload.headers).not.toHaveProperty("set-cookie");
+      expect(Buffer.from(payload.bodyBase64 ?? "", "base64").toString()).toBe("upstream unavailable");
     } finally {
       fakeProvider.stop(true);
     }

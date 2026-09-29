@@ -27,7 +27,12 @@ describe("model settings API key probe", () => {
   });
 
   test("reports provider authentication rejection without accepting the key", async () => {
-    globalThis.fetch = (async () => Response.json({ status: 401, bodyBase64: "" })) as typeof fetch;
+    globalThis.fetch = (async () => Response.json({
+      error: "provider_http_error",
+      message: "Provider responded with HTTP 401.",
+      status: 401,
+      bodyBase64: ""
+    }, { status: 502 })) as typeof fetch;
 
     await expect(discoverProviderModels({
       apiOrigin: "http://127.0.0.1:17382",
@@ -35,5 +40,19 @@ describe("model settings API key probe", () => {
       apiKey: "wrong-key",
       force: true,
     })).resolves.toEqual({ status: "failed", message: "Provider responded 401" });
+  });
+
+  test("preserves structured proxy failures instead of collapsing them to HTTP 502", async () => {
+    globalThis.fetch = (async () => Response.json({
+      error: "provider_fetch_timeout",
+      message: "Provider proxy request timed out."
+    }, { status: 504 })) as typeof fetch;
+
+    await expect(discoverProviderModels({
+      apiOrigin: "http://127.0.0.1:17382",
+      provider: "deepseek",
+      apiKey: "test-key",
+      force: true,
+    })).resolves.toEqual({ status: "failed", message: "Provider proxy request timed out." });
   });
 });

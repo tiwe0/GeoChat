@@ -187,6 +187,12 @@ export class AssistantSessionController {
     return true;
   }
 
+  cancelSelectConversation(token: SelectConversationToken): boolean {
+    if (!this.#matchesSelectConversation(token)) return false;
+    this.#replace({ transition: IDLE_TRANSITION });
+    return true;
+  }
+
   restore(restored: RestoredAssistantSession): AssistantSessionSnapshot {
     const generation = this.#snapshot.generation + 1;
     this.#replace({

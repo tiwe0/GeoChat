@@ -9,13 +9,17 @@ import {
   formatLegacyConversationMigrationSummary,
   migrateLegacyConversationCache,
 } from "./legacyMigration";
+import {
+  AssistantSessionController,
+  AssistantSessionTransitionKind,
+} from "../session/assistantSessionController";
 
 export function useConversations(options: {
   apiOrigin: string;
   authSessionRef: { current: AuthSessionController };
   isStreaming: boolean;
   setMessages: Dispatch<SetStateAction<ChatMessage[]>>;
-  changeModel: (model: string) => void;
+  sessionController: AssistantSessionController;
   followLatest: () => void;
   onSelect: (conversation: ConversationSummary) => void;
   onDelete: (conversation: ConversationSummary) => void;
@@ -25,16 +29,18 @@ export function useConversations(options: {
   model: string;
   title: string | null;
 }) {
-  const { apiOrigin, authSessionRef, isStreaming, setMessages, changeModel, followLatest, onSelect, onDelete, t } = options;
+  const { apiOrigin, authSessionRef, isStreaming, setMessages, sessionController, followLatest, onSelect, onDelete, t } = options;
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectingId, setSelectingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [migrationRecoveryAvailable, setMigrationRecoveryAvailable] = useState(false);
-  const selectionGenerationRef = useRef(0);
   const migrationPromiseRef = useRef<ReturnType<typeof migrateLegacyConversationCache> | null>(null);
   const migrationSummaryShownRef = useRef(false);
+  const sessionTransition = sessionController.getSnapshot().transition;
+  const selectingId = sessionTransition.kind === AssistantSessionTransitionKind.SelectConversation
+    ? sessionTransition.conversationId
+    : null;
 
   const load = useCallback(async (silent = false) => {
     const session = authSessionRef.current.snapshot();
@@ -70,9 +76,14 @@ export function useConversations(options: {
   const select = useCallback(async (conversation: ConversationSummary) => {
     const session = authSessionRef.current.snapshot();
     if (isStreaming || deletingId) return;
-    const generation = ++selectionGenerationRef.current;
-    const isCurrent = () => selectionGenerationRef.current === generation;
-    setSelectingId(conversation.id); setError(null);
+    const transition = sessionController.beginSelectConversation(conversation.id);
+    const isCurrent = () => {
+      const snapshot = sessionController.getSnapshot();
+      return snapshot.generation === transition.generation
+        && snapshot.transition.kind === AssistantSessionTransitionKind.SelectConversation
+        && snapshot.transition.conversationId === transition.conversationId;
+    };
+    setError(null);
     let restoringCanvas = false;
     try {
       const stored = await fetchConversationMessages(apiOrigin, session.token, conversation.id);
@@ -85,22 +96,28 @@ export function useConversations(options: {
         () => isCurrent() && authSessionRef.current.isCurrent(session),
       );
       if (!isCurrent() || !authSessionRef.current.isCurrent(session)) return;
-      if (conversation.model) changeModel(conversation.model);
+      if (!sessionController.commitSelectConversation(transition, {
+        title: conversation.title || t("history.untitled"),
+        model: conversation.model || undefined,
+      })) return;
       setMessages(restoredMessages); onSelect(conversation); window.requestAnimationFrame(followLatest);
       console.info(`[INFO] Conversation selected conversationId=${conversation.id} source=backend`);
     } catch (e) {
-      if (!isCurrent() || !authSessionRef.current.isCurrent(session) || (e instanceof DOMException && e.name === "AbortError")) return;
+      if (!isCurrent() || !authSessionRef.current.isCurrent(session)) return;
+      if (e instanceof DOMException && e.name === "AbortError") {
+        sessionController.cancelSelectConversation(transition);
+        return;
+      }
       console.error("[ERROR] Caught exception at src/renderer-react/src/features/conversations/useConversations.ts:72", e);
+      sessionController.cancelSelectConversation(transition);
       const fallback = t(restoringCanvas ? "history.replayFailed" : "history.loadConversationFailed");
       setError(e instanceof Error && e.message.trim() ? e.message : fallback);
     }
-    finally { if (isCurrent()) setSelectingId(null); }
-  }, [apiOrigin, authSessionRef, changeModel, deletingId, followLatest, isStreaming, onSelect, setMessages, t]);
+  }, [apiOrigin, authSessionRef, deletingId, followLatest, isStreaming, onSelect, sessionController, setMessages, t]);
 
   const remove = useCallback(async (conversation: ConversationSummary) => {
     const session = authSessionRef.current.snapshot();
     if (isStreaming || selectingId || deletingId) return false;
-    selectionGenerationRef.current += 1;
     setDeletingId(conversation.id);
     setError(null);
     try {

@@ -19,6 +19,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -37,7 +38,7 @@ import { saveStoredModel } from "../features/local-session/storage";
 import { areSupportedAgentAttachments } from "../features/attachments/capabilities";
 import { useConversations } from "../features/conversations/useConversations";
 import { useConversationBlackboard } from "../features/conversations/useConversationBlackboard";
-import { PanelChatState } from "../features/chat/panelChatState";
+import { AssistantSessionController } from "../features/session/assistantSessionController";
 import {
   CHAT_PAGE_MIN_HEIGHT,
   DEFAULT_PANEL_HEIGHT,
@@ -267,9 +268,30 @@ export function AssistantPanel({
   const [modelOptions, setModelOptions] = useState<RuntimeModelOption[]>(loadModelCatalog());
   const modelOptionsRef = useRef<RuntimeModelOption[]>(loadModelCatalog());
   modelOptionsRef.current = modelOptions;
-  const [selectedModel, setSelectedModel] = useState<string>("");
-  const [thinkingEnabled, setThinkingEnabled] = useState(true);
-  const [thinkingEffort, setThinkingEffort] = useState<ThinkingEffort>("standard");
+  const [assistantSessionController] = useState(() => new AssistantSessionController({
+    threadIdFactory: createAssistantRuntimeThreadId,
+  }));
+  const subscribeAssistantSession = useCallback(
+    (notify: () => void) => assistantSessionController.subscribe(() => notify()),
+    [assistantSessionController],
+  );
+  const getAssistantSessionSnapshot = useCallback(
+    () => assistantSessionController.getSnapshot(),
+    [assistantSessionController],
+  );
+  const assistantSession = useSyncExternalStore(
+    subscribeAssistantSession,
+    getAssistantSessionSnapshot,
+    getAssistantSessionSnapshot,
+  );
+  const {
+    conversationId: currentConversationId,
+    title: currentConversationTitle,
+    threadId: assistantThreadId,
+    model: selectedModel,
+    thinkingEnabled,
+    thinkingEffort,
+  } = assistantSession;
   const [conversationDrawerOpen, setConversationDrawerOpen] = useState(false);
   const [blackboardOpen, setBlackboardOpen] = useState(false);
   const [fusionPanel, setFusionPanel] = useState<FusionPanelId | null>(null);
@@ -278,9 +300,6 @@ export function AssistantPanel({
   const previousInteractionModeRef = useRef(interaction.mode);
   const [onboardingTourReady, setOnboardingTourReady] = useState<boolean | null>(null);
   const suppressBlackboardToggleRef = useRef(false);
-  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
-  const [currentConversationTitle, setCurrentConversationTitle] = useState<string | null>(null);
-  const [assistantThreadId, setAssistantThreadId] = useState(() => createAssistantRuntimeThreadId());
   const assistantRuntimeRef = useRef<AssistantRuntime | null>(null);
   const pendingFusionSelectionRef = useRef<readonly string[] | null>(null);
 
@@ -302,7 +321,6 @@ export function AssistantPanel({
     const timer = window.setTimeout(warm, 900);
     return () => window.clearTimeout(timer);
   }, []);
-  const panelChatRef = useRef(new PanelChatState());
   const selectedModelOption = modelOptions.find((option) => option.id === selectedModel);
   const thinkingSupported = selectedModelOption
     ? agentModelSupportsReasoning(selectedModelOption.provider, selectedModelOption.id)
@@ -323,14 +341,14 @@ export function AssistantPanel({
   const { messages, setMessages, sendMessage, retry, canRetry, stop, status, error } = useAgentRunChat({
     apiOrigin: API_ORIGIN,
     getAuthToken: () => authSessionRef.current.token,
-    getModel: () => panelChatRef.current.model,
+    getModel: () => assistantSessionController.getSnapshot().model,
     getModelConfig: getSelectedModelConfig,
     getModelProvider: (model) => modelOptionsRef.current.find((option) => option.id === model)?.provider ?? "deepseek",
     // Auto and Thinking both request provider reasoning so the streamed
     // reasoning deltas can be shown in the transcript. Instant is the only
     // mode that explicitly suppresses the provider's reasoning channel.
-    getThinking: () => thinkingEnabled,
-    getThinkingEffort: () => thinkingEffort,
+    getThinking: () => assistantSessionController.getSnapshot().thinkingEnabled,
+    getThinkingEffort: () => assistantSessionController.getSnapshot().thinkingEffort,
     onRendererToolSettled: () => onRefreshSelection?.("tool-complete"),
     locale: i18n.language.startsWith("en") ? "en-US" : "zh-CN",
     onFinish: () => {
@@ -340,16 +358,18 @@ export function AssistantPanel({
       if (blackboardOpen) void blackboard.load();
     },
     onRestore: (run) => {
-      panelChatRef.current.setConversationId(run.conversationId);
-      setCurrentConversationId(run.conversationId);
-      setAssistantThreadId(run.conversationId);
-      setCurrentConversationTitle(run.prompt.replace(/\s+/g, " ").trim().slice(0, 80));
-      changeModel(run.modelId, run.modelProvider);
+      const restoredModel = modelOptionsRef.current.find((option) => (
+        option.id === run.modelId && option.provider === run.modelProvider
+      ));
+      assistantSessionController.restore({
+        conversationId: run.conversationId,
+        title: run.prompt.replace(/\s+/g, " ").trim().slice(0, 80),
+        model: restoredModel?.id,
+        thinkingEnabled: run.thinking === true,
+        thinkingEffort: run.thinkingEffort ?? undefined,
+      });
+      if (restoredModel) void saveStoredModel(restoredModel.id);
       assistantRuntimeRef.current?.thread.composer.setText(run.prompt);
-      // A recovered run keeps the reasoning setting it started with, not
-      // whatever the composer happens to show now.
-      setThinkingEnabled(run.thinking === true);
-      if (run.thinkingEffort) setThinkingEffort(run.thinkingEffort);
     },
   });
   const isStreaming = status === "streaming" || status === "submitted";
@@ -449,10 +469,7 @@ export function AssistantPanel({
         // so can leak dangling tool calls and make AI SDK reject the prompt as
         // missing a tool result.
         setMessages([]);
-        panelChatRef.current.setConversationId(conversationId);
-        setCurrentConversationId(conversationId);
-        setAssistantThreadId(conversationId);
-        setCurrentConversationTitle(null);
+        assistantSessionController.activateForSubmit({ conversationId, title: null });
       },
       showChat: () => setPanelView("chat")
     });
@@ -468,18 +485,17 @@ export function AssistantPanel({
       modelOptionsRef.current = models;
       setModelOptions(models);
       const configured = readDesktopConfig().model;
-      const current = panelChatRef.current.model;
+      const current = assistantSessionController.getSnapshot().model;
       const selected = models.find((model) => model.id === current)
         ?? models.find((model) => model.id === configured.model && model.provider === configured.provider)
         ?? models[0];
       if (!selected) return;
-      panelChatRef.current.setModel(selected.id);
-      setSelectedModel(selected.id);
+      assistantSessionController.setModel(selected.id);
     };
     refreshCatalog();
     globalThis.addEventListener(DESKTOP_CONFIG_CHANGED_EVENT, refreshCatalog);
     return () => globalThis.removeEventListener(DESKTOP_CONFIG_CHANGED_EVENT, refreshCatalog);
-  }, []);
+  }, [assistantSessionController]);
   useEffect(() => {
     if (interaction.mode !== "fusion" || !fusionPanel) return;
     const focusFrame = globalThis.requestAnimationFrame(() => {
@@ -503,10 +519,9 @@ export function AssistantPanel({
   }, [fusionPanel, interaction.mode]);
   useEffect(() => {
     if (!selectedModel || thinkingSupported || !thinkingEnabled) return;
-    setThinkingEnabled(false);
-    panelChatRef.current.setThinkingEnabled(false);
+    assistantSessionController.setThinkingEnabled(false);
     void browser.storage.local.set({ [THINKING_ENABLED_STORAGE_KEY]: false });
-  }, [selectedModel, thinkingEnabled, thinkingSupported]);
+  }, [assistantSessionController, selectedModel, thinkingEnabled, thinkingSupported]);
   // Show the tour once on first launch. Completion and skipping are persisted
   // locally so returning users are not interrupted.
   useEffect(() => {
@@ -530,15 +545,16 @@ export function AssistantPanel({
             ? false
             : undefined;
       if (resolvedThinking !== undefined) {
-        setThinkingEnabled(resolvedThinking);
-        panelChatRef.current.setThinkingEnabled(resolvedThinking);
+        assistantSessionController.setThinkingEnabled(resolvedThinking);
       }
       const effort = stored[THINKING_EFFORT_STORAGE_KEY];
-      if (effort === "light" || effort === "standard" || effort === "extended") setThinkingEffort(effort);
+      if (effort === "light" || effort === "standard" || effort === "extended") {
+        assistantSessionController.setThinkingEffort(effort);
+      }
     }).catch((error) => {
       console.error("[ERROR] Failed to read stored thinking preferences", error);
     });
-  }, []);
+  }, [assistantSessionController]);
 
   function completeOnboardingTour() {
     setOnboardingTourReady(false);
@@ -575,25 +591,17 @@ export function AssistantPanel({
     authSessionRef,
     isStreaming,
     setMessages,
-    changeModel,
+    sessionController: assistantSessionController,
     // The assistant-ui ThreadPrimitive.Viewport owns auto-scroll. Conversation
     // switches also remount the viewport through its conversation key below.
     followLatest: () => undefined,
     onSelect: (conversation) => {
       fusionController.resetTurns();
-      panelChatRef.current.setConversationId(conversation.id);
-      setCurrentConversationId(conversation.id);
-      setAssistantThreadId(conversation.id);
-      setCurrentConversationTitle(conversation.title || t("history.untitled"));
       setConversationDrawerOpen(false);
       setBlackboardOpen(false);
     },
     onDelete: (conversation) => {
-      if (conversation.id !== currentConversationId) return;
-      panelChatRef.current.setConversationId(null);
-      setCurrentConversationId(null);
-      setAssistantThreadId(createAssistantRuntimeThreadId());
-      setCurrentConversationTitle(null);
+      if (assistantSessionController.deleteConversation(conversation.id) !== "current") return;
       setMessages([]);
       void assistantRuntime.thread.composer.reset();
       setBlackboardOpen(false);
@@ -626,10 +634,8 @@ export function AssistantPanel({
 
   function startNewConversation() {
     if (isStreaming) return;
-    panelChatRef.current.setConversationId(null);
-    setCurrentConversationId(null);
-    setAssistantThreadId(createAssistantRuntimeThreadId());
-    setCurrentConversationTitle(null);
+    const transition = assistantSessionController.beginNewConversation();
+    assistantSessionController.commitNewConversation(transition);
     setMessages([]);
     void assistantRuntime.thread.composer.reset();
     setConversationDrawerOpen(false);
@@ -668,15 +674,13 @@ export function AssistantPanel({
       currentConversationId,
       requestedConversationId,
     );
-    if (requestedConversationId && requestedConversationId !== assistantThreadId) {
-      setAssistantThreadId(requestedConversationId);
-    }
-    if (conversationId !== currentConversationId) {
-      panelChatRef.current.setConversationId(conversationId);
-      setCurrentConversationId(conversationId);
-      const attachmentTitle = files.find((part) => part.filename)?.filename ?? "";
-      setCurrentConversationTitle(compactConversationTitle(text || attachmentTitle) || t("history.newConversation"));
-    }
+    const attachmentTitle = files.find((part) => part.filename)?.filename ?? "";
+    assistantSessionController.activateForSubmit({
+      conversationId,
+      title: conversationId === currentConversationId
+        ? undefined
+        : compactConversationTitle(text || attachmentTitle) || t("history.newConversation"),
+    });
     setSubmissionError(null);
     onConversationStarted?.();
     try {
@@ -712,11 +716,9 @@ export function AssistantPanel({
   function changeModel(value: string, provider?: string) {
     const selected = modelOptionsRef.current.find((option) => option.id === value && (!provider || option.provider === provider));
     if (!selected) return;
-    panelChatRef.current.setModel(selected.id);
-    setSelectedModel(selected.id);
+    assistantSessionController.setModel(selected.id);
     if (!agentModelSupportsReasoning(selected.provider, selected.id)) {
-      setThinkingEnabled(false);
-      panelChatRef.current.setThinkingEnabled(false);
+      assistantSessionController.setThinkingEnabled(false);
       void browser.storage.local.set({ [THINKING_ENABLED_STORAGE_KEY]: false });
     }
     void saveStoredModel(value);
@@ -724,7 +726,9 @@ export function AssistantPanel({
 
   function getSelectedModelConfig() {
     const config = readDesktopConfig();
-    const selected = modelOptionsRef.current.find((option) => option.id === panelChatRef.current.model);
+    const selected = modelOptionsRef.current.find((option) => (
+      option.id === assistantSessionController.getSnapshot().model
+    ));
     if (!selected) return config.model;
     const credentials = credentialsForProvider(config.providerCredentials, selected.provider);
     if (selected.provider === "custom") {
@@ -749,13 +753,12 @@ export function AssistantPanel({
   }
 
   function changeThinkingEnabled(enabled: boolean) {
-    setThinkingEnabled(enabled);
-    panelChatRef.current.setThinkingEnabled(enabled);
+    assistantSessionController.setThinkingEnabled(enabled);
     void browser.storage.local.set({ [THINKING_ENABLED_STORAGE_KEY]: enabled });
   }
 
   function changeThinkingEffort(effort: ThinkingEffort) {
-    setThinkingEffort(effort);
+    assistantSessionController.setThinkingEffort(effort);
     void browser.storage.local.set({ [THINKING_EFFORT_STORAGE_KEY]: effort });
   }
 

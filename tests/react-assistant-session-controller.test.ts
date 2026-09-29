@@ -50,6 +50,24 @@ describe("AssistantSessionController", () => {
     });
   });
 
+  test("a failed current selection returns to idle without changing the session", () => {
+    const controller = createController({
+      conversationId: "conversation-current",
+      threadId: "conversation-current",
+      title: "Current",
+    });
+    const selection = controller.beginSelectConversation("conversation-failed");
+
+    expect(controller.cancelSelectConversation(selection)).toBeTrue();
+    expect(controller.getSnapshot()).toMatchObject({
+      conversationId: "conversation-current",
+      threadId: "conversation-current",
+      title: "Current",
+      transition: { kind: AssistantSessionTransitionKind.Idle },
+    });
+    expect(controller.commitSelectConversation(selection, { title: "Failed" })).toBeFalse();
+  });
+
   test("activateForSubmit establishes a conversation and supersedes pending work", () => {
     const controller = createController();
     const staleSelection = controller.beginSelectConversation("conversation-stale");

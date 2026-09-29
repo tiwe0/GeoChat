@@ -35,6 +35,13 @@ type SendMessageInput = { text?: string; files?: FileUIPart[] };
 type SendMessageOptions = { body?: { conversationId?: string } };
 type ActiveNativeRun = { runId: string; conversationId: string };
 type NativeRunRequestContext = Omit<StoredActiveNativeRun, "runId">;
+type NativeRunRequestSnapshot = Readonly<{
+  model: AgentModelConfig;
+  locale: "zh-CN" | "en-US";
+  thinking: boolean;
+  thinkingEffort: AgentRunThinkingEffort;
+  desktopConfig: DesktopConfig;
+}>;
 
 const NATIVE_CHAT_NETWORK_RETRY_DELAYS_MS = [750, 1_500, 3_000] as const;
 
@@ -67,6 +74,49 @@ export function unwrapAgentRunSubmissionError(error: unknown) {
   return error instanceof AgentRunSubmissionError ? error.originalError : error;
 }
 
+export class AgentRunSubmissionLease {
+  private acquired = false;
+
+  tryAcquire() {
+    if (this.acquired) return false;
+    this.acquired = true;
+    return true;
+  }
+
+  release() {
+    this.acquired = false;
+  }
+}
+
+export function captureNativeRunRequestSnapshot(
+  input: Pick<Parameters<typeof useAgentRunChat>[0], "getModelConfig" | "getThinking" | "getThinkingEffort" | "locale">,
+  desktopConfig: DesktopConfig = readDesktopConfig(),
+): NativeRunRequestSnapshot {
+  const selectedModel = input.getModelConfig?.();
+  if (!selectedModel) throw new Error("A model configuration is required.");
+  const model = Object.freeze({ ...selectedModel });
+  return Object.freeze({
+    model,
+    locale: input.locale,
+    thinking: input.getThinking() && agentModelSupportsReasoning(model.provider, model.model),
+    thinkingEffort: input.getThinkingEffort(),
+    desktopConfig: structuredClone(desktopConfig),
+  });
+}
+
+export async function stopActiveNativeRun(
+  active: ActiveNativeRun | null,
+  stopChat: () => Promise<unknown>,
+  terminalize: (run: ActiveNativeRun) => Promise<unknown>,
+) {
+  await stopChat();
+  if (active) await terminalize(active);
+}
+
+function isActiveNativeRun(activeRunRef: { current: ActiveNativeRun | null }, runId: string) {
+  return activeRunRef.current?.runId === runId;
+}
+
 export function useAgentRunChat(input: {
   apiOrigin: string;
   getAuthToken: () => string | null;
@@ -93,6 +143,10 @@ export function useAgentRunChat(input: {
   const retryCurrentRequestRef = useRef<(() => Promise<void>) | null>(null);
   const activeRequestContextRef = useRef<NativeRunRequestContext | null>(null);
   const failedRequestContextRef = useRef<NativeRunRequestContext | null>(null);
+  const activeRequestSnapshotRef = useRef<NativeRunRequestSnapshot | null>(null);
+  const failedRequestSnapshotRef = useRef<NativeRunRequestSnapshot | null>(null);
+  const submissionLeaseRef = useRef(new AgentRunSubmissionLease());
+  const userStopInProgressRef = useRef(false);
   const [canRetry, setCanRetry] = useState(false);
 
   const rememberFailedRequest = (request: NativeRunRequestContext | null) => {
@@ -122,7 +176,9 @@ export function useAgentRunChat(input: {
       void retry().catch((retryError) => {
         if (scheduleNetworkRetry(active, retryError)) return;
         rememberFailedRequest(activeRequestContextRef.current);
+        failedRequestSnapshotRef.current = activeRequestSnapshotRef.current;
         activeRequestContextRef.current = null;
+        activeRequestSnapshotRef.current = null;
         activeRunRef.current = null;
         runGenerationRef.current += 1;
         void terminalizeInterruptedNativeRun(active, inputRef.current, installationIdRef).catch((cancelError) => {
@@ -148,24 +204,21 @@ export function useAgentRunChat(input: {
       prepareSendMessagesRequest: ({ messages }) => {
         const active = activeRunRef.current;
         if (!active) throw new Error("A native AI SDK run context is required.");
-        const current = inputRef.current;
-        const model = current.getModelConfig?.();
-        if (!model) throw new Error("A model configuration is required.");
-        const thinking = current.getThinking()
-          && agentModelSupportsReasoning(model.provider, model.model);
+        const snapshot = activeRequestSnapshotRef.current;
+        if (!snapshot) throw new Error("A native AI SDK request snapshot is required.");
         return {
           body: {
             messages: messagesWithSkillPolicy(
               completeInterruptedToolParts(messages),
-              readDesktopConfig(),
-              current.locale,
+              snapshot.desktopConfig,
+              snapshot.locale,
             ),
             runId: active.runId,
             conversationId: active.conversationId,
-            model,
-            locale: current.locale,
-            thinking,
-            thinkingEffort: current.getThinkingEffort(),
+            model: snapshot.model,
+            locale: snapshot.locale,
+            thinking: snapshot.thinking,
+            thinkingEffort: snapshot.thinkingEffort,
           },
         };
       },
@@ -227,7 +280,13 @@ export function useAgentRunChat(input: {
       // would turn a recoverable transport failure into a user cancellation.
       if (isError) return;
       if (isAbort || isDisconnect) {
+        if (isAbort && userStopInProgressRef.current) {
+          clearNetworkRetry();
+          return;
+        }
         const interruptedRun = activeRunRef.current;
+        activeRequestContextRef.current = null;
+        activeRequestSnapshotRef.current = null;
         activeRunRef.current = null;
         runGenerationRef.current += 1;
         clearNetworkRetry();
@@ -248,7 +307,9 @@ export function useAgentRunChat(input: {
       }
       const completedRun = activeRunRef.current;
       activeRequestContextRef.current = null;
+      activeRequestSnapshotRef.current = null;
       rememberFailedRequest(null);
+      failedRequestSnapshotRef.current = null;
       activeRunRef.current = null;
       runGenerationRef.current += 1;
       clearNetworkRetry();
@@ -257,10 +318,13 @@ export function useAgentRunChat(input: {
     },
     onError: (error) => {
       console.error(`[ERROR] Native AI SDK chat failed: ${error.message}`, error);
+      if (userStopInProgressRef.current) return;
       const active = activeRunRef.current;
       if (active && scheduleNetworkRetry(active, error)) return;
       rememberFailedRequest(activeRequestContextRef.current);
+      failedRequestSnapshotRef.current = activeRequestSnapshotRef.current;
       activeRequestContextRef.current = null;
+      activeRequestSnapshotRef.current = null;
       activeRunRef.current = null;
       runGenerationRef.current += 1;
       clearNetworkRetry();
@@ -298,115 +362,158 @@ export function useAgentRunChat(input: {
   }, []);
 
   const sendMessage = useCallback(async (message: SendMessageInput, options?: SendMessageOptions) => {
-    await recoveryPromiseRef.current;
-    if (chat.status === "submitted" || chat.status === "streaming" || activeRunRef.current) return;
+    if (!submissionLeaseRef.current.tryAcquire()) return;
     const conversationId = options?.body?.conversationId;
-    if (!conversationId) throw new Error("A conversation id is required for an agent run.");
-    const files = message.files ?? [];
-    if (!areSupportedAgentAttachments(files)) {
-      const unsupported = files.find((file) => !file.mediaType?.startsWith("image/"));
-      throw new Error(`Unsupported agent attachment: ${unsupported?.filename ?? "file"}. Only image attachments are supported.`);
-    }
-    const localAttachments = toImageAttachments(files);
-    const currentPrompt = message.text?.trim() || (localAttachments.length ? "Analyze the attached image and help with the GeoGebra task." : "");
-    if (!currentPrompt) return;
-    const current = inputRef.current;
-    const attachments = await uploadImageAttachments(current.apiOrigin, current.getAuthToken(), localAttachments);
-    const uploadedFiles = files.map((file, index) => attachments[index]
-      ? { ...file, url: attachments[index]!.dataUrl }
-      : file);
-    const runId = `run_${crypto.randomUUID().replaceAll("-", "")}`;
-    clearNetworkRetry();
-    runGenerationRef.current += 1;
-    const text = message.text?.trim();
-    const model = current.getModelConfig?.();
-    if (!model) {
-      activeRunRef.current = null;
-      throw new Error("A model configuration is required.");
-    }
-    const thinking = current.getThinking() && agentModelSupportsReasoning(model.provider, model.model);
-    const requestContext: NativeRunRequestContext = {
-      conversationId,
-      modelProvider: model.provider,
-      modelId: model.model,
-      prompt: currentPrompt,
-      thinking,
-      thinkingEffort: current.getThinkingEffort(),
-    };
-    activeRequestContextRef.current = requestContext;
-    rememberFailedRequest(null);
-    let messageAccepted = false;
     try {
-      await activateNativeRun(activeRunRef, {
-        runId,
-        ...requestContext,
-      });
-      messageAccepted = true;
-      if (text) await chat.sendMessage({ text, ...(uploadedFiles.length ? { files: uploadedFiles } : {}) });
-      else await chat.sendMessage({ files: uploadedFiles });
-    } catch (error) {
-      if (messageAccepted) rememberFailedRequest(requestContext);
-      activeRequestContextRef.current = null;
-      activeRunRef.current = null;
-      runGenerationRef.current += 1;
-      try {
-        await terminalizeInterruptedNativeRun({ runId, conversationId }, current, installationIdRef);
-      } catch (cancelError) {
-        console.error(`[ERROR] Failed to terminalize rejected native AI SDK run runId=${runId}`, cancelError);
+      if (!conversationId) throw new Error("A conversation id is required for an agent run.");
+      const files = message.files ?? [];
+      if (!areSupportedAgentAttachments(files)) {
+        const unsupported = files.find((file) => !file.mediaType?.startsWith("image/"));
+        throw new Error(`Unsupported agent attachment: ${unsupported?.filename ?? "file"}. Only image attachments are supported.`);
       }
-      throw new AgentRunSubmissionError(error, messageAccepted);
+      const localAttachments = toImageAttachments(files);
+      const currentPrompt = message.text?.trim() || (localAttachments.length ? "Analyze the attached image and help with the GeoGebra task." : "");
+      if (!currentPrompt) return;
+      const current = inputRef.current;
+      const snapshot = captureNativeRunRequestSnapshot(current);
+      const submissionGeneration = runGenerationRef.current;
+
+      await recoveryPromiseRef.current;
+      if (
+        runGenerationRef.current !== submissionGeneration
+        || chat.status === "submitted"
+        || chat.status === "streaming"
+        || activeRunRef.current
+      ) return;
+
+      const attachments = await uploadImageAttachments(current.apiOrigin, current.getAuthToken(), localAttachments);
+      if (
+        runGenerationRef.current !== submissionGeneration
+        || activeRunRef.current
+      ) return;
+      const uploadedFiles = files.map((file, index) => attachments[index]
+        ? { ...file, url: attachments[index]!.dataUrl }
+        : file);
+      const runId = `run_${crypto.randomUUID().replaceAll("-", "")}`;
+      clearNetworkRetry();
+      runGenerationRef.current += 1;
+      const text = message.text?.trim();
+      const requestContext: NativeRunRequestContext = {
+        conversationId,
+        modelProvider: snapshot.model.provider,
+        modelId: snapshot.model.model,
+        prompt: currentPrompt,
+        thinking: snapshot.thinking,
+        thinkingEffort: snapshot.thinkingEffort,
+      };
+      activeRequestContextRef.current = requestContext;
+      activeRequestSnapshotRef.current = snapshot;
+      rememberFailedRequest(null);
+      failedRequestSnapshotRef.current = null;
+      let messageAccepted = false;
+      try {
+        await activateNativeRun(activeRunRef, {
+          runId,
+          ...requestContext,
+        });
+        messageAccepted = true;
+        if (!isActiveNativeRun(activeRunRef, runId)) throw new Error("Agent run submission was superseded before transport started.");
+        if (text) await chat.sendMessage({ text, ...(uploadedFiles.length ? { files: uploadedFiles } : {}) });
+        else await chat.sendMessage({ files: uploadedFiles });
+      } catch (error) {
+        if (messageAccepted) {
+          rememberFailedRequest(requestContext);
+          failedRequestSnapshotRef.current = snapshot;
+        }
+        activeRequestContextRef.current = null;
+        activeRequestSnapshotRef.current = null;
+        activeRunRef.current = null;
+        runGenerationRef.current += 1;
+        let submissionError: unknown = error;
+        try {
+          await terminalizeInterruptedNativeRun({ runId, conversationId }, current, installationIdRef);
+        } catch (cancelError) {
+          submissionError = new AggregateError(
+            [error, cancelError],
+            `Native AI SDK submission failed and run ${runId} could not be terminalized.`,
+          );
+        }
+        throw new AgentRunSubmissionError(submissionError, messageAccepted);
+      }
+    } finally {
+      submissionLeaseRef.current.release();
     }
   }, [chat]);
 
   const retry = useCallback(async () => {
-    await recoveryPromiseRef.current;
-    if (chat.status === "submitted" || chat.status === "streaming" || activeRunRef.current) return false;
-    const requestContext = failedRequestContextRef.current;
-    if (!requestContext) return false;
-    const runId = `run_${crypto.randomUUID().replaceAll("-", "")}`;
-    clearNetworkRetry();
-    runGenerationRef.current += 1;
-    activeRequestContextRef.current = requestContext;
-    rememberFailedRequest(null);
-    let requestActivated = false;
+    if (!submissionLeaseRef.current.tryAcquire()) return false;
     try {
-      await activateNativeRun(activeRunRef, { runId, ...requestContext });
-      requestActivated = true;
-      chat.clearError();
-      // AI SDK owns message truncation and request reconstruction. This
-      // removes a partial assistant response, keeps the original user turn,
-      // and avoids duplicating that message in local history.
-      await chat.regenerate();
-      return true;
-    } catch (error) {
-      activeRequestContextRef.current = null;
-      activeRunRef.current = null;
-      rememberFailedRequest(requestContext);
-      if (requestActivated) {
-        try {
-          await terminalizeInterruptedNativeRun({ runId, conversationId: requestContext.conversationId }, inputRef.current, installationIdRef);
-        } catch (cancelError) {
-          console.error(`[ERROR] Failed to terminalize retried native AI SDK run runId=${runId}`, cancelError);
+      await recoveryPromiseRef.current;
+      if (chat.status === "submitted" || chat.status === "streaming" || activeRunRef.current) return false;
+      const requestContext = failedRequestContextRef.current;
+      const requestSnapshot = failedRequestSnapshotRef.current;
+      if (!requestContext || !requestSnapshot) return false;
+      const runId = `run_${crypto.randomUUID().replaceAll("-", "")}`;
+      clearNetworkRetry();
+      runGenerationRef.current += 1;
+      activeRequestContextRef.current = requestContext;
+      activeRequestSnapshotRef.current = requestSnapshot;
+      rememberFailedRequest(null);
+      failedRequestSnapshotRef.current = null;
+      let requestActivated = false;
+      try {
+        await activateNativeRun(activeRunRef, { runId, ...requestContext });
+        requestActivated = true;
+        if (!isActiveNativeRun(activeRunRef, runId)) throw new Error("Agent run retry was superseded before transport started.");
+        chat.clearError();
+        // AI SDK owns message truncation and request reconstruction. This
+        // removes a partial assistant response, keeps the original user turn,
+        // and avoids duplicating that message in local history.
+        await chat.regenerate();
+        return true;
+      } catch (error) {
+        activeRequestContextRef.current = null;
+        activeRequestSnapshotRef.current = null;
+        activeRunRef.current = null;
+        rememberFailedRequest(requestContext);
+        failedRequestSnapshotRef.current = requestSnapshot;
+        if (requestActivated) {
+          let retryError: unknown = error;
+          try {
+            await terminalizeInterruptedNativeRun({ runId, conversationId: requestContext.conversationId }, inputRef.current, installationIdRef);
+          } catch (cancelError) {
+            retryError = new AggregateError(
+              [error, cancelError],
+              `Native AI SDK retry failed and run ${runId} could not be terminalized.`,
+            );
+          }
+          throw new AgentRunSubmissionError(retryError, true);
         }
+        throw new AgentRunSubmissionError(error, true);
       }
-      throw new AgentRunSubmissionError(error, true);
+    } finally {
+      submissionLeaseRef.current.release();
     }
   }, [chat]);
 
   const stop = useCallback(async () => {
     const active = activeRunRef.current;
-    activeRequestContextRef.current = null;
-    rememberFailedRequest(null);
-    activeRunRef.current = null;
-    runGenerationRef.current += 1;
-    clearNetworkRetry();
-    await chat.stop();
-    if (!active) return;
-    const current = inputRef.current;
+    userStopInProgressRef.current = true;
     try {
-      await terminalizeInterruptedNativeRun(active, current, installationIdRef);
-    } catch (error) {
-      console.error(`[ERROR] Failed to cancel native AI SDK run runId=${active.runId}`, error);
+      await stopActiveNativeRun(
+        active,
+        () => chat.stop(),
+        (run) => terminalizeInterruptedNativeRun(run, inputRef.current, installationIdRef),
+      );
+      activeRequestContextRef.current = null;
+      activeRequestSnapshotRef.current = null;
+      rememberFailedRequest(null);
+      failedRequestSnapshotRef.current = null;
+      if (!active || activeRunRef.current?.runId === active.runId) activeRunRef.current = null;
+      runGenerationRef.current += 1;
+      clearNetworkRetry();
+    } finally {
+      userStopInProgressRef.current = false;
     }
   }, [chat]);
 

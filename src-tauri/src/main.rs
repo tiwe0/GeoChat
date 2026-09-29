@@ -4,6 +4,8 @@ mod access;
 mod app_bundle;
 mod app_bundle_protocol;
 mod commands;
+mod credential_broker;
+mod credentials;
 mod env_config;
 mod installed_client_smoke;
 mod logging;
@@ -28,6 +30,10 @@ use commands::app_bundle_update::{
     check_app_bundle_update, get_app_bundle_update_state, install_app_bundle_update,
     rollback_app_bundle_update,
 };
+use commands::credentials::{
+    delete_provider_credential, import_legacy_credential, list_provider_credential_metadata,
+    save_provider_credential, CredentialCommandState,
+};
 use commands::graphics::{get_graphics_preferences, set_graphics_preferences, DesktopGraphicsMode};
 use commands::improvement::{
     get_improvement_plan_preferences, set_improvement_plan_preferences,
@@ -48,6 +54,8 @@ use commands::shell_update::{
     check_all_updates, check_for_updates, download_update, get_update_state, install_update,
     set_update_preferences,
 };
+use credential_broker::CredentialBrokerRuntime;
+use credentials::{CredentialVault, PlatformCredentialStore};
 use env_config::configured_string;
 use installed_client_smoke::{
     complete_pending_installed_client_update_evidence, installed_client_update_smoke_cli_enabled,
@@ -158,6 +166,10 @@ fn main() {
             sync_problem_bank_metadata,
             load_problem_bank_page,
             load_problem_detail,
+            save_provider_credential,
+            import_legacy_credential,
+            delete_provider_credential,
+            list_provider_credential_metadata,
             mark_renderer_ready,
             install_update
         ])
@@ -248,7 +260,16 @@ fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
     log::info!(target: "geochat::lifecycle", "GeoChat desktop shell is starting");
     let local_backend_auth_token = local_runtime_auth_token();
     let runtime_authorized = access_allows_runtime_use();
-    let backend = start_backend(&app_data_dir, &resource_dir, &local_backend_auth_token)?;
+    let credential_store = PlatformCredentialStore::new().map_err(|error| error.to_string())?;
+    let credential_vault = Arc::new(CredentialVault::new(Arc::new(credential_store)));
+    let credential_broker = CredentialBrokerRuntime::start(credential_vault.clone())?;
+    let backend = start_backend(
+        &app_data_dir,
+        &resource_dir,
+        &local_backend_auth_token,
+        credential_broker,
+    )?;
+    app.manage(CredentialCommandState::new(credential_vault));
     let shell_update_state = initial_shell_update_state(settings.update_preferences.clone());
     // Resolving verifies every asset in the manifest by hash, so it happens
     // exactly once here and everything downstream reads the cached result.

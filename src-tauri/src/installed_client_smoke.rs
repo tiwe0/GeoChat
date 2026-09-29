@@ -103,6 +103,7 @@ pub(crate) fn run_installed_client_update_smoke_cli() -> Result<(), String> {
         backend: Mutex::new(BackendRuntime {
             base_url: "http://127.0.0.1:0".to_string(),
             child: None,
+            _credential_broker: None,
         }),
         mcp: Mutex::new(McpRuntime::new()),
         shell_update: Mutex::new(ShellUpdateRuntime::new(initial_shell_update_state(

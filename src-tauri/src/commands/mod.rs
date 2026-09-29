@@ -1,5 +1,6 @@
 pub(crate) mod access;
 pub(crate) mod app_bundle_update;
+pub(crate) mod credentials;
 pub(crate) mod graphics;
 pub(crate) mod improvement;
 pub(crate) mod logging;

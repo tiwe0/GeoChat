@@ -24,6 +24,10 @@ tauri-plugin-updater = { version = "2", default-features = false, features = ["r
 time = { version = "0.3", features = ["formatting"] }
 url = "2"
 uuid = { version = "1", features = ["v4"] }
+zeroize = "1"
+
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
+keyring = { version = "=4.2.0", default-features = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = "2.0.2"

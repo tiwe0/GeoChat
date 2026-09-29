@@ -10,6 +10,7 @@ use std::{
 
 use crate::{
     app_bundle::{bundled_resource_root, resolve_active_app_bundle},
+    credential_broker::CredentialBrokerRuntime,
     desktop_database_path,
     logging::sanitize_message,
     DesktopState,
@@ -25,6 +26,7 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 pub(crate) struct BackendRuntime {
     pub(crate) base_url: String,
     pub(crate) child: Option<Child>,
+    pub(crate) _credential_broker: Option<CredentialBrokerRuntime>,
 }
 
 impl Drop for BackendRuntime {
@@ -40,6 +42,7 @@ pub(crate) fn start_backend(
     app_data_dir: &Path,
     resource_dir: &Path,
     auth_token: &str,
+    credential_broker: CredentialBrokerRuntime,
 ) -> Result<BackendRuntime, String> {
     if let Some(configured_url) = development_backend_url() {
         let configured_token = configured_development_backend_auth_token().ok_or_else(|| {
@@ -51,6 +54,7 @@ pub(crate) fn start_backend(
         return Ok(BackendRuntime {
             base_url: configured_url,
             child: None,
+            _credential_broker: Some(credential_broker),
         });
     }
 
@@ -77,6 +81,7 @@ pub(crate) fn start_backend(
         cwd.display()
     );
 
+    let broker_connection = credential_broker.connection();
     let mut command = Command::new(&runtime);
     command
         .arg(&entry)
@@ -85,6 +90,8 @@ pub(crate) fn start_backend(
         .env("GEOCHAT_DESKTOP_BACKEND_HOST", "127.0.0.1")
         .env("GEOCHAT_DESKTOP_BACKEND_AUTH_MODE", "required")
         .env("GEOCHAT_DESKTOP_BACKEND_AUTH_TOKEN", auth_token)
+        .env("GEOCHAT_CREDENTIAL_BROKER_URL", &broker_connection.base_url)
+        .env("GEOCHAT_CREDENTIAL_BROKER_TOKEN", &broker_connection.token)
         .env("GEOCHAT_DESKTOP_ALLOWED_ORIGINS", backend_allowed_origins())
         .env("GEOCHAT_DESKTOP_RESOURCE_ROOT", &resource_root)
         .env("GEOCHAT_DESKTOP_DB_PATH", &database_path)
@@ -109,12 +116,19 @@ pub(crate) fn start_backend(
     )?;
     capture_child_output(&mut child, "backend");
 
-    wait_for_backend_health(&base_url, &mut child, Duration::from_millis(12_000))?;
+    if let Err(error) =
+        wait_for_backend_health(&base_url, &mut child, Duration::from_millis(12_000))
+    {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(error);
+    }
     log::info!(target: "geochat::backend", "Local backend health check passed");
 
     Ok(BackendRuntime {
         base_url,
         child: Some(child),
+        _credential_broker: Some(credential_broker),
     })
 }
 

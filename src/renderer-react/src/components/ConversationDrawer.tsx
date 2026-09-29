@@ -36,6 +36,7 @@ type ConversationDrawerProps = {
   onClose: () => void;
   onSelect: (conversation: ConversationSummary) => void;
   onDelete: (conversation: ConversationSummary) => Promise<boolean>;
+  onExportRecovery?: () => void;
 };
 
 export function ConversationDrawer({
@@ -51,6 +52,7 @@ export function ConversationDrawer({
   onClose,
   onSelect,
   onDelete,
+  onExportRecovery,
 }: ConversationDrawerProps) {
   const { t } = useTranslation();
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -128,7 +130,13 @@ export function ConversationDrawer({
             </Stack>
           ) : conversations.length === 0 ? (
             error ? (
-              <Alert severity="error" sx={{ mt: 0.5 }}>{error}</Alert>
+              <Alert
+                severity="error"
+                sx={{ mt: 0.5 }}
+                action={onExportRecovery ? <Button size="small" onClick={onExportRecovery}>{t("history.exportRecovery")}</Button> : undefined}
+              >
+                {error}
+              </Alert>
             ) : (
               <Typography variant="body2" color="text.secondary" sx={{ px: 1, py: 2 }}>
                 {t("history.empty")}
@@ -136,7 +144,15 @@ export function ConversationDrawer({
             )
           ) : (
             <Stack spacing={0.25}>
-              {error && <Alert severity="error" sx={{ mb: 0.5 }}>{error}</Alert>}
+              {error && (
+                <Alert
+                  severity="error"
+                  sx={{ mb: 0.5 }}
+                  action={onExportRecovery ? <Button size="small" onClick={onExportRecovery}>{t("history.exportRecovery")}</Button> : undefined}
+                >
+                  {error}
+                </Alert>
+              )}
               {conversations.map((conversation) => {
                 const selected = conversation.id === currentConversationId;
                 const confirming = conversation.id === confirmingId;

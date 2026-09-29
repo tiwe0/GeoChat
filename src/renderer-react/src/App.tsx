@@ -1,9 +1,10 @@
 import { MenuIcon, RotateCcwIcon, WrenchIcon } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { CircularProgress } from "@mui/material";
+import { Alert, CircularProgress } from "@mui/material";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { GeoGebraController } from "./geogebra/controller";
+import type { CanvasRecoveryState } from "./geogebra/canvas-transactions";
 import {
   DEFAULT_GEOGEBRA_TOOLBAR_VISIBLE,
   mountGeoGebra,
@@ -19,6 +20,7 @@ import { setFrontendGeoGebraController } from "./geogebra/runtime";
 import { useInteractionMode } from "./features/fusion-mode";
 import { backendOrigin, desktopRuntimeError } from "./features/desktop/runtime";
 import { desktopLogger } from "./features/desktop/desktopLogger";
+import { consumeDesktopConfigRecoveryNotice } from "../../shared/desktop/desktop-config-recovery";
 
 const AssistantPanel = lazy(async () => ({
   default: (await import("./components/AssistantPanel")).AssistantPanel,
@@ -34,13 +36,21 @@ export default function App() {
   const [selectionContext, setSelectionContext] = useState<GeoGebraSelectionContext>({ status: "unavailable", objectNames: [] });
   const [canvasState, setCanvasState] = useState<"loading" | "ready" | "error">("loading");
   const [canvasError, setCanvasError] = useState<string | null>(null);
+  const [canvasRecovery, setCanvasRecovery] = useState<CanvasRecoveryState | null>(null);
+  const [canvasMountGeneration, setCanvasMountGeneration] = useState(0);
+  const [retryingRecovery, setRetryingRecovery] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [toolbarVisible, setToolbarVisible] = useState(DEFAULT_GEOGEBRA_TOOLBAR_VISIBLE);
   const [canvasIntroVisible, setCanvasIntroVisible] = useState(true);
+  const [configRecoveryNotice, setConfigRecoveryNotice] = useState(() => consumeDesktopConfigRecoveryNotice());
 
   // A shell that will not report its backend is a hard failure, not something
   // to paper over with a guessed port.
   const runtimeError = desktopRuntimeError();
+
+  useEffect(() => controllerRef.current.subscribeCanvasRecovery(() => {
+    setCanvasRecovery(controllerRef.current.canvasRecoveryState);
+  }), []);
 
   useEffect(() => {
     let disposed = false;
@@ -79,9 +89,45 @@ export default function App() {
       mountedApplet?.dispose();
       selectionBridgeRef.current?.dispose();
       selectionBridgeRef.current = null;
+      controllerRef.current.setApi(null);
       setFrontendGeoGebraController(null);
     };
-  }, []);
+  }, [canvasMountGeneration]);
+
+  async function retryCanvasRecovery() {
+    if (!canvasRecovery || retryingRecovery) return;
+    setRetryingRecovery(true);
+    try {
+      await controllerRef.current.retryCanvasRecovery();
+    } catch (error) {
+      desktopLogger.warn(error);
+      setCanvasError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setRetryingRecovery(false);
+    }
+  }
+
+  function reloadCanvasForRecovery() {
+    setCanvasState("loading");
+    setCanvasError(null);
+    setCanvasMountGeneration((current) => current + 1);
+  }
+
+  function exportCanvasRecoveryDiagnostics() {
+    if (!canvasRecovery) return;
+    const payload = JSON.stringify({
+      schemaVersion: 1,
+      exportedAt: new Date().toISOString(),
+      canvasState,
+      recovery: canvasRecovery,
+    }, null, 2);
+    const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `geochat-canvas-recovery-${Date.now()}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
 
   async function resetCanvas() {
     if (canvasState !== "ready" || resetting) return;
@@ -126,6 +172,15 @@ export default function App() {
 
   return (
     <main className="frontend-shell">
+      {configRecoveryNotice && (
+        <Alert
+          className="frontend-config-recovery-notice"
+          severity="warning"
+          onClose={() => setConfigRecoveryNotice(null)}
+        >
+          {t("configRecovery.recovered", { count: configRecoveryNotice.recoveredFields.length })}
+        </Alert>
+      )}
       <section className="frontend-canvas" aria-label="GeoGebra 画板">
         <div
           ref={canvasRef}
@@ -187,6 +242,25 @@ export default function App() {
             <strong>{canvasState === "error" ? "GeoGebra 画板加载失败" : "正在加载 GeoGebra 画板…"}</strong>
             {canvasError && <span>{canvasError}</span>}
             {runtimeError && <span>{`Desktop bridge unavailable: ${runtimeError}`}</span>}
+          </div>
+        )}
+        {canvasRecovery && (
+          <div className="frontend-canvas-overlay" role="alert" aria-live="assertive">
+            <div className="frontend-canvas-error" />
+            <strong>{t("canvasRecovery.title")}</strong>
+            <span>{t("canvasRecovery.description")}</span>
+            <span>{canvasRecovery.error}</span>
+            <div className="frontend-canvas-recovery-actions">
+              <button type="button" onClick={() => void retryCanvasRecovery()} disabled={retryingRecovery}>
+                {retryingRecovery ? t("canvasRecovery.retrying") : t("canvasRecovery.retry")}
+              </button>
+              <button type="button" onClick={exportCanvasRecoveryDiagnostics}>
+                {t("canvasRecovery.exportDiagnostics")}
+              </button>
+              <button type="button" onClick={reloadCanvasForRecovery}>
+                {t("canvasRecovery.reload")}
+              </button>
+            </div>
           </div>
         )}
       </section>

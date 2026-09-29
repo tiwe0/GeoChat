@@ -25,6 +25,17 @@ export const zhCN = {
     hideToolbar: "隐藏 GeoGebra 工具栏",
     reset: "重置 GeoGebra 画板",
   },
+  canvasRecovery: {
+    title: "画布需要恢复",
+    description: "上一份构图未能安全恢复，后续画布写入已暂停。",
+    retry: "重试恢复",
+    retrying: "正在重试…",
+    exportDiagnostics: "导出诊断",
+    reload: "重载画布",
+  },
+  configRecovery: {
+    recovered: "已恢复 {{count}} 个无效配置字段，原始数据已隔离保留用于诊断。",
+  },
   panel: {
     thinking: "思考中",
     thinkingComplete: "思考完成",
@@ -173,6 +184,7 @@ export const zhCN = {
     minimizeDescription: "\u6536\u8d77\u52a9\u624b\u9762\u677f\u3002",
   },
   history: {
+    exportRecovery: "导出恢复数据",
     title: "\u5386\u53f2\u5bf9\u8bdd",
     open: "\u6253\u5f00\u5386\u53f2\u5bf9\u8bdd",
     close: "\u5173\u95ed\u5386\u53f2\u5bf9\u8bdd",

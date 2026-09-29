@@ -25,6 +25,17 @@ export const en = {
     hideToolbar: "Hide GeoGebra toolbar",
     reset: "Reset GeoGebra canvas",
   },
+  canvasRecovery: {
+    title: "Canvas recovery required",
+    description: "Canvas changes are paused because the previous construction could not be restored safely.",
+    retry: "Retry recovery",
+    retrying: "Retrying…",
+    exportDiagnostics: "Export diagnostics",
+    reload: "Reload canvas",
+  },
+  configRecovery: {
+    recovered: "Recovered {{count}} invalid configuration field(s). The original data was quarantined for diagnosis.",
+  },
   panel: {
     thinking: "Thinking",
     thinkingComplete: "Thinking complete",
@@ -173,6 +184,7 @@ export const en = {
     minimizeDescription: "Collapse the assistant panel.",
   },
   history: {
+    exportRecovery: "Export recovery data",
     title: "Conversation history",
     open: "Open conversation history",
     close: "Close conversation history",

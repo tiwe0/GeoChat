@@ -71,7 +71,9 @@ export class CanvasTransactionCoordinator {
 
   subscribeRecovery(listener: () => void) {
     this.recoveryListeners.add(listener);
-    return () => this.recoveryListeners.delete(listener);
+    return () => {
+      this.recoveryListeners.delete(listener);
+    };
   }
 
   clearRecoveryForAppletReplacement() {

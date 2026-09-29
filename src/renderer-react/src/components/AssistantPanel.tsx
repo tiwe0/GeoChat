@@ -1032,6 +1032,7 @@ export function AssistantPanel({
         selectingId={selectingConversationId}
         deletingId={deletingConversationId}
         error={conversationHistoryError}
+        onExportRecovery={conversationHistory.migrationRecoveryAvailable ? conversationHistory.exportMigrationRecovery : undefined}
         conversations={conversations}
         currentConversationId={currentConversationId}
         onClose={closeFusionPanel}
@@ -1364,6 +1365,7 @@ export function AssistantPanel({
             selectingId={selectingConversationId}
             deletingId={deletingConversationId}
             error={conversationHistoryError}
+            onExportRecovery={conversationHistory.migrationRecoveryAvailable ? conversationHistory.exportMigrationRecovery : undefined}
             conversations={conversations}
             currentConversationId={currentConversationId}
             onClose={() => setConversationDrawerOpen(false)}

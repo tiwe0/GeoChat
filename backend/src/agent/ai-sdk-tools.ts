@@ -29,7 +29,6 @@ export function createBackendPlanningTools(
   return Object.fromEntries(
     getFunctionCallPlanningToolNames()
       .filter((toolName) => shouldExposeSkillDiscoveryTool(toolName, skillSelection, prompt))
-      .filter((toolName) => shouldExposeBlackboardTool(toolName, run))
       .filter((toolName) => toolName !== "executeAdvancedDrawingCommand" || Boolean(skillSelection?.enabledAdvancedTools.length))
       .filter((toolName) => !disabled.has(toolName))
       .map((toolName) => [toolName, createBackendPlanningTool(toolName, locale, skillSelection, {
@@ -48,15 +47,6 @@ function shouldExposeSkillDiscoveryTool(
   if (!skillSelection) return true;
   if (skillSelection.status !== "disabled") return true;
   return skillRuntimePolicyFromPrompt(prompt).enabled;
-}
-
-function shouldExposeBlackboardTool(toolName: FunctionCallToolName, run?: Pick<AgentRunLedgerRecord, "tools">) {
-  // Working memory is useful from the first planning turn: the original
-  // problem and current goal should be persisted before any drawing tool is
-  // executed. Keep the tools available throughout the run instead of waiting
-  // for a prior canvas write/explanation step.
-  void run;
-  return true;
 }
 
 function createBackendPlanningTool<TToolName extends FunctionCallToolName>(

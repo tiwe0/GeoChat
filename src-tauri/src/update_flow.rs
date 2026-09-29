@@ -306,13 +306,14 @@ pub(crate) fn install_shell_update(
 }
 
 pub(crate) fn schedule_silent_shell_update_check(app: AppHandle) {
-    let Some(state) = app.try_state::<DesktopState>() else {
-        return;
+    let already_running = {
+        let Some(state) = app.try_state::<DesktopState>() else {
+            return;
+        };
+        state
+            .silent_shell_update_task_running
+            .swap(true, Ordering::SeqCst)
     };
-    let already_running = state
-        .silent_shell_update_task_running
-        .swap(true, Ordering::SeqCst);
-    drop(state);
     if already_running {
         return;
     }

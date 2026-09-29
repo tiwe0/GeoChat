@@ -59,6 +59,8 @@ pub(crate) struct AppBundleInstallResult {
     pub(crate) signature_verified: bool,
 }
 
+pub(crate) type RemoteAppBundleManifest = (AppBundleManifest, Vec<u8>, Option<Vec<u8>>);
+
 pub(crate) fn app_bundle_manifest_url() -> Option<String> {
     configured_string(&[
         development_env("GEOCHAT_APP_BUNDLE_MANIFEST_URL"),
@@ -281,7 +283,7 @@ pub(crate) fn resolve_active_app_bundle(
 
 pub(crate) fn read_remote_app_bundle_manifest(
     manifest_url: &str,
-) -> Result<(AppBundleManifest, Vec<u8>, Option<Vec<u8>>), String> {
+) -> Result<RemoteAppBundleManifest, String> {
     let manifest_bytes = read_url_bytes(manifest_url)?;
     let signature_bytes = verify_remote_app_bundle_signature(manifest_url, &manifest_bytes)?;
     let manifest = parse_app_bundle_manifest(&manifest_bytes)?;

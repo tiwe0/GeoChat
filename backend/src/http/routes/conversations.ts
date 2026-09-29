@@ -9,8 +9,7 @@ import {
 } from "@geochat-ai/app";
 import {
   ConversationOwnershipError,
-  ConversationRunActiveError,
-  type ConversationDataScope
+  ConversationRunActiveError
 } from "../../db/conversation-repository";
 import type { BackendHttpContext } from "../context";
 import {

@@ -507,7 +507,6 @@ export function normalizeAgentRunThinkingEffort(value: unknown): AgentRunThinkin
  * tool status, errors, and the current user turn. In-memory records remain intact.
  */
 export function compactAgentRunLedgerForStorage(record: AgentRunLedgerRecord, maxBytes = 2_000_000): AgentRunLedgerRecord {
-  const serialized = JSON.stringify(record);
   const byteLength = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).byteLength;
   if (byteLength(record) <= maxBytes) return record;
 

@@ -48,9 +48,7 @@ export type CurriculumSearchResult = CurriculumNode & {
 };
 
 const ALGEBRA_SKILLS = ["number-expression", "factorization-formulas"];
-const EQUATION_SKILLS = ["equations-inequalities", "quadratic-equation", "inequality-interval"];
 const GRAPH_FUNCTION_SKILLS = ["function-graph", "quadratic-function"];
-const PLANE_GEOMETRY_SKILLS = ["plane-geometry", "triangle-circle-geometry", "geometric-transformations", "geometric-construction"];
 const SOLID_GEOMETRY_SKILLS = ["solid-geometry", "solid-section", "prism", "sphere", "pyramid-circumsphere"];
 const CONIC_SKILLS = ["analytic-geometry-conic", "conic-focus-directrix"];
 const PROBABILITY_SKILLS = ["probability-statistics", "classical-probability", "statistical-distribution"];

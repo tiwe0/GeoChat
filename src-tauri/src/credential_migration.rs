@@ -59,7 +59,7 @@ impl CredentialMigrationJournal {
                 || validate_protocol(&entry.protocol).is_err()
                 || canonical_endpoint.as_deref() != Some(entry.canonical_base_url.as_str())
                 || canonical_reference.as_deref() != Some(entry.credential_ref.as_str())
-                || fingerprint.map_or(true, |digest| {
+                || fingerprint.is_none_or(|digest| {
                     digest.len() != 64
                         || !digest
                             .bytes()

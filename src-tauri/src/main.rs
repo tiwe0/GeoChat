@@ -248,7 +248,7 @@ fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
     log::info!(target: "geochat::lifecycle", "GeoChat desktop shell is starting");
     let local_backend_auth_token = local_runtime_auth_token();
     let runtime_authorized = access_allows_runtime_use();
-    let backend = start_backend(&app_data_dir, &resource_dir)?;
+    let backend = start_backend(&app_data_dir, &resource_dir, &local_backend_auth_token)?;
     let shell_update_state = initial_shell_update_state(settings.update_preferences.clone());
     // Resolving verifies every asset in the manifest by hash, so it happens
     // exactly once here and everything downstream reads the cached result.
@@ -489,10 +489,15 @@ fn now_iso() -> String {
 
 fn local_runtime_auth_token() -> String {
     if cfg!(debug_assertions) {
-        if let Ok(configured) = env::var("GEOCHAT_DESKTOP_LOCAL_AUTH_TOKEN") {
-            let trimmed = configured.trim();
-            if !trimmed.is_empty() {
-                return trimmed.to_string();
+        for name in [
+            "GEOCHAT_DESKTOP_BACKEND_AUTH_TOKEN",
+            "GEOCHAT_DESKTOP_LOCAL_AUTH_TOKEN",
+        ] {
+            if let Ok(configured) = env::var(name) {
+                let trimmed = configured.trim();
+                if !trimmed.is_empty() {
+                    return trimmed.to_string();
+                }
             }
         }
     }

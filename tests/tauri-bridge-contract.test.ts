@@ -117,7 +117,12 @@ describe("Tauri desktop bridge contract", () => {
     const calls: Array<{ command: string; args?: Record<string, unknown> }> = [];
     const api = createTauriDesktopApi(async (command, args) => {
       calls.push({ command, args });
-      return undefined;
+      return (command === "get_runtime_info" ? {
+        platform: "darwin",
+        appVersion: "0.6.1",
+        backendBaseUrl: "http://127.0.0.1:17365",
+        backendAuth: { status: "authorized", token: "test-token" }
+      } : undefined) as never;
     }, fakeListen());
 
     await api.getRuntimeInfo();
@@ -185,6 +190,35 @@ describe("Tauri desktop bridge contract", () => {
       bankSlug: "gaokao",
       problemId: "problem-1"
     });
+  });
+
+  test("decodes authorized and unauthorized runtime authentication states", async () => {
+    const authorized = createTauriDesktopApi(async () => ({
+      platform: "darwin",
+      appVersion: "0.6.1",
+      backendBaseUrl: "http://127.0.0.1:17365",
+      backendAuth: { status: "authorized", token: "test-token" }
+    }) as never, fakeListen());
+    await expect(authorized.getRuntimeInfo()).resolves.toMatchObject({
+      backendAuth: { status: "authorized", token: "test-token" }
+    });
+
+    const unauthorized = createTauriDesktopApi(async () => ({
+      platform: "darwin",
+      appVersion: "0.6.1",
+      backendBaseUrl: "http://127.0.0.1:17365",
+      backendAuth: { status: "unauthorized" }
+    }) as never, fakeListen());
+    await expect(unauthorized.getRuntimeInfo()).resolves.toMatchObject({
+      backendAuth: { status: "unauthorized" }
+    });
+
+    const invalid = createTauriDesktopApi(async () => ({
+      platform: "darwin",
+      appVersion: "0.6.1",
+      backendBaseUrl: "http://127.0.0.1:17365"
+    }) as never, fakeListen());
+    await expect(invalid.getRuntimeInfo()).rejects.toThrow();
   });
 
   test("maps update listeners to stable Tauri event names", async () => {

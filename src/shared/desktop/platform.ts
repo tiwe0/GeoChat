@@ -26,6 +26,6 @@ export async function fetchRuntimeInfo() {
     platform: "web",
     appVersion: APP_VERSION,
     backendBaseUrl: webBackendBaseUrl(),
-    backendAuthToken: undefined
+    backendAuth: { status: "disabled" }
   } satisfies RuntimeInfo;
 }

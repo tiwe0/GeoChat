@@ -12,8 +12,14 @@ pub(crate) struct RuntimeInfo {
     platform: String,
     app_version: String,
     backend_base_url: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    backend_auth_token: Option<String>,
+    backend_auth: RuntimeBackendAuth,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+enum RuntimeBackendAuth {
+    Authorized { token: String },
+    Unauthorized,
 }
 
 #[tauri::command]
@@ -24,10 +30,13 @@ pub(crate) fn get_runtime_info(state: State<'_, DesktopState>) -> Result<Runtime
         platform: env::consts::OS.to_string(),
         app_version: env!("CARGO_PKG_VERSION").to_string(),
         backend_base_url: backend.base_url.clone(),
-        backend_auth_token: state
-            .runtime_authorized
-            .load(Ordering::SeqCst)
-            .then(|| state.local_backend_auth_token.clone()),
+        backend_auth: if state.runtime_authorized.load(Ordering::SeqCst) {
+            RuntimeBackendAuth::Authorized {
+                token: state.local_backend_auth_token.clone(),
+            }
+        } else {
+            RuntimeBackendAuth::Unauthorized
+        },
     })
 }
 

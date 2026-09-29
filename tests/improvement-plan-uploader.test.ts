@@ -8,12 +8,10 @@ import {
 import type { DesktopChatMessage, DesktopConfig } from "../src/shared/desktop/workbench-types";
 
 const runtime: RuntimeInfo = {
+  platform: "darwin",
   appVersion: "0.2.4-test",
   backendBaseUrl: "http://127.0.0.1:17369",
-  backendAuthToken: "test-token",
-  mcpEndpoint: null,
-  mcpHealthUrl: null,
-  mcpEnabled: false
+  backendAuth: { status: "authorized", token: "test-token" }
 };
 
 const config: DesktopConfig = {

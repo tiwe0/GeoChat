@@ -1,32 +1,25 @@
 import { Effect } from "effect";
-import { type ConversationDataScope } from "../db/conversation-repository";
 import { createAgentRunDiagnosticsService } from "../services/agent-run-diagnostics";
 import { createAgentRunEventService } from "../services/agent-run-events";
 import type { BackendHttpContext } from "./context";
+import { isValidPathEncoding } from "./paths";
 import { json, withCors } from "./response";
-import { handleAgentRunObservabilityRoute } from "./routes/agent-run-observability";
-import { handleHealthAndAssetRoute } from "./routes/health-assets";
-import { handleConversationRoute } from "./routes/conversations";
-import { handleMessageRoute } from "./routes/messages";
-import { handleMigrationRoute } from "./routes/migration";
-import { handleNativeChatRoute } from "./routes/native-chat";
-import { handleProblemBankRoute } from "./routes/problem-bank";
-import { handleProviderProxyRoute } from "./routes/provider-proxy";
-import { handleSkillCatalogRoute } from "./routes/skills";
-import { handleBenchmarkRoute } from "./routes/benchmark";
-
-type AuthenticatedDataScope = (
-  request: Request
-) => Promise<
-  | { scope: ConversationDataScope }
-  | { response: Response }
->;
-
+import { matchBackendRouteAccess } from "./route-access";
+import type { DataScopeResolver } from "./scope";
+import {
+  CORS_ALLOWED_HEADERS,
+  CORS_ALLOWED_METHODS,
+  isAllowedOrigin,
+  readBackendHttpSecurity,
+  requestIsAuthorized,
+  type BackendHttpSecurity
+} from "./security";
 export function createBackendHttpHandler(
   context: BackendHttpContext,
   options: {
-    authenticatedDataScope?: AuthenticatedDataScope;
+    authenticatedDataScope?: DataScopeResolver;
     backfillPersistedAgentErrorEvents?: boolean;
+    security?: BackendHttpSecurity;
   } = {}
 ) {
   const {
@@ -35,6 +28,7 @@ export function createBackendHttpHandler(
   const agentRunEvents = createAgentRunEventService(agentRunRepository);
   const agentRunDiagnostics = createAgentRunDiagnosticsService(agentRunRepository);
   const authenticateDataScope = options.authenticatedDataScope ?? authenticatedDataScope;
+  const security = options.security ?? readBackendHttpSecurity();
 
   if (options.backfillPersistedAgentErrorEvents ?? true) {
     void agentRunEvents.backfillPersistedAgentErrorEvents();
@@ -43,7 +37,7 @@ export function createBackendHttpHandler(
   async function handleRequest(request: Request) {
     const response = await Effect.runPromise(
       Effect.tryPromise({
-        try: () => routeRequest(request, context, authenticateDataScope),
+        try: () => routeRequest(request, context, authenticateDataScope, security),
         catch: (error) => error
       }).pipe(
         Effect.catchAll((error) =>
@@ -59,7 +53,7 @@ export function createBackendHttpHandler(
         )
       )
     );
-    return withCors(response, request);
+    return withCors(response, request, security);
   }
 
   function getConversationPersistenceDiagnostics(conversationId: string, expectedRunIds: string[] = []) {
@@ -75,54 +69,113 @@ export function createBackendHttpHandler(
 async function routeRequest(
   request: Request,
   context: BackendHttpContext,
-  authenticateDataScope: AuthenticatedDataScope
+  authenticateDataScope: DataScopeResolver,
+  security: BackendHttpSecurity
 ) {
   const url = new URL(request.url);
+  const routeAccess = matchBackendRouteAccess(url.pathname);
 
-  if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204 });
+  if (!routeAccess) {
+    return json(
+      { error: "not_found", message: "The requested resource was not found." },
+      { status: 404 }
+    );
   }
 
-  const healthOrAssetResponse = await handleHealthAndAssetRoute(request, url, context);
-  if (healthOrAssetResponse) return healthOrAssetResponse;
+  if (!isValidPathEncoding(url.pathname)) {
+    return json(
+      { error: "invalid_path", message: "The request path is not valid." },
+      { status: 400 }
+    );
+  }
 
-  const skillCatalogResponse = await handleSkillCatalogRoute(request, url);
-  if (skillCatalogResponse) return skillCatalogResponse;
+  const origin = request.headers.get("origin");
+  if (origin !== null && !isAllowedOrigin(origin, security)) {
+    return json(
+      { error: "cors_origin_forbidden", message: "The request origin is not allowed." },
+      { status: 403 }
+    );
+  }
 
-  const conversationResponse = await handleConversationRoute(request, url, context, authenticateDataScope);
-  if (conversationResponse) return conversationResponse;
+  if (request.method === "OPTIONS") {
+    return handleCorsPreflight(request, security, routeAccess.methods);
+  }
 
-  const migrationResponse = await handleMigrationRoute(request, url, context, authenticateDataScope);
-  if (migrationResponse) return migrationResponse;
+  if (!routeAccess.methods.includes(request.method as typeof routeAccess.methods[number])) {
+    return json(
+      { error: "method_not_allowed", message: "The requested method is not allowed." },
+      {
+        status: 405,
+        headers: { allow: routeAccess.methods.join(", ") }
+      }
+    );
+  }
 
-  const messageResponse = await handleMessageRoute(request, url, context, authenticateDataScope);
-  if (messageResponse) return messageResponse;
+  if (routeAccess.access === "authenticated" && !requestIsAuthorized(request, security.authentication)) {
+    return json(
+      {
+        error: "unauthorized",
+        message: "A valid local backend bearer token is required."
+      },
+      {
+        status: 401,
+        headers: { "www-authenticate": "Bearer" }
+      }
+    );
+  }
 
-  const problemBankResponse = await handleProblemBankRoute(request, url, context, authenticateDataScope);
-  if (problemBankResponse) return problemBankResponse;
+  const routeResponse = await routeAccess.handle(request, url, context, authenticateDataScope);
+  if (routeResponse) return routeResponse;
 
-  const benchmarkResponse = await handleBenchmarkRoute(request, url, context, authenticateDataScope);
-  if (benchmarkResponse) return benchmarkResponse;
-
-  const nativeChatResponse = await handleNativeChatRoute(request, url, context, authenticateDataScope);
-  if (nativeChatResponse) return nativeChatResponse;
-
-  const agentRunObservabilityResponse = await handleAgentRunObservabilityRoute(request, url, context, authenticateDataScope);
-  if (agentRunObservabilityResponse) return agentRunObservabilityResponse;
-
-  const providerProxyResponse = await handleProviderProxyRoute(request, url, context);
-  if (providerProxyResponse) return providerProxyResponse;
-
-  return json(
-    {
-      error: "not_found",
-      message: `${request.method} ${url.pathname} is not available.`
-    },
-    { status: 404 }
-  );
+  return json({ error: "not_found", message: "The requested resource was not found." }, { status: 404 });
 }
 
-async function authenticatedDataScope(request: Request): ReturnType<AuthenticatedDataScope> {
+function handleCorsPreflight(
+  request: Request,
+  security: BackendHttpSecurity,
+  routeMethods: readonly string[]
+) {
+  const origin = request.headers.get("origin");
+  if (!isAllowedOrigin(origin, security)) {
+    return json(
+      { error: "cors_origin_forbidden", message: "The request origin is not allowed." },
+      { status: 403 }
+    );
+  }
+
+  const requestedMethod = request.headers.get("access-control-request-method")?.toUpperCase();
+  if (
+    !requestedMethod
+    || !CORS_ALLOWED_METHODS.includes(requestedMethod as typeof CORS_ALLOWED_METHODS[number])
+    || !routeMethods.includes(requestedMethod)
+  ) {
+    return json(
+      { error: "cors_method_forbidden", message: "The requested CORS method is not allowed." },
+      { status: 403 }
+    );
+  }
+
+  const requestedHeaders = (request.headers.get("access-control-request-headers") ?? "")
+    .split(",")
+    .map((header) => header.trim().toLowerCase())
+    .filter(Boolean);
+  const forbiddenHeader = requestedHeaders.find(
+    (header) => !CORS_ALLOWED_HEADERS.includes(header as typeof CORS_ALLOWED_HEADERS[number])
+  );
+  if (forbiddenHeader) {
+    return json(
+      {
+        error: "cors_header_forbidden",
+        message: `The requested CORS header is not allowed: ${forbiddenHeader}`
+      },
+      { status: 403 }
+    );
+  }
+
+  return new Response(null, { status: 204 });
+}
+
+async function authenticatedDataScope(request: Request): ReturnType<DataScopeResolver> {
   void request;
   return { scope: { ownerUserId: null } };
 }

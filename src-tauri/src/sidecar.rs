@@ -14,6 +14,7 @@ use crate::{
     logging::sanitize_message,
     DesktopState,
 };
+use url::Url;
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -38,8 +39,15 @@ impl Drop for BackendRuntime {
 pub(crate) fn start_backend(
     app_data_dir: &Path,
     resource_dir: &Path,
+    auth_token: &str,
 ) -> Result<BackendRuntime, String> {
     if let Some(configured_url) = development_backend_url() {
+        let configured_token = configured_development_backend_auth_token().ok_or_else(|| {
+            "GEOCHAT_DESKTOP_BACKEND_URL requires an explicit GEOCHAT_DESKTOP_BACKEND_AUTH_TOKEN (or GEOCHAT_DESKTOP_LOCAL_AUTH_TOKEN).".to_string()
+        })?;
+        if configured_token != auth_token {
+            return Err("The configured development backend token does not match the renderer runtime token.".to_string());
+        }
         return Ok(BackendRuntime {
             base_url: configured_url,
             child: None,
@@ -75,6 +83,9 @@ pub(crate) fn start_backend(
         .current_dir(&cwd)
         .env("GEOCHAT_DESKTOP_BACKEND_PORT", port.to_string())
         .env("GEOCHAT_DESKTOP_BACKEND_HOST", "127.0.0.1")
+        .env("GEOCHAT_DESKTOP_BACKEND_AUTH_MODE", "required")
+        .env("GEOCHAT_DESKTOP_BACKEND_AUTH_TOKEN", auth_token)
+        .env("GEOCHAT_DESKTOP_ALLOWED_ORIGINS", backend_allowed_origins())
         .env("GEOCHAT_DESKTOP_RESOURCE_ROOT", &resource_root)
         .env("GEOCHAT_DESKTOP_DB_PATH", &database_path)
         .env("GEOCHAT_REMOTE_SKILLS_CACHE_DIR", &skill_cache_dir)
@@ -105,6 +116,41 @@ pub(crate) fn start_backend(
         base_url,
         child: Some(child),
     })
+}
+
+fn backend_allowed_origins() -> String {
+    backend_allowed_origins_for(
+        cfg!(debug_assertions),
+        cfg!(target_os = "windows"),
+        env::var("GEOCHAT_DEV_URL").ok().as_deref(),
+    )
+}
+
+fn backend_allowed_origins_for(debug: bool, windows: bool, dev_url: Option<&str>) -> String {
+    let mut origins = if debug {
+        vec!["http://127.0.0.1:1421".to_string()]
+    } else if windows {
+        vec![
+            "http://tauri.localhost".to_string(),
+            "http://geochat-bundle.localhost".to_string(),
+        ]
+    } else {
+        vec![
+            "tauri://localhost".to_string(),
+            "geochat-bundle://localhost".to_string(),
+        ]
+    };
+    if debug {
+        if let Some(dev_url) = dev_url {
+            if let Ok(parsed_url) = Url::parse(dev_url.trim()) {
+                let origin = parsed_url.origin().ascii_serialization();
+                if !origins.iter().any(|candidate| candidate == &origin) {
+                    origins.push(origin);
+                }
+            }
+        }
+    }
+    origins.join(",")
 }
 
 pub(crate) fn start_desktop_mcp(state: &DesktopState) -> Result<(Child, u16), String> {
@@ -344,6 +390,27 @@ fn development_backend_url() -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+fn configured_development_backend_auth_token() -> Option<String> {
+    configured_development_backend_auth_token_for(
+        env::var("GEOCHAT_DESKTOP_BACKEND_AUTH_TOKEN")
+            .ok()
+            .as_deref(),
+        env::var("GEOCHAT_DESKTOP_LOCAL_AUTH_TOKEN").ok().as_deref(),
+    )
+}
+
+fn configured_development_backend_auth_token_for(
+    backend_token: Option<&str>,
+    legacy_local_token: Option<&str>,
+) -> Option<String> {
+    [backend_token, legacy_local_token]
+        .into_iter()
+        .flatten()
+        .map(str::trim)
+        .find(|token| !token.is_empty())
+        .map(str::to_string)
+}
+
 fn desktop_agent_skill_cache_dir(app_data_dir: &Path) -> Result<PathBuf, String> {
     let directory = app_data_dir.join("agent-skills");
     fs::create_dir_all(&directory).map_err(|error| {
@@ -465,7 +532,11 @@ fn port_from_url(value: &str) -> Option<u16> {
 mod tests {
     use std::net::TcpListener;
 
-    use super::{child_output_level, find_available_loopback_port, should_use_built_backend_for};
+    use super::{
+        backend_allowed_origins_for, child_output_level,
+        configured_development_backend_auth_token_for, find_available_loopback_port,
+        should_use_built_backend_for,
+    };
 
     #[test]
     fn available_port_skips_an_occupied_preferred_port() {
@@ -512,6 +583,42 @@ mod tests {
     fn backend_mode_environment_can_override_defaults() {
         assert!(should_use_built_backend_for(Some("1"), true));
         assert!(!should_use_built_backend_for(Some("0"), true));
+    }
+
+    #[test]
+    fn external_development_backend_requires_an_explicit_shared_token() {
+        assert_eq!(
+            configured_development_backend_auth_token_for(Some(" shared-token "), None),
+            Some("shared-token".to_string())
+        );
+        assert_eq!(
+            configured_development_backend_auth_token_for(None, Some("legacy-token")),
+            Some("legacy-token".to_string())
+        );
+        assert_eq!(
+            configured_development_backend_auth_token_for(None, None),
+            None
+        );
+        assert_eq!(
+            configured_development_backend_auth_token_for(Some("  "), Some("")),
+            None
+        );
+    }
+
+    #[test]
+    fn backend_origins_are_profiled_by_runtime_platform() {
+        assert_eq!(
+            backend_allowed_origins_for(false, true, None),
+            "http://tauri.localhost,http://geochat-bundle.localhost"
+        );
+        assert_eq!(
+            backend_allowed_origins_for(false, false, None),
+            "tauri://localhost,geochat-bundle://localhost"
+        );
+        assert_eq!(
+            backend_allowed_origins_for(true, false, Some("http://localhost:4173/app")),
+            "http://127.0.0.1:1421,http://localhost:4173"
+        );
     }
 
     #[test]

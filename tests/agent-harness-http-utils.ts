@@ -1,8 +1,11 @@
 import { createDatabase } from "../backend/src/db/client";
 
+export const TEST_BACKEND_AUTH_TOKEN = "geochat-test-backend-token";
+
 export async function createHttpHarness(input: {
   databasePath?: string;
   backfillPersistedAgentErrorEvents?: boolean;
+  authToken?: string;
 } = {}) {
   const databasePath = input.databasePath ?? `/tmp/geochat-agent-harness-${crypto.randomUUID()}.sqlite`;
   const previousDatabasePath = Bun.env.GEOCHAT_DESKTOP_DB_PATH;
@@ -11,12 +14,22 @@ export async function createHttpHarness(input: {
     const { createBackendHttpContext } = await import("../backend/src/http/context");
     const { createBackendHttpHandler } = await import("../backend/src/http/handler");
     const context = createBackendHttpContext();
+    const authToken = input.authToken ?? TEST_BACKEND_AUTH_TOKEN;
     const handler = createBackendHttpHandler(context, {
-      backfillPersistedAgentErrorEvents: input.backfillPersistedAgentErrorEvents ?? false
+      backfillPersistedAgentErrorEvents: input.backfillPersistedAgentErrorEvents ?? false,
+      security: {
+        authentication: { mode: "required", token: authToken },
+        allowedOrigins: new Set(["http://127.0.0.1:1421"])
+      }
     });
 
     async function request(path: string, init?: RequestInit) {
-      const response = await handler.handleRequest(new Request(`http://127.0.0.1:17365${path}`, init));
+      const headers = new Headers(init?.headers);
+      if (!headers.has("authorization")) headers.set("authorization", `Bearer ${authToken}`);
+      const response = await handler.handleRequest(new Request(
+        `http://127.0.0.1:17365${path}`,
+        { ...init, headers }
+      ));
       const text = await response.text();
       return {
         response,
@@ -31,7 +44,12 @@ export async function createHttpHarness(input: {
       databasePath,
       context,
       handler,
-      handleRequest: handler.handleRequest,
+      handleRequest: (request: Request) => {
+        const headers = new Headers(request.headers);
+        if (!headers.has("authorization")) headers.set("authorization", `Bearer ${authToken}`);
+        return handler.handleRequest(new Request(request, { headers }));
+      },
+      rawHandleRequest: handler.handleRequest,
       request
     };
   } finally {

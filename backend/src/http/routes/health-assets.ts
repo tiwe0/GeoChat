@@ -1,14 +1,16 @@
 import { join, normalize, resolve, sep } from "node:path";
 import type { BackendHttpContext } from "../context";
-import { isGeoGebraAssetPath } from "../paths";
+import { isGeoGebraAssetPath, safeDecodePathComponent } from "../paths";
 import { json } from "../response";
 
 export async function handleHealthAndAssetRoute(request: Request, url: URL, context: BackendHttpContext) {
-  if ((request.method === "GET" || request.method === "HEAD") && isGeoGebraAssetPath(url.pathname)) {
+  if (!isPublicHealthOrAssetRequest(request, url)) return undefined;
+
+  if (isGeoGebraAssetPath(url.pathname)) {
     return serveGeoGebraAsset(url.pathname, request.method, context.resources.geogebraAssetRoot);
   }
 
-  if (request.method === "GET" && url.pathname === "/health") {
+  if (url.pathname === "/health") {
     return json({
       status: "ok",
       service: "geochat-desktop-backend",
@@ -19,13 +21,22 @@ export async function handleHealthAndAssetRoute(request: Request, url: URL, cont
       }
     });
   }
+}
 
-  return undefined;
+export function isPublicHealthOrAssetRequest(request: Request, url: URL) {
+  return (
+    (request.method === "GET" && url.pathname === "/health")
+    || ((request.method === "GET" || request.method === "HEAD") && isGeoGebraAssetPath(url.pathname))
+  );
 }
 
 async function serveGeoGebraAsset(pathname: string, method: string, geogebraAssetRoot: string) {
+  const decodedPathname = safeDecodePathComponent(pathname);
+  if (decodedPathname === undefined) {
+    return json({ error: "invalid_path", message: "The request path is not valid." }, { status: 400 });
+  }
   const relativePath = normalize(
-    decodeURIComponent(pathname)
+    decodedPathname
       .replace(/^\/tools\/geogebra-assets-v2\/?/, "")
       .replace(/^\/tools\/geogebra-assets\/?/, "")
   );

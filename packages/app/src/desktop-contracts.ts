@@ -79,11 +79,22 @@ export type UpsertDesktopConversationMessageInput = {
   };
 };
 
+export const RuntimeBackendAuth = Schema.Union(
+  Schema.Struct({
+    status: Schema.Literal("authorized"),
+    token: Schema.NonEmptyString
+  }),
+  Schema.Struct({ status: Schema.Literal("unauthorized") }),
+  Schema.Struct({ status: Schema.Literal("disabled") })
+);
+
+export type RuntimeBackendAuth = Schema.Schema.Type<typeof RuntimeBackendAuth>;
+
 export const RuntimeInfo = Schema.Struct({
   platform: Schema.String,
   appVersion: Schema.String,
   backendBaseUrl: Schema.String,
-  backendAuthToken: Schema.optional(Schema.String)
+  backendAuth: RuntimeBackendAuth
 });
 
 export type RuntimeInfo = Schema.Schema.Type<typeof RuntimeInfo>;

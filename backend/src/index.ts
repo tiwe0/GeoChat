@@ -7,7 +7,9 @@ const Environment = Schema.Struct({
   }),
   GEOCHAT_DESKTOP_BACKEND_HOST: Schema.optionalWith(Schema.String, {
     default: () => "127.0.0.1"
-  })
+  }),
+  GEOCHAT_DESKTOP_BACKEND_AUTH_MODE: Schema.optional(Schema.String),
+  GEOCHAT_DESKTOP_BACKEND_AUTH_TOKEN: Schema.optional(Schema.String)
 });
 
 const env = Schema.decodeUnknownSync(Environment)(Bun.env);

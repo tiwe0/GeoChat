@@ -72,6 +72,8 @@ export function backendOrigin() {
  * is correct: a browser-only dev run talks to a backend started without one.
  */
 export function backendAuthToken() {
-  const token = runtime?.backendAuthToken?.trim();
+  const token = runtime?.backendAuth.status === "authorized"
+    ? runtime.backendAuth.token.trim()
+    : undefined;
   return token ? token : null;
 }

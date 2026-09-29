@@ -1,19 +1,28 @@
-const corsMethods = "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS";
+import {
+  CORS_ALLOWED_HEADERS,
+  CORS_ALLOWED_METHODS,
+  isAllowedOrigin,
+  type BackendHttpSecurity
+} from "./security";
 
-export function corsHeadersFor(request: Request) {
-  return {
-    "access-control-allow-origin": request.headers.get("origin") ?? "*",
-    "access-control-allow-methods": corsMethods,
-    "access-control-allow-headers": request.headers.get("access-control-request-headers") ?? "*",
-    "access-control-expose-headers": "*",
-    "access-control-max-age": "86400",
-    "vary": "Origin, Access-Control-Request-Method, Access-Control-Request-Headers"
-  };
+export function corsHeadersFor(request: Request, security: BackendHttpSecurity) {
+  const origin = request.headers.get("origin");
+  const headers = new Headers({
+    vary: "Origin, Access-Control-Request-Method, Access-Control-Request-Headers"
+  });
+  if (!isAllowedOrigin(origin, security)) return headers;
+
+  headers.set("access-control-allow-origin", origin!);
+  headers.set("access-control-allow-methods", [...CORS_ALLOWED_METHODS, "OPTIONS"].join(","));
+  headers.set("access-control-allow-headers", CORS_ALLOWED_HEADERS.join(","));
+  headers.set("access-control-expose-headers", "content-type");
+  headers.set("access-control-max-age", "86400");
+  return headers;
 }
 
-export function withCors(response: Response, request: Request) {
+export function withCors(response: Response, request: Request, security: BackendHttpSecurity) {
   const headers = new Headers(response.headers);
-  for (const [key, value] of Object.entries(corsHeadersFor(request))) {
+  for (const [key, value] of corsHeadersFor(request, security)) {
     headers.set(key, value);
   }
   headers.set("cross-origin-resource-policy", "cross-origin");

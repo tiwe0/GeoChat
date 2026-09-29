@@ -36,7 +36,7 @@
     "dist": "bun run tauri:build",
     "test": "bun test tests",
     "typecheck": "tsc -p packages/app/tsconfig.json --pretty && tsc -p tsconfig.node.json --pretty && tsc -p tsconfig.web.json --pretty",
-    "backend:dev": "bun --watch backend/src/index.ts",
+    "backend:dev": "GEOCHAT_DESKTOP_BACKEND_AUTH_MODE=disabled bun --watch backend/src/index.ts",
     "backend:start": "bun backend/src/index.ts",
     "datasets:download-hf": "bun tools/download-huggingface-problem-datasets.ts",
     "datasets:profile-hf": "bun tools/profile-huggingface-problem-datasets.ts",

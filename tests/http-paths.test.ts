@@ -8,6 +8,7 @@ import {
   conversationDetailPath,
   conversationMessagesPath,
   isGeoGebraAssetPath,
+  isValidPathEncoding,
   problemAttemptPath,
   problemDetailPath,
   problemSetProblemsPath,
@@ -52,5 +53,20 @@ describe("backend http path helpers", () => {
     });
     expect(benchmarkRunPath("/v1/benchmark-runs/run-1/results")).toBeUndefined();
     expect(benchmarkRunActionPath("/v1/benchmark-runs/run-1/retry")).toBeUndefined();
+  });
+
+  test("rejects invalid percent encoding without throwing", () => {
+    const malformed = "%E0%A4%A";
+    expect(isValidPathEncoding(`/v1/conversations/${malformed}`)).toBe(false);
+    expect(conversationDetailPath(`/v1/conversations/${malformed}`)).toBeUndefined();
+    expect(conversationMessagesPath(`/v1/conversations/${malformed}/messages`)).toBeUndefined();
+    expect(conversationBlackboardPath(`/v1/conversations/${malformed}/blackboard`)).toBeUndefined();
+    expect(problemSetProblemsPath(`/v1/problem-sets/${malformed}/problems`)).toBeUndefined();
+    expect(problemDetailPath(`/v1/problems/${malformed}`)).toBeUndefined();
+    expect(problemAttemptPath(`/v1/problems/${malformed}/attempts`)).toBeUndefined();
+    expect(agentRunCancelPath(`/v1/agent-runs/${malformed}/cancel`)).toBeUndefined();
+    expect(benchmarkRunPath(`/v1/benchmark-runs/${malformed}`)).toBeUndefined();
+    expect(benchmarkRunResultsPath(`/v1/benchmark-runs/${malformed}/results`)).toBeUndefined();
+    expect(benchmarkRunActionPath(`/v1/benchmark-runs/${malformed}/complete`)).toBeUndefined();
   });
 });

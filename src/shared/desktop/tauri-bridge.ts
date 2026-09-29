@@ -15,6 +15,8 @@ import type {
   DesktopUpdateState,
   GeoChatDesktopApi
 } from "../../shared/desktop-api";
+import { RuntimeInfo } from "@geochat-ai/app/desktop-contracts";
+import { Schema } from "effect";
 
 type TauriInvoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 type TauriListen = typeof import("@tauri-apps/api/event").listen;
@@ -144,7 +146,7 @@ function createGraphicsBridge(
 function createRuntimeBridge(invoke: TauriInvoke): BridgeSlice<"getRuntimeInfo" | "markRendererReady"> {
   const commands = TAURI_DESKTOP_COMMANDS.runtime;
   return {
-    getRuntimeInfo: () => invoke(commands.getRuntimeInfo),
+    getRuntimeInfo: () => invoke<unknown>(commands.getRuntimeInfo).then(Schema.decodeUnknownSync(RuntimeInfo)),
     markRendererReady: () => invoke(commands.markRendererReady)
   };
 }

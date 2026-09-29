@@ -146,13 +146,13 @@ describe("agent model registry schema", () => {
     expect(normalizeAgentModelConfig({
       provider: "custom",
       model: "local-vision",
-      apiKey: "key",
-      customBaseUrl: "http://127.0.0.1:11434/v1",
+      credentialRef: "local-credential-ref",
       protocol: "openai-compatible",
       supportsImages: true,
     })).toMatchObject({
       provider: "custom",
       model: "local-vision",
+      credentialRef: "local-credential-ref",
       protocol: "openai-compatible",
       supportsImages: true,
     });

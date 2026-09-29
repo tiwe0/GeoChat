@@ -12,15 +12,17 @@ import "./styles.css";
 import { initializeI18n } from "./i18n";
 import { copilotTheme } from "./theme";
 import { installWebPlatform } from "./platform-web";
-import { installTauriDesktopBridge } from "../../shared/desktop/tauri-bridge";
+import { installTauriDesktopBridge, installedDesktopApi } from "../../shared/desktop/tauri-bridge";
 import { loadDesktopRuntime } from "./features/desktop/runtime";
 import { desktopLogger, installDesktopLogging } from "./features/desktop/desktopLogger";
+import { migrateLegacyDesktopCredentialsBeforeConfigLoad } from "../../shared/desktop/desktop-credential-bootstrap";
 
 installWebPlatform();
 const emotionCache = createCache({ key: "geochat-web" });
 
 async function bootstrap() {
   await installTauriDesktopBridge();
+  await migrateLegacyDesktopCredentialsBeforeConfigLoad(localStorage, installedDesktopApi());
   installDesktopLogging();
   // Must precede the first render so the native chat transport receives the
   // backend URL selected by the desktop shell.

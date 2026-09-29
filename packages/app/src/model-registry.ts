@@ -90,19 +90,19 @@ export const AGENT_PROVIDER_REGISTRY = [
   {
     id: "openai",
     label: "OpenAI",
-    defaultBaseUrl: "https://api.openai.com",
+    defaultBaseUrl: "https://api.openai.com/v1",
     allowedHosts: ["api.openai.com"]
   },
   {
     id: "anthropic",
     label: "Anthropic Claude",
-    defaultBaseUrl: "https://api.anthropic.com",
+    defaultBaseUrl: "https://api.anthropic.com/v1",
     allowedHosts: ["api.anthropic.com"]
   },
   {
     id: "google",
     label: "Google Gemini",
-    defaultBaseUrl: "https://generativelanguage.googleapis.com",
+    defaultBaseUrl: "https://generativelanguage.googleapis.com/v1beta",
     allowedHosts: ["generativelanguage.googleapis.com"]
   },
   {

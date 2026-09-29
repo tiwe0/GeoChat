@@ -14,8 +14,7 @@ describe("desktop image attachment model selection", () => {
       model: {
         provider: "openai",
         model: "gpt-5.5",
-        apiKey: "primary-key",
-        customBaseUrl: ""
+        credentialRef: "primary-ref"
       }
     });
 
@@ -35,15 +34,13 @@ describe("desktop image attachment model selection", () => {
       model: {
         provider: "deepseek",
         model: "deepseek-v4-flash",
-        apiKey: "primary-key",
-        customBaseUrl: "",
+        credentialRef: "primary-ref",
         maxToolSteps: 9
       },
       visionModel: {
         provider: "openrouter",
         model: "openai/gpt-5.5",
-        apiKey: "vision-key",
-        customBaseUrl: ""
+        credentialRef: "vision-ref"
       }
     });
 
@@ -65,14 +62,12 @@ describe("desktop image attachment model selection", () => {
       model: {
         provider: "deepseek",
         model: "deepseek-v4-flash",
-        apiKey: "primary-key",
-        customBaseUrl: ""
+        credentialRef: "primary-ref"
       },
       visionModel: {
         provider: "openrouter",
         model: "openai/gpt-5.5",
-        apiKey: "",
-        customBaseUrl: ""
+        credentialRef: ""
       }
     });
 
@@ -84,19 +79,17 @@ describe("desktop image attachment model selection", () => {
     });
   });
 
-  test("does not enable image input for image-capable models without keys", () => {
+  test("does not enable image input for image-capable models without credentials", () => {
     const config = normalizeDesktopConfig({
       model: {
         provider: "openai",
         model: "gpt-5.5",
-        apiKey: "",
-        customBaseUrl: ""
+        credentialRef: ""
       },
       visionModel: {
         provider: "openrouter",
         model: "openai/gpt-5.5",
-        apiKey: "",
-        customBaseUrl: ""
+        credentialRef: ""
       }
     });
 
@@ -110,19 +103,17 @@ describe("desktop image attachment model selection", () => {
     });
   });
 
-  test("falls back to configured vision model when primary multimodal has no key", () => {
+  test("falls back to configured vision model when primary multimodal has no credential", () => {
     const config = normalizeDesktopConfig({
       model: {
         provider: "openai",
         model: "gpt-5.5",
-        apiKey: "",
-        customBaseUrl: ""
+        credentialRef: ""
       },
       visionModel: {
         provider: "openrouter",
         model: "openai/gpt-5.5",
-        apiKey: "vision-key",
-        customBaseUrl: ""
+        credentialRef: "vision-ref"
       }
     });
 

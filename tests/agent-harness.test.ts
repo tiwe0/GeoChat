@@ -89,42 +89,39 @@ import {
 import { canExecuteBackendToolRequest, executeBackendToolRequest } from "../backend/src/agent/backend-tools";
 import { activateAgentSkill, listAvailableAgentSkills, parseAgentSkillPathList } from "../backend/src/agent/skills";
 describe("agent model registry", () => {
-  test("normalizes unknown providers but keeps explicit custom model ids for known providers", () => {
+  test("normalizes unknown providers but keeps explicit model ids and credential references for known providers", () => {
     expect(
       normalizeAgentModelConfig({
         provider: "unknown",
         model: "missing",
-        apiKey: "key",
-        customBaseUrl: ""
+        credentialRef: "unknown-provider-ref"
       })
     ).toMatchObject({
       provider: "deepseek",
       model: "deepseek-flash",
-      apiKey: "key"
+      credentialRef: "unknown-provider-ref"
     });
     expect(
       normalizeAgentModelConfig({
         provider: "openai",
         model: "gpt-custom-router",
-        apiKey: "key",
-        customBaseUrl: "https://llm.local/v1"
+        credentialRef: "openai-ref"
       })
     ).toMatchObject({
       provider: "openai",
       model: "gpt-custom-router",
-      customBaseUrl: "https://llm.local/v1"
+      credentialRef: "openai-ref"
     });
     expect(
       normalizeAgentModelConfig({
         provider: "openrouter",
         model: "anthropic/claude-sonnet-4.5",
-        apiKey: "key",
-        customBaseUrl: ""
+        credentialRef: "openrouter-ref"
       })
     ).toMatchObject({
       provider: "openrouter",
       model: "anthropic/claude-sonnet-4.5",
-      apiKey: "key"
+      credentialRef: "openrouter-ref"
     });
   });
 
@@ -1286,7 +1283,7 @@ describe("function call registry", () => {
     const run = createAgentRunLedger({
       runId: "command-usage-run",
       conversationId: "conversation-usage",
-      model: { provider: "openai", model: "gpt-5.5", apiKey: "", customBaseUrl: "" },
+      model: { provider: "openai", model: "gpt-5.5", credentialRef: "" },
       prompt: "画圆并标出圆心",
       attachmentCount: 0,
       startedAt: "2026-06-06T00:00:00.000Z"
@@ -1353,7 +1350,7 @@ describe("function call registry", () => {
     const baseRun = (runId: string) => createAgentRunLedger({
       runId,
       conversationId: `conversation-${runId}`,
-      model: { provider: "openai", model: "gpt-5.5", apiKey: "", customBaseUrl: "" },
+      model: { provider: "openai", model: "gpt-5.5", credentialRef: "" },
       prompt: "画一个教学图",
       attachmentCount: 0,
       startedAt: "2026-06-06T00:00:00.000Z"
@@ -2518,7 +2515,7 @@ describe("agent run review", () => {
     return createAgentRunLedger({
       runId,
       conversationId: `conversation-${runId}`,
-      model: { provider: "openai", model: "gpt-5.5", apiKey: "", customBaseUrl: "" },
+      model: { provider: "openai", model: "gpt-5.5", credentialRef: "" },
       prompt: "构造一个椭圆并解释。",
       attachmentCount: 0,
       startedAt: "2026-06-06T00:00:00.000Z"

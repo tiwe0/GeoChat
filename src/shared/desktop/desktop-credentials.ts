@@ -3,6 +3,7 @@ import {
   isAgentModelProtocol,
   type AgentModelProtocol
 } from "@geochat-ai/app/model-registry";
+import type { DesktopCredentialMigrationJournal } from "../desktop-api";
 
 export const DESKTOP_CREDENTIAL_MIGRATION_SCHEMA_VERSION = 1 as const;
 
@@ -27,20 +28,8 @@ export type LegacyCredentialMigrationItem = Readonly<LegacyCredentialIdentity & 
   sources: readonly LegacyCredentialSource[];
 }>;
 
-export type CredentialMigrationJournalEntry = Readonly<{
-  schemaVersion: typeof DESKTOP_CREDENTIAL_MIGRATION_SCHEMA_VERSION;
-  provider: string;
-  protocol: AgentModelProtocol;
-  canonicalBaseUrl: string;
-  credentialRef: string;
-  sourceFingerprint: string;
-  phase: CredentialMigrationPhase;
-}>;
-
-export type CredentialMigrationJournal = Readonly<{
-  schemaVersion: typeof DESKTOP_CREDENTIAL_MIGRATION_SCHEMA_VERSION;
-  entries: readonly CredentialMigrationJournalEntry[];
-}>;
+export type CredentialMigrationJournal = DesktopCredentialMigrationJournal;
+export type CredentialMigrationJournalEntry = CredentialMigrationJournal["entries"][number];
 
 export type CredentialMigrationConflict = Readonly<{
   source: LegacyCredentialSource;

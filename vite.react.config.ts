@@ -83,6 +83,16 @@ export default defineConfig({
               priority: 25,
             },
             {
+              name: "assistant-ui",
+              test: /node_modules[\\/]@assistant-ui[\\/]/,
+              priority: 24,
+            },
+            {
+              name: "effect-runtime",
+              test: /node_modules[\\/]effect[\\/]/,
+              priority: 23,
+            },
+            {
               name: "ui-utilities",
               test: /node_modules[\\/](?:react-i18next|i18next|react-joyride|@floating-ui|@gilbarbara|scroll|scrollparent|use-sync-external-store|@fastify)[\\/]/,
               priority: 15,

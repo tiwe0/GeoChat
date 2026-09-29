@@ -80,7 +80,7 @@ function createBackendPlanningTool<TToolName extends FunctionCallToolName>(
     title: spec.display.label,
     description: spec.description,
     inputSchema: jsonSchema<FunctionCallArgsByName[TToolName]>(
-      modelToolInputSchemaForRun(toolName, locale, skillSelection),
+      asAiSdkJsonSchema(modelToolInputSchemaForRun(toolName, locale, skillSelection)),
       {
         validate: (value) => validateNativeToolInput(toolName, value, policyContext),
       },
@@ -103,6 +103,14 @@ function createBackendPlanningTool<TToolName extends FunctionCallToolName>(
     outputSchema: jsonSchema({ type: "object", additionalProperties: true }),
     ...(execute ? { execute } : {})
   } as any) as Tool;
+}
+
+function asAiSdkJsonSchema(schema: ReturnType<typeof getFunctionCallModelInputJsonSchema>) {
+  // The shared registry intentionally exposes readonly enum arrays. AI SDK's
+  // JSONSchema7 type requires mutable arrays even though it only reads the
+  // schema, so clone at this package boundary instead of weakening the shared
+  // registry contract.
+  return structuredClone(schema) as unknown as Parameters<typeof jsonSchema>[0];
 }
 
 function modelToolInputSchemaForRun(

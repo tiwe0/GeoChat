@@ -3,19 +3,25 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:f
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
-const explicitRoots = [
-  ...process.argv.slice(2),
-  ...(process.env.GEOCHAT_PACKAGED_RESOURCES_ROOT ? [process.env.GEOCHAT_PACKAGED_RESOURCES_ROOT] : [])
-].filter(Boolean);
-const resourceRoots = explicitRoots.length > 0 ? explicitRoots.map((root) => resolve(root)) : discoverResourceRoots();
+export async function runPackagedBackendSmoke(
+  args = process.argv.slice(2),
+  environment = process.env,
+) {
+  const explicitRoots = [
+    ...args,
+    ...(environment.GEOCHAT_PACKAGED_RESOURCES_ROOT ? [environment.GEOCHAT_PACKAGED_RESOURCES_ROOT] : [])
+  ].filter(Boolean);
+  const resourceRoots = explicitRoots.length > 0 ? explicitRoots.map((root) => resolve(root)) : discoverResourceRoots();
 
-if (resourceRoots.length === 0) {
-  fail("No packaged resources root found. Pass GEOCHAT_PACKAGED_RESOURCES_ROOT or a path argument.");
-}
+  if (resourceRoots.length === 0) {
+    throw new Error("No packaged resources root found. Pass GEOCHAT_PACKAGED_RESOURCES_ROOT or a path argument.");
+  }
 
-for (const root of resourceRoots) {
-  await smokeBackendRuntime(root);
+  for (const root of resourceRoots) {
+    await smokeBackendRuntime(root);
+  }
 }
 
 function discoverResourceRoots() {
@@ -46,6 +52,7 @@ async function smokeBackendRuntime(root) {
   const backendEntry = join(root, manifest.backend?.entry ?? "backend/backend.bundle.js");
   const port = await bindEphemeralLoopbackPort();
   const tmp = mkdtempSync(join(tmpdir(), "geochat-packaged-backend-"));
+  const authToken = "packaged-backend-smoke";
   const child = spawn(runtime, [backendEntry], {
     cwd: root,
     env: {
@@ -54,7 +61,7 @@ async function smokeBackendRuntime(root) {
       GEOCHAT_DESKTOP_BACKEND_PORT: String(port),
       GEOCHAT_DESKTOP_RESOURCE_ROOT: root,
       GEOCHAT_DESKTOP_DB_PATH: join(tmp, "geochat-desktop.sqlite"),
-      GEOCHAT_DESKTOP_BACKEND_AUTH_TOKEN: "packaged-backend-smoke"
+      GEOCHAT_DESKTOP_BACKEND_AUTH_TOKEN: authToken
     },
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -65,7 +72,9 @@ async function smokeBackendRuntime(root) {
   });
 
   try {
-    await waitForHealth(`http://127.0.0.1:${port}/health`, child);
+    const origin = `http://127.0.0.1:${port}`;
+    await waitForHealth(`${origin}/health`, child);
+    await verifyAuthenticationBoundary(origin, authToken);
     console.log(`Packaged backend runtime ok: ${root}`);
   } finally {
     await stopChild(child);
@@ -74,6 +83,30 @@ async function smokeBackendRuntime(root) {
 
   if (child.exitCode !== null && child.exitCode !== 0) {
     fail(`Packaged backend exited with code ${child.exitCode}.\n${stderr}`);
+  }
+}
+
+export async function verifyAuthenticationBoundary(origin, authToken) {
+  const conversationsUrl = `${origin}/v1/conversations`;
+  const missing = await fetch(conversationsUrl, { signal: AbortSignal.timeout(2_000) });
+  if (missing.status !== 401) {
+    throw new Error(`Packaged backend accepted a protected route without authentication: status=${missing.status}.`);
+  }
+
+  const incorrect = await fetch(conversationsUrl, {
+    headers: { authorization: "Bearer incorrect-packaged-smoke-token" },
+    signal: AbortSignal.timeout(2_000),
+  });
+  if (incorrect.status !== 401) {
+    throw new Error(`Packaged backend accepted an incorrect bearer token: status=${incorrect.status}.`);
+  }
+
+  const authorized = await fetch(conversationsUrl, {
+    headers: { authorization: `Bearer ${authToken}` },
+    signal: AbortSignal.timeout(2_000),
+  });
+  if (!authorized.ok) {
+    throw new Error(`Packaged backend rejected its injected bearer token: status=${authorized.status}.`);
   }
 }
 
@@ -147,4 +180,15 @@ function existsFile(path) {
 function fail(message) {
   console.error(message);
   process.exit(1);
+}
+
+const invokedPath = process.argv[1] && statSync(process.argv[1], { throwIfNoEntry: false })?.isFile()
+  ? pathToFileURL(resolve(process.argv[1])).href
+  : null;
+if (invokedPath === import.meta.url) {
+  try {
+    await runPackagedBackendSmoke();
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
 }

@@ -49,6 +49,7 @@ import {
 import { systemPromptForRun } from "./agent-prompt";
 import { refineExecuteGeoGebraCommands } from "./native-tool-policy";
 import { AgentRunLedgerConflictError } from "../db/agent-run-repository";
+import { sanitizeProviderError } from "./provider-error";
 
 export type NativeChatRequest = {
   messages: UIMessage[];
@@ -115,9 +116,10 @@ export async function createNativeChatResponse(
   try {
     await persistNativeConversationMessages(context, input.conversationId, [latestUser], options.dataScope);
   } catch (error) {
+    const sanitized = sanitizeProviderError(error);
     run = finishAgentRunLedger(run, {
       status: "failed",
-      error: error instanceof Error ? error.message : "Failed to persist the conversation owner anchor.",
+      error: sanitized || "Failed to persist the conversation owner anchor.",
     });
     run = await persistClaimedRun(context, releaseContinuationLease(run, continuationLeaseId));
     return jsonError(run.error ?? "Failed to persist the conversation owner anchor.", 500);
@@ -310,8 +312,9 @@ export async function createNativeChatResponse(
     timeout: run.modelStepTimeoutMs ?? 120_000,
     sendReasoning: true,
     onError: (error) => {
-      console.error(`[ERROR] Native AI SDK chat stream failed runId=${run.runId}`, error);
-      return error instanceof Error ? error.message : "Agent run failed.";
+      const sanitized = sanitizeProviderError(error);
+      console.error(`[ERROR] Native AI SDK chat stream failed runId=${run.runId}: ${sanitized}`);
+      return sanitized || "Agent run failed.";
     },
     onEnd: async ({ messages: finalMessages, isAborted, outcome }) => {
       try {
@@ -327,7 +330,7 @@ export async function createNativeChatResponse(
           if (outcome.status === "failed") {
             next = finishAgentRunLedger(next, {
               status: "failed",
-              error: outcome.error instanceof Error ? outcome.error.message : "Agent run failed.",
+              error: sanitizeProviderError(outcome.error) || "Agent run failed.",
             });
           } else {
             next = terminalizeCompletedModelTurn(next, finalFinishReason, maxModelSteps);
@@ -344,7 +347,8 @@ export async function createNativeChatResponse(
             ));
         resolveTerminalPersistence({ status: persisted.status, error: persisted.error });
       } catch (error) {
-        console.error(`[ERROR] Failed to persist native AI SDK chat runId=${run.runId}`, error);
+        const sanitized = sanitizeProviderError(error);
+        console.error(`[ERROR] Failed to persist native AI SDK chat runId=${run.runId}: ${sanitized}`);
         try {
           await commitRun((current) => {
             const withUsage = finalUsage
@@ -352,11 +356,13 @@ export async function createNativeChatResponse(
               : current;
             return releaseContinuationLease(finishAgentRunLedger(withUsage, {
               status: "failed",
-              error: error instanceof Error ? error.message : "Failed to persist the completed agent run.",
+              error: sanitized || "Failed to persist the completed agent run.",
             }), continuationLeaseId);
           });
         } catch (terminalError) {
-          console.error(`[ERROR] Failed to record native AI SDK persistence failure runId=${run.runId}`, terminalError);
+          console.error(
+            `[ERROR] Failed to record native AI SDK persistence failure runId=${run.runId}: ${sanitizeProviderError(terminalError)}`
+          );
         }
         rejectTerminalPersistence(error);
       }
@@ -387,7 +393,7 @@ function gateTerminalStreamEvent(
         controller.enqueue(encoder.encode(terminalEvents));
       }
     } catch (error) {
-      const errorText = error instanceof Error ? error.message : "Failed to persist the completed agent run.";
+      const errorText = sanitizeProviderError(error) || "Failed to persist the completed agent run.";
       controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "error", errorText })}\n\ndata: [DONE]\n\n`));
     }
     terminalEvents = "";

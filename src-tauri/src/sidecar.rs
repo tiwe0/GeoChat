@@ -200,16 +200,17 @@ where
             let Ok(line) = line else {
                 break;
             };
+            let sanitized = sanitize_message(&line);
             if is_stderr {
-                eprintln!("{line}");
+                eprintln!("{sanitized}");
             } else {
-                println!("{line}");
+                println!("{sanitized}");
             }
             log::log!(
                 target: "geochat::sidecar",
                 child_output_level(&line, is_stderr),
                 "[{service}] {}",
-                sanitize_message(&line)
+                sanitized
             );
         }
     });

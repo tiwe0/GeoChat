@@ -1,5 +1,9 @@
 # assistant-ui migration plan
 
+- Status: implemented; regression protection remains active
+- Last refreshed: 2026-09-29
+- Owner area: renderer / assistant workspace
+
 ## Goal
 
 Use one `@assistant-ui/react` runtime and one shared message/composer rendering pipeline for window mode, fusion mode, and the fusion transcript, while preserving GeoChat's native-run lifecycle, AI SDK message persistence, renderer tool execution, and fusion spatial navigation.

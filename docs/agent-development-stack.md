@@ -1,5 +1,9 @@
 # Agent Development Stack Notes
 
+- Status: maintained reference inventory; not an adoption roadmap
+- Last refreshed: 2026-09-29
+- Owner area: backend agent runtime / shared contracts / renderer integration
+
 This document records candidate libraries for the GeoChat Desktop agent runtime. These are planning notes, not the dependency manifest. The current installed dependency versions live in `package.json`, workspace package manifests, and the lockfile.
 
 ## Core Agent Framework
@@ -7,16 +11,13 @@ This document records candidate libraries for the GeoChat Desktop agent runtime.
 | Library | Version | Use |
 | --- | --- | --- |
 | `effect` | currently installed as `^3.21.2` | Functional effect system for side effects, concurrency, and service composition. |
-| `@modelcontextprotocol/sdk` | `1.27.1` | Model Context Protocol SDK for standardized context/tool integration. |
-| `@agentclientprotocol/sdk` | `0.21.0` | Agent Client Protocol SDK. |
+| `@modelcontextprotocol/sdk` | currently installed as `^1.27.1` | Model Context Protocol SDK for standardized context/tool integration. |
 
 ## LLM Integration
 
 | Library | Version | Use |
 | --- | --- | --- |
-| `ai` | currently installed as `^6.0.197` | Vercel AI SDK core. |
-| `@ai-sdk/provider` | `3.0.8` | Provider interface layer. |
-| `@ai-sdk/provider-utils` | `4.0.23` | Provider utility functions. |
+| `ai` | currently installed as `7.0.109` | Vercel AI SDK core used by the Bun backend. |
 
 The Vercel AI SDK ecosystem can support multiple LLM providers, including OpenAI, Anthropic, Google, Azure, Amazon Bedrock, Groq, Mistral, xAI, Perplexity, and Cohere.
 
@@ -40,9 +41,8 @@ The Vercel AI SDK ecosystem can support multiple LLM providers, including OpenAI
 
 | Library | Use |
 | --- | --- |
-| `solid-js` | Reactive UI framework for the renderer. |
-| `@opentui/core` | Terminal UI component library. |
-| `@kobalte/core` | Headless UI components for SolidJS. |
+| `react` / `react-dom` | React 19 renderer and application composition. |
+| `@assistant-ui/react` | Shared assistant runtime, thread primitives, composer, and message presentation. |
 
 ## Utility Libraries
 
@@ -86,4 +86,7 @@ The candidate stack emphasizes:
 - first-class tracing with OpenTelemetry
 - code understanding through Tree-sitter
 
-Before adopting any candidate dependency, verify current versions, license, bundle/runtime impact, and whether the feature belongs in the Bun backend, Tauri shell/command bridge, shared `@geochat-ai/app` package, or Solid renderer.
+Before adopting any candidate dependency, verify its current version, license,
+bundle/runtime impact, and whether the feature belongs in the Bun backend, Tauri
+shell/command bridge, shared `@geochat-ai/app` package, or React renderer. The
+dependency manifests and lockfile are always authoritative over this inventory.

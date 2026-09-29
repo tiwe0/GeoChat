@@ -1,10 +1,24 @@
 # GeoChat 架构与代码质量全面优化计划
 
-状态：提案，待按阶段执行
+状态：执行中；Phase 0–3 已完成，Phase 4–5 正在收口
 最后更新：2026-09-29
 Owner area：Desktop architecture / backend platform / renderer state
 适用范围：`/Users/ivory/Project/GeoChat` 当前 Tauri + React + Bun + SQLite 桌面项目
 不适用范围：兄弟仓库 `GeoChatDesktop`、官网视觉改版、未明确授权的线上发布
+停止条件：所有阶段性验收项有实现与自动化证据；完整类型、测试、Rust、安装包 smoke 门禁通过；无法本地证明的签名、公证、真实 provider 和真实桌面视觉验收被明确列为外部证据缺口。
+
+## 0. 执行状态
+
+| 阶段 | 状态 | 当前证据边界 |
+| --- | --- | --- |
+| Phase 0：安全边界 | 已完成 | loopback API 鉴权、严格 CORS、CSP/provider 响应边界已有回归测试 |
+| Phase 1：凭据与配置 | 已完成 | 原生凭据库、无损配置恢复、安装包本地验收已落地 |
+| Phase 2：数据一致性 | 已完成 | backend 会话权威、画布事务、迁移与可恢复删除已落地 |
+| Phase 3：状态所有权 | 已完成 | session controller、run lease、assistant workspace 拆分及行为回归已落地 |
+| Phase 4：后端与契约 | 执行中 | native chat 端口化、运行时解码、数据库迁移正在集成 |
+| Phase 5：质量与发布 | 执行中 | 严格静态门禁、结构化日志、package CI、桌面 E2E 尚待最终闭环 |
+
+本表只描述当前执行状态，不替代下文各阶段的验收标准。每次状态变化必须由新鲜验证结果支撑。
 
 ## 1. 执行摘要
 

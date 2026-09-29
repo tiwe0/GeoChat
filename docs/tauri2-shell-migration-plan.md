@@ -1,6 +1,8 @@
 # Tauri 2 Shell Migration Plan
 
-Status: Tauri-only desktop branch. The Tauri shell is the default desktop shell and owns packaging, window lifecycle, native commands, backend process supervision, app-bundle bootstrapping, and packaged-layout smoke coverage.
+- Status: Tauri-only desktop branch. The Tauri shell is the default desktop shell and owns packaging, window lifecycle, native commands, backend process supervision, app-bundle bootstrapping, and packaged-layout smoke coverage.
+- Last refreshed: 2026-09-29
+- Owner area: native shell / packaging
 
 Electron build scripts, dependencies, main/preload sources, and legacy full-package update metadata checks have been removed from this branch.
 
@@ -25,7 +27,7 @@ user data
   updates/previous
 ```
 
-The backend, harness, and SolidJS renderer remain the product layer. Tauri is the native host and process supervisor.
+The Bun backend, harness, and React renderer remain the product layer. Tauri is the native host and process supervisor.
 
 ## Update Strategy
 

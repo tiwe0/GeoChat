@@ -1,5 +1,9 @@
 # GeoGebra Applet Vendor Source
 
+- Status: current implementation reference
+- Last refreshed: 2026-09-29
+- Owner area: renderer / GeoGebra integration
+
 ## Vendored Runtime
 
 The desktop project vendors the GeoGebra applet runtime under `vendor/geogebra`
@@ -36,9 +40,21 @@ Current local route:
 /tools/geogebra-assets-v2 -> vendor/geogebra
 ```
 
-The SolidJS wrapper in `src/renderer/src/geogebra.ts` owns the runtime contract:
+The React renderer integration is split across narrow modules under
+`src/renderer-react/src/geogebra/`:
 
-- inject the applet using `new window.GGBApplet(...)`
-- set the HTML5 codebase to `HTML5/5.0/web3d/`
-- maintain per-board controller state instead of relying on a single global `window.ggbApplet`
-- expose command execution, canvas context, PNG export, and GGB export as desktop app services
+- `ggbdeploy-wrapper.ts` defines and loads the vendored `GGBApplet` runtime.
+- `controller.ts` owns command execution and applet lifecycle operations.
+- `canvas-context.ts` derives the context supplied to an agent run.
+- `selection-context.ts` owns selection observation and refresh semantics.
+
+Together these modules:
+
+- inject the applet using `new window.GGBApplet(...)`;
+- set the HTML5 codebase to `HTML5/5.0/web3d/`;
+- maintain per-board controller state instead of relying on a single global `window.ggbApplet`;
+- expose command execution, canvas context, PNG export, and GGB export as desktop app services.
+
+The vendored runtime is an implementation dependency, not a state authority. The
+renderer session controller and canvas transaction adapter remain responsible for
+coordinating conversation switches and lossless canvas recovery.

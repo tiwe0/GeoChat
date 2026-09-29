@@ -1,4 +1,5 @@
 import { Box, Typography } from "@mui/material";
+import { useAuiState } from "@assistant-ui/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -6,10 +7,11 @@ import { deriveFusionBubbles, isFusionRenderableMessage } from "./bubbles";
 import { FusionBubbleStack } from "./FusionBubbleStack";
 import { FusionComposer } from "./FusionComposer";
 import { FusionToolbar } from "./FusionToolbar";
-import type { FusionAttachment, FusionChatMessage, FusionChatStatus } from "./types";
+import type { FusionChatMessage, FusionChatStatus } from "./types";
 import type { FusionModeController } from "./useFusionModeController";
 import {
   clampFusionPoint,
+  FUSION_BUBBLE_COMPOSER_GAP,
   FUSION_COMPOSER_HEIGHT,
   FUSION_COMPOSER_WIDTH,
   fusionAttachedBubbleLayout,
@@ -31,20 +33,15 @@ export function FusionModeSurface(props: {
   messages: readonly FusionChatMessage[];
   status: FusionChatStatus;
   error?: string | null;
-  input: string;
-  inputHistory: readonly string[];
-  attachments: FusionAttachment[];
   canvasReady: boolean;
   modelLabel: string;
   modelControl?: ReactNode;
   selectionContext: GeoGebraSelectionContext;
   activePanel?: "transcript" | "history" | "blackboard" | "problem-bank" | "settings" | null;
   languageControl?: ReactNode;
-  onInputChange: (value: string) => void;
   onRefreshSelection?: (reason: GeoGebraSelectionRefreshReason) => GeoGebraSelectionContext | undefined;
-  onAttachmentsChange: (attachments: FusionAttachment[]) => void;
-  onSend: () => Promise<boolean>;
-  onStop: () => void;
+  onPrepareSubmit?: (selectionObjectNames: readonly string[]) => void;
+  onAttachmentError?: (message: string) => void;
   canRetry?: boolean;
   onRetry?: () => Promise<boolean>;
   onOpenHistory: (trigger: HTMLButtonElement) => void;
@@ -57,8 +54,14 @@ export function FusionModeSurface(props: {
 }) {
   const { t } = useTranslation();
   const reduceMotion = useReducedMotion();
-  const busy = props.status === "streaming" || props.status === "submitted";
+  const runtimeMessages = useAuiState((state) => state.thread.messages);
+  const runtimeRunning = useAuiState((state) => state.thread.isRunning);
+  const busy = runtimeRunning;
   const [turnSizes, setTurnSizes] = useState<Record<string, FusionSurfaceSize>>({});
+  const [composerSize, setComposerSize] = useState<FusionSurfaceSize>({
+    width: FUSION_COMPOSER_WIDTH,
+    height: FUSION_COMPOSER_HEIGHT,
+  });
   const [announcement, setAnnouncement] = useState("");
   const previousStatusRef = useRef(props.status);
   const announcementBaselineRef = useRef<readonly string[]>(props.messages.map((message) => message.id));
@@ -80,12 +83,12 @@ export function FusionModeSurface(props: {
   const composerPoint = useMemo(() => clampFusionPoint(
     props.controller.composerPoint,
     props.controller.viewport,
-    { width: FUSION_COMPOSER_WIDTH, height: FUSION_COMPOSER_HEIGHT },
+    composerSize,
     safeInsets,
-  ), [props.controller.composerPoint, props.controller.viewport, safeInsets]);
+  ), [composerSize, props.controller.composerPoint, props.controller.viewport, safeInsets]);
   const activeBubbleLayout = useMemo(
-    () => fusionAttachedBubbleLayout(composerPoint, props.controller.viewport, safeInsets),
-    [composerPoint, props.controller.viewport, safeInsets],
+    () => fusionAttachedBubbleLayout(composerPoint, props.controller.viewport, safeInsets, composerSize),
+    [composerPoint, composerSize, props.controller.viewport, safeInsets],
   );
   const activeBubbleSize = activeBubbleLayout.size;
   useEffect(() => {
@@ -120,10 +123,13 @@ export function FusionModeSurface(props: {
       // final viewport footprint instead of feeding every ResizeObserver tick
       // back into collision resolution, which visibly shakes the whole stack.
       size: turn.status === "active" ? activeBubbleSize : turnSizes[turn.id],
+      belowOffset: turn.id === props.controller.activeTurnId
+        ? composerSize.height + FUSION_BUBBLE_COMPOSER_GAP
+        : undefined,
     })),
     props.controller.viewport,
     safeInsets,
-  ).map((layout) => [layout.id, layout])), [activeBubbleSize, composerPoint, props.controller.activeTurnId, props.controller.viewport, safeInsets, turnSizes, visibleTurns]);
+  ).map((layout) => [layout.id, layout])), [activeBubbleSize, composerPoint, composerSize.height, props.controller.activeTurnId, props.controller.viewport, safeInsets, turnSizes, visibleTurns]);
   const recordTurnSize = useCallback((turnId: string, size: FusionSurfaceSize) => {
     setTurnSizes((current) => {
       const previous = current[turnId];
@@ -132,18 +138,12 @@ export function FusionModeSurface(props: {
     });
   }, []);
 
-  const send = async () => {
+  const prepareSubmit = () => {
     if (busy) return;
     const refreshedSelection = props.onRefreshSelection?.("submit");
-    const turnId = props.controller.freezeTurnAnchor(
-      undefined,
+    props.onPrepareSubmit?.(
       fusionSelectionObjectNamesForSubmit(props.selectionContext, refreshedSelection),
     );
-    try {
-      if (!await props.onSend()) props.controller.failTurn(turnId);
-    } catch {
-      props.controller.failTurn(turnId);
-    }
   };
 
   return (
@@ -245,20 +245,19 @@ export function FusionModeSurface(props: {
       {visibleTurns.map((turn, turnIndex) => {
         const layout = turnLayouts.get(turn.id);
         const displayAnchor = fusionTurnDisplayAnchor(turn, props.controller.activeTurnId, composerPoint);
-        const turnMessages = props.messages.filter((message) => turn.messageIds.includes(message.id));
         const turnChatStatus: FusionChatStatus = turn.status === "active"
           ? props.status === "submitted" ? "submitted" : "streaming"
           : turn.status === "error" ? "error" : "ready";
         const bubbles = deriveFusionBubbles({
-          messages: turnMessages,
+          runtimeMessages,
+          sourceMessageIds: turn.messageIds,
+          active: turn.status === "active" && runtimeRunning,
           status: turnChatStatus,
           error: turn.status === "error" ? props.error : null,
           labels: {
             thinking: t("fusion.thinking"),
             connecting: t("fusion.connecting"),
-            runningTool: (name) => t("fusion.runningTool", { name }),
             attachment: t("fusion.attachmentMessage"),
-            moreMessages: (count) => t("fusion.moreMessages", { count }),
           },
         });
         return (
@@ -267,7 +266,6 @@ export function FusionModeSurface(props: {
             anchor={layout?.anchor ?? displayAnchor}
             placement={layout?.placement ?? props.controller.bubblePlacement}
             bubbles={bubbles}
-            streaming={turn.status === "active"}
             turnStatus={turn.status}
             collapsed={turn.collapsed}
             pinned={turn.pinned}
@@ -282,6 +280,7 @@ export function FusionModeSurface(props: {
             continueLabel={t("fusion.continueTurn")}
             retryLabel={t("fusion.retryTurn")}
             collapsedSummaryLabel={t("fusion.collapsedTurn")}
+            returnToLatestLabel={t("fusion.returnToLatest")}
             onToggleCollapsed={() => props.controller.toggleTurnCollapsed(turn.id)}
             onTogglePinned={() => props.controller.toggleTurnPinned(turn.id)}
             onDismiss={() => props.controller.dismissTurn(turn.id)}
@@ -294,13 +293,13 @@ export function FusionModeSurface(props: {
                 }).catch(() => props.controller.failTurn(turn.id));
               }
               : undefined}
-            onOpenTranscript={props.onOpenTranscript}
             onSizeChange={turn.status === "active" ? undefined : (size) => recordTurnSize(turn.id, size)}
             visualOpacity={fusionTurnVisualOpacity(turnIndex, visibleTurns.length, turn.status === "active")}
             visualOrder={turnIndex}
             maxHeight={turn.id === props.controller.activeTurnId && !turn.collapsed
               ? activeBubbleSize.height
               : undefined}
+            composerHeight={turn.id === props.controller.activeTurnId ? composerSize.height : undefined}
           />
         );
       })}
@@ -311,10 +310,6 @@ export function FusionModeSurface(props: {
             key="fusion-composer"
             x={composerPoint.x}
             y={composerPoint.y}
-            value={props.input}
-            history={props.inputHistory}
-            attachments={props.attachments}
-            busy={busy}
             disabled={!props.canvasReady}
             canvasConnected={props.canvasReady}
             canvasConnectedLabel={t("canvasStatus.canvas.ready")}
@@ -326,26 +321,17 @@ export function FusionModeSurface(props: {
               : undefined}
             placeholder={t("fusion.placeholder")}
             attachLabel={t("composer.attachFiles")}
-            removeAttachmentLabel={t("fusion.removeAttachment")}
+            removeAttachmentLabel={(name) => t("composer.removeAttachment", { name })}
             sendLabel={t("composer.sendMessage")}
             stopLabel={t("composer.stopGeneration")}
             dragLabel={t("fusion.dragComposer")}
-            fileReadFailed={t("composer.fileReadFailed")}
-            unsupportedFile={(name) => t("composer.unsupportedFile", { name })}
-            fileTooLarge={(name) => t("composer.fileTooLarge", { name })}
-            tooManyFiles={(count) => t("composer.tooManyFiles", { count })}
-            totalTooLarge={t("composer.totalTooLarge")}
-            onChange={props.onInputChange}
             onFocus={() => props.onRefreshSelection?.("focus")}
-            onAttachmentsChange={props.onAttachmentsChange}
-            onSend={() => { void send(); }}
-            onStop={() => {
-              props.controller.completeActiveTurn();
-              props.onStop();
-            }}
+            onSubmit={prepareSubmit}
+            onAttachmentError={props.onAttachmentError}
             onDragStart={props.controller.startDragging}
             onDragMove={props.controller.moveDragging}
             onDragStop={props.controller.stopDragging}
+            onSizeChange={setComposerSize}
           />
         )}
       </AnimatePresence>

@@ -1,18 +1,17 @@
-import { getToolName, isToolUIPart } from "ai";
-import { isAssistantDisplayToolPart } from "../chat/assistantProcess";
+import { getExternalStoreMessages, type ThreadMessage } from "@assistant-ui/react";
+import { isToolUIPart } from "ai";
+import { isGeoChatDisplayToolName } from "../assistant-ui/toolPresentation";
 import type { FusionBubble, FusionChatMessage, FusionChatStatus } from "./types";
 
 export type FusionBubbleLabels = {
   thinking: string;
   connecting: string;
-  runningTool: (name: string) => string;
   attachment: string;
-  moreMessages: (count: number) => string;
 };
 
-function textContent(message: FusionChatMessage) {
-  return message.parts
-    .filter((part): part is Extract<(typeof message.parts)[number], { type: "text" }> => part.type === "text")
+function runtimeTextContent(message: ThreadMessage) {
+  return message.content
+    .filter((part): part is Extract<(typeof message.content)[number], { type: "text" }> => part.type === "text")
     .map((part) => part.text.trim())
     .filter(Boolean)
     .join("\n\n");
@@ -27,123 +26,114 @@ export function isFusionRenderableMessage(message: FusionChatMessage) {
   });
 }
 
-function assistantStatus(message: FusionChatMessage, labels: FusionBubbleLabels) {
-  const activeTool = [...message.parts].reverse().find((part) => isToolUIPart(part) && part.state !== "output-available");
-  if (activeTool && isToolUIPart(activeTool)) return labels.runningTool(getToolName(activeTool));
-  const hasReasoning = message.parts.some((part) => part.type === "reasoning");
-  return hasReasoning ? labels.thinking : "";
+function externalMessageIds(message: ThreadMessage) {
+  return getExternalStoreMessages<FusionChatMessage>(message).map((external) => external.id);
 }
 
-function appendAssistantSegment(
-  target: FusionBubble[],
-  message: FusionChatMessage,
-  parts: FusionChatMessage["parts"],
-  segmentIndex: number,
-  status: FusionChatStatus,
-  labels: FusionBubbleLabels,
-) {
-  if (parts.length === 0) return;
-  const segmentMessage: FusionChatMessage = {
-    ...message,
-    id: `${message.id}:segment:${segmentIndex}`,
-    parts,
-  };
-  const content = textContent(segmentMessage);
-  if (content) {
-    target.push({ id: segmentMessage.id, role: "assistant", content, message: segmentMessage });
-    return;
-  }
-  const segmentStatus = assistantStatus(segmentMessage, labels);
-  if (segmentStatus) {
-    target.push({
-      id: segmentMessage.id,
-      role: "status",
-      content: segmentStatus,
-      pending: status !== "ready",
-      message: segmentMessage,
-    });
-  }
+function stableSourceId(message: ThreadMessage, sourceMessageIds: ReadonlySet<string>) {
+  return externalMessageIds(message).find((id) => sourceMessageIds.has(id))
+    ?? (sourceMessageIds.has(message.id) ? message.id : undefined)
+    ?? message.id;
+}
+
+function belongsToTurn(message: ThreadMessage, sourceMessageIds: ReadonlySet<string>) {
+  if (sourceMessageIds.has(message.id)) return true;
+  return externalMessageIds(message).some((id) => sourceMessageIds.has(id));
+}
+
+function hasUserAttachment(message: ThreadMessage) {
+  return message.role === "user" && (
+    message.attachments.length > 0
+    || message.content.some((part) => part.type === "file" || part.type === "image")
+  );
+}
+
+function isDisplayToolPart(
+  part: ThreadMessage["content"][number],
+): part is Extract<ThreadMessage["content"][number], { type: "tool-call" }> {
+  return part.type === "tool-call" && isGeoChatDisplayToolName(part.toolName);
+}
+
+function shouldRenderAssistantShell(message: Extract<ThreadMessage, { role: "assistant" }>) {
+  return message.status.type !== "complete"
+    || message.content.some((part) => !isDisplayToolPart(part));
 }
 
 export function deriveFusionBubbles(input: {
-  messages: readonly FusionChatMessage[];
+  runtimeMessages: readonly ThreadMessage[];
+  sourceMessageIds: readonly string[];
+  active: boolean;
   status: FusionChatStatus;
   error?: string | null;
   labels: FusionBubbleLabels;
-  limit?: number;
 }): FusionBubble[] {
-  const historyBubbles: FusionBubble[] = [];
-  for (const message of input.messages) {
+  const sourceMessageIds = new Set(input.sourceMessageIds);
+  const matchedIndices = input.runtimeMessages.flatMap((message, index) => (
+    belongsToTurn(message, sourceMessageIds) ? [index] : []
+  ));
+  const lastMatchedIndex = matchedIndices.at(-1) ?? -1;
+  const selectedMessages = input.runtimeMessages.filter((message, index) => (
+    belongsToTurn(message, sourceMessageIds)
+    || (sourceMessageIds.size > 0 && input.active && index > lastMatchedIndex && message.role === "assistant")
+  ));
+  const bubbles: FusionBubble[] = [];
+  let hasAssistantShell = false;
+  let currentUserSeed: string | undefined;
+
+  for (const message of selectedMessages) {
+    if (message.role === "system") continue;
+    const content = runtimeTextContent(message);
     if (message.role === "user") {
-      const content = textContent(message);
-      if (content) historyBubbles.push({ id: message.id, role: "user", content, message });
-      else if (message.parts.some((part) => part.type === "file")) {
-        historyBubbles.push({ id: message.id, role: "user", content: input.labels.attachment, message });
+      currentUserSeed = stableSourceId(message, sourceMessageIds);
+      if (content || hasUserAttachment(message)) {
+        bubbles.push({
+          id: message.id,
+          role: "user",
+          content: content || input.labels.attachment,
+          messageId: message.id,
+        });
       }
       continue;
     }
 
-    let segmentIndex = 0;
-    let displayIndex = 0;
-    let segmentParts: FusionChatMessage["parts"] = [];
-    const flushSegment = () => {
-      appendAssistantSegment(historyBubbles, message, segmentParts, segmentIndex, input.status, input.labels);
-      if (segmentParts.length > 0) segmentIndex += 1;
-      segmentParts = [];
-    };
-
-    for (const part of message.parts) {
-      if (!isAssistantDisplayToolPart(part)) {
-        segmentParts.push(part);
-        continue;
-      }
-      flushSegment();
-      historyBubbles.push({
-        id: `${message.id}:display:${displayIndex}`,
+    if (shouldRenderAssistantShell(message)) {
+      hasAssistantShell = true;
+      bubbles.push({
+        id: `fusion-response:${currentUserSeed ?? stableSourceId(message, sourceMessageIds)}`,
+        role: "assistant",
+        content: content || input.labels.thinking,
+        messageId: message.id,
+        ...(message.status.type === "running" || message.status.type === "requires-action" ? { pending: true } : {}),
+      });
+    }
+    message.content.forEach((part, partIndex) => {
+      if (!isDisplayToolPart(part)) return;
+      bubbles.push({
+        id: `${message.id}:${part.toolCallId}`,
         role: "display-card",
         content: "",
-        displayPart: part,
+        messageId: message.id,
+        partIndex,
       });
-      displayIndex += 1;
-    }
-    flushSegment();
+    });
   }
 
-  // Keep the newest assistant response on one React identity for its whole
-  // lifecycle. The submitted/thinking placeholder can therefore turn into
-  // reasoning, tools, and streamed text without mounting a second bubble.
-  let currentResponseIndex = -1;
-  for (let index = historyBubbles.length - 1; index >= 0; index -= 1) {
-    const bubble = historyBubbles[index];
-    if (bubble?.role !== "assistant" && bubble?.role !== "status") continue;
-    currentResponseIndex = index;
-    break;
-  }
-  if (currentResponseIndex >= 0) {
-    historyBubbles[currentResponseIndex] = {
-      ...historyBubbles[currentResponseIndex],
-      id: "fusion-active",
-    };
-  } else if (input.status === "submitted" || input.status === "streaming") {
-    historyBubbles.push({
-      id: "fusion-active",
+  const firstAssistant = selectedMessages.find((message) => message.role === "assistant");
+  const responseSeed = currentUserSeed
+    ?? (firstAssistant ? stableSourceId(firstAssistant, sourceMessageIds) : undefined)
+    ?? input.sourceMessageIds[0]
+    ?? "pending";
+  const responseShellId = `fusion-response:${responseSeed}`;
+
+  if (input.active && !hasAssistantShell && (input.status === "submitted" || input.status === "streaming")) {
+    bubbles.push({
+      id: responseShellId,
       role: "status",
       content: input.status === "submitted" ? input.labels.connecting : input.labels.thinking,
       pending: true,
     });
-  }
-
-  const limit = Math.max(1, input.limit ?? 3);
-  const hiddenCount = Math.max(0, historyBubbles.length - limit);
-  const bubbles: FusionBubble[] = hiddenCount > 0
-    ? [
-      { id: "fusion-overflow", role: "overflow", content: input.labels.moreMessages(hiddenCount) },
-      ...historyBubbles.slice(-limit),
-    ]
-    : historyBubbles;
-
-  if (input.error) {
-    bubbles.push({ id: "fusion-error", role: "error", content: input.error });
+  } else if (!hasAssistantShell && input.error) {
+    bubbles.push({ id: responseShellId, role: "error", content: input.error });
   }
 
   return bubbles;

@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import {
   FUSION_BUBBLE_ABOVE_OFFSET,
   FUSION_BUBBLE_BELOW_OFFSET,
+  FUSION_BUBBLE_CARD_MAX_HEIGHT,
   FUSION_BUBBLE_COMPOSER_GAP,
+  FUSION_BUBBLE_MAX_HEIGHT,
+  FUSION_BUBBLE_STACK_CHROME_ALLOWANCE,
   FUSION_COMPOSER_HEIGHT,
   fusionActiveBubbleSize,
   fusionAttachedBubbleLayout,
@@ -69,7 +72,7 @@ describe("fusion spatial layout", () => {
   test("keeps the responsive active bubble clear of its composer", () => {
     const compactViewport = { width: 960, height: 600 };
     const requestedAnchor = { x: 380, y: 448 };
-    const size = fusionActiveBubbleSize(compactViewport);
+    const size = fusionAttachedBubbleLayout(requestedAnchor, compactViewport).size;
     const [layout] = layoutFusionSpatialTurns([{
       id: "attached-active",
       anchor: requestedAnchor,
@@ -92,6 +95,16 @@ describe("fusion spatial layout", () => {
     expect(composer.top - bubble.bottom).toBeGreaterThanOrEqual(FUSION_BUBBLE_COMPOSER_GAP);
   });
 
+  test("reserves two maximum-height cards in the default stack budget", () => {
+    expect(FUSION_BUBBLE_MAX_HEIGHT).toBe(
+      FUSION_BUBBLE_CARD_MAX_HEIGHT * 2 + FUSION_BUBBLE_STACK_CHROME_ALLOWANCE,
+    );
+    expect(FUSION_BUBBLE_STACK_CHROME_ALLOWANCE).toBeGreaterThanOrEqual(96);
+    expect(FUSION_BUBBLE_MAX_HEIGHT - 36 - 48 - 6).toBeGreaterThanOrEqual(
+      FUSION_BUBBLE_CARD_MAX_HEIGHT * 2 + 6,
+    );
+  });
+
   test("shrinks an attached live response instead of moving it over the composer", () => {
     const compactViewport = { width: 960, height: 600 };
     const requestedAnchor = { x: 480, y: 300 };
@@ -110,6 +123,19 @@ describe("fusion spatial layout", () => {
     expect(layout).toMatchObject({ anchor: requestedAnchor, placement: attached.placement });
     expect(requestedAnchor.y - bubble.bottom).toBeGreaterThanOrEqual(FUSION_BUBBLE_COMPOSER_GAP);
     expect(bubble.top).toBeGreaterThanOrEqual(56);
+  });
+
+  test("uses the measured multiline composer height when reserving response space", () => {
+    const viewport = { width: 1100, height: 760 };
+    const point = { x: 550, y: 520 };
+    const composer = { width: 390, height: 156 };
+    const attached = fusionAttachedBubbleLayout(point, viewport, {}, composer);
+    const composerBottom = point.y + composer.height;
+    if (attached.placement === "above") {
+      expect(point.y - attached.size.height).toBeGreaterThanOrEqual(56);
+    } else {
+      expect(composerBottom + FUSION_BUBBLE_COMPOSER_GAP + attached.size.height).toBeLessThanOrEqual(viewport.height - 12);
+    }
   });
 
   test("reserves the right side for viewport panels on desktop only", () => {

@@ -15,10 +15,16 @@ const messages = [{
 
 describe("fusion screen-reader announcements", () => {
   test("keeps transcript streaming outside live regions to avoid duplicate announcements", () => {
-    const source = readFileSync(join(import.meta.dir, "../src/renderer-react/src/features/fusion-mode/FusionTranscript.tsx"), "utf8");
-    expect(source).toContain('role="region"');
-    expect(source).not.toContain('role="log"');
-    expect(source).not.toContain('aria-live="polite"');
+    const root = join(import.meta.dir, "../src/renderer-react/src");
+    const transcript = readFileSync(join(root, "features/fusion-mode/FusionTranscript.tsx"), "utf8");
+    const surface = readFileSync(join(root, "features/fusion-mode/FusionModeSurface.tsx"), "utf8");
+    const thread = readFileSync(join(root, "features/assistant-ui/GeoChatThread.tsx"), "utf8");
+    expect(transcript).toContain("ariaLabel={props.ariaLabel}");
+    expect(thread).toContain('role={ariaLabel ? "region" : undefined}');
+    expect(thread).not.toContain('role="log"');
+    expect(thread).not.toContain('aria-live="polite"');
+    expect(transcript).not.toContain('aria-live="polite"');
+    expect(surface.match(/aria-live="polite"/g)).toHaveLength(1);
   });
 
   test("announces only final assistant text after a busy run completes", () => {

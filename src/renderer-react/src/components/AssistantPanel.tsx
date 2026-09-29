@@ -2,7 +2,6 @@ import { ArrowLeftIcon, CalculatorIcon, ChevronDownIcon, CircleHelpIcon, CircleP
 import {
   Box,
   ButtonBase,
-  CircularProgress,
   IconButton,
   ListItemText,
   Menu,
@@ -15,6 +14,7 @@ import {
 import { Joyride, STATUS, type Step } from "react-joyride";
 import {
   useLayoutEffect,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -22,20 +22,15 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { Streamdown } from "streamdown";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { agentModelSupportsReasoning } from "@geochat-ai/app/model-registry";
+import { AssistantRuntimeProvider, type AssistantRuntime } from "@assistant-ui/react";
 import {
   unwrapAgentRunSubmissionError,
   useAgentRunChat,
   wasAgentRunMessageAccepted,
 } from "../hooks/useAgentRunChat";
 import { formatAgentRunError } from "../features/agent-run/errorMessage";
-import { STREAMDOWN_PLUGINS } from "../features/chat/streamdownPlugins";
-import { StaticMessageMarkdown } from "../features/chat/StaticMessageMarkdown";
-import { composerHistoryFromMessages } from "../features/chat/composerHistory";
-import { isInternalToolResultEcho } from "../features/chat/toolResultEcho";
-import { collectAssistantProcessRuns } from "../features/chat/assistantProcess";
 import { useLocalSession } from "../features/local-session/useLocalSession";
 import { SettingsPanel } from "../features/desktop/SettingsPanel";
 import { saveStoredModel } from "../features/local-session/storage";
@@ -54,14 +49,8 @@ import {
   resolvePanelWindowHost,
   usePanelWindow,
 } from "../features/panel-window/usePanelWindow";
-import { useMessageScroll } from "../hooks/useMessageScroll";
-import { useStreamdownTranslations } from "../i18n/useStreamdownTranslations";
-import { ChatComposer, type ComposerAttachment } from "./ChatComposer";
 import { ConversationDrawer } from "./ConversationDrawer";
 import { LanguageButton } from "./LanguageButton";
-import { MessageAttachment } from "./MessageAttachment";
-import { AgentToolResult, isAgentDisplayToolPart } from "./AgentToolResult";
-import { AssistantProcess } from "./AssistantProcess";
 import { BlackboardDrawer } from "./BlackboardDrawer";
 import { OnboardingTooltip } from "./OnboardingTooltip";
 import { ErrorToast } from "./ErrorToast";
@@ -94,6 +83,17 @@ import {
   useInteractionMode,
   useInteractionModeTransition,
 } from "../features/fusion-mode";
+import {
+  convertToAssistantUiMessage,
+  cancelGeoChatAssistantTurn,
+  createGeoChatAttachmentAdapter,
+  GeoChatComposer,
+  GeoChatThread,
+  resolveGeoChatConversationId,
+  submitGeoChatAssistantTurn,
+  useGeoChatAssistantRuntime,
+  type GeoChatAssistantSubmission,
+} from "../features/assistant-ui";
 
 const ONBOARDING_TOUR_STORAGE_KEY = "geogebraCopilotOnboardingTourCompleted";
 const ONBOARDING_TOUR_VERSION = 3;
@@ -104,6 +104,12 @@ const MotionPaper = motion.create(Paper);
 const PROBLEM_BANK_SIDECAR_WIDTH = 380;
 const PROBLEM_BANK_SIDECAR_GAP = 12;
 const PANEL_VIEWPORT_GUTTER = 8;
+
+function createAssistantRuntimeThreadId(conversationId?: string | null) {
+  // New conversations use the same client-generated id for assistant-ui and
+  // the backend run, so publishing the first request never switches threads.
+  return conversationId ?? `conv_${crypto.randomUUID().replaceAll("-", "")}`;
+}
 
 function compactConversationTitle(value: string) {
   const normalized = value
@@ -157,12 +163,80 @@ async function pasteContextMenuText(target: PanelContextMenuState["editable"]) {
   target.ownerDocument.execCommand("insertText", false, text);
 }
 
-function toolPartStatus(part: unknown): string {
-  if (!part || typeof part !== "object") return "pending";
-  const state = (part as { state?: string }).state;
-  if (state === "output-available") return "done";
-  if (state === "output-error") return "failed";
-  return "running";
+function WindowThreadEmpty({ onSubmit }: { onSubmit: (prompt: string) => void }) {
+  const { t } = useTranslation();
+  return (
+    <Box className="geochat-assistant-welcome">
+      <Stack spacing={1.25} sx={{ width: "100%" }}>
+        <Stack spacing={0.75} sx={{ alignItems: "center", textAlign: "center" }}>
+          <motion.div
+            initial={{ opacity: 0, y: 12, scale: 0.76, rotate: -8 }}
+            animate={{ opacity: 1, y: 0, scale: 1, rotate: 0 }}
+            transition={{ duration: 0.62, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <BrandIcon size={136} />
+          </motion.div>
+          <Box sx={{ px: 0.5 }}>
+            <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: "-0.02em" }}>
+              {t("panel.welcomeTitle")}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35, maxWidth: 520 }}>
+              {t("panel.welcomeDescription")}
+            </Typography>
+          </Box>
+        </Stack>
+        <Stack direction="row" spacing={0.75} sx={{ width: "100%", alignItems: "stretch" }}>
+          {[
+            { key: "circle", icon: <CirclePlusIcon size={18} /> },
+            { key: "construction", icon: <CalculatorIcon size={18} /> },
+            { key: "explain", icon: <CircleHelpIcon size={18} /> },
+          ].map((example, index) => (
+            <motion.div
+              key={example.key}
+              initial={{ opacity: 0, y: 32, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ delay: index * 0.1, duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+              style={{ flex: 1, minWidth: 0 }}
+            >
+              <ButtonBase
+                component="button"
+                type="button"
+                onClick={() => onSubmit(t(`panel.examples.${example.key}`))}
+                sx={{
+                  width: "100%",
+                  minWidth: 0,
+                  minHeight: 94,
+                  display: "flex",
+                  alignItems: "flex-end",
+                  justifyContent: "flex-start",
+                  p: 1.1,
+                  border: 1,
+                  borderColor: "divider",
+                  borderRadius: 1,
+                  bgcolor: "background.paper",
+                  color: "text.primary",
+                  textAlign: "left",
+                  transition: (theme) => theme.transitions.create(["background-color", "border-color", "transform"], { duration: 150 }),
+                  "&:hover": { bgcolor: "action.hover", borderColor: "primary.main", transform: "translateY(-2px)" },
+                  "&:focus-visible": { outline: "2px solid", outlineColor: "primary.main", outlineOffset: 1 },
+                }}
+              >
+                <Stack spacing={0.45} sx={{ minWidth: 0 }}>
+                  {example.icon}
+                  <Typography variant="caption" sx={{ fontWeight: 750, lineHeight: 1.25, overflowWrap: "anywhere" }}>
+                    {t(`panel.examples.${example.key}`)}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2, overflowWrap: "anywhere" }}>
+                    {t(`panel.exampleDescriptions.${example.key}`)}
+                  </Typography>
+                </Stack>
+              </ButtonBase>
+            </motion.div>
+          ))}
+        </Stack>
+      </Stack>
+    </Box>
+  );
 }
 
 export function AssistantPanel({
@@ -182,11 +256,8 @@ export function AssistantPanel({
   const interaction = useInteractionMode();
   const modeTransition = useInteractionModeTransition(interaction);
   const fusionController = useFusionModeController(interaction.mode === "fusion");
-  const streamdownTranslations = useStreamdownTranslations();
-  const [input, setInput] = useState("");
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
   const [contextMenu, setContextMenu] = useState<PanelContextMenuState | null>(null);
-  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [panelView, setPanelView] = useState<"chat" | "user">("chat");
   const [problemBankOpen, setProblemBankOpen] = useState(false);
@@ -209,6 +280,9 @@ export function AssistantPanel({
   const suppressBlackboardToggleRef = useRef(false);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [currentConversationTitle, setCurrentConversationTitle] = useState<string | null>(null);
+  const [assistantThreadId, setAssistantThreadId] = useState(() => createAssistantRuntimeThreadId());
+  const assistantRuntimeRef = useRef<AssistantRuntime | null>(null);
+  const pendingFusionSelectionRef = useRef<readonly string[] | null>(null);
 
   useEffect(() => () => {
     if (fusionPanelFocusRestoreTimerRef.current !== null) {
@@ -246,7 +320,6 @@ export function AssistantPanel({
   });
   const panelWindow = usePanelWindow(panelView, interaction.mode === "window");
   const { panelRef, collapsed, setCollapsed, dragging, resizing } = panelWindow;
-  const messageScroll = useMessageScroll({ active: !collapsed && panelView === "chat" });
   const { messages, setMessages, sendMessage, retry, canRetry, stop, status, error } = useAgentRunChat({
     apiOrigin: API_ORIGIN,
     getAuthToken: () => authSessionRef.current.token,
@@ -261,6 +334,7 @@ export function AssistantPanel({
     onRendererToolSettled: () => onRefreshSelection?.("tool-complete"),
     locale: i18n.language.startsWith("en") ? "en-US" : "zh-CN",
     onFinish: () => {
+      pendingFusionSelectionRef.current = null;
       fusionController.completeActiveTurn();
       void conversationHistory.load(true);
       if (blackboardOpen) void blackboard.load();
@@ -268,9 +342,10 @@ export function AssistantPanel({
     onRestore: (run) => {
       panelChatRef.current.setConversationId(run.conversationId);
       setCurrentConversationId(run.conversationId);
+      setAssistantThreadId(run.conversationId);
       setCurrentConversationTitle(run.prompt.replace(/\s+/g, " ").trim().slice(0, 80));
       changeModel(run.modelId, run.modelProvider);
-      setInput(run.prompt);
+      assistantRuntimeRef.current?.thread.composer.setText(run.prompt);
       // A recovered run keeps the reasoning setting it started with, not
       // whatever the composer happens to show now.
       setThinkingEnabled(run.thinking === true);
@@ -278,7 +353,69 @@ export function AssistantPanel({
     },
   });
   const isStreaming = status === "streaming" || status === "submitted";
-  const composerHistory = useMemo(() => composerHistoryFromMessages(messages), [messages]);
+  const assistantAttachmentAdapter = useMemo(() => createGeoChatAttachmentAdapter({
+    duplicateFile: (name) => t("composer.duplicateFile", { name }),
+    fileReadFailed: t("composer.fileReadFailed"),
+    fileTooLarge: (name) => t("composer.fileTooLarge", { name }),
+    tooManyFiles: (count) => t("composer.tooManyFiles", { count }),
+    totalTooLarge: t("composer.totalTooLarge"),
+    unsupportedFile: (name) => t("composer.unsupportedFile", { name }),
+  }), [t]);
+  const assistantMessageProjectionRef = useRef({ messageCount: messages.length, status, error });
+  assistantMessageProjectionRef.current = { messageCount: messages.length, status, error };
+  const assistantRuntimeActionsRef = useRef({
+    submit: submitAssistantSubmission,
+    freezeTurnAnchor: fusionController.freezeTurnAnchor,
+    failTurn: fusionController.failTurn,
+    completeActiveTurn: fusionController.completeActiveTurn,
+    stop,
+  });
+  assistantRuntimeActionsRef.current = {
+    submit: submitAssistantSubmission,
+    freezeTurnAnchor: fusionController.freezeTurnAnchor,
+    failTurn: fusionController.failTurn,
+    completeActiveTurn: fusionController.completeActiveTurn,
+    stop,
+  };
+  const convertAssistantMessage = useCallback((message: (typeof messages)[number], index: number) => {
+    const projection = assistantMessageProjectionRef.current;
+    return convertToAssistantUiMessage(message, {
+      state: message.role === "assistant" && index === projection.messageCount - 1
+        ? projection.status
+        : "ready",
+      error: projection.error,
+    });
+  }, []);
+  const handleAssistantNew = useCallback(async (submission: GeoChatAssistantSubmission) => {
+    const pendingSelection = pendingFusionSelectionRef.current;
+    pendingFusionSelectionRef.current = null;
+    await submitGeoChatAssistantTurn({
+      submission,
+      prepareTurn: pendingSelection
+        ? () => assistantRuntimeActionsRef.current.freezeTurnAnchor(undefined, pendingSelection)
+        : undefined,
+      submit: assistantRuntimeActionsRef.current.submit,
+      failTurn: assistantRuntimeActionsRef.current.failTurn,
+    });
+  }, []);
+  const handleAssistantCancel = useCallback(async () => {
+    pendingFusionSelectionRef.current = null;
+    await cancelGeoChatAssistantTurn({
+      stop: assistantRuntimeActionsRef.current.stop,
+      completeTurn: assistantRuntimeActionsRef.current.completeActiveTurn,
+    });
+  }, []);
+  const assistantRuntime = useGeoChatAssistantRuntime({
+    threadId: assistantThreadId,
+    messages,
+    isRunning: isStreaming,
+    isSendDisabled: isStreaming,
+    convertMessage: convertAssistantMessage,
+    onNew: handleAssistantNew,
+    onCancel: handleAssistantCancel,
+    attachmentAdapter: assistantAttachmentAdapter,
+  });
+  assistantRuntimeRef.current = assistantRuntime;
 
   // The MCP server queues actions and waits for the renderer to run them, so
   // the poll loop belongs here, where the app is mounted, rather than in the
@@ -286,8 +423,8 @@ export function AssistantPanel({
   // reads live state through this ref, because an MCP action can arrive on any
   // render and must see the state of that moment, not of its construction.
   const mcpStatusRef = useRef<RendererMcpStatus>(DEFAULT_MCP_STATUS);
-  const debugStateRef = useRef({ conversationId: currentConversationId, view: panelView, isStreaming });
-  debugStateRef.current = { conversationId: currentConversationId, view: panelView, isStreaming };
+  const debugStateRef = useRef({ conversationId: currentConversationId, assistantThreadId, view: panelView, isStreaming });
+  debugStateRef.current = { conversationId: currentConversationId, assistantThreadId, view: panelView, isStreaming };
   const executeDebugActionRef = useRef<((action: DesktopDebugAction) => Promise<unknown>) | null>(null);
   if (!executeDebugActionRef.current) {
     executeDebugActionRef.current = createDesktopDebugActionExecutor({
@@ -299,8 +436,8 @@ export function AssistantPanel({
       sendMessage: (content, requestedConversationId) => {
         const conversationId = requestedConversationId
           ?? debugStateRef.current.conversationId
-          ?? `conv_${crypto.randomUUID().replaceAll("-", "")}`;
-        void submit(content, conversationId).catch((error) => {
+          ?? debugStateRef.current.assistantThreadId;
+        void submitPrompt(content, conversationId).catch((error) => {
           console.error(`[ERROR] Desktop MCP message submission failed: ${error instanceof Error ? error.message : String(error)}`, error);
         });
         return conversationId;
@@ -314,6 +451,7 @@ export function AssistantPanel({
         setMessages([]);
         panelChatRef.current.setConversationId(conversationId);
         setCurrentConversationId(conversationId);
+        setAssistantThreadId(conversationId);
         setCurrentConversationTitle(null);
       },
       showChat: () => setPanelView("chat")
@@ -432,21 +570,20 @@ export function AssistantPanel({
     { target: () => panelRef.current?.querySelector<HTMLElement>('[data-copilot-tour="send"]') ?? null, title: t("tour.sendTitle"), content: t("tour.sendDescription"), placement: "top", skipBeacon: true, buttons: ["back", "skip", "primary"] },
     { target: () => panelRef.current?.querySelector<HTMLElement>('[data-copilot-tour="minimize"]') ?? null, title: t("tour.minimizeTitle"), content: t("tour.minimizeDescription"), placement: "bottom-end", skipBeacon: true, buttons: ["back", "skip", "primary"] },
   ];
-  useLayoutEffect(() => {
-    if (collapsed || panelView !== "chat" || messageScroll.mode !== "follow") return;
-    messageScroll.scrollToLatest();
-  }, [collapsed, messageScroll.mode, messageScroll.scrollToLatest, messages, panelView, status]);
   const conversationHistory = useConversations({
     apiOrigin: API_ORIGIN,
     authSessionRef,
     isStreaming,
     setMessages,
     changeModel,
-    followLatest: messageScroll.followLatest,
+    // The assistant-ui ThreadPrimitive.Viewport owns auto-scroll. Conversation
+    // switches also remount the viewport through its conversation key below.
+    followLatest: () => undefined,
     onSelect: (conversation) => {
       fusionController.resetTurns();
       panelChatRef.current.setConversationId(conversation.id);
       setCurrentConversationId(conversation.id);
+      setAssistantThreadId(conversation.id);
       setCurrentConversationTitle(conversation.title || t("history.untitled"));
       setConversationDrawerOpen(false);
       setBlackboardOpen(false);
@@ -455,10 +592,10 @@ export function AssistantPanel({
       if (conversation.id !== currentConversationId) return;
       panelChatRef.current.setConversationId(null);
       setCurrentConversationId(null);
+      setAssistantThreadId(createAssistantRuntimeThreadId());
       setCurrentConversationTitle(null);
       setMessages([]);
-      setInput("");
-      setAttachments([]);
+      void assistantRuntime.thread.composer.reset();
       setBlackboardOpen(false);
       fusionController.resetTurns();
     },
@@ -491,14 +628,13 @@ export function AssistantPanel({
     if (isStreaming) return;
     panelChatRef.current.setConversationId(null);
     setCurrentConversationId(null);
+    setAssistantThreadId(createAssistantRuntimeThreadId());
     setCurrentConversationTitle(null);
     setMessages([]);
-    setInput("");
-    setAttachments([]);
+    void assistantRuntime.thread.composer.reset();
     setConversationDrawerOpen(false);
     setBlackboardOpen(false);
     fusionController.resetTurns();
-    messageScroll.followLatest();
   }
 
   function toggleBlackboard() {
@@ -515,27 +651,33 @@ export function AssistantPanel({
     void blackboard.load();
   }
 
-  async function submit(exampleText?: string, requestedConversationId?: string): Promise<boolean> {
-    const text = (exampleText ?? input).trim();
-    const pendingAttachments = exampleText === undefined ? attachments : [];
-    if ((!text && pendingAttachments.length === 0) || isStreaming) return false;
-    const files = pendingAttachments.map((attachment) => attachment.part);
+  async function submitAssistantSubmission(
+    submission: GeoChatAssistantSubmission,
+    requestedConversationId?: string,
+  ): Promise<boolean> {
+    const text = submission.text?.trim() ?? "";
+    const files = submission.files ?? [];
+    if ((!text && files.length === 0) || isStreaming) return false;
     if (!areSupportedAgentAttachments(files)) {
-      const unsupported = pendingAttachments.find((attachment) => !attachment.part.mediaType?.startsWith("image/"));
-      setSubmissionError(t("composer.unsupportedFile", { name: unsupported?.part.filename ?? t("common.attachment") }));
+      const unsupported = files.find((part) => !part.mediaType?.startsWith("image/"));
+      setSubmissionError(t("composer.unsupportedFile", { name: unsupported?.filename ?? t("common.attachment") }));
       return false;
     }
-    const conversationId = requestedConversationId ?? currentConversationId ?? `conv_${crypto.randomUUID().replaceAll("-", "")}`;
+    const conversationId = resolveGeoChatConversationId(
+      assistantThreadId,
+      currentConversationId,
+      requestedConversationId,
+    );
+    if (requestedConversationId && requestedConversationId !== assistantThreadId) {
+      setAssistantThreadId(requestedConversationId);
+    }
     if (conversationId !== currentConversationId) {
       panelChatRef.current.setConversationId(conversationId);
       setCurrentConversationId(conversationId);
-      const attachmentTitle = pendingAttachments.find((attachment) => attachment.part.filename)?.part.filename ?? "";
+      const attachmentTitle = files.find((part) => part.filename)?.filename ?? "";
       setCurrentConversationTitle(compactConversationTitle(text || attachmentTitle) || t("history.newConversation"));
     }
-    messageScroll.followLatest();
     setSubmissionError(null);
-    setInput("");
-    if (exampleText === undefined) setAttachments([]);
     onConversationStarted?.();
     try {
       if (text) {
@@ -547,18 +689,17 @@ export function AssistantPanel({
     } catch (caughtError) {
       const accepted = wasAgentRunMessageAccepted(caughtError);
       if (!accepted) {
-        if (exampleText === undefined) {
-          setInput(text);
-          setAttachments(pendingAttachments);
-        }
         setSubmissionError(formatAgentRunError(unwrapAgentRunSubmissionError(caughtError), t));
       }
       return accepted;
     }
   }
 
+  async function submitPrompt(text: string, requestedConversationId?: string): Promise<boolean> {
+    return submitAssistantSubmission({ text: text.trim() }, requestedConversationId);
+  }
+
   async function retryFailedRun() {
-    messageScroll.followLatest();
     setSubmissionError(null);
     try {
       return await retry();
@@ -669,7 +810,7 @@ export function AssistantPanel({
 
   function useProblemInComposer(problem: string) {
     setSubmissionError(null);
-    setInput(problem);
+    assistantRuntime.thread.composer.setText(problem);
     if (interaction.mode === "fusion") {
       closeFusionPanel({ restoreFocus: false });
       fusionController.summonAt(fusionController.composerPoint);
@@ -799,6 +940,7 @@ export function AssistantPanel({
     previousInteractionModeRef.current = interaction.mode;
     cancelFusionPanelFocusRestore();
     fusionPanelTriggerRef.current = null;
+    pendingFusionSelectionRef.current = null;
 
     if (interaction.mode === "fusion") {
       const nextPanel = fusionPanelFromWindowState({
@@ -830,7 +972,7 @@ export function AssistantPanel({
 
   if (interaction.mode === "fusion") {
     return (
-      <>
+      <AssistantRuntimeProvider runtime={assistantRuntime}>
       <InteractionModeTransition
         transition={modeTransition.transition}
       />
@@ -839,9 +981,6 @@ export function AssistantPanel({
         messages={messages}
         status={status}
         error={toastError}
-        input={input}
-        inputHistory={composerHistory}
-        attachments={attachments}
         canvasReady={canvasReady}
         modelLabel={selectedModelOption?.label ?? selectedModel}
         modelControl={(
@@ -864,10 +1003,13 @@ export function AssistantPanel({
         onRefreshSelection={onRefreshSelection}
         activePanel={fusionPanel}
         languageControl={<LanguageButton />}
-        onInputChange={setInput}
-        onAttachmentsChange={setAttachments}
-        onSend={() => submit()}
-        onStop={stop}
+        onPrepareSubmit={(selectionObjectNames) => {
+          pendingFusionSelectionRef.current = selectionObjectNames;
+        }}
+        onAttachmentError={(message) => {
+          pendingFusionSelectionRef.current = null;
+          setSubmissionError(message);
+        }}
         canRetry={canRetry}
         onRetry={retryFailedRun}
         onOpenHistory={(trigger) => toggleFusionPanel("history", trigger, () => { void conversationHistory.load(); })}
@@ -913,8 +1055,6 @@ export function AssistantPanel({
         {fusionPanel === "transcript" && (
           <FusionViewportCard key="fusion-transcript" panelId="transcript" title={panelTitle} closeLabel={t("history.close")} onClose={closeFusionPanel}>
             <FusionTranscript
-              messages={messages}
-              streaming={isStreaming}
               emptyLabel={t("history.empty")}
               ariaLabel={t("fusion.transcript")}
             />
@@ -939,12 +1079,12 @@ export function AssistantPanel({
         )}
       </AnimatePresence>
       <FusionOnboardingTour run={onboardingTourReady === true} onComplete={completeOnboardingTour} />
-      </>
+      </AssistantRuntimeProvider>
     );
   }
 
   return (
-    <>
+    <AssistantRuntimeProvider runtime={assistantRuntime}>
     <InteractionModeTransition
       transition={modeTransition.transition}
     />
@@ -1263,301 +1403,49 @@ export function AssistantPanel({
               modelLabel={selectedModelOption?.label ?? selectedModel}
             />
           ) : (
-        <>
-          <Box
-            ref={messageScroll.viewportRef}
-            aria-live="polite"
-            aria-label={t("panel.conversationMessages")}
-            data-scroll-mode={messageScroll.mode}
-            tabIndex={0}
-            onScroll={messageScroll.handleScroll}
-            onWheelCapture={messageScroll.handleWheel}
-            onTouchStartCapture={messageScroll.handleTouchStart}
-            onTouchMoveCapture={messageScroll.handleTouchMove}
-            onKeyDown={messageScroll.handleKeyDown}
-            sx={{
-              position: "relative",
-              minHeight: 150,
-              flex: 1,
-              overflowY: "auto",
-              overscrollBehavior: "contain",
-              bgcolor: "background.default",
-              outline: "none",
-              "&:focus-visible": {
-                outline: "2px solid",
-                outlineColor: "primary.main",
-                outlineOffset: -2,
-              },
+          <GeoChatThread
+            key={assistantThreadId}
+            surface="window"
+            classNames={{
+              root: "geochat-assistant-thread geochat-assistant-thread--window",
+              viewport: "geochat-assistant-thread__viewport",
+              footer: "geochat-assistant-thread__footer",
+              userMessage: "geochat-assistant-message geochat-assistant-message--user",
+              assistantMessage: "geochat-assistant-message geochat-assistant-message--assistant",
+              systemMessage: "geochat-assistant-message geochat-assistant-message--system",
+              messageContent: "geochat-assistant-message__content",
             }}
-          >
-            <Box
-              ref={messageScroll.contentRef}
-              sx={{
-                minHeight: "100%",
-                p: 1.5,
-                pb: messages.length === 0 ? 0.75 : 1.5,
-                display: "flex",
-                flexDirection: "column",
-                gap: 1,
-              }}
-            >
-              {messages.length === 0 && (
-                <Box
-                  sx={{
-                    position: "absolute",
-                    inset: 0,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    pb: 10,
-                    pointerEvents: "none",
-                  }}
-                >
-                  <Stack spacing={0.75} sx={{ alignItems: "center", textAlign: "center" }}>
-                    <motion.div
-                      initial={{ opacity: 0, y: 12, scale: 0.76, rotate: -8 }}
-                      animate={{ opacity: 1, y: 0, scale: 1, rotate: 0 }}
-                      transition={{ duration: 0.62, ease: [0.22, 1, 0.36, 1] }}
-                    >
-                      <BrandIcon size={136} />
-                    </motion.div>
-                  </Stack>
-                </Box>
-              )}
-              {messages.length === 0 && (
-                <Box
-                  sx={{
-                    position: "absolute",
-                    left: 12,
-                    right: 12,
-                    bottom: 6,
-                    minHeight: 150,
-                    display: "flex",
-                    alignItems: "flex-end",
-                  }}
-                >
-                  <Stack spacing={1.25} sx={{ width: "100%" }}>
-                    <Box sx={{ px: 0.5 }}>
-                      <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: "-0.02em" }}>
-                        {t("panel.welcomeTitle")}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35, maxWidth: 520 }}>
-                        {t("panel.welcomeDescription")}
-                      </Typography>
-                    </Box>
-                    <Stack direction="row" spacing={0.75} sx={{ width: "100%", alignItems: "stretch" }}>
-                    {[
-                      { key: "circle", icon: <CirclePlusIcon size={18} /> },
-                      { key: "construction", icon: <CalculatorIcon size={18} /> },
-                      { key: "explain", icon: <CircleHelpIcon size={18} /> },
-                    ].map((example, index) => (
-                      <motion.div
-                        key={example.key}
-                        initial={{ opacity: 0, y: 32, scale: 0.96 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        transition={{ delay: index * 0.1, duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
-                        style={{ flex: 1, minWidth: 0 }}
-                      >
-                        <ButtonBase
-                          component="button"
-                          type="button"
-                          onClick={() => void submit(t(`panel.examples.${example.key}`))}
-                          sx={{
-                            position: "relative",
-                            width: "100%",
-                            minWidth: 0,
-                            minHeight: 94,
-                            display: "flex",
-                            alignItems: "flex-end",
-                            justifyContent: "flex-start",
-                            overflow: "hidden",
-                            p: 1.1,
-                            border: 1,
-                            borderColor: "divider",
-                            borderRadius: 1,
-                            bgcolor: "background.paper",
-                            color: "text.primary",
-                            textAlign: "left",
-                            transition: (theme) => theme.transitions.create(["background-color", "border-color", "transform"], { duration: 150 }),
-                            "&:hover": { bgcolor: "action.hover", borderColor: "primary.main", transform: "translateY(-2px)" },
-                            "&:focus-visible": { outline: "2px solid", outlineColor: "primary.main", outlineOffset: 1 },
-                          }}
-                        >
-                          <Stack spacing={0.45} sx={{ position: "relative", zIndex: 1, minWidth: 0 }}>
-                            {example.icon}
-                            <Typography variant="caption" sx={{ fontWeight: 750, lineHeight: 1.25, overflowWrap: "anywhere" }}>
-                              {t(`panel.examples.${example.key}`)}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2, overflowWrap: "anywhere" }}>
-                              {t(`panel.exampleDescriptions.${example.key}`)}
-                            </Typography>
-                          </Stack>
-                        </ButtonBase>
-                      </motion.div>
-                    ))}
-                    </Stack>
-                  </Stack>
-                </Box>
-              )}
-              {messages.map((message) => {
-                const processRuns = message.role === "assistant"
-                  ? collectAssistantProcessRuns(
-                    message.parts,
-                    isAgentDisplayToolPart,
-                    (_part, index) => isInternalToolResultEcho(message.parts, index),
-                  )
-                  : [];
-                const processByFirstIndex = new Map(processRuns.map((process) => [process.firstIndex, process]));
-                const processIndexes = new Set(processRuns.flatMap((process) => process.entries.map(({ index }) => index)));
-                const activeProcessIndex = processRuns.at(-1)?.firstIndex;
-                return (
-                  <Box
-                  key={message.id}
-                  sx={{
-                    maxWidth: message.role === "user" ? "88%" : "100%",
-                    alignSelf: message.role === "user" ? "flex-end" : "flex-start",
-                    px: message.role === "user" ? 1.25 : 0.5,
-                    py: message.role === "user" ? 1 : 0.75,
-                    borderRadius: 1.25,
-                    bgcolor: message.role === "user" ? "primary.main" : "transparent",
-                    color: message.role === "user" ? "primary.contrastText" : "text.primary",
-                    overflowWrap: "anywhere",
-                  }}
-                >
-                    {message.parts.map((part, index) => {
-                    const process = processByFirstIndex.get(index);
-                    if (process) {
-                      return (
-                        <AssistantProcess
-                          key={index}
-                          active={Boolean(
-                            isStreaming
-                            && message.id === messages.at(-1)?.id
-                            && index === activeProcessIndex
-                            && !process.hasFinalContent
-                          )}
-                          process={process}
-                          labels={{
-                            active: t("panel.process.active"),
-                            complete: t("panel.process.complete"),
-                            toolsOnly: t("panel.process.toolsOnly"),
-                            toolCount: (count) => t(
-                              count === 1 ? "panel.process.toolCountOne" : "panel.process.toolCountMany",
-                              { count },
-                            ),
-                            expand: t("panel.process.expand"),
-                            collapse: t("panel.process.collapse"),
-                            reasoning: t("panel.process.reasoning"),
-                            input: t("panel.process.input"),
-                            output: t("panel.process.output"),
-                            error: t("panel.process.error"),
-                            status: (toolStatus) => t(`tools.${toolStatus}`),
-                          }}
-                        />
-                      );
-                    }
-                    if (processIndexes.has(index)) return null;
-                    if (part.type === "text") {
-                      if (message.role === "assistant" && isInternalToolResultEcho(message.parts, index)) return null;
-                      if (message.role === "assistant") {
-                        return (
-                          <Streamdown
-                            key={index}
-                            animated={false}
-                            isAnimating={status === "streaming"}
-                            caret="block"
-                            className="copilot-markdown"
-                            plugins={STREAMDOWN_PLUGINS}
-                            translations={streamdownTranslations}
-                          >
-                            {part.text}
-                          </Streamdown>
-                        );
-                      }
-                      return (
-                        <StaticMessageMarkdown key={index} className="user-message-markdown">
-                          {part.text}
-                        </StaticMessageMarkdown>
-                      );
-                    }
-                    if (part.type === "file") return <MessageAttachment key={index} part={part} />;
-                    if (isAgentDisplayToolPart(part)) {
-                      return (
-                        <AgentToolResult
-                          key={index}
-                          part={part}
-                          locale={i18n.language.startsWith("en") ? "en-US" : "zh-CN"}
-                          statusLabel={t(`tools.${toolPartStatus(part)}`)}
-                        />
-                      );
-                    }
-                    return null;
-                  })}
-                  </Box>
-                );
-              })}
-              {status === "submitted" && (
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  role="status"
-                  aria-live="polite"
-                  sx={{ alignItems: "center", px: 1.25, py: 1, color: "text.secondary" }}
-                >
-                  <CircularProgress size={14} />
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      display: "inline-block",
-                      animation: "copilotThinkingPulse 1.35s ease-in-out infinite",
-                      "@keyframes copilotThinkingPulse": {
-                        "0%, 100%": { opacity: 0.55 },
-                        "50%": { opacity: 1 },
-                      },
-                      "@media (prefers-reduced-motion: reduce)": {
-                        animation: "none",
-                        opacity: 1,
-                      },
-                    }}
-                  >
-                    {t("panel.connecting")}
-                  </Typography>
-                </Stack>
-              )}
-            </Box>
-          </Box>
-          <ChatComposer
-            value={input}
-            history={composerHistory}
-            focusSignal={composerFocusSignal}
-            attachments={attachments}
-            busy={isStreaming}
-            model={selectedModel}
-            models={modelOptions}
-            thinkingEnabled={thinkingEnabled}
-            thinkingSupported={thinkingSupported}
-            thinkingEffort={thinkingEffort}
-            sendDisabled={
-              (!input.trim() && attachments.length === 0)
-              || isStreaming
-            }
-            error={submissionError}
-            onChange={(value) => {
-              setSubmissionError(null);
-              setInput(value);
-            }}
-            onAttachmentsChange={(next) => {
-              setSubmissionError(null);
-              setAttachments(next);
-            }}
-            onSend={() => void submit()}
-            onStop={stop}
-            onModelChange={changeModel}
-            modelPortalContainer={() => panelRef.current?.parentElement ?? null}
-            onThinkingEnabledChange={changeThinkingEnabled}
-            onThinkingEffortChange={changeThinkingEffort}
+            empty={<WindowThreadEmpty onSubmit={(prompt) => void submitPrompt(prompt)} />}
+            footer={(
+              <GeoChatComposer
+                variant="window"
+                focusSignal={composerFocusSignal}
+                disabled={!canvasReady}
+                error={submissionError}
+                placeholder={t("composer.placeholder")}
+                attachLabel={t("composer.attachFiles")}
+                removeAttachmentLabel={(name) => t("composer.removeAttachment", { name })}
+                sendLabel={t("composer.sendMessage")}
+                stopLabel={t("composer.stopGeneration")}
+                modelControl={(
+                  <ModelMenu
+                    value={selectedModel}
+                    models={modelOptions}
+                    disabled={isStreaming}
+                    thinkingEnabled={thinkingEnabled}
+                    thinkingSupported={thinkingSupported}
+                    thinkingEffort={thinkingEffort}
+                    portalContainer={() => panelRef.current?.parentElement ?? null}
+                    onChange={changeModel}
+                    onThinkingEnabledChange={changeThinkingEnabled}
+                    onThinkingEffortChange={changeThinkingEffort}
+                  />
+                )}
+                onFocus={() => setSubmissionError(null)}
+                onAttachmentError={setSubmissionError}
+              />
+            )}
           />
-        </>
           )}
           </motion.div>
         </AnimatePresence>
@@ -1690,6 +1578,6 @@ export function AssistantPanel({
         </MotionPaper>
       ) : null}
     </AnimatePresence>
-    </>
+    </AssistantRuntimeProvider>
   );
 }

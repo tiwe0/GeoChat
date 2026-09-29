@@ -20,7 +20,7 @@ const anchorA = { x: 120, y: 180 };
 const anchorB = { x: 720, y: 420 };
 
 describe("fusion spatial turns", () => {
-  test("freezes a distinct anchor for every run and never moves old turns", () => {
+  test("appends follow-up runs to one conversation flow instead of opening another floating turn", () => {
     let state = beginFusionSpatialTurn(EMPTY_FUSION_SPATIAL_STATE, { id: "run-1", anchor: anchorA, createdAt: 1 });
     state = synchronizeFusionSpatialTurns(state, {
       messages: [
@@ -33,12 +33,27 @@ describe("fusion spatial turns", () => {
     });
     state = completeActiveFusionTurn(state);
     state = beginFusionSpatialTurn(state, { id: "run-2", anchor: anchorB, createdAt: 3 });
+    state = synchronizeFusionSpatialTurns(state, {
+      messages: [
+        { id: "user-1", role: "user" },
+        { id: "assistant-1", role: "assistant" },
+        { id: "user-2", role: "user" },
+        { id: "assistant-2", role: "assistant" },
+      ],
+      chatStatus: "streaming",
+      fallbackAnchor: anchorB,
+      now: 4,
+    });
 
-    expect(state.turns).toMatchObject([
-      { id: "run-1", anchor: anchorA, messageIds: ["user-1", "assistant-1"], collapsed: false },
-      { id: "run-2", anchor: anchorB, messageIds: [], status: "active", collapsed: false },
-    ]);
-    expect(state.activeTurnId).toBe("run-2");
+    expect(state.turns).toHaveLength(1);
+    expect(state.turns[0]).toMatchObject({
+      id: "run-1",
+      anchor: anchorB,
+      messageIds: ["user-1", "assistant-1", "user-2", "assistant-2"],
+      status: "active",
+      collapsed: false,
+    });
+    expect(state.activeTurnId).toBe("run-1");
   });
 
   test("keeps one stable active run while streaming messages are appended", () => {
@@ -107,7 +122,36 @@ describe("fusion spatial turns", () => {
     });
   });
 
-  test("adopts a window-mode run as an active fusion turn without overwriting completed anchors", () => {
+  test("reactivates the same completed flow when a window-mode follow-up adds new messages", () => {
+    let state = beginFusionSpatialTurn(EMPTY_FUSION_SPATIAL_STATE, { id: "run-window-follow-up", anchor: anchorA });
+    state = synchronizeFusionSpatialTurns(state, {
+      messages: [{ id: "user-1", role: "user" }, { id: "assistant-1", role: "assistant" }],
+      chatStatus: "streaming",
+      fallbackAnchor: anchorA,
+    });
+    state = completeActiveFusionTurn(state);
+    state = synchronizeFusionSpatialTurns(state, {
+      messages: [
+        { id: "user-1", role: "user" },
+        { id: "assistant-1", role: "assistant" },
+        { id: "user-2", role: "user" },
+      ],
+      chatStatus: "streaming",
+      fallbackAnchor: anchorB,
+    });
+
+    expect(state.turns).toHaveLength(1);
+    expect(state.turns[0]).toMatchObject({
+      id: "run-window-follow-up",
+      anchor: anchorB,
+      messageIds: ["user-1", "assistant-1", "user-2"],
+      status: "active",
+      collapsed: false,
+    });
+    expect(state.activeTurnId).toBe("run-window-follow-up");
+  });
+
+  test("adopts a window-mode follow-up into the existing conversation flow", () => {
     let state = synchronizeFusionSpatialTurns(EMPTY_FUSION_SPATIAL_STATE, {
       messages: [
         { id: "old-user", role: "user" },
@@ -129,22 +173,15 @@ describe("fusion spatial turns", () => {
       now: 2,
     });
 
-    expect(state.turns).toMatchObject([
-      {
-        id: "message:old-user",
-        anchor: anchorA,
-        messageIds: ["old-user", "old-answer"],
-        status: "completed",
-      },
-      {
-        id: "message:live-user",
-        anchor: anchorB,
-        messageIds: ["live-user", "live-answer"],
-        status: "active",
-        collapsed: false,
-      },
-    ]);
-    expect(state.activeTurnId).toBe("message:live-user");
+    expect(state.turns).toHaveLength(1);
+    expect(state.turns[0]).toMatchObject({
+      id: "message:old-user",
+      anchor: anchorB,
+      messageIds: ["old-user", "old-answer", "live-user", "live-answer"],
+      status: "active",
+      collapsed: false,
+    });
+    expect(state.activeTurnId).toBe("message:old-user");
   });
 
   test("promotes the matching latest turn when a retry crosses into fusion mode", () => {
@@ -170,7 +207,7 @@ describe("fusion spatial turns", () => {
     expect(state.turns).toHaveLength(1);
     expect(state.turns[0]).toMatchObject({
       id: "message:retry-user",
-      anchor: anchorA,
+      anchor: anchorB,
       status: "active",
       collapsed: false,
     });
@@ -253,7 +290,7 @@ describe("fusion spatial turns", () => {
     expect(state.activeTurnId).toBe("run-error");
   });
 
-  test("imports existing message turns as compact historical summaries", () => {
+  test("imports an existing conversation as one compact historical flow", () => {
     const state = synchronizeFusionSpatialTurns(EMPTY_FUSION_SPATIAL_STATE, {
       messages: [
         { id: "u1", role: "user" },
@@ -265,10 +302,13 @@ describe("fusion spatial turns", () => {
       fallbackAnchor: anchorB,
       now: 10,
     });
-    expect(state.turns).toMatchObject([
-      { id: "message:u1", messageIds: ["u1", "a1"], collapsed: true, anchor: anchorB },
-      { id: "message:u2", messageIds: ["u2", "a2"], collapsed: true, anchor: anchorB },
-    ]);
+    expect(state.turns).toHaveLength(1);
+    expect(state.turns[0]).toMatchObject({
+      id: "message:u1",
+      messageIds: ["u1", "a1", "u2", "a2"],
+      collapsed: true,
+      anchor: anchorB,
+    });
   });
 
   test("drops anchors from another conversation when message identities are replaced", () => {
@@ -304,7 +344,7 @@ describe("fusion spatial turns", () => {
     expect(state).toBe(EMPTY_FUSION_SPATIAL_STATE);
   });
 
-  test("escape-style collapse targets only the latest expanded completed turn", () => {
+  test("escape-style collapse targets the unified completed conversation flow", () => {
     let state = synchronizeFusionSpatialTurns(EMPTY_FUSION_SPATIAL_STATE, {
       messages: [
         { id: "u1", role: "user" },
@@ -316,12 +356,9 @@ describe("fusion spatial turns", () => {
       fallbackAnchor: anchorA,
     });
     state = toggleFusionTurnCollapsed(state, "message:u1");
-    state = toggleFusionTurnCollapsed(state, "message:u2");
     const collapsed = collapseLatestFusionTurn(state);
-    expect(collapsed.turns).toMatchObject([
-      { id: "message:u1", collapsed: false },
-      { id: "message:u2", collapsed: true },
-    ]);
+    expect(collapsed.turns).toHaveLength(1);
+    expect(collapsed.turns[0]).toMatchObject({ id: "message:u1", collapsed: true });
   });
 
   test("caps floating turn windows while preserving active and pinned work", () => {

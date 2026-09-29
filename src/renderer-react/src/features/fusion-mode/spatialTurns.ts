@@ -79,9 +79,28 @@ export function beginFusionSpatialTurn(
   input: { id: string; anchor: FusionPoint; selectionObjectNames?: readonly string[]; createdAt?: number },
 ): FusionSpatialState {
   if (state.turns.some((turn) => turn.id === input.id)) return state;
-  // Starting a follow-up must not make the previous answer disappear. The
-  // visible-turn selector already bounds canvas clutter, while collapse stays
-  // an explicit user action.
+  const currentIndex = state.activeTurnId
+    ? state.turns.findIndex((turn) => turn.id === state.activeTurnId)
+    : -1;
+  const current = currentIndex >= 0 ? state.turns[currentIndex] : undefined;
+  if (current && !current.dismissed && !current.pinned) {
+    // A spatial turn represents the current conversation, not one backend run.
+    // Follow-up submissions therefore reactivate and move the same bubble flow
+    // instead of leaving a second toolbar/card pair behind on the canvas.
+    const turns = [...state.turns];
+    turns[currentIndex] = {
+      ...current,
+      anchor: input.anchor,
+      selectionObjectNames: [...(input.selectionObjectNames ?? [])],
+      status: "active",
+      collapsed: false,
+      dismissed: false,
+    };
+    return preserveIdentity(state, { turns, activeTurnId: current.id });
+  }
+
+  // An explicitly pinned flow is a deliberate snapshot. Only that case opens
+  // another spatial flow when the conversation continues elsewhere.
   const turns = [...state.turns];
   turns.push({
     id: input.id,
@@ -106,6 +125,8 @@ export function synchronizeFusionSpatialTurns(
     now?: number;
   },
 ): FusionSpatialState {
+  const visibleMessages = input.messages.filter((message) => message.role !== "system");
+  const visibleMessageIds = visibleMessages.map((message) => message.id);
   const knownMessageIds = new Set(state.turns.flatMap((turn) => turn.messageIds));
   const hasRunningTurn = state.turns.some((turn) => turn.status === "active");
   const hasMessageOverlap = input.messages.some((message) => knownMessageIds.has(message.id));
@@ -116,25 +137,31 @@ export function synchronizeFusionSpatialTurns(
     }
   }
 
-  const groups = groupMessages(input.messages);
+  const groups = groupMessages(visibleMessages);
   const assignedIds = new Set(state.turns.flatMap((turn) => turn.messageIds));
   let turns = [...state.turns];
   const activeIndex = state.activeTurnId
     ? turns.findIndex((turn) => turn.id === state.activeTurnId && turn.status === "active")
     : -1;
+  const chatIsRunning = input.chatStatus === "submitted" || input.chatStatus === "streaming";
+  let activeTurnId = state.activeTurnId;
+  let resumedSelectedTurn = false;
   let settledSelectedGroupId: string | null = null;
 
   if (activeIndex >= 0) {
     const active = turns[activeIndex]!;
-    const group = groups.find((candidate) => candidate.messageIds.some((id) => active.messageIds.includes(id)))
-      ?? [...groups].reverse().find((candidate) => candidate.messageIds.some((id) => !assignedIds.has(id)));
+    const group = active.messageIds.length === 0
+      ? [...groups].reverse().find((candidate) => candidate.messageIds.some((id) => !assignedIds.has(id)))
+      : undefined;
     // `ready` is not a reliable terminal signal while AI SDK is handing a
     // renderer tool result back into an automatically continued run. Keep the
     // spatial turn active until the chat lifecycle emits its explicit finish
     // event (or the user stops it) so the card cannot flicker completed and
     // active between tool steps.
     const nextStatus: FusionTurnStatus = input.chatStatus === "error" ? "error" : "active";
-    const nextMessageIds = group?.messageIds ?? active.messageIds;
+    const nextMessageIds = active.messageIds.length > 0
+      ? visibleMessageIds
+      : group?.messageIds ?? active.messageIds;
     turns[activeIndex] = {
       ...active,
       messageIds: nextMessageIds,
@@ -147,41 +174,51 @@ export function synchronizeFusionSpatialTurns(
   if (activeIndex < 0 && state.activeTurnId) {
     const selectedIndex = turns.findIndex((turn) => turn.id === state.activeTurnId);
     const selected = selectedIndex >= 0 ? turns[selectedIndex] : undefined;
-    const group = selected?.messageIds.length
-      ? groups.find((candidate) => candidate.messageIds.some((id) => selected.messageIds.includes(id)))
-      : undefined;
-    if (selected && selected.status !== "active" && group) {
+    const overlapsSelected = selected?.messageIds.some((id) => visibleMessageIds.includes(id));
+    if (selected && selected.status !== "active" && overlapsSelected) {
+      const hasNewMessages = visibleMessageIds.some((id) => !selected.messageIds.includes(id));
+      if (chatIsRunning && hasNewMessages) {
+        turns[selectedIndex] = {
+          ...selected,
+          anchor: input.fallbackAnchor,
+          messageIds: visibleMessageIds,
+          status: "active",
+          collapsed: false,
+          dismissed: false,
+        };
+        activeTurnId = selected.id;
+        resumedSelectedTurn = true;
+      } else {
       // `onFinish` can settle the spatial turn one React commit before the AI
       // SDK publishes its final status/message snapshot. Merge that last
       // snapshot into the completed turn, but never reopen it as a fresh run.
-      turns[selectedIndex] = sameIds(selected.messageIds, group.messageIds)
-        ? selected
-        : { ...selected, messageIds: group.messageIds };
-      settledSelectedGroupId = group.id;
-      for (const id of group.messageIds) assignedIds.add(id);
+        turns[selectedIndex] = sameIds(selected.messageIds, visibleMessageIds)
+          ? selected
+          : { ...selected, messageIds: visibleMessageIds };
+        settledSelectedGroupId = groups[0]?.id ?? null;
+        for (const id of visibleMessageIds) assignedIds.add(id);
+      }
     }
   }
 
-  let activeTurnId = state.activeTurnId;
-  const chatIsRunning = input.chatStatus === "submitted" || input.chatStatus === "streaming";
-  if (activeIndex < 0 && chatIsRunning) {
-    // A run may start in window mode and then cross into fusion mode. In that
-    // case no spatial turn was frozen by the fusion composer, so adopt the
-    // newest unassigned message group without mutating the previously attached
-    // completed turn. Retries can reuse the latest matching turn and anchor.
+  if (activeIndex < 0 && chatIsRunning && !resumedSelectedTurn) {
+    // A run may start in window mode and then cross into fusion mode. Reuse a
+    // matching conversation flow when possible; only a genuinely unrelated
+    // message history receives a new spatial identity.
     const group = [...groups].reverse().find((candidate) => (
       candidate.id !== settledSelectedGroupId
       && candidate.messageIds.some((id) => !assignedIds.has(id))
     )) ?? (settledSelectedGroupId ? undefined : groups.at(-1));
     if (!group) return preserveIdentity(state, { turns, activeTurnId });
-    const matchingIndex = group
-      ? turns.findIndex((turn) => turn.messageIds.some((id) => group.messageIds.includes(id)))
-      : -1;
+    const matchingIndex = turns.findIndex((turn) => (
+      !turn.dismissed && turn.messageIds.some((id) => visibleMessageIds.includes(id))
+    ));
     if (matchingIndex >= 0) {
       const matching = turns[matchingIndex]!;
       turns[matchingIndex] = {
         ...matching,
-        messageIds: group!.messageIds,
+        anchor: input.fallbackAnchor,
+        messageIds: visibleMessageIds,
         status: "active",
         collapsed: false,
         dismissed: false,
@@ -192,7 +229,7 @@ export function synchronizeFusionSpatialTurns(
       turns.push({
         id,
         anchor: input.fallbackAnchor,
-        messageIds: group?.messageIds ?? [],
+        messageIds: group.messageIds,
         selectionObjectNames: [],
         status: "active",
         collapsed: false,
@@ -202,15 +239,15 @@ export function synchronizeFusionSpatialTurns(
       });
       activeTurnId = id;
     }
-    for (const id of group?.messageIds ?? []) assignedIds.add(id);
+    for (const id of visibleMessageIds) assignedIds.add(id);
   }
 
-  for (const group of groups) {
-    if (group.messageIds.every((id) => assignedIds.has(id))) continue;
+  if (turns.length === 0 && visibleMessageIds.length > 0) {
+    const firstGroup = groups[0];
     turns.push({
-      id: `message:${group.id}`,
+      id: `message:${firstGroup?.id ?? visibleMessageIds[0]}`,
       anchor: input.fallbackAnchor,
-      messageIds: group.messageIds,
+      messageIds: visibleMessageIds,
       selectionObjectNames: [],
       status: "completed",
       collapsed: true,
@@ -218,7 +255,6 @@ export function synchronizeFusionSpatialTurns(
       dismissed: false,
       createdAt: input.now ?? Date.now(),
     });
-    for (const id of group.messageIds) assignedIds.add(id);
   }
 
   return preserveIdentity(state, { turns, activeTurnId });

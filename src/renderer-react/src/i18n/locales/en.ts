@@ -87,7 +87,7 @@ export const en = {
     continueTurn: "Continue here",
     retryTurn: "Regenerate this response",
     collapsedTurn: "Collapsed response",
-    moreMessages: "{{count}} earlier messages",
+    returnToLatest: "Return to latest",
   },
   fusionTour: {
     summonTitle: "Summon chat anywhere",
@@ -266,6 +266,7 @@ export const en = {
     dropFiles: "Drop files to attach",
     attachedImage: "Attached image",
     removeAttachment: "Remove attachment {{name}}",
+    duplicateFile: "{{name}} is already attached.",
     fileReadFailed: "Unable to read the selected file.",
     fileAttachFailed: "Unable to attach the selected file.",
     unsupportedFile: "{{name}} is not a supported file type.",

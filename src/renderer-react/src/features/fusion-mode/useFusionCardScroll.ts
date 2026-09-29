@@ -11,41 +11,59 @@ import {
 
 const BOTTOM_THRESHOLD = 8;
 
-export type MessageScrollMode = "browse" | "follow";
-export type MessageScrollEvent = "follow-latest" | "reached-bottom" | "user-browse";
+export type FusionCardScrollMode = "browse" | "follow";
+export type FusionCardScrollEvent = "follow-latest" | "reached-bottom" | "user-browse";
 
-export function nextMessageScrollMode(
-  current: MessageScrollMode,
-  event: MessageScrollEvent,
-): MessageScrollMode {
+export function nextFusionCardScrollMode(
+  current: FusionCardScrollMode,
+  event: FusionCardScrollEvent,
+): FusionCardScrollMode {
   if (event === "user-browse") return "browse";
   if (event === "follow-latest" || event === "reached-bottom") return "follow";
   return current;
 }
 
-type UseMessageScrollOptions = {
+export function fusionCardScrollEventForViewport(
+  mode: FusionCardScrollMode,
+  atBottom: boolean,
+): FusionCardScrollEvent | null {
+  // Native scroll events also fire for layout reflow and programmatic
+  // scrollTop updates. Only explicit wheel/touch/keyboard intent may detach
+  // streaming output from follow mode.
+  return mode === "browse" && atBottom ? "reached-bottom" : null;
+}
+
+type UseFusionCardScrollOptions = {
   active: boolean;
+  targetKey?: string;
+  viewportKey?: string;
 };
 
 function isAtBottom(viewport: HTMLElement) {
   return viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= BOTTOM_THRESHOLD;
 }
 
-export function useMessageScroll({ active }: UseMessageScrollOptions) {
-  const [mode, setMode] = useState<MessageScrollMode>("follow");
+function canBrowseEarlier(viewport: HTMLElement) {
+  return viewport.scrollTop > BOTTOM_THRESHOLD;
+}
+
+export function useFusionCardScroll({ active, targetKey, viewportKey }: UseFusionCardScrollOptions) {
+  const [mode, setMode] = useState<FusionCardScrollMode>("follow");
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const modeRef = useRef<MessageScrollMode>("follow");
+  const modeRef = useRef<FusionCardScrollMode>("follow");
   const activeRef = useRef(active);
-  const lastScrollTopRef = useRef(0);
   const savedScrollTopRef = useRef(0);
+  const savedScrollTopsRef = useRef(new Map<string, number>());
+  const viewportKeyRef = useRef(viewportKey);
   const touchYRef = useRef<number | null>(null);
   const autoScrollingRef = useRef(false);
   const scrollFrameRef = useRef<number | null>(null);
   const releaseFrameRef = useRef<number | null>(null);
   activeRef.current = active;
+  viewportKeyRef.current = viewportKey;
 
-  const changeMode = useCallback((nextMode: MessageScrollMode) => {
+  const changeMode = useCallback((nextMode: FusionCardScrollMode) => {
     modeRef.current = nextMode;
     setMode((currentMode) => currentMode === nextMode ? currentMode : nextMode);
   }, []);
@@ -61,7 +79,7 @@ export function useMessageScroll({ active }: UseMessageScrollOptions) {
     if (modeRef.current === "browse") return;
     cancelScheduledScroll();
     autoScrollingRef.current = false;
-    changeMode(nextMessageScrollMode(modeRef.current, "user-browse"));
+    changeMode(nextFusionCardScrollMode(modeRef.current, "user-browse"));
   }, [cancelScheduledScroll, changeMode]);
 
   const scrollToLatest = useCallback(() => {
@@ -76,7 +94,6 @@ export function useMessageScroll({ active }: UseMessageScrollOptions) {
       if (!viewport || modeRef.current !== "follow") return;
       autoScrollingRef.current = true;
       viewport.scrollTop = viewport.scrollHeight;
-      lastScrollTopRef.current = viewport.scrollTop;
       savedScrollTopRef.current = viewport.scrollTop;
       if (releaseFrameRef.current !== null) cancelAnimationFrame(releaseFrameRef.current);
       releaseFrameRef.current = requestAnimationFrame(() => {
@@ -87,9 +104,22 @@ export function useMessageScroll({ active }: UseMessageScrollOptions) {
   }, []);
 
   const followLatest = useCallback(() => {
-    changeMode(nextMessageScrollMode(modeRef.current, "follow-latest"));
+    changeMode(nextFusionCardScrollMode(modeRef.current, "follow-latest"));
     scrollToLatest();
   }, [changeMode, scrollToLatest]);
+
+  useLayoutEffect(() => {
+    cancelScheduledScroll();
+    autoScrollingRef.current = false;
+    touchYRef.current = null;
+    savedScrollTopRef.current = 0;
+    changeMode("follow");
+
+    const viewport = viewportRef.current;
+    if (!active || !viewport) return;
+    viewport.scrollTop = viewport.scrollHeight;
+    savedScrollTopRef.current = viewport.scrollTop;
+  }, [active, cancelScheduledScroll, changeMode, targetKey]);
 
   useLayoutEffect(() => {
     if (!active) return;
@@ -101,9 +131,11 @@ export function useMessageScroll({ active }: UseMessageScrollOptions) {
       scrollToLatest();
     } else {
       autoScrollingRef.current = true;
-      viewport.scrollTop = savedScrollTopRef.current;
-      lastScrollTopRef.current = viewport.scrollTop;
-      if (isAtBottom(viewport)) followLatest();
+      const savedScrollTop = viewportKey
+        ? savedScrollTopsRef.current.get(viewportKey)
+        : undefined;
+      viewport.scrollTop = savedScrollTop ?? viewport.scrollHeight;
+      savedScrollTopRef.current = viewport.scrollTop;
       releaseFrameRef.current = requestAnimationFrame(() => {
         releaseFrameRef.current = null;
         autoScrollingRef.current = false;
@@ -116,33 +148,28 @@ export function useMessageScroll({ active }: UseMessageScrollOptions) {
 
     return () => {
       savedScrollTopRef.current = viewport.scrollTop;
-      lastScrollTopRef.current = viewport.scrollTop;
+      if (viewportKey) savedScrollTopsRef.current.set(viewportKey, viewport.scrollTop);
       touchYRef.current = null;
       resizeObserver.disconnect();
       cancelScheduledScroll();
       autoScrollingRef.current = false;
     };
-  }, [active, cancelScheduledScroll, followLatest, scrollToLatest]);
+  }, [active, cancelScheduledScroll, scrollToLatest, viewportKey]);
 
   const handleScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
     const viewport = event.currentTarget;
-    const currentScrollTop = viewport.scrollTop;
-    const movedUp = currentScrollTop < lastScrollTopRef.current - 1;
-    lastScrollTopRef.current = currentScrollTop;
-    savedScrollTopRef.current = currentScrollTop;
+    savedScrollTopRef.current = viewport.scrollTop;
+    const ownerKey = viewportKeyRef.current;
+    if (ownerKey) savedScrollTopsRef.current.set(ownerKey, viewport.scrollTop);
 
     if (autoScrollingRef.current) return;
-    if (modeRef.current === "follow" && movedUp) {
-      enterBrowseMode();
-      return;
-    }
-    if (modeRef.current === "browse" && isAtBottom(viewport)) {
-      changeMode(nextMessageScrollMode(modeRef.current, "reached-bottom"));
-    }
-  }, [changeMode, enterBrowseMode]);
+    const eventType = fusionCardScrollEventForViewport(modeRef.current, isAtBottom(viewport));
+    if (eventType) changeMode(nextFusionCardScrollMode(modeRef.current, eventType));
+  }, [changeMode]);
 
   const handleWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
-    if (event.deltaY < 0) enterBrowseMode();
+    if (event.defaultPrevented) return;
+    if (event.deltaY < 0 && canBrowseEarlier(event.currentTarget)) enterBrowseMode();
   }, [enterBrowseMode]);
 
   const handleTouchStart = useCallback((event: TouchEvent<HTMLDivElement>) => {
@@ -153,7 +180,9 @@ export function useMessageScroll({ active }: UseMessageScrollOptions) {
     const currentY = event.touches[0]?.clientY;
     const previousY = touchYRef.current;
     if (currentY === undefined) return;
-    if (previousY !== null && currentY > previousY + 1) enterBrowseMode();
+    if (previousY !== null && currentY > previousY + 1 && canBrowseEarlier(event.currentTarget)) {
+      enterBrowseMode();
+    }
     touchYRef.current = currentY;
   }, [enterBrowseMode]);
 
@@ -162,7 +191,7 @@ export function useMessageScroll({ active }: UseMessageScrollOptions) {
       || event.key === "PageUp"
       || event.key === "Home"
       || (event.key === " " && event.shiftKey);
-    if (movesUp) enterBrowseMode();
+    if (movesUp && canBrowseEarlier(event.currentTarget)) enterBrowseMode();
   }, [enterBrowseMode]);
 
   return {
@@ -171,6 +200,7 @@ export function useMessageScroll({ active }: UseMessageScrollOptions) {
     contentRef,
     scrollToLatest,
     followLatest,
+    pauseFollowing: enterBrowseMode,
     handleScroll,
     handleWheel,
     handleTouchStart,

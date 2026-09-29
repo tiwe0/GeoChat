@@ -1,60 +1,22 @@
-import { GripVerticalIcon, PaperclipIcon, SendIcon, SquareIcon, XIcon } from "lucide-react";
-import {
-  Box,
-  Chip,
-  CircularProgress,
-  IconButton,
-  Paper,
-  Stack,
-  TextField,
-  Tooltip,
-  Typography,
-} from "@mui/material";
+import { Box, Stack, Typography } from "@mui/material";
+import { GripVerticalIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import {
-  useRef,
-  useState,
-  useEffect,
-  type ChangeEvent,
-  type ClipboardEvent,
-  type KeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
-} from "react";
-import type { ReactNode } from "react";
-import {
-  AGENT_ATTACHMENT_ACCEPT,
-  MAX_AGENT_FILE_COUNT,
-  MAX_AGENT_FILE_SIZE,
-  MAX_AGENT_TOTAL_FILE_SIZE,
-  isSupportedAgentFile,
-} from "../attachments/capabilities";
-import { imageFilesFromClipboard, insertTextAtSelection } from "../chat/composerPaste";
-import { useComposerHistory } from "../../hooks/useComposerHistory";
-import type { FusionAttachment } from "./types";
+import { useEffect, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { GeoChatComposer } from "../assistant-ui";
 import { FUSION_COMPOSER_Z_INDEX } from "./geometry";
 
-const MotionPaper = motion.create(Paper);
+const MotionBox = motion.create(Box);
 
-function fileSignature(file: File) {
-  return `${file.name}:${file.size}:${file.lastModified}`;
-}
-
-function fileToDataUrl(file: File, failureMessage: string) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error(failureMessage));
-    reader.onerror = () => reject(new Error(failureMessage, { cause: reader.error }));
-    reader.readAsDataURL(file);
-  });
-}
-
+/**
+ * Spatial shell for the shared assistant-ui composer.
+ *
+ * assistant-ui owns text, attachments, submit/cancel, paste, drop, focus and
+ * input history. This wrapper only owns GeoChat's canvas placement and drag
+ * interaction, keeping the fusion surface free of a second chat state model.
+ */
 export function FusionComposer(props: {
   x: number;
   y: number;
-  value: string;
-  history: readonly string[];
-  attachments: FusionAttachment[];
-  busy: boolean;
   disabled: boolean;
   canvasConnected: boolean;
   canvasConnectedLabel: string;
@@ -64,120 +26,77 @@ export function FusionComposer(props: {
   selectionLabel?: string;
   placeholder: string;
   attachLabel: string;
-  removeAttachmentLabel: string;
+  removeAttachmentLabel: string | ((name: string) => string);
   sendLabel: string;
   stopLabel: string;
   dragLabel: string;
-  fileReadFailed: string;
-  unsupportedFile: (name: string) => string;
-  fileTooLarge: (name: string) => string;
-  tooManyFiles: (count: number) => string;
-  totalTooLarge: string;
-  onChange: (value: string) => void;
+  error?: string | null;
   onFocus?: () => void;
-  onAttachmentsChange: (attachments: FusionAttachment[]) => void;
-  onSend: () => void;
-  onStop: () => void;
+  onSubmit?: () => void;
+  onAttachmentError?: (message: string) => void;
   onDragStart: (event: ReactPointerEvent<HTMLElement>) => void;
   onDragMove: (event: ReactPointerEvent<HTMLElement>) => void;
   onDragStop: (event: ReactPointerEvent<HTMLElement>) => void;
+  onSizeChange?: (size: { width: number; height: number }) => void;
 }) {
   const reduceMotion = useReducedMotion();
-  const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const [preparing, setPreparing] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const textInputRef = useRef<HTMLInputElement>(null);
-  const inputHistory = useComposerHistory({
-    entries: props.history,
-    value: props.value,
-    disabled: props.busy || props.disabled,
-    onChange: props.onChange,
-  });
+  const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    textInputRef.current?.focus({ preventScroll: true });
-  }, [props.focusSignal]);
-  const canSubmit = !props.disabled && (Boolean(props.value.trim()) || props.attachments.length > 0);
+    const root = rootRef.current;
+    if (!root || !props.onSizeChange) return;
+    const report = () => {
+      const bounds = root.getBoundingClientRect();
+      props.onSizeChange?.({ width: bounds.width, height: bounds.height });
+    };
+    report();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(report);
+    observer?.observe(root);
+    return () => observer?.disconnect();
+  }, [props.onSizeChange]);
 
-  async function addFiles(files: Iterable<File>) {
-    if (props.busy || preparing) return;
-    const signatures = new Set(props.attachments.map((attachment) => attachment.signature));
-    const accepted: File[] = [];
-    let totalSize = props.attachments.reduce((sum, attachment) => sum + attachment.size, 0);
-    let error: string | null = null;
-    for (const file of files) {
-      const signature = fileSignature(file);
-      if (signatures.has(signature)) continue;
-      if (!isSupportedAgentFile(file)) { error ??= props.unsupportedFile(file.name); continue; }
-      if (file.size > MAX_AGENT_FILE_SIZE) { error ??= props.fileTooLarge(file.name); continue; }
-      if (props.attachments.length + accepted.length >= MAX_AGENT_FILE_COUNT) {
-        error ??= props.tooManyFiles(MAX_AGENT_FILE_COUNT);
-        break;
-      }
-      if (totalSize + file.size > MAX_AGENT_TOTAL_FILE_SIZE) { error ??= props.totalTooLarge; continue; }
-      signatures.add(signature);
-      totalSize += file.size;
-      accepted.push(file);
-    }
-    setAttachmentError(error);
-    if (accepted.length === 0) return;
-    setPreparing(true);
-    try {
-      const next = await Promise.all(accepted.map(async (file): Promise<FusionAttachment> => ({
-        id: crypto.randomUUID(),
-        signature: fileSignature(file),
-        size: file.size,
-        part: {
-          type: "file",
-          filename: file.name,
-          mediaType: file.type,
-          url: await fileToDataUrl(file, props.fileReadFailed),
-        },
-      })));
-      props.onAttachmentsChange([...props.attachments, ...next]);
-    } catch (caughtError) {
-      console.error("[ERROR] Fusion attachment preparation failed", caughtError);
-      setAttachmentError(caughtError instanceof Error ? caughtError.message : props.fileReadFailed);
-    } finally {
-      setPreparing(false);
-    }
-  }
-
-  function handleInputFiles(event: ChangeEvent<HTMLInputElement>) {
-    if (event.target.files) void addFiles(event.target.files);
-    event.target.value = "";
-  }
-
-  function handlePaste(event: ClipboardEvent<HTMLDivElement>) {
-    const files = imageFilesFromClipboard(event.clipboardData);
-    if (files.length === 0) return;
-    event.preventDefault();
-    const pastedText = event.clipboardData.getData("text/plain");
-    const target = event.target;
-    if (pastedText && (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement)) {
-      const insertion = insertTextAtSelection(props.value, pastedText, target.selectionStart, target.selectionEnd);
-      props.onChange(insertion.value);
-      globalThis.requestAnimationFrame(() => target.setSelectionRange(insertion.cursor, insertion.cursor));
-    }
-    void addFiles(files);
-  }
-
-  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (inputHistory.handleKeyDown(event)) return;
-    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
-    event.preventDefault();
-    event.currentTarget.closest("form")?.requestSubmit();
-  }
+  const composerHeader = (
+    <Stack
+      data-copilot-tour="fusion-composer"
+      direction="row"
+      spacing={0.5}
+      onPointerDown={(event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest("button, input, textarea, select, [role='button'], [role='menuitem']")) return;
+        props.onDragStart(event);
+      }}
+      onPointerMove={props.onDragMove}
+      onPointerUp={props.onDragStop}
+      onPointerCancel={props.onDragStop}
+      onLostPointerCapture={props.onDragStop}
+      sx={{ minWidth: 0, alignItems: "center", cursor: "grab", touchAction: "none", userSelect: "none" }}
+      aria-label={props.dragLabel}
+    >
+      <GripVerticalIcon size={16} color="#9ca3af" />
+      <Box sx={{ minWidth: 0, flex: 1 }}>
+        {props.modelControl ?? (
+          <Typography variant="caption" color="text.secondary" noWrap>
+            {props.modelLabel}
+          </Typography>
+        )}
+      </Box>
+      {props.selectionLabel && (
+        <Typography
+          variant="caption"
+          color="primary.main"
+          noWrap
+          sx={{ maxWidth: 180, fontWeight: 650 }}
+          title={props.selectionLabel}
+        >
+          {props.selectionLabel}
+        </Typography>
+      )}
+    </Stack>
+  );
 
   return (
     <Box
-      component="form"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (props.busy || preparing || !canSubmit) return;
-        inputHistory.reset();
-        props.onSend();
-      }}
+      ref={rootRef}
       sx={{
         position: "fixed",
         left: props.x,
@@ -188,136 +107,50 @@ export function FusionComposer(props: {
         zIndex: FUSION_COMPOSER_Z_INDEX,
       }}
     >
-    <MotionPaper
-      initial={reduceMotion ? false : { opacity: 0, scale: 0.94, y: 8 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      transition={{ duration: reduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}
-      elevation={8}
-      sx={{
-        position: "relative",
-        border: 1,
-        borderColor: "divider",
-        borderRadius: 3,
-        overflow: "hidden",
-        bgcolor: "rgba(255,255,255,0.94)",
-        backdropFilter: "blur(22px)",
-      }}
-    >
-      {props.canvasConnected && (
-        <Box
-          role="status"
-          aria-label={props.canvasConnectedLabel}
-          title={props.canvasConnectedLabel}
-          sx={{
-            position: "absolute",
-            top: 10,
-            right: 11,
-            zIndex: 2,
-            width: 8,
-            height: 8,
-            borderRadius: "50%",
-            bgcolor: "#42a564",
-            boxShadow: "0 0 0 3px rgba(66, 165, 100, 0.14)",
-          }}
-        />
-      )}
-      <Stack
-        data-copilot-tour="fusion-composer"
-        direction="row"
-        spacing={0.5}
-        onPointerDown={(event) => {
-          const target = event.target instanceof Element ? event.target : null;
-          if (target?.closest("button, input, textarea, select, [role='button'], [role='menuitem']")) return;
-          props.onDragStart(event);
-        }}
-        onPointerMove={props.onDragMove}
-        onPointerUp={props.onDragStop}
-        onPointerCancel={props.onDragStop}
-        onLostPointerCapture={props.onDragStop}
-        sx={{ alignItems: "center", pl: 1, pr: 3.5, py: 0.5, cursor: "grab", touchAction: "none", userSelect: "none" }}
-        aria-label={props.dragLabel}
+      <MotionBox
+        initial={reduceMotion ? false : { opacity: 0, scale: 0.94, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: reduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}
+        sx={{ position: "relative" }}
       >
-        <GripVerticalIcon size={16} color="#9ca3af" />
-        <Box sx={{ minWidth: 0, flex: 1 }}>{props.modelControl ?? <Typography variant="caption" color="text.secondary" noWrap>{props.modelLabel}</Typography>}</Box>
-        {props.selectionLabel && (
-          <Typography variant="caption" color="primary.main" noWrap sx={{ maxWidth: 180, fontWeight: 650 }} title={props.selectionLabel}>
-            {props.selectionLabel}
-          </Typography>
+        {props.canvasConnected && (
+          <Box
+            role="status"
+            aria-label={props.canvasConnectedLabel}
+            title={props.canvasConnectedLabel}
+            sx={{
+              position: "absolute",
+              top: 10,
+              right: 11,
+              zIndex: 2,
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              bgcolor: "#42a564",
+              boxShadow: "0 0 0 3px rgba(66, 165, 100, 0.14)",
+            }}
+          />
         )}
-      </Stack>
-      {props.attachments.length > 0 && (
-        <Stack direction="row" spacing={0.5} sx={{ px: 1, pt: 0.5, overflowX: "auto" }}>
-          {props.attachments.map((attachment) => (
-            <Chip
-              key={attachment.id}
-              size="small"
-              label={attachment.part.filename}
-              onDelete={() => props.onAttachmentsChange(props.attachments.filter((item) => item.id !== attachment.id))}
-              deleteIcon={<XIcon />}
-              aria-label={`${props.removeAttachmentLabel}: ${attachment.part.filename ?? ""}`}
-            />
-          ))}
-        </Stack>
-      )}
-      <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", px: 1, py: 0.5 }}>
-        <input ref={fileInputRef} hidden type="file" multiple accept={AGENT_ATTACHMENT_ACCEPT} onChange={handleInputFiles} />
-        <Tooltip title={props.attachLabel} arrow>
-          <Box component="span" sx={{ display: "inline-flex", alignItems: "center" }}>
-            <IconButton size="small" disabled={props.busy || preparing} onClick={() => fileInputRef.current?.click()} aria-label={props.attachLabel} data-copilot-tour="fusion-attachments">
-              {preparing ? <CircularProgress size={17} /> : <PaperclipIcon size={18} />}
-            </IconButton>
-          </Box>
-        </Tooltip>
-        <TextField
-          inputRef={textInputRef}
-          autoFocus
-          fullWidth
-          multiline
-          maxRows={5}
-          size="small"
-          variant="standard"
-          value={props.value}
-          placeholder={props.placeholder}
+        <GeoChatComposer
+          variant="fusion"
+          header={composerHeader}
+          focusSignal={props.focusSignal}
           disabled={props.disabled}
-          onChange={(event) => inputHistory.changeValue(event.target.value)}
+          error={props.error}
+          placeholder={props.placeholder}
+          attachLabel={props.attachLabel}
+          removeAttachmentLabel={props.removeAttachmentLabel}
+          sendLabel={props.sendLabel}
+          stopLabel={props.stopLabel}
           onFocus={props.onFocus}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-          slotProps={{ input: { disableUnderline: true } }}
+          onSubmit={props.onSubmit}
+          onAttachmentError={props.onAttachmentError}
           sx={{
-            minWidth: 0,
-            "& .MuiInputBase-root": {
-              minHeight: 28,
-              p: 0,
-              alignItems: "center",
-            },
-            "& textarea": {
-              lineHeight: "24px",
-            },
+            header: { pr: 3.5 },
+            root: { borderRadius: 3 },
           }}
         />
-        <Tooltip title={props.busy ? props.stopLabel : props.sendLabel} arrow>
-          <Box component="span" sx={{ display: "inline-flex", alignItems: "center" }}>
-            <IconButton
-              type={props.busy ? "button" : "submit"}
-              data-copilot-tour="fusion-send"
-              size="small"
-              color="primary"
-              disabled={preparing || (!props.busy && !canSubmit)}
-              onClick={props.busy ? props.onStop : undefined}
-              aria-label={props.busy ? props.stopLabel : props.sendLabel}
-            >
-              {props.busy ? <SquareIcon size={18} /> : <SendIcon size={18} />}
-            </IconButton>
-          </Box>
-        </Tooltip>
-      </Stack>
-      {attachmentError && (
-        <Box sx={{ px: 1, pb: 0.5 }}>
-          <Typography variant="caption" color="error.main">{attachmentError}</Typography>
-        </Box>
-      )}
-    </MotionPaper>
+      </MotionBox>
     </Box>
   );
 }

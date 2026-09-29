@@ -9,16 +9,14 @@ import {
 import type { Locale } from "../../../../shared/desktop/locale";
 import { Streamdown } from "streamdown";
 import { STREAMDOWN_PLUGINS } from "./streamdownPlugins";
-import { isAssistantDisplayToolPart } from "./assistantProcess";
 import { useStreamdownTranslations } from "../../i18n/useStreamdownTranslations";
+import type { ToolCallMessagePartProps } from "@assistant-ui/react";
+import { isGeoChatDisplayToolName } from "../assistant-ui/toolPresentation";
 
-type ToolPart = {
-  type: string;
-  state?: string;
-  input?: unknown;
-  output?: unknown;
-  errorText?: unknown;
-};
+export type AgentDisplayToolPart = Pick<
+  ToolCallMessagePartProps,
+  "toolName" | "args" | "result" | "isError" | "status"
+>;
 
 type ToolCard = {
   title?: string;
@@ -179,15 +177,20 @@ function Verdict({ value, copy }: { value?: string; copy: CardLabels }) {
   return <Chip size="small" label={copy[normalized]} />;
 }
 
-export function isAgentDisplayToolPart(part: unknown): part is ToolPart {
-  return isAssistantDisplayToolPart(part);
+export function isAgentDisplayToolPart(part: unknown): part is AgentDisplayToolPart {
+  if (!part || typeof part !== "object" || Array.isArray(part)) return false;
+  const candidate = part as Partial<AgentDisplayToolPart>;
+  return typeof candidate.toolName === "string" && isGeoChatDisplayToolName(candidate.toolName);
 }
 
-export function AgentDisplayToolResult({ part, locale, statusLabel }: { part: ToolPart; locale: "zh-CN" | "en-US"; statusLabel: string }) {
-  const toolName = part.type.slice(5);
+export function AgentDisplayToolResult({ part, locale, statusLabel }: { part: AgentDisplayToolPart; locale: "zh-CN" | "en-US"; statusLabel: string }) {
+  const toolName = part.toolName;
   const copy = labels[locale];
-  const card = toCard(part.output) ?? toCard(part.input);
-  const error = stringValue(part.errorText);
+  const card = toCard(part.result) ?? toCard(part.args);
+  const failed = part.isError || part.status.type === "incomplete";
+  const error = failed
+    ? stringValue(part.result) ?? ("error" in part.status ? stringValue(part.status.error) : undefined)
+    : undefined;
 
   if (!card) {
     return (
@@ -211,7 +214,7 @@ export function AgentDisplayToolResult({ part, locale, statusLabel }: { part: To
       {toolName === "showChoiceAnalysis" && <ChoiceAnalysis card={card} copy={copy} />}
       {toolName === "showSelectedElements" && <Stack spacing={0.5}><Typography variant="caption" color="text.secondary">{copy.selected}</Typography>{card.elements?.map((element, index) => <Stack spacing={0.25} key={`${element.label}-${index}`}><Typography component="code" variant="body2">{element.label}</Typography>{element.type && <Typography variant="caption">{copy.type}: {element.type}</Typography>}{element.description && <Markdown>{element.description}</Markdown>}{element.role && <Typography variant="body2"><strong>{copy.role}: </strong>{element.role}</Typography>}</Stack>)}{card.nextActionHint && <Typography variant="body2"><strong>{copy.nextAction}: </strong>{card.nextActionHint}</Typography>}</Stack>}
       {card.auxiliaryElementReview && <Stack spacing={0.25}><Typography variant="caption" color="text.secondary">{copy.auxiliary}</Typography><Markdown>{card.auxiliaryElementReview}</Markdown></Stack>}
-      {part.state !== "output-available" && <Typography variant="caption" color="text.secondary">{toolName}: {statusLabel}{error ? ` (${error})` : ""}</Typography>}
+      {part.status.type !== "complete" && <Typography variant="caption" color="text.secondary">{toolName}: {statusLabel}{error ? ` (${error})` : ""}</Typography>}
     </Stack>
   );
 }

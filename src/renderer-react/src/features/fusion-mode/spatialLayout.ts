@@ -19,6 +19,7 @@ export type FusionSpatialLayoutInput = {
   active: boolean;
   createdAt: number;
   size?: FusionSurfaceSize;
+  belowOffset?: number;
 };
 
 export type FusionSpatialLayout = {
@@ -55,20 +56,30 @@ function normalizedSize(input: FusionSpatialLayoutInput, viewport: FusionViewpor
   };
 }
 
-function rectFor(anchor: FusionPoint, placement: FusionPlacement, size: FusionSurfaceSize): Rect {
+function rectFor(
+  anchor: FusionPoint,
+  placement: FusionPlacement,
+  size: FusionSurfaceSize,
+  belowOffset = FUSION_BUBBLE_BELOW_OFFSET,
+): Rect {
   const left = anchor.x - size.width / 2;
   const top = placement === "above"
     ? anchor.y + FUSION_BUBBLE_ABOVE_OFFSET - size.height
-    : anchor.y + FUSION_BUBBLE_BELOW_OFFSET;
+    : anchor.y + belowOffset;
   return { left, top, right: left + size.width, bottom: top + size.height };
 }
 
-function anchorForRect(rect: Rect, placement: FusionPlacement, size: FusionSurfaceSize): FusionPoint {
+function anchorForRect(
+  rect: Rect,
+  placement: FusionPlacement,
+  size: FusionSurfaceSize,
+  belowOffset = FUSION_BUBBLE_BELOW_OFFSET,
+): FusionPoint {
   return {
     x: rect.left + size.width / 2,
     y: placement === "above"
       ? rect.bottom - FUSION_BUBBLE_ABOVE_OFFSET
-      : rect.top - FUSION_BUBBLE_BELOW_OFFSET,
+      : rect.top - belowOffset,
   };
 }
 
@@ -112,8 +123,8 @@ function candidates(
     for (const y of offsets) {
       for (const x of [0, -96, 96, -192, 192]) {
         const requestedAnchor = { x: input.anchor.x + x, y: input.anchor.y + y };
-        const rect = clampRect(rectFor(requestedAnchor, placement, size), viewport, insets);
-        const anchor = anchorForRect(rect, placement, size);
+        const rect = clampRect(rectFor(requestedAnchor, placement, size, input.belowOffset), viewport, insets);
+        const anchor = anchorForRect(rect, placement, size, input.belowOffset);
         result.push({
           anchor,
           placement,

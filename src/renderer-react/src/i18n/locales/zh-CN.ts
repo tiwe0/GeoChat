@@ -87,7 +87,7 @@ export const zhCN = {
     continueTurn: "在此继续提问",
     retryTurn: "重新生成本轮回答",
     collapsedTurn: "已收起的回答",
-    moreMessages: "还有 {{count}} 条更早消息",
+    returnToLatest: "回到最新",
   },
   fusionTour: {
     summonTitle: "随时唤起对话",
@@ -266,6 +266,7 @@ export const zhCN = {
     dropFiles: "\u677e\u5f00\u4ee5\u6dfb\u52a0\u9644\u4ef6",
     attachedImage: "\u9644\u4ef6\u56fe\u7247",
     removeAttachment: "\u79fb\u9664\u9644\u4ef6 {{name}}",
+    duplicateFile: "{{name}} \u5df2\u6dfb\u52a0\u3002",
     fileReadFailed: "\u65e0\u6cd5\u8bfb\u53d6\u6240\u9009\u6587\u4ef6\u3002",
     fileAttachFailed: "\u65e0\u6cd5\u6dfb\u52a0\u6240\u9009\u6587\u4ef6\u3002",
     unsupportedFile: "{{name}} \u7684\u6587\u4ef6\u7c7b\u578b\u4e0d\u53d7\u652f\u6301\u3002",

@@ -9,12 +9,11 @@ const panelSource = readFileSync(
 );
 const targetSource = [
   panelSource,
-  "ChatComposer.tsx",
-  "LanguageButton.tsx",
-  "ModelMenu.tsx",
-].map((source) => source.endsWith(".tsx")
-  ? readFileSync(new URL(`../src/renderer-react/src/components/${source}`, import.meta.url), "utf8")
-  : source).join("\n");
+  readFileSync(new URL("../src/renderer-react/src/features/assistant-ui/GeoChatComposer.tsx", import.meta.url), "utf8"),
+  readFileSync(new URL("../src/renderer-react/src/features/fusion-mode/FusionComposer.tsx", import.meta.url), "utf8"),
+  readFileSync(new URL("../src/renderer-react/src/components/LanguageButton.tsx", import.meta.url), "utf8"),
+  readFileSync(new URL("../src/renderer-react/src/components/ModelMenu.tsx", import.meta.url), "utf8"),
+].join("\n");
 const fusionTourSource = readFileSync(
   new URL("../src/renderer-react/src/features/fusion-mode/FusionOnboardingTour.tsx", import.meta.url),
   "utf8",

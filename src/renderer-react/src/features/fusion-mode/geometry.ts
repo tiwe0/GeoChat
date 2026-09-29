@@ -23,8 +23,13 @@ export const FUSION_TITLEBAR_SAFE_TOP = 56;
 export const FUSION_COMPOSER_WIDTH = 360;
 export const FUSION_COMPOSER_HEIGHT = 72;
 export const FUSION_BUBBLE_MAX_WIDTH = 430;
-export const FUSION_BUBBLE_MAX_HEIGHT = 420;
-export const FUSION_BUBBLE_VIEWPORT_HEIGHT_RATIO = 0.48;
+export const FUSION_BUBBLE_CARD_MAX_HEIGHT = 420;
+// Reserve enough outer space for two maximum-height cards plus their gap,
+// transparent shell padding, and the optional turn controls above the flow.
+export const FUSION_BUBBLE_STACK_CHROME_ALLOWANCE = 96;
+export const FUSION_BUBBLE_MAX_HEIGHT = (
+  FUSION_BUBBLE_CARD_MAX_HEIGHT * 2
+) + FUSION_BUBBLE_STACK_CHROME_ALLOWANCE;
 export const FUSION_BUBBLE_COMPOSER_GAP = 12;
 export const FUSION_BUBBLE_ABOVE_OFFSET = -FUSION_BUBBLE_COMPOSER_GAP;
 export const FUSION_BUBBLE_BELOW_OFFSET = FUSION_COMPOSER_HEIGHT + FUSION_BUBBLE_COMPOSER_GAP;
@@ -44,7 +49,7 @@ export function fusionActiveBubbleSize(viewport: FusionViewport): FusionSurfaceS
     width: Math.min(FUSION_BUBBLE_MAX_WIDTH, Math.max(1, viewport.width - 8)),
     height: Math.min(
       FUSION_BUBBLE_MAX_HEIGHT,
-      Math.max(1, viewport.height * FUSION_BUBBLE_VIEWPORT_HEIGHT_RATIO),
+      Math.max(1, viewport.height - FUSION_TITLEBAR_SAFE_TOP - FUSION_VIEWPORT_GUTTER),
     ),
   };
 }
@@ -58,6 +63,7 @@ export function fusionAttachedBubbleLayout(
   point: FusionPoint,
   viewport: FusionViewport,
   insets: FusionSafeInsets = {},
+  composerSize: FusionSurfaceSize = { width: FUSION_COMPOSER_WIDTH, height: FUSION_COMPOSER_HEIGHT },
 ): { placement: FusionPlacement; size: FusionSurfaceSize } {
   const naturalSize = fusionActiveBubbleSize(viewport);
   const safeTop = Math.max(FUSION_TITLEBAR_SAFE_TOP, insets.top ?? FUSION_TITLEBAR_SAFE_TOP);
@@ -65,7 +71,7 @@ export function fusionAttachedBubbleLayout(
   const availableAbove = Math.max(1, point.y - FUSION_BUBBLE_COMPOSER_GAP - safeTop);
   const availableBelow = Math.max(
     1,
-    safeBottom - point.y - FUSION_COMPOSER_HEIGHT - FUSION_BUBBLE_COMPOSER_GAP,
+    safeBottom - point.y - composerSize.height - FUSION_BUBBLE_COMPOSER_GAP,
   );
   const placement = availableAbove >= Math.min(naturalSize.height, 220)
     ? "above"

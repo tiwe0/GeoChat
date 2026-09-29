@@ -4,6 +4,11 @@ import { restoreConversationMessages, type ChatMessage } from "./messageAdapter"
 import type { AuthSessionController } from "../local-session/useLocalSession";
 import { extractCanvasReplayActions, replayConversationCanvas } from "./replay";
 import { deleteLocalConversation, listLocalConversations, readLocalConversation, saveLocalConversation } from "./localStore";
+import {
+  deleteConversationAfterRemoteConfirmation,
+  filterHiddenConversations,
+  retryPendingLocalConversationDeletes,
+} from "./deletion";
 
 export function useConversations(options: {
   apiOrigin: string;
@@ -27,10 +32,13 @@ export function useConversations(options: {
   const [selectingId, setSelectingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const selectionGenerationRef = useRef(0);
+  const hiddenConversationIdsRef = useRef(new Set<string>());
 
   const load = useCallback(async (silent = false) => {
     const session = authSessionRef.current.snapshot();
-    const local = listLocalConversations();
+    const cleanupErrors = retryPendingLocalConversationDeletes(hiddenConversationIdsRef.current, deleteLocalConversation);
+    if (cleanupErrors.length) console.warn("[WARN] Local conversation cleanup remains pending", cleanupErrors[0]);
+    const local = filterHiddenConversations(listLocalConversations(), hiddenConversationIdsRef.current);
     setConversations(local);
     // Desktop conversations are local-first, but the local backend is also
     // available to guest/browser sessions. Send the request without an auth
@@ -39,7 +47,10 @@ export function useConversations(options: {
     try {
       const loaded = await fetchConversationSummaries(apiOrigin, session.token);
       if (!authSessionRef.current.isCurrent(session)) return;
-      setConversations(mergeConversationSummaries(local, loaded));
+      setConversations(filterHiddenConversations(
+        mergeConversationSummaries(local, loaded),
+        hiddenConversationIdsRef.current,
+      ));
       console.debug(`[DEBUG] Conversation index loaded local=${local.length} backend=${loaded.length}`);
     } catch (e) { console.error("[ERROR] Caught exception at src/renderer-react/src/features/conversations/useConversations.ts:43", e); setError(e instanceof Error && e.message.trim() ? e.message : t("history.loadFailed")); }
     finally { if (!silent) setLoading(false); }
@@ -54,7 +65,7 @@ export function useConversations(options: {
   // throttle on slower WebKit builds. Persist the final coherent snapshot as
   // soon as the run becomes terminal instead.
   useEffect(() => {
-    if (isStreaming || !conversationId || !messages.length) return;
+    if (isStreaming || !conversationId || !messages.length || hiddenConversationIdsRef.current.has(conversationId)) return;
     try {
       saveLocalConversation({ id: conversationId, model, title, messages });
       setConversations((current) => mergeConversationSummaries(listLocalConversations(), current));
@@ -66,7 +77,7 @@ export function useConversations(options: {
 
   const select = useCallback(async (conversation: ConversationSummary) => {
     const session = authSessionRef.current.snapshot();
-    if (isStreaming || deletingId) return;
+    if (isStreaming || deletingId || hiddenConversationIdsRef.current.has(conversation.id)) return;
     const generation = ++selectionGenerationRef.current;
     const isCurrent = () => selectionGenerationRef.current === generation;
     setSelectingId(conversation.id); setError(null);
@@ -105,11 +116,18 @@ export function useConversations(options: {
     setDeletingId(conversation.id);
     setError(null);
     try {
-      deleteLocalConversation(conversation.id);
-      await deleteConversation(apiOrigin, session.token, conversation.id);
-      if (!authSessionRef.current.isCurrent(session)) return false;
-      setConversations((current) => current.filter((item) => item.id !== conversation.id));
-      onDelete(conversation);
+      const result = await deleteConversationAfterRemoteConfirmation({
+        conversation,
+        deleteRemote: () => deleteConversation(apiOrigin, session.token, conversation.id),
+        deleteLocal: () => deleteLocalConversation(conversation.id),
+        hiddenConversationIds: hiddenConversationIdsRef.current,
+        removeFromUi: () => setConversations((current) => current.filter((item) => item.id !== conversation.id)),
+        onDeleted: () => onDelete(conversation),
+      });
+      if (result.localCleanupError) {
+        console.warn(`[WARN] Conversation deleted remotely; local cleanup remains pending conversationId=${conversation.id}`, result.localCleanupError);
+        setError(result.localCleanupError.message.trim() || t("history.deleteFailed"));
+      }
       console.info(`[INFO] Conversation deleted conversationId=${conversation.id}`);
       return true;
     } catch (e) {

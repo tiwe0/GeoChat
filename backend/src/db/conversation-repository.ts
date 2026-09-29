@@ -32,6 +32,13 @@ export class ConversationOwnershipError extends Error {
   }
 }
 
+export class ConversationRunActiveError extends Error {
+  constructor() {
+    super("Conversation has an active agent run.");
+    this.name = "ConversationRunActiveError";
+  }
+}
+
 export type ConversationRepository = {
   listConversations(scope?: ConversationDataScope): Promise<DesktopConversationSummary[]>;
   getConversationDetail(conversationId: string, scope?: ConversationDataScope): Promise<DesktopConversationDetail | undefined>;
@@ -118,14 +125,23 @@ function createSqliteConversationRepository(db: SqliteDatabase): ConversationRep
     },
     async deleteConversation(conversationId, scope) {
       if (!sqliteConversationOwnedByScope(db, conversationId, scope)) return;
-      const runIds = db
-        .select({ runId: sqliteAgentRunLedgers.runId })
-        .from(sqliteAgentRunLedgers)
-        .where(eq(sqliteAgentRunLedgers.conversationId, conversationId))
-        .all()
-        .map((row) => row.runId);
-
       db.transaction((tx) => {
+        const hasActiveRun = Boolean(tx
+          .select({ runId: sqliteAgentRunLedgers.runId })
+          .from(sqliteAgentRunLedgers)
+          .where(and(
+            eq(sqliteAgentRunLedgers.conversationId, conversationId),
+            eq(sqliteAgentRunLedgers.status, "running"),
+          ))
+          .get());
+        if (hasActiveRun) throw new ConversationRunActiveError();
+
+        const runIds = tx
+          .select({ runId: sqliteAgentRunLedgers.runId })
+          .from(sqliteAgentRunLedgers)
+          .where(eq(sqliteAgentRunLedgers.conversationId, conversationId))
+          .all()
+          .map((row) => row.runId);
         if (runIds.length) {
           tx.delete(sqliteAgentErrorEvents).where(inArray(sqliteAgentErrorEvents.runId, runIds)).run();
           tx.delete(sqliteAgentRunLedgers).where(inArray(sqliteAgentRunLedgers.runId, runIds)).run();

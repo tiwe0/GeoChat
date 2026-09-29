@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
-  createAgentRunLedger
+  createAgentRunLedger,
+  finishAgentRunLedger
 } from "@geochat-ai/app";
 import { conversationBlackboardEntries } from "../backend/src/db/schema";
 import { createDatabaseForPath, createHttpHarness } from "./agent-harness-http-utils";
@@ -440,7 +441,7 @@ describe("conversation history", () => {
       })
     });
 
-    const run = createAgentRunLedger({
+    const run = finishAgentRunLedger(createAgentRunLedger({
       runId,
       conversationId,
       userMessageId: `${conversationId}-user`,
@@ -454,6 +455,11 @@ describe("conversation history", () => {
       prompt: "画一个圆并解释半径。",
       attachmentCount: 0,
       startedAt: "2026-06-06T04:10:01.000Z"
+    }), {
+      status: "succeeded",
+      completedAt: "2026-06-06T04:10:02.000Z",
+      usage: null,
+      error: null
     });
     await context.repositories.agentRuns.saveLedger(run);
     await context.repositories.blackboard.patchEntries(conversationId, {
@@ -526,6 +532,51 @@ describe("conversation history", () => {
     });
     const runList = await request("/v1/agent-runs");
     expect(runList.json.runs.some((item: { runId: string }) => item.runId === runId)).toBe(false);
+  });
+
+  test("rejects deletion while a conversation run is still active", async () => {
+    const { context, request } = await createHttpHarness();
+    const conversationId = `history-running-delete-${crypto.randomUUID()}`;
+    const runId = `${conversationId}-run`;
+
+    await request(`/v1/conversations/${encodeURIComponent(conversationId)}/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        conversationId,
+        message: {
+          id: `${conversationId}-user`,
+          role: "user",
+          content: "保持运行中的会话。",
+          createdAt: "2026-06-06T04:20:00.000Z",
+          payload: {
+            id: `${conversationId}-user`,
+            role: "user",
+            content: "保持运行中的会话。",
+            createdAt: "12:20:00"
+          }
+        }
+      })
+    });
+    await context.repositories.agentRuns.saveLedger(createAgentRunLedger({
+      runId,
+      conversationId,
+      userMessageId: `${conversationId}-user`,
+      assistantMessageId: `${conversationId}-assistant`,
+      model: { provider: "openai", model: "gpt-5.5", apiKey: "", customBaseUrl: "" },
+      prompt: "保持运行中的会话。",
+      attachmentCount: 0,
+      startedAt: "2026-06-06T04:20:01.000Z"
+    }));
+
+    const rejected = await request(`/v1/conversations/${encodeURIComponent(conversationId)}`, { method: "DELETE" });
+
+    expect(rejected).toMatchObject({
+      status: 409,
+      json: { error: "conversation_run_active" }
+    });
+    expect((await request(`/v1/conversations/${encodeURIComponent(conversationId)}`)).status).toBe(200);
+    expect((await context.repositories.agentRuns.getLedger(runId))?.status).toBe("running");
   });
 });
 

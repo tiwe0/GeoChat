@@ -7,7 +7,11 @@ import {
   type ReadBlackboardArgs,
   type UpsertDesktopConversationMessageInput
 } from "@geochat-ai/app";
-import { ConversationOwnershipError, type ConversationDataScope } from "../../db/conversation-repository";
+import {
+  ConversationOwnershipError,
+  ConversationRunActiveError,
+  type ConversationDataScope
+} from "../../db/conversation-repository";
 import type { BackendHttpContext } from "../context";
 import {
   conversationBlackboardPath,
@@ -103,7 +107,17 @@ export async function handleConversationRoute(
     if ("response" in dataScope) return dataScope.response;
     const conversation = await conversationRepository.getConversationDetail(conversationPath, dataScope.scope);
     if (!conversation) return json({ error: "not_found", message: "Conversation was not found." }, { status: 404 });
-    await conversationRepository.deleteConversation(conversationPath, dataScope.scope);
+    try {
+      await conversationRepository.deleteConversation(conversationPath, dataScope.scope);
+    } catch (error) {
+      if (error instanceof ConversationRunActiveError) {
+        return json(
+          { error: "conversation_run_active", message: "Conversation cannot be deleted while an agent run is active." },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
     return new Response(null, { status: 204 });
   }
 

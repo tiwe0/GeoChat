@@ -5,6 +5,7 @@ import { nativeAgentRuntimeMigration } from "./0003_native_agent_runtime";
 import { problemBankMigration } from "./0004_problem_bank";
 import { benchmarksMigration } from "./0005_benchmarks";
 import { unifiedProblemBankMigration } from "./0006_unified_problem_bank";
+import { schemaParityMigration } from "./0007_schema_parity";
 import type { SqliteMigration } from "./types";
 
 export const sqliteMigrations: readonly SqliteMigration[] = [
@@ -14,6 +15,7 @@ export const sqliteMigrations: readonly SqliteMigration[] = [
   problemBankMigration,
   benchmarksMigration,
   unifiedProblemBankMigration,
+  schemaParityMigration,
 ];
 
 export const latestSqliteSchemaVersion = sqliteMigrations.at(-1)?.version ?? 0;

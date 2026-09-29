@@ -1,13 +1,16 @@
 import { generateText, Output, type LanguageModel } from "ai";
 import { z } from "zod";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
+import { agentRoutingPrompt } from "@geochat-ai/app/agent-policy";
 import {
   agentThinkingProviderOptions,
-  agentRoutingPrompt,
-  getAdvancedDrawingToolDefinitions,
   type AgentRunLedgerRecord,
   type AgentRunUsage,
-  type FunctionCallToolName
-} from "@geochat-ai/app";
+} from "@geochat-ai/app/agent-run";
+import { getAdvancedDrawingToolDefinitions } from "@geochat-ai/app/geometry";
+import type { FunctionCallToolName } from "@geochat-ai/app/functioncalls";
+
+const logger = createStructuredLogger("agent.skill-selector");
 import {
   activateAgentSkill,
   createAgentSkillBrief,
@@ -143,7 +146,7 @@ export async function selectAgentSkillsForRun(input: {
       }, policy);
   const loggedSelection = selection.then((packet) => {
     const completed = { ...packet, cacheHit: false };
-    console.info("[INFO] Agent skill selection completed", JSON.stringify({
+    logger.info("selection_completed", "AGENT_SKILL_SELECTION_COMPLETED", {
       runId: input.run.runId,
       conversationId: input.run.conversationId,
       status: completed.status,
@@ -152,7 +155,7 @@ export async function selectAgentSkillsForRun(input: {
       failedSkillLoads: completed.failedSkillLoads ?? [],
       curriculumNodes: completed.curriculumNodes.map((node) => node.id),
       enabledAdvancedTools: completed.enabledAdvancedTools,
-    }));
+    });
     return completed;
   });
   skillSelectionCache.set(cacheKey, loggedSelection);
@@ -223,7 +226,11 @@ async function runSkillSelector(input: {
       },
     };
   } catch (error) {
-    console.error("[ERROR] Caught exception at backend/src/agent/skill-selector.ts:155", error);
+    logger.warn("selection_model_failed", "AGENT_SKILL_SELECTION_FAILED", {
+      error,
+      runId: input.run.runId,
+      conversationId: input.run.conversationId,
+    });
     if (candidateContext) {
       return {
         ...await enrichSkillSelectionPacket(
@@ -302,7 +309,7 @@ async function buildSkillSelectorCandidateContext(
         const activated = await activateAgentSkill(skill.name);
         constraintsBrief = extractAgentSkillConstraintBrief(activated.markdown);
       } catch (caughtError) {
-        console.error("[ERROR] Caught exception at backend/src/agent/skill-selector.ts:227", caughtError);
+        logger.debug("constraint_brief_load_failed", "AGENT_SKILL_CONSTRAINT_LOAD_FAILED", { error: caughtError, skillName: skill.name });
         constraintsBrief = [];
       }
       return createAgentSkillBrief(skill, {
@@ -491,7 +498,7 @@ async function enrichSkillSelectionPacket(
           reason: selected.reason
         };
       } catch (caughtError) {
-        console.error("[ERROR] Caught exception at backend/src/agent/skill-selector.ts:447", caughtError);
+        logger.debug("curriculum_item_normalize_failed", "AGENT_CURRICULUM_ITEM_INVALID", { error: caughtError, curriculumId: selected.id });
         return undefined;
       }
     })
@@ -522,7 +529,7 @@ async function enrichSkillSelectionPacket(
           ? { ok: true as const, skill: activated }
           : { ok: false as const, name: skill.name, error: "Skill definition was not found." };
       } catch (caughtError) {
-        console.error("[ERROR] Caught exception at backend/src/agent/skill-selector.ts:474", caughtError);
+        logger.warn("skill_activation_failed", "AGENT_SKILL_ACTIVATION_FAILED", { error: caughtError, skillName: skill.name });
         return {
           ok: false as const,
           name: skill.name,

@@ -9,6 +9,9 @@ import {
 } from "@mui/material";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
+
+const logger = createStructuredLogger("renderer.error-toast");
 
 type ErrorToastProps = {
   message: string | null | undefined;
@@ -33,7 +36,7 @@ export function ErrorToast({ message }: ErrorToastProps) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1600);
     } catch (caughtError) {
-      console.error("[ERROR] Caught exception at src/renderer-react/src/components/ErrorToast.tsx:35", caughtError);
+      logger.warn("clipboard_copy_failed", "ERROR_TOAST_COPY_FAILED", { error: caughtError });
       // Clipboard access is permission-controlled; the error remains visible.
     }
   }

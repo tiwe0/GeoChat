@@ -1,19 +1,7 @@
 import {
   getFunctionCallBackendExecutableToolNames,
-  compileGeometryPlanToExecuteArgs,
-  compileGeometryPlanToGeoGebra,
-  compileAdvancedDrawingCommand,
-  createGeometryPlanFromRecipe,
-  normalizeConstructionRecipeInputs,
   isFunctionCallArgs,
-  isAdvancedDrawingToolName,
-  isConstructionRecipeId,
-  searchGeoGebraCommandReference,
-  type AdvancedDrawingToolName,
-  type AgentRunToolRecord,
   type ActivateSkillArgs,
-  type BlackboardPatchResult,
-  type BlackboardEntry,
   type CreateGeometryPlanArgs,
   type ExecuteAdvancedDrawingCommandArgs,
   type FunctionCallArgsByName,
@@ -21,12 +9,28 @@ import {
   type FunctionCallToolName,
   type ListSkillsArgs,
   type LoadSkillArgs,
-  type PatchBlackboardArgs,
-  type ReadBlackboardArgs,
   type SearchGeoGebraCommandsArgs,
   type SearchSkillsArgs,
   type ToolExecutionResult
-} from "@geochat-ai/app";
+} from "@geochat-ai/app/functioncalls";
+import {
+  compileGeometryPlanToExecuteArgs,
+  compileGeometryPlanToGeoGebra,
+  compileAdvancedDrawingCommand,
+  createGeometryPlanFromRecipe,
+  normalizeConstructionRecipeInputs,
+  isAdvancedDrawingToolName,
+  isConstructionRecipeId,
+  searchGeoGebraCommandReference,
+  type AdvancedDrawingToolName,
+} from "@geochat-ai/app/geometry";
+import type { AgentRunToolRecord } from "@geochat-ai/app/agent-run";
+import type {
+  BlackboardEntry,
+  BlackboardPatchResult,
+  PatchBlackboardArgs,
+  ReadBlackboardArgs
+} from "@geochat-ai/app/blackboard";
 import {
   activateAgentSkill,
   filterBusinessReadyAgentSkills,

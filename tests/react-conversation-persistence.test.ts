@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { parseConversationMessages } from "../src/renderer-react/src/features/conversations/api";
+import {
+  fetchConversationMessages,
+  parseConversationMessages
+} from "../src/renderer-react/src/features/conversations/api";
 import { restoreConversationMessages } from "../src/renderer-react/src/features/conversations/messageAdapter";
 
 const originalLocalStorage = globalThis.localStorage;
@@ -50,6 +53,16 @@ describe("conversation transcript persistence", () => {
       payload: { parts: [{ type: "text", text: "backend" }] },
     }]);
     expect(restoreConversationMessages(stored)[0]?.parts).toEqual([{ type: "text", text: "backend" }]);
+  });
+
+  test("rejects malformed restore responses with a stable contract error code", async () => {
+    const request = (async () => Response.json({ conversation: { messages: [] } })) as typeof fetch;
+    try {
+      await fetchConversationMessages("http://127.0.0.1:17382", null, "conversation-1", request);
+      throw new Error("expected restore contract rejection");
+    } catch (error) {
+      expect(error).toMatchObject({ errorCode: "conversation_restore_invalid" });
+    }
   });
 
   test("uses backend history as the sole runtime authority after legacy migration", async () => {

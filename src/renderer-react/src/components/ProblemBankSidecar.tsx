@@ -15,7 +15,8 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import type { ProblemSetSummary } from "@geochat-ai/app";
+import type { ProblemSetSummary } from "@geochat-ai/app/problem-bank";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import type {
   DesktopProblemBankCacheState,
   DesktopProblemBankCatalog,
@@ -29,6 +30,8 @@ import { backendAuthToken, backendOrigin } from "../features/desktop/runtime";
 import { desktopProblemBankApi } from "../features/desktop/problemBankDesktop";
 import { fetchProblemSets } from "../features/desktop/settings/problemBankApi";
 import { useStreamdownTranslations } from "../i18n/useStreamdownTranslations";
+
+const logger = createStructuredLogger("problem-bank.sidecar");
 
 export type ProblemBankListItem = ProblemSetSummary & { source: "local" | "cloud" };
 type ProblemRow = DesktopProblemBankPage["items"][number];
@@ -180,7 +183,7 @@ function loadProblemBankSnapshot() {
     fetchProblemSets(backendOrigin(), backendAuthToken()),
     desktopApi?.getProblemBankCacheState() ?? Promise.resolve(null),
     desktopApi?.getProblemBankCatalog().catch((caughtError) => {
-      console.error("[ERROR] Failed to read the cached cloud problem-bank catalog", caughtError);
+      logger.warn("cached_catalog_read_failed", "PROBLEM_BANK_CACHED_CATALOG_READ_FAILED", { error: caughtError });
       return null;
     }) ?? Promise.resolve(null),
   ]).then(([localResult, cacheState, catalog]) => {
@@ -206,7 +209,7 @@ export async function preloadProblemBankSidecar() {
       await requestProblemPage(firstCloudBank, "0");
     }
   } catch (caughtError) {
-    console.debug("[DEBUG] Problem-bank preload was skipped", caughtError);
+    logger.debug("preload_skipped", "PROBLEM_BANK_PRELOAD_SKIPPED", { error: caughtError });
   }
 }
 
@@ -279,7 +282,7 @@ export function ProblemBankSidecar({
       setLoadState("ready");
     } catch (caughtError) {
       if (version !== requestVersion.current) return;
-      console.error("[ERROR] Failed to load the problem-bank sidecar", caughtError);
+      logger.warn("sidecar_load_failed", "PROBLEM_BANK_SIDECAR_LOAD_FAILED", { error: caughtError });
       setError(caughtError instanceof Error ? caughtError.message : String(caughtError));
       setLoadState("error");
     }
@@ -346,7 +349,7 @@ export function ProblemBankSidecar({
       setCatalog(nextCatalog);
       setLoadState("ready");
     } catch (caughtError) {
-      console.error("[ERROR] Failed to sync the cloud problem-bank catalog", caughtError);
+      logger.warn("catalog_sync_failed", "PROBLEM_BANK_CATALOG_SYNC_FAILED", { error: caughtError });
       setError(caughtError instanceof Error ? caughtError.message : String(caughtError));
     } finally {
       setSyncing(false);
@@ -364,14 +367,14 @@ export function ProblemBankSidecar({
   const prefetchBank = useCallback((bank: ProblemBankListItem) => {
     if (bank.source !== "cloud" || !networkAllowsPrefetch()) return;
     void getProblemPage(bank, "0").catch((caughtError) => {
-      console.debug("[DEBUG] Predictive problem-bank page download was skipped", caughtError);
+      logger.debug("page_prefetch_skipped", "PROBLEM_BANK_PAGE_PREFETCH_SKIPPED", { error: caughtError });
     });
   }, [getProblemPage]);
 
   const prefetchProblem = useCallback((problem: ProblemRow) => {
     if (!selectedBank || !networkAllowsPrefetch()) return;
     void getProblemDetail(selectedBank, problem).catch((caughtError) => {
-      console.debug("[DEBUG] Predictive problem detail download was skipped", caughtError);
+      logger.debug("detail_prefetch_skipped", "PROBLEM_BANK_DETAIL_PREFETCH_SKIPPED", { error: caughtError });
     });
   }, [getProblemDetail, selectedBank]);
 
@@ -389,7 +392,7 @@ export function ProblemBankSidecar({
       setPageState(page.nextCursor ? "idle" : "complete");
     } catch (caughtError) {
       if (version !== pageRequestVersion.current) return;
-      console.error("[ERROR] Failed to lazily load a problem-bank page", caughtError);
+      logger.warn("page_load_failed", "PROBLEM_BANK_PAGE_LOAD_FAILED", { error: caughtError });
       setPageError(caughtError instanceof Error ? caughtError.message : String(caughtError));
       setPageState("error");
     } finally {
@@ -435,7 +438,7 @@ export function ProblemBankSidecar({
       setDetailState("ready");
     } catch (caughtError) {
       if (version !== detailRequestVersion.current) return;
-      console.error("[ERROR] Failed to load the problem detail", caughtError);
+      logger.warn("detail_load_failed", "PROBLEM_BANK_DETAIL_LOAD_FAILED", { error: caughtError });
       setDetailError(caughtError instanceof Error ? caughtError.message : String(caughtError));
       setDetailState("error");
     }
@@ -475,7 +478,7 @@ export function ProblemBankSidecar({
     if (!selectedBank || selectedProblem || !nextCursor || pageState !== "idle" || !networkAllowsPrefetch()) return;
     const timer = window.setTimeout(() => {
       void getProblemPage(selectedBank, nextCursor).catch((caughtError) => {
-        console.debug("[DEBUG] Predictive next-page download was skipped", caughtError);
+        logger.debug("next_page_prefetch_skipped", "PROBLEM_BANK_PAGE_PREFETCH_SKIPPED", { error: caughtError });
       });
     }, 350);
     return () => window.clearTimeout(timer);
@@ -925,7 +928,7 @@ function ProblemMedia({ src, alt }: { src: string; alt: string }) {
       decoding="async"
       referrerPolicy="no-referrer"
       onError={() => {
-        console.error("[ERROR] Failed to load problem media from the configured source.");
+        logger.warn("media_load_failed", "PROBLEM_BANK_MEDIA_LOAD_FAILED");
         setFailed(true);
       }}
     />

@@ -6,12 +6,15 @@ import type {
 } from "@geochat-ai/app/legacy-conversation-import";
 import { decodeLegacyConversationImportResponse } from "@geochat-ai/app/legacy-conversation-import";
 import type { UIMessage } from "ai";
-import { isFunctionCallArgs, isFunctionCallToolName } from "@geochat-ai/app";
+import { isFunctionCallArgs, isFunctionCallToolName } from "@geochat-ai/app/functioncalls";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import {
   isBlackboardCategory,
   isBlackboardEntryStatus,
   type BlackboardEntry,
 } from "@geochat-ai/app/blackboard";
+
+const logger = createStructuredLogger("conversations.api");
 
 export type ConversationSummary = { id: string; model: string; title: string | null; createdAt: string; updatedAt: string; messageCount: number };
 export type StoredConversationPart = UIMessage["parts"][number];
@@ -75,7 +78,11 @@ export function parseConversationParts(value: unknown, apiOrigin?: string): Stor
       const toolName = data.type.slice("tool-".length);
       const allowedStates = new Set(["input-streaming", "input-available", "approval-requested", "approval-responded", "output-available", "output-error", "output-denied"]);
       if (!isFunctionCallToolName(toolName) || !allowedStates.has(String(data.state))) return [];
-      if ("input" in data && !isFunctionCallArgs(toolName, data.input)) return [];
+      // AI SDK exposes a DeepPartial tool input while it is still streaming.
+      // Once the input is available the registered tool contract must validate,
+      // but applying that full validation here would discard legitimate partial
+      // snapshots during conversation restore.
+      if (data.state !== "input-streaming" && "input" in data && !isFunctionCallArgs(toolName, data.input)) return [];
       if (data.state === "output-error" && typeof data.errorText !== "string") return [];
       return [data as StoredConversationPart];
     }
@@ -92,7 +99,7 @@ function proxyStoredImageUrl(value: string, apiOrigin?: string) {
     const key = decodeURIComponent(parsed.pathname.slice(prefix.length));
     return `${apiOrigin.replace(/\/$/, "")}/api/media/images/${encodeURIComponent(key)}`;
   } catch (caughtError) {
-    console.error("[ERROR] Caught exception at src/renderer-react/src/features/conversations/api.ts:68", caughtError);
+    logger.debug("stored_image_url_parse_failed", "CONVERSATION_IMAGE_URL_INVALID", { error: caughtError });
     return value;
   }
 }

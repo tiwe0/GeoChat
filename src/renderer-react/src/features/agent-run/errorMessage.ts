@@ -1,3 +1,7 @@
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
+
+const logger = createStructuredLogger("agent-run.error-message");
+
 type ErrorTranslator = (key: string) => string;
 
 /** Preserve transport/domain diagnostics so the UI can show and copy the original failure. */
@@ -13,7 +17,7 @@ export function formatAgentRunError(error: unknown, t: ErrorTranslator) {
       const serialized = JSON.stringify(error);
       if (serialized && serialized !== "{}") return serialized;
     } catch (caughtError) {
-      console.error("[ERROR] Failed to serialize an agent error", caughtError);
+      logger.debug("error_serialize_failed", "AGENT_ERROR_SERIALIZE_FAILED", { error: caughtError });
       // Fall through to the localized fallback for an unserializable value.
     }
   }

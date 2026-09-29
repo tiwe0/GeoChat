@@ -34,6 +34,15 @@ describe("desktop config recovery", () => {
     consumeDesktopConfigRecoveryNotice();
   });
 
+  test("does not write defaults into an empty store during bootstrap", () => {
+    const storage = {
+      getItem: () => null,
+      setItem: () => { throw new DOMException("The quota has been exceeded.", "QuotaExceededError"); },
+    };
+
+    expect(recoverDesktopConfigBeforeLoad(storage)).toBeNull();
+  });
+
   test("repairs only invalid fields and preserves valid provider, locale, and interaction settings", () => {
     const raw = JSON.stringify({
       schemaVersion: 1,

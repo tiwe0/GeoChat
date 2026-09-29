@@ -14,9 +14,9 @@ describe("composer input history", () => {
   });
 
   test("shares one composer implementation across window and fusion surfaces", () => {
-    const panel = readFileSync(join(rendererRoot, "components/AssistantPanel.tsx"), "utf8");
+    const windowSurface = readFileSync(join(rendererRoot, "features/assistant-workspace/AssistantWindowSurface.tsx"), "utf8");
     const fusionComposer = readFileSync(join(rendererRoot, "features/fusion-mode/FusionComposer.tsx"), "utf8");
-    expect(panel).toContain("<GeoChatComposer");
+    expect(windowSurface).toContain("<GeoChatComposer");
     expect(fusionComposer).toContain('import { GeoChatComposer } from "../assistant-ui"');
     expect(fusionComposer).toContain('<GeoChatComposer\n          variant="fusion"');
     expect(existsSync(join(rendererRoot, "features/chat/composerHistory.ts"))).toBe(false);

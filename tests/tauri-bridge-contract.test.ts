@@ -344,7 +344,47 @@ describe("Tauri desktop bridge contract", () => {
       expect(rustSources).toContain(`fn ${command}`);
     }
   });
+
+  test("grants every registered application command through the Tauri ACL", () => {
+    const mainSource = readFileSync("src-tauri/src/main.rs", "utf8");
+    const buildSource = readFileSync("src-tauri/build.rs", "utf8");
+    const permissionSource = readFileSync("src-tauri/permissions/desktop-app.toml", "utf8");
+    const defaultCapability = JSON.parse(readFileSync("src-tauri/capabilities/default.json", "utf8")) as {
+      permissions: string[];
+    };
+    const devCapability = JSON.parse(readFileSync("src-tauri/capabilities/dev-server.json", "utf8")) as {
+      permissions: string[];
+    };
+
+    const registeredCommands = extractRustIdentifiers(
+      mainSource.match(/generate_handler!\[([\s\S]*?)\]/)?.[1] ?? ""
+    );
+    const manifestedCommands = extractQuotedValues(
+      buildSource.match(/const APP_COMMANDS:.*?=\s*&\[([\s\S]*?)\];/)?.[1] ?? ""
+    );
+    const allowedPermissions = extractQuotedValues(
+      permissionSource.match(/permissions\s*=\s*\[([\s\S]*?)\]/)?.[1] ?? ""
+    );
+
+    expect(manifestedCommands.sort()).toEqual(registeredCommands.sort());
+    expect(allowedPermissions.sort()).toEqual(
+      registeredCommands.map((command) => `allow-${command.replaceAll("_", "-")}`).sort()
+    );
+    expect(defaultCapability.permissions).toContain("desktop-app");
+    expect(devCapability.permissions).toContain("desktop-app");
+  });
 });
+
+function extractRustIdentifiers(source: string): string[] {
+  return source
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => /^[a-z][a-z0-9_]*$/.test(value));
+}
+
+function extractQuotedValues(source: string): string[] {
+  return Array.from(source.matchAll(/"([a-z0-9_-]+)"/g), (match) => match[1]);
+}
 
 function readRustSources(dir: string): string {
   return readdirSync(dir, { withFileTypes: true })

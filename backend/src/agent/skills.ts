@@ -4,6 +4,9 @@ import { access, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promi
 import { homedir } from "node:os";
 import { basename, delimiter, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
+
+const logger = createStructuredLogger("agent.skills");
 
 const SKILL_FILE_NAME = "SKILL.md";
 const MAX_SKILL_MARKDOWN_BYTES = 96_000;
@@ -379,8 +382,7 @@ async function remoteSkillRootsFromEnv(env: NodeJS.ProcessEnv) {
           const manifest = await fetchRemoteSkillManifest(url);
           await cacheRemoteManifestSkills(writableCacheDir, manifest);
         } catch (error) {
-          console.error("[ERROR] Caught exception at backend/src/agent/skills.ts:362", error);
-          console.warn(`[WARN] Failed to refresh remote agent skills: ${error instanceof Error ? error.message : String(error)}`);
+          logger.warn("remote_manifest_refresh_failed", "AGENT_SKILL_REFRESH_FAILED", { error });
         }
       })
     );
@@ -796,7 +798,7 @@ async function canRead(path: string) {
     if (caughtError && typeof caughtError === "object" && "code" in caughtError && caughtError.code === "ENOENT") {
       return false;
     }
-    console.error("[ERROR] Caught exception at backend/src/agent/skills.ts:763", caughtError);
+    logger.warn("skill_path_access_failed", "AGENT_SKILL_PATH_ACCESS_FAILED", { error: caughtError, path });
     return false;
   }
 }

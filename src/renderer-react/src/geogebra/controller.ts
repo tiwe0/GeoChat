@@ -1,6 +1,7 @@
 import type { GeoGebraApi } from "./ggbdeploy-wrapper";
 import { canvasLabels, getAppletXml, readCanvasContext, tryReadCanvasContext, type CanvasContext } from "./canvas-context";
 import { normalizeGeoGebraCommandSyntax, normalizeGeoGebraFreeParameterCommands } from "@geochat-ai/app/functioncalls";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import { evaluateCommand, type CommandResult } from "./command-executor";
 import { GeoGebraAnimationRuntime, type AnimationScheduler, type GeoGebraAnimationEasing, type GeoGebraAnimationMode } from "./animation-runtime";
 import {
@@ -9,6 +10,8 @@ import {
   type CanvasTransactionContext,
   type CanvasTransactionOptions,
 } from "./canvas-transactions";
+
+const logger = createStructuredLogger("geogebra.controller");
 
 const COMMAND_DELAY_MS = 0;
 
@@ -330,7 +333,7 @@ export class GeoGebraController {
     let failed = 0;
     for (const label of [...labels].reverse()) {
       if (typeof this.api!.deleteObject !== "function") { failed += 1; continue; }
-      try { this.call("deleteObject", label); deleted += 1; } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/controller.ts:170", caughtError); failed += 1; }
+      try { this.call("deleteObject", label); deleted += 1; } catch (caughtError) { logger.warn("object_delete_failed", "GEOGEBRA_OBJECT_DELETE_FAILED", { error: caughtError, objectLabel: label }); failed += 1; }
     }
     if (typeof this.api!.reset === "function") {
       this.call("reset");
@@ -377,7 +380,7 @@ export class GeoGebraController {
       if (raw === false) return { ok: false, success: false, requestedMode: mode, mode, method: "setPerspective", error: "GeoGebra 拒绝了视图切换。" };
       return { ok: true, success: true, requestedMode: mode, mode, method: "setPerspective" };
     } catch (error) {
-      console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/controller.ts:213", error);
+      logger.warn("perspective_change_failed", "GEOGEBRA_PERSPECTIVE_CHANGE_FAILED", { error, perspective: mode });
       return { ok: false, success: false, requestedMode: mode, mode, method: "setPerspective", error: error instanceof Error ? error.message : String(error) };
     }
   }
@@ -392,17 +395,17 @@ export class GeoGebraController {
     const fn = this.api?.[name];
     if (typeof fn !== "function") return undefined;
     try { return Reflect.apply(fn, this.api, args); }
-    catch (error) { console.error(`[ERROR] GeoGebra optional API ${name} failed`, error); return undefined; }
+    catch (error) { logger.debug("optional_api_failed", "GEOGEBRA_OPTIONAL_API_FAILED", { error, api: name }); return undefined; }
   }
 
   private refreshVisuals() {
     const refreshViews = this.api?.refreshViews;
     if (typeof refreshViews === "function") {
-      try { refreshViews.call(this.api); } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/controller.ts:227", caughtError); /* rendering is best effort */ }
+      try { refreshViews.call(this.api); } catch (caughtError) { logger.debug("refresh_views_failed", "GEOGEBRA_REFRESH_FAILED", { error: caughtError }); /* rendering is best effort */ }
     }
     const recalculateEnvironments = this.api?.recalculateEnvironments;
     if (typeof recalculateEnvironments === "function") {
-      try { recalculateEnvironments.call(this.api); } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/controller.ts:231", caughtError); /* optional API */ }
+      try { recalculateEnvironments.call(this.api); } catch (caughtError) { logger.debug("recalculate_environments_failed", "GEOGEBRA_RECALCULATE_FAILED", { error: caughtError }); /* optional API */ }
     }
   }
 }

@@ -12,8 +12,9 @@ export type {
   FunctionCallToolName,
   ToolDisplayInfo
 } from "./functioncall-types";
+export * from "./functioncall-groups";
+export * from "./functioncall-schemas";
 export {
-  FUNCTION_CALL_REGISTRY,
   getFunctionCallSpec,
   getFunctionCallToolNames,
   isFunctionCallToolName,

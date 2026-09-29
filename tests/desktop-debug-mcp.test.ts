@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAgentRunLedger, finishAgentRunLedger } from "@geochat-ai/app";
+import { createDatabase } from "../backend/src/db/client";
 import { createGeoChatDesktopDebugServer } from "../tools/desktop-debug-mcp/index";
 import { agentRunReviewFromLedgerRow, desktopSubmissionEvidence, problemContentForDesktopRun, waitForConversationRun } from "../tools/desktop-debug-mcp/tools";
 
@@ -21,6 +22,29 @@ describe("desktop debug MCP", () => {
     const registeredTools = (server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools;
 
     expect(Object.keys(registeredTools)).not.toContain("select_desktop_problem");
+    expect(Object.keys(registeredTools)).toContain("restore_desktop_conversation");
+    expect(Object.keys(registeredTools)).toContain("configure_deterministic_test_provider");
+    expect(Object.keys(registeredTools)).toContain("clear_deterministic_test_provider");
+    expect(Object.keys(registeredTools)).toContain("probe_desktop_real_ui");
+  });
+
+  test("queues only the named restricted real-UI operation with its run nonce", async () => {
+    const { server, actions } = createGeoChatDesktopDebugServer();
+    const result = await callRegisteredTool(server, "probe_desktop_real_ui", {
+      nonce: "123e4567-e89b-42d3-a456-426614174000",
+      operation: "switch_mode",
+      target: "fusion",
+    });
+    expect(result).toMatchObject({ ok: true, queued: true });
+    expect(actions.list(1)[0]).toMatchObject({
+      type: "probe_real_ui",
+      nonce: "123e4567-e89b-42d3-a456-426614174000",
+      operation: "switch_mode",
+      target: "fusion",
+      status: "queued",
+    });
+    expect(actions.list(1)[0]).not.toHaveProperty("selector");
+    expect(actions.list(1)[0]).not.toHaveProperty("script");
   });
 
   test("resolves a local problem into the exact content sent through the real chat path", () => {
@@ -86,6 +110,46 @@ describe("desktop debug MCP", () => {
     });
   });
 
+  test("returns empty legacy run details for a fresh database", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "geochat-mcp-fresh-db-"));
+    temporaryDirectories.push(directory);
+    const databasePath = join(directory, "desktop.sqlite");
+    createDatabase({ databasePath }).close();
+
+    const previousPath = process.env.GEOCHAT_DESKTOP_MCP_DB_PATH;
+    process.env.GEOCHAT_DESKTOP_MCP_DB_PATH = databasePath;
+    try {
+      const { server } = createGeoChatDesktopDebugServer();
+      const conversationBundle = await callRegisteredTool(server, "get_conversation_debug_bundle", {
+        conversationId: "fresh-conversation"
+      });
+      expect(conversationBundle).toMatchObject({
+        ok: true,
+        toolRequests: [],
+        policyDecisions: [],
+        modelSteps: []
+      });
+
+      const runBundle = await callRegisteredTool(server, "get_agent_run_debug_bundle", {
+        runId: "fresh-run"
+      });
+      expect(runBundle).toMatchObject({
+        ok: true,
+        toolRequests: [],
+        policyDecisions: [],
+        modelSteps: []
+      });
+
+      const filteredRuns = await callRegisteredTool(server, "list_failed_agent_runs", {
+        toolName: "executeGeoGebraCommands"
+      });
+      expect(filteredRuns).toMatchObject({ ok: true, runs: [] });
+    } finally {
+      if (previousPath === undefined) delete process.env.GEOCHAT_DESKTOP_MCP_DB_PATH;
+      else process.env.GEOCHAT_DESKTOP_MCP_DB_PATH = previousPath;
+    }
+  });
+
   test("waits for the newly sent conversation run to reach a terminal state", async () => {
     const directory = mkdtempSync(join(tmpdir(), "geochat-mcp-run-wait-"));
     temporaryDirectories.push(directory);
@@ -121,3 +185,17 @@ describe("desktop debug MCP", () => {
     });
   });
 });
+
+async function callRegisteredTool(
+  server: unknown,
+  name: string,
+  args: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const registeredTools = (server as {
+    _registeredTools: Record<string, {
+      handler: (args: Record<string, unknown>) => Promise<{ structuredContent?: Record<string, unknown> }>;
+    }>;
+  })._registeredTools;
+  const result = await registeredTools[name]!.handler(args);
+  return result.structuredContent ?? {};
+}

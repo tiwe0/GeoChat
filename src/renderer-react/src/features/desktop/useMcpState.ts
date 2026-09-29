@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import {
   createMcpDebugActionPolling,
   DEFAULT_MCP_STATUS,
@@ -7,6 +8,8 @@ import {
   type DesktopDebugAction
 } from "../../../../shared/desktop/mcp-debug-actions";
 import type { RendererMcpStatus } from "../../../../shared/desktop/workbench-types";
+
+const logger = createStructuredLogger("desktop.mcp-state");
 
 /**
  * The local MCP server's status, and the poll loop that serves it.
@@ -32,7 +35,7 @@ export function useMcpState(input: {
       return;
     }
     const next = await api.getMcpStatus().catch((error) => {
-      console.error("[ERROR] Failed to read desktop MCP status", error);
+      logger.warn("status_read_failed", "DESKTOP_MCP_STATUS_READ_FAILED", { error });
       return {
         ...DEFAULT_MCP_STATUS,
         available: true,
@@ -50,7 +53,7 @@ export function useMcpState(input: {
     setBusy(true);
     try {
       const next = await api.setMcpEnabled(enabled).catch((error) => {
-        console.error("[ERROR] Failed to change desktop MCP state", error);
+        logger.warn("state_change_failed", "DESKTOP_MCP_STATE_CHANGE_FAILED", { error });
         return {
           ...DEFAULT_MCP_STATUS,
           available: true,

@@ -1,4 +1,5 @@
 import { BlocksIcon, SearchIcon, SparklesIcon } from "lucide-react";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Box,
@@ -27,6 +28,8 @@ import type { SkillConfig, VisualProfileName } from "../../../../../shared/deskt
 import { backendAuthToken, backendOrigin } from "../runtime";
 import { SettingsDisclosure } from "./SettingsDisclosure";
 import { fetchSkillCatalog } from "./skillsApi";
+
+const logger = createStructuredLogger("desktop.skills-settings");
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -105,7 +108,7 @@ export function SkillsSettings() {
       })
       .catch((caughtError) => {
         if (controller.signal.aborted) return;
-        console.error("[ERROR] Failed to load the Agent Skill catalog", caughtError);
+        logger.warn("catalog_load_failed", "AGENT_SKILL_CATALOG_LOAD_FAILED", { error: caughtError });
         setLoadState("error");
       });
     return () => controller.abort();

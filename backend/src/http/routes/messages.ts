@@ -1,4 +1,4 @@
-import { CreateGeoChatMessageInput } from "@geochat-ai/app";
+import { CreateGeoChatMessageInput } from "@geochat-ai/app/desktop-contracts";
 import { Either, Schema } from "effect";
 import type { BackendHttpContext } from "../context";
 import { json, readJson } from "../response";

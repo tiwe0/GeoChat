@@ -30,6 +30,18 @@ function legacyRawConfig() {
 }
 
 describe("desktop credential startup migration", () => {
+  test("keeps the renderer bootable when config quarantine exceeds WebView quota", async () => {
+    const raw = JSON.stringify({ locale: "en-US", debug: { modelStepTimeoutMs: "broken" } });
+    const storage = {
+      getItem: (key: string) => key === CONFIG_STORAGE_KEY ? raw : null,
+      removeItem: () => {},
+      setItem: () => { throw new DOMException("The quota has been exceeded.", "QuotaExceededError"); },
+    };
+
+    await expect(prepareDesktopConfigBeforeLoad(storage, undefined)).resolves.toBeNull();
+    expect(storage.getItem(CONFIG_STORAGE_KEY)).toBe(raw);
+  });
+
   test("migrates plaintext before config recovery can quarantine legacy structure", async () => {
     const storage = memoryStorage({ [CONFIG_STORAGE_KEY]: legacyRawConfig() });
     const stored = new Set<string>();

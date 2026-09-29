@@ -14,6 +14,7 @@ import {
 import type { AgentRunImageAttachment, ChatMessageMetadata } from "@geochat-ai/app/contracts";
 import { agentModelSupportsReasoning, type AgentModelConfig } from "@geochat-ai/app/model-registry";
 import type { AgentRunThinkingEffort } from "@geochat-ai/app/contracts";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import { areSupportedAgentAttachments } from "../features/attachments/capabilities";
 import {
   clearActiveNativeRun,
@@ -29,6 +30,8 @@ import {
   readDesktopConfig,
 } from "../../../shared/desktop/desktop-config";
 import type { DesktopConfig } from "../../../shared/desktop/workbench-types";
+
+const logger = createStructuredLogger("agent-run.renderer");
 
 type ChatMessage = UIMessage<ChatMessageMetadata>;
 type SendMessageInput = { text?: string; files?: FileUIPart[] };
@@ -167,7 +170,13 @@ export function useAgentRunChat(input: {
     if (delay === null || !isRetryableNativeChatError(error)) return false;
     const generation = runGenerationRef.current;
     networkRetryAttemptRef.current += 1;
-    desktopLogger.warn(`Native AI SDK stream interrupted; retrying run ${active.runId} in ${delay}ms (${networkRetryAttemptRef.current}/${NATIVE_CHAT_NETWORK_RETRY_DELAYS_MS.length})`);
+    logger.warn("stream_retry_scheduled", "AGENT_STREAM_RETRY_SCHEDULED", {
+      error,
+      runId: active.runId,
+      conversationId: active.conversationId,
+      retryDelayMs: delay,
+      retryAttempt: networkRetryAttemptRef.current,
+    });
     networkRetryTimerRef.current = globalThis.setTimeout(() => {
       networkRetryTimerRef.current = null;
       if (activeRunRef.current?.runId !== active.runId || runGenerationRef.current !== generation) return;
@@ -182,7 +191,11 @@ export function useAgentRunChat(input: {
         activeRunRef.current = null;
         runGenerationRef.current += 1;
         void terminalizeInterruptedNativeRun(active, inputRef.current, installationIdRef).catch((cancelError) => {
-          console.error("[ERROR] Failed to terminalize the active agent run after network retries", cancelError);
+          logger.warn("retry_terminalization_failed", "AGENT_RUN_TERMINALIZATION_FAILED", {
+            error: cancelError,
+            runId: active.runId,
+            conversationId: active.conversationId,
+          });
         });
       });
     }, delay);
@@ -206,13 +219,14 @@ export function useAgentRunChat(input: {
         if (!active) throw new Error("A native AI SDK run context is required.");
         const snapshot = activeRequestSnapshotRef.current;
         if (!snapshot) throw new Error("A native AI SDK request snapshot is required.");
+        const transportMessages = nativeChatTransportMessages(
+          messages,
+          snapshot.desktopConfig,
+          snapshot.locale,
+        );
         return {
           body: {
-            messages: messagesWithSkillPolicy(
-              completeInterruptedToolParts(messages),
-              snapshot.desktopConfig,
-              snapshot.locale,
-            ),
+            ...transportMessages,
             runId: active.runId,
             conversationId: active.conversationId,
             model: snapshot.model,
@@ -237,7 +251,14 @@ export function useAgentRunChat(input: {
       const toolName = toolCall.toolName;
       const knownTool = isFunctionCallToolName(toolName);
       const rendererTool = knownTool && isFunctionCallRendererExecutable(toolName);
-      console.debug(`[DEBUG] Native AI SDK tool received name=${toolName} dynamic=${toolCall.dynamic} active=${Boolean(active)} renderer=${rendererTool}`);
+      logger.debug("tool_received", "AGENT_TOOL_RECEIVED", {
+        runId: active?.runId,
+        conversationId: active?.conversationId,
+        toolName,
+        toolCallId: toolCall.toolCallId,
+        dynamic: toolCall.dynamic,
+        rendererTool,
+      });
       if (!active || toolCall.dynamic || !knownTool || !rendererTool) return;
       const runId = active.runId;
       const generation = runGenerationRef.current;
@@ -260,7 +281,13 @@ export function useAgentRunChat(input: {
           }, isCurrentRun);
         }
       } catch (error) {
-        console.error(`[ERROR] Renderer tool failed tool=${toolName} toolCallId=${toolCall.toolCallId}`, error);
+        logger.error("renderer_tool_failed", "AGENT_RENDERER_TOOL_FAILED", {
+          error,
+          runId,
+          conversationId: active.conversationId,
+          toolName,
+          toolCallId: toolCall.toolCallId,
+        });
         queueToolOutput(addToolOutputRef.current, {
           tool: toolName,
           toolCallId: toolCall.toolCallId,
@@ -292,7 +319,11 @@ export function useAgentRunChat(input: {
         clearNetworkRetry();
         if (interruptedRun) {
           void terminalizeInterruptedNativeRun(interruptedRun, inputRef.current, installationIdRef).catch((error) => {
-            console.error("[ERROR] Failed to terminalize an interrupted native AI SDK run", error);
+            logger.warn("interrupted_run_terminalization_failed", "AGENT_RUN_TERMINALIZATION_FAILED", {
+              error,
+              runId: interruptedRun.runId,
+              conversationId: interruptedRun.conversationId,
+            });
           });
         }
         return;
@@ -317,10 +348,14 @@ export function useAgentRunChat(input: {
       inputRef.current.onFinish?.();
     },
     onError: (error) => {
-      console.error(`[ERROR] Native AI SDK chat failed: ${error.message}`, error);
       if (userStopInProgressRef.current) return;
       const active = activeRunRef.current;
       if (active && scheduleNetworkRetry(active, error)) return;
+      logger.error("chat_failed", "AGENT_CHAT_FAILED", {
+        error,
+        runId: active?.runId,
+        conversationId: active?.conversationId,
+      });
       rememberFailedRequest(activeRequestContextRef.current);
       failedRequestSnapshotRef.current = activeRequestSnapshotRef.current;
       activeRequestContextRef.current = null;
@@ -330,7 +365,11 @@ export function useAgentRunChat(input: {
       clearNetworkRetry();
       if (active) {
         void terminalizeInterruptedNativeRun(active, inputRef.current, installationIdRef).catch((cancelError) => {
-          console.error("[ERROR] Failed to terminalize the active agent run after a chat error", cancelError);
+          logger.warn("chat_error_terminalization_failed", "AGENT_RUN_TERMINALIZATION_FAILED", {
+            error: cancelError,
+            runId: active.runId,
+            conversationId: active.conversationId,
+          });
         });
       }
     },
@@ -348,7 +387,7 @@ export function useAgentRunChat(input: {
     const recovery = recoverInterruptedNativeRun(inputRef.current, installationIdRef, fetch, () => runGenerationRef.current === generation)
       .then(() => undefined)
       .catch((error) => {
-        if (runGenerationRef.current === generation) console.error("[ERROR] Failed to recover interrupted native AI SDK run", error);
+        if (runGenerationRef.current === generation) logger.warn("interrupted_run_recovery_failed", "AGENT_RUN_RECOVERY_FAILED", { error });
       })
       .finally(() => {
         if (recoveryPromiseRef.current === recovery) recoveryPromiseRef.current = null;
@@ -641,6 +680,20 @@ export function messagesWithSkillPolicy<Message extends UIMessage>(
   return requestMessages;
 }
 
+export function nativeChatTransportMessages<Message extends UIMessage>(
+  messages: Message[],
+  config: DesktopConfig,
+  locale: "zh-CN" | "en-US",
+) {
+  const visibleMessages = completeInterruptedToolParts(messages);
+  return {
+    // This is the only transcript the backend may persist or return to the UI.
+    messages: visibleMessages,
+    // Provider-only augmentation must never become conversation history.
+    providerMessages: messagesWithSkillPolicy(visibleMessages, config, locale),
+  };
+}
+
 /**
  * AI SDK invokes `onToolCall` from its serialized message-update queue.
  * `addToolOutput` schedules work on that same queue, so awaiting it from the
@@ -661,7 +714,11 @@ export function queueToolOutput(
   globalThis.setTimeout(() => {
     if (!isCurrent()) return;
     void Promise.resolve(addToolOutput(input)).catch((error) => {
-      console.error(`[ERROR] Failed to queue renderer tool output tool=${input.tool} toolCallId=${input.toolCallId}`, error);
+      logger.warn("tool_output_queue_failed", "AGENT_TOOL_OUTPUT_QUEUE_FAILED", {
+        error,
+        toolName: input.tool,
+        toolCallId: input.toolCallId,
+      });
     });
   }, 0);
 }
@@ -821,7 +878,7 @@ async function uploadImageAttachments(apiOrigin: string, token: string | null, a
       const payload = await response.json() as { url?: unknown };
       return typeof payload.url === "string" ? { ...attachment, dataUrl: payload.url } : attachment;
     } catch (caughtError) {
-      console.error("[ERROR] Failed to upload an agent attachment", caughtError);
+      logger.warn("attachment_upload_failed", "AGENT_ATTACHMENT_UPLOAD_FAILED", { error: caughtError, attachmentName: attachment.name });
       return attachment;
     }
   }));

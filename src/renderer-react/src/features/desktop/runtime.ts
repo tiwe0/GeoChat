@@ -1,5 +1,8 @@
 import type { RuntimeInfo } from "@geochat-ai/app/desktop-contracts";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import { desktopLogger } from "./desktopLogger";
+
+const logger = createStructuredLogger("desktop.runtime");
 
 /**
  * Where the backend actually is.
@@ -11,8 +14,7 @@ import { desktopLogger } from "./desktopLogger";
  * assets — and neither is the shell's answer. Nothing listens on 8787, so every
  * agent run failed to connect.
  *
- * The value is resolved once during bootstrap, before the first render, so the
- * coordinator that captures it at mount captures the right one.
+ * Bootstrap resolves it once before the coordinator mounts.
  */
 let runtime: RuntimeInfo | null = null;
 let loadError: string | null = null;
@@ -23,10 +25,10 @@ export async function loadDesktopRuntime() {
   try {
     runtime = await api.getRuntimeInfo();
     loadError = null;
-    console.info("[INFO] Desktop runtime information loaded");
-    console.debug(`[DEBUG] Desktop backend origin resolved to ${new URL(runtime.backendBaseUrl).origin}`);
+    logger.info("runtime_loaded", "DESKTOP_RUNTIME_LOADED");
+    logger.debug("backend_origin_resolved", "DESKTOP_BACKEND_ORIGIN_RESOLVED", { origin: new URL(runtime.backendBaseUrl).origin });
   } catch (error) {
-    console.error("[ERROR] Caught exception at src/renderer-react/src/features/desktop/runtime.ts:25", error);
+    logger.error("runtime_load_failed", "DESKTOP_RUNTIME_LOAD_FAILED", { error });
     runtime = null;
     loadError = error instanceof Error ? error.message : String(error);
   }
@@ -38,8 +40,6 @@ export function desktopRuntime() {
 }
 
 /**
- * Set when the shell is present but would not answer.
- *
  * This must not fail quietly. The fallback below is a guess at a port the
  * shell scans from, and an unrelated backend left running on that port will
  * answer it — so a broken bridge looks exactly like a working app until a
@@ -60,9 +60,9 @@ export function backendOrigin() {
     desktopLogger.trace(`Using backend origin ${origin}`);
     return origin;
   } catch (caughtError) {
-    console.error("[ERROR] Caught exception at src/renderer-react/src/features/desktop/runtime.ts:56", caughtError);
+    logger.warn("backend_url_invalid", "DESKTOP_BACKEND_URL_INVALID", { error: caughtError });
     const fallbackOrigin = new URL(fallback).origin;
-    console.warn(`[WARN] Invalid reported backend URL; using fallback origin ${fallbackOrigin}`);
+    logger.warn("backend_origin_fallback", "DESKTOP_BACKEND_ORIGIN_FALLBACK", { fallbackOrigin });
     return fallbackOrigin;
   }
 }

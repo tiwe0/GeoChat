@@ -1,4 +1,4 @@
-import type { ProblemSetListResponse } from "@geochat-ai/app";
+import type { ProblemSetListResponse } from "@geochat-ai/app/problem-bank";
 import type { ProblemListFilters } from "../../db/problem-bank-repository";
 import { problemCasesRootFromUrl as resolveProblemCasesRootFromUrl } from "../../problem-cases";
 import type { BackendHttpContext } from "../context";

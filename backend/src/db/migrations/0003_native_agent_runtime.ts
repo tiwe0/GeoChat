@@ -3,7 +3,7 @@ import { hasTable, tableColumns } from "./utils";
 
 const createLedgerTable = (table: string) => `
   CREATE TABLE ${table} (
-    run_id TEXT PRIMARY KEY,
+    run_id TEXT PRIMARY KEY NOT NULL,
     conversation_id TEXT NOT NULL,
     status TEXT NOT NULL CONSTRAINT agent_run_ledgers_status_ck CHECK (status IN ('running', 'succeeded', 'failed', 'cancelled')),
     revision INTEGER NOT NULL DEFAULT 0,
@@ -43,7 +43,7 @@ export const nativeAgentRuntimeMigration: SqliteMigration = {
     }
     sqlite.run(`
       CREATE TABLE IF NOT EXISTS agent_error_events (
-        event_id TEXT PRIMARY KEY,
+        event_id TEXT PRIMARY KEY NOT NULL,
         run_id TEXT NOT NULL,
         conversation_id TEXT,
         source TEXT NOT NULL CONSTRAINT agent_error_events_source_ck CHECK (source IN ('run', 'tool')),

@@ -80,7 +80,7 @@ const CUSTOM_MODEL_MAX_TOOL_STEPS = 8;
 export const MIN_AGENT_MAX_TOOL_STEPS = 1;
 export const MAX_AGENT_MAX_TOOL_STEPS = 64;
 
-export const AGENT_PROVIDER_REGISTRY = [
+const AGENT_PROVIDER_REGISTRY_DATA = [
   {
     id: "deepseek",
     label: "DeepSeek（深度求索）",
@@ -119,7 +119,15 @@ export const AGENT_PROVIDER_REGISTRY = [
   }
 ] as const satisfies readonly AgentProviderDefinition[];
 
-export const AGENT_MODEL_REGISTRY = [
+/** @deprecated Prefer createAgentModelRegistrySchema() or the focused lookup helpers. */
+export const AGENT_PROVIDER_REGISTRY: readonly Readonly<AgentProviderDefinition>[] = Object.freeze(
+  AGENT_PROVIDER_REGISTRY_DATA.map((provider) => Object.freeze({
+    ...provider,
+    allowedHosts: Object.freeze([...provider.allowedHosts])
+  }))
+);
+
+const AGENT_MODEL_REGISTRY_DATA = [
   {
     provider: "deepseek",
     id: "deepseek-flash",
@@ -439,6 +447,14 @@ export const AGENT_MODEL_REGISTRY = [
   }
 ] as const satisfies readonly AgentModelDefinition[];
 
+/** @deprecated Prefer createAgentModelRegistrySchema() or the focused lookup helpers. */
+export const AGENT_MODEL_REGISTRY: readonly Readonly<AgentModelDefinition>[] = Object.freeze(
+  AGENT_MODEL_REGISTRY_DATA.map((model) => Object.freeze({
+    ...model,
+    capabilities: Object.freeze([...model.capabilities])
+  }))
+);
+
 const AGENT_MODEL_REGISTRY_SCHEMA_KIND = "geochat-model-registry-schema";
 const AGENT_MODEL_REGISTRY_SCHEMA_VERSION = 1;
 const AGENT_MODEL_CAPABILITIES = new Set<AgentModelCapability>(["text", "imageInput", "toolCalling"]);
@@ -582,7 +598,8 @@ export function getAgentProviderOptions() {
 }
 
 export function getAgentProviderDefinitionForSchema(provider: string, schema?: AgentModelRegistrySchema): AgentProviderDefinition | undefined {
-  return registryProviders(schema).find((entry) => entry.id === provider);
+  const definition = registryProviders(schema).find((entry) => entry.id === provider);
+  return definition ? cloneProviderDefinition(definition) : undefined;
 }
 
 export function getAgentProviderDefinition(provider: string): AgentProviderDefinition | undefined {
@@ -608,7 +625,8 @@ export function getAgentProviderProxyPolicy(provider: string) {
 }
 
 export function getAgentModelDefinitionForSchema(provider: string, model: string, schema?: AgentModelRegistrySchema): AgentModelDefinition | undefined {
-  return registryModels(schema).find((entry) => entry.provider === provider && entry.id === model);
+  const definition = registryModels(schema).find((entry) => entry.provider === provider && entry.id === model);
+  return definition ? cloneModelDefinition(definition) : undefined;
 }
 
 export function getAgentModelDefinition(provider: string, model: string): AgentModelDefinition | undefined {
@@ -634,7 +652,7 @@ export function getDefaultAgentModel(provider: string) {
 }
 
 export function getDefaultAgentProvider() {
-  return AGENT_PROVIDER_REGISTRY[0];
+  return cloneProviderDefinition(AGENT_PROVIDER_REGISTRY[0]);
 }
 
 export function normalizeAgentModelConfig(value: Partial<AgentModelConfig> | undefined): AgentModelConfig {

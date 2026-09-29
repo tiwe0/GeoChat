@@ -1,4 +1,5 @@
-import { collectGeoGebraCommandUsageStats, finishAgentRunLedger, reviewAgentRunLedger } from "@geochat-ai/app";
+import { finishAgentRunLedger, reviewAgentRunLedger } from "@geochat-ai/app/agent-run";
+import { collectGeoGebraCommandUsageStats } from "@geochat-ai/app/geometry";
 import {
   agentRunConversationVisibleInScope,
   filterAgentErrorEventsForScope,

@@ -1,4 +1,4 @@
-import type { ProblemImportResponse, ProblemSetListResponse, ProblemSetSummary } from "@geochat-ai/app";
+import type { ProblemImportResponse, ProblemSetListResponse, ProblemSetSummary } from "@geochat-ai/app/problem-bank";
 
 function problemBankHeaders(token: string | null): Record<string, string> {
   const headers: Record<string, string> = { "x-client-channel": "desktop-workbench" };

@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { Box, Button, Link, Stack, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import { APP_VERSION } from "../../../../../shared/desktop/platform";
 import aboutBannerUrl from "../../../assets/settings/geochat-about-banner.png";
 import authorImageUrl from "../../../assets/settings/thanks/author.jpg";
 import sponsorImageUrl from "../../../assets/settings/thanks/wechat.png";
+
+const logger = createStructuredLogger("desktop.about-settings");
 
 /**
  * Who made this, under what licence, and standing on whose shoulders.
@@ -42,7 +45,7 @@ export function AboutSettings() {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1400);
     } catch (caughtError) {
-      console.error("[ERROR] Caught exception at src/renderer-react/src/features/desktop/settings/AboutSettings.tsx:40", caughtError);
+      logger.warn("wechat_id_copy_failed", "ABOUT_CLIPBOARD_COPY_FAILED", { error: caughtError });
       // Clipboard access can be refused; the id is on screen either way.
     }
   };

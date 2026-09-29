@@ -3,8 +3,12 @@ import { readFileSync } from "node:fs";
 import { en } from "../src/renderer-react/src/i18n/locales/en";
 import { zhCN } from "../src/renderer-react/src/i18n/locales/zh-CN";
 
-const panelSource = readFileSync(
-  new URL("../src/renderer-react/src/components/AssistantPanel.tsx", import.meta.url),
+const workspaceSource = readFileSync(
+  new URL("../src/renderer-react/src/features/assistant-workspace/AssistantWorkspace.tsx", import.meta.url),
+  "utf8",
+);
+const windowSurfaceSource = readFileSync(
+  new URL("../src/renderer-react/src/features/assistant-workspace/AssistantWindowSurface.tsx", import.meta.url),
   "utf8",
 );
 const onboardingStateSource = readFileSync(
@@ -12,7 +16,7 @@ const onboardingStateSource = readFileSync(
   "utf8",
 );
 const targetSource = [
-  panelSource,
+  windowSurfaceSource,
   readFileSync(new URL("../src/renderer-react/src/features/assistant-ui/GeoChatComposer.tsx", import.meta.url), "utf8"),
   readFileSync(new URL("../src/renderer-react/src/features/fusion-mode/FusionComposer.tsx", import.meta.url), "utf8"),
   readFileSync(new URL("../src/renderer-react/src/components/LanguageButton.tsx", import.meta.url), "utf8"),
@@ -25,7 +29,7 @@ const fusionTourSource = readFileSync(
 
 describe("initial onboarding tour", () => {
   test("covers every current toolbar feature in visual order", () => {
-    const targets = [...panelSource.matchAll(/querySelector<HTMLElement>\('\[data-copilot(?:-thinking)?-tour="([^"]+)"\]'/g)]
+    const targets = [...workspaceSource.matchAll(/querySelector<HTMLElement>\('\[data-copilot(?:-thinking)?-tour="([^"]+)"\]'/g)]
       .map((match) => match[1]);
 
     expect(targets).toEqual([
@@ -42,9 +46,15 @@ describe("initial onboarding tour", () => {
       "minimize",
     ]);
 
-    for (const target of targets.filter((value) => value !== "thinking")) {
+    for (const target of targets.filter(
+      (value) => !["thinking", "language", "model", "attachments", "send"].includes(value),
+    )) {
       expect(targetSource).toContain(`data-copilot-tour="${target}"`);
     }
+    expect(windowSurfaceSource).toContain('tourId="language"');
+    expect(workspaceSource).toContain('tourId: "model"');
+    expect(targetSource).toContain('data-copilot-tour={isFusion ? "fusion-attachments" : "attachments"}');
+    expect(targetSource).toContain('data-copilot-tour={isFusion ? "fusion-send" : "send"}');
     expect(targetSource).toContain('data-copilot-thinking-tour="thinking"');
   });
 
@@ -52,8 +62,8 @@ describe("initial onboarding tour", () => {
     expect(onboardingStateSource).toContain("export const ONBOARDING_TOUR_VERSION = 3;");
     expect(onboardingStateSource).toContain("stored[ONBOARDING_TOUR_STORAGE_KEY] !== ONBOARDING_TOUR_VERSION");
     expect(onboardingStateSource).toContain("[ONBOARDING_TOUR_STORAGE_KEY]: ONBOARDING_TOUR_VERSION");
-    expect(panelSource).toContain("const onboarding = useOnboardingState();");
-    expect(panelSource).toContain("onRestartTour={restartOnboardingTour}");
+    expect(workspaceSource).toContain("const onboarding = useOnboardingState();");
+    expect(workspaceSource).toContain("onRestartTour: restartOnboardingTour");
   });
 
   test("covers the fusion workflow without relying on the window toolbar", () => {

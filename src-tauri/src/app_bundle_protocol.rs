@@ -1,5 +1,13 @@
 use tauri::http;
 
+/// CSP enforced by the production `geochat-bundle` custom protocol.
+///
+/// Tauri applies `app.security.csp` while serving its built-in asset protocol,
+/// but registered custom protocol responses bypass that asset transformation.
+/// Keep this value synchronized with `tauri.conf.json`; a behavioral test
+/// asserts both the emitted response header and config parity.
+pub(crate) const APP_BUNDLE_CONTENT_SECURITY_POLICY: &str = "default-src 'self' geochat-bundle:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:*; script-src 'self' geochat-bundle: 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' geochat-bundle: 'unsafe-inline'; img-src 'self' geochat-bundle: https://assets.chat-with-geogebra.com data: blob:; font-src 'self' geochat-bundle: data:; worker-src 'self' geochat-bundle: blob:; child-src 'self' geochat-bundle: blob:; manifest-src 'self' geochat-bundle:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+
 pub(crate) fn app_bundle_protocol_request_path(path: &str) -> Option<String> {
     let path = path.strip_prefix('/').unwrap_or(path);
     if path.is_empty() {
@@ -81,6 +89,58 @@ pub(crate) fn app_bundle_protocol_response(
     http::Response::builder()
         .status(status)
         .header(http::header::CONTENT_TYPE, content_type)
+        .header(
+            http::header::CONTENT_SECURITY_POLICY,
+            APP_BUNDLE_CONTENT_SECURITY_POLICY,
+        )
+        .header(http::header::X_CONTENT_TYPE_OPTIONS, "nosniff")
         .body(body)
         .unwrap_or_else(|_| http::Response::new(Vec::new()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{app_bundle_protocol_response, APP_BUNDLE_CONTENT_SECURITY_POLICY};
+    use tauri::http;
+
+    #[test]
+    fn custom_protocol_html_response_enforces_production_csp() {
+        let body = b"<!doctype html><script>alert('blocked without policy')</script>".to_vec();
+        let response = app_bundle_protocol_response(
+            http::StatusCode::OK,
+            "text/html; charset=utf-8",
+            body.clone(),
+        );
+
+        assert_eq!(response.status(), http::StatusCode::OK);
+        assert_eq!(response.body(), &body);
+        assert_eq!(
+            response
+                .headers()
+                .get(http::header::CONTENT_SECURITY_POLICY)
+                .and_then(|value| value.to_str().ok()),
+            Some(APP_BUNDLE_CONTENT_SECURITY_POLICY)
+        );
+        assert_eq!(
+            response
+                .headers()
+                .get(http::header::X_CONTENT_TYPE_OPTIONS)
+                .and_then(|value| value.to_str().ok()),
+            Some("nosniff")
+        );
+        assert!(APP_BUNDLE_CONTENT_SECURITY_POLICY.contains("object-src 'none'"));
+        assert!(APP_BUNDLE_CONTENT_SECURITY_POLICY.contains("frame-ancestors 'none'"));
+    }
+
+    #[test]
+    fn custom_protocol_csp_matches_production_tauri_config() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        assert_eq!(
+            config
+                .pointer("/app/security/csp")
+                .and_then(serde_json::Value::as_str),
+            Some(APP_BUNDLE_CONTENT_SECURITY_POLICY)
+        );
+    }
 }

@@ -1,4 +1,5 @@
 import { EraserIcon, FolderOpenIcon } from "lucide-react";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Button,
@@ -14,6 +15,8 @@ import { useTranslation } from "react-i18next";
 import type { DesktopProblemBankCacheState, DesktopProblemBankDownloadState } from "../../../../../shared/desktop-api";
 import { desktopProblemBankApi } from "../problemBankDesktop";
 import { SettingsSection } from "./SettingsSection";
+
+const logger = createStructuredLogger("desktop.problem-bank-cache-settings");
 
 export function ProblemBankCacheSettings() {
   const { t } = useTranslation();
@@ -37,7 +40,7 @@ export function ProblemBankCacheSettings() {
       setDownloadStates(Object.fromEntries(nextDownloadStates.map((state) => [state.bankSlug, state])));
     }).catch((caughtError) => {
       if (disposed) return;
-      console.error("[ERROR] Failed to load problem-bank cache settings", caughtError);
+      logger.warn("settings_load_failed", "PROBLEM_BANK_CACHE_SETTINGS_LOAD_FAILED", { error: caughtError });
       setError(caughtError instanceof Error ? caughtError.message : String(caughtError));
     });
 
@@ -69,7 +72,7 @@ export function ProblemBankCacheSettings() {
     try {
       await api.openProblemBankCacheDirectory();
     } catch (caughtError) {
-      console.error("[ERROR] Failed to open the problem bank cache directory", caughtError);
+      logger.warn("directory_open_failed", "PROBLEM_BANK_CACHE_DIRECTORY_OPEN_FAILED", { error: caughtError });
       setError(caughtError instanceof Error ? caughtError.message : String(caughtError));
     } finally {
       setAction(null);
@@ -87,7 +90,7 @@ export function ProblemBankCacheSettings() {
       setDownloadStates({});
       setClearDialogOpen(false);
     } catch (caughtError) {
-      console.error("[ERROR] Failed to clear the problem bank cache", caughtError);
+      logger.warn("cache_clear_failed", "PROBLEM_BANK_CACHE_CLEAR_FAILED", { error: caughtError });
       setError(caughtError instanceof Error ? caughtError.message : String(caughtError));
     } finally {
       setAction(null);

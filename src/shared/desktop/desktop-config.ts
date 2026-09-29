@@ -10,6 +10,7 @@ import {
   type AgentModelConfig,
   type AgentModelRegistrySchema
 } from "@geochat-ai/app/model-registry";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import type {
   DesktopConfig,
   DebugConfig,
@@ -25,6 +26,8 @@ import {
   parseRawDesktopConfig
 } from "./desktop-credentials";
 import { detectPreferredLocale, type Locale } from "./locale";
+
+const logger = createStructuredLogger("desktop.config");
 
 export const CONFIG_STORAGE_KEY = "geochat-desktop-ui-config";
 export const DESKTOP_CONFIG_SCHEMA_VERSION = 1 as const;
@@ -444,7 +447,7 @@ export function readDesktopConfig(): DesktopConfig {
     return normalizeDesktopConfigJson(globalThis.localStorage.getItem(CONFIG_STORAGE_KEY) ?? "{}");
   } catch (caughtError) {
     if (caughtError instanceof DesktopCredentialMigrationRequiredError) throw caughtError;
-    console.error("[ERROR] Caught exception at src/shared/desktop/desktop-config.ts:331", caughtError);
+    logger.warn("config_read_failed", "DESKTOP_CONFIG_READ_FAILED", { error: caughtError });
     return createDefaultDesktopConfig();
   }
 }

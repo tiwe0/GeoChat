@@ -6,17 +6,21 @@ export const initialMigration: SqliteMigration = {
   up(sqlite) {
     sqlite.run(`
       CREATE TABLE IF NOT EXISTS messages (
-        id TEXT PRIMARY KEY,
+        id TEXT PRIMARY KEY NOT NULL,
         role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
         content TEXT NOT NULL,
+        owner_user_id TEXT,
         created_at INTEGER NOT NULL
       )
     `);
     sqlite.run(`
       CREATE TABLE IF NOT EXISTS conversations (
-        id TEXT PRIMARY KEY,
+        id TEXT PRIMARY KEY NOT NULL,
         title TEXT NOT NULL,
+        source_title TEXT,
         summary TEXT NOT NULL,
+        model TEXT,
+        owner_user_id TEXT,
         message_count INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
@@ -24,7 +28,7 @@ export const initialMigration: SqliteMigration = {
     `);
     sqlite.run(`
       CREATE TABLE IF NOT EXISTS conversation_messages (
-        id TEXT PRIMARY KEY,
+        id TEXT PRIMARY KEY NOT NULL,
         conversation_id TEXT NOT NULL,
         role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
         content TEXT NOT NULL,
@@ -34,7 +38,7 @@ export const initialMigration: SqliteMigration = {
     `);
     sqlite.run(`
       CREATE TABLE IF NOT EXISTS conversation_blackboard_entries (
-        id TEXT PRIMARY KEY,
+        id TEXT PRIMARY KEY NOT NULL,
         conversation_id TEXT NOT NULL,
         key TEXT NOT NULL,
         category TEXT NOT NULL CHECK (category IN ('original_problem', 'givens', 'goal', 'math_analysis', 'construction_plan', 'canvas_state', 'assumptions', 'open_issues', 'failed_attempts', 'teaching_notes')),
@@ -47,13 +51,12 @@ export const initialMigration: SqliteMigration = {
         source_run_id TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
-        archived_at INTEGER,
-        UNIQUE (conversation_id, key)
+        archived_at INTEGER
       )
     `);
     sqlite.run(`
       CREATE TABLE IF NOT EXISTS agent_run_ledgers (
-        run_id TEXT PRIMARY KEY,
+        run_id TEXT PRIMARY KEY NOT NULL,
         conversation_id TEXT NOT NULL,
         status TEXT NOT NULL,
         mode TEXT NOT NULL DEFAULT 'ai-sdk' CHECK (mode IN ('ai-sdk', 'local-planner')),

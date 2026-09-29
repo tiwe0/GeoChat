@@ -1,4 +1,4 @@
-import type { AgentRunLedgerRecord } from "@geochat-ai/app";
+import type { AgentRunLedgerRecord } from "@geochat-ai/app/agent-run";
 import { sanitizeProviderError } from "./provider-error";
 
 export type NativeChatTerminalPersistence = Pick<AgentRunLedgerRecord, "status" | "error">;

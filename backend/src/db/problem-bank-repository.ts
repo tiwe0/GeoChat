@@ -1,13 +1,13 @@
 import { existsSync } from "node:fs";
 import { asc, desc, eq, isNull } from "drizzle-orm";
 import type {
-  MigrationProblemAttempt,
   ProblemDetail,
   ProblemImportResponse,
   ProblemListResponse,
   ProblemSetSummary,
   ProblemSummary
-} from "@geochat-ai/app";
+} from "@geochat-ai/app/problem-bank";
+import type { MigrationProblemAttempt } from "@geochat-ai/app/migration";
 import type { GeoChatDatabaseRuntimeConfig } from "./runtime";
 import type { createDatabase } from "./client";
 import { buildLocalProblemBankImportPlan } from "../problem-bank/import-plan";

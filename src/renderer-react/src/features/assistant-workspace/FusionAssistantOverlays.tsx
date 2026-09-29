@@ -24,7 +24,7 @@ export function FusionAssistantOverlays(props: {
     error: string | null;
     migrationRecoveryAvailable: boolean;
     exportMigrationRecovery: () => void;
-    select: (conversation: ConversationSummary) => Promise<void>;
+    select: (conversation: ConversationSummary) => Promise<unknown>;
     remove: (conversation: ConversationSummary) => Promise<boolean>;
   };
   currentConversationId: string | null;

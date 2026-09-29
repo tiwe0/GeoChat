@@ -1,10 +1,13 @@
 import type { RuntimeInfo } from "@geochat-ai/app/desktop-contracts";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import type { DesktopChatMessage, DesktopConfig } from "./workbench-types";
 import type { Locale } from "./locale";
 import {
   resolveWorkbenchDesktopRuntime,
   type WorkbenchDesktopRuntime
 } from "./workbench-desktop-runtime";
+
+const logger = createStructuredLogger("desktop.improvement-plan");
 
 const QUEUE_KEY = "geochat.improvement.queue.v1";
 const MAX_QUEUE_ITEMS = 100;
@@ -95,7 +98,7 @@ export function createImprovementPlanUploader(input: {
       const result = await desktopApi.uploadImprovementPlanSamples(batch);
       if (result.ok) writeQueue(uploaderRuntime.queueStorage, queue.slice(batch.length));
     } catch (caughtError) {
-      console.error("[ERROR] Caught exception at src/shared/desktop/improvement-plan.ts:97", caughtError);
+      logger.debug("upload_deferred", "IMPROVEMENT_PLAN_UPLOAD_DEFERRED", { error: caughtError });
       // Best-effort telemetry: keep the queue for a later background retry.
     } finally {
       flushing = false;
@@ -174,7 +177,7 @@ function readQueue(storage: Pick<Storage, "getItem"> | undefined): ImprovementPl
     const parsed = JSON.parse(storage.getItem(QUEUE_KEY) ?? "[]");
     return Array.isArray(parsed) ? parsed.filter(isSample) : [];
   } catch (caughtError) {
-    console.error("[ERROR] Caught exception at src/shared/desktop/improvement-plan.ts:175", caughtError);
+    logger.debug("queue_read_failed", "IMPROVEMENT_PLAN_QUEUE_READ_FAILED", { error: caughtError });
     return [];
   }
 }
@@ -184,12 +187,12 @@ function writeQueue(storage: Pick<Storage, "setItem"> | undefined, queue: Improv
   try {
     storage.setItem(QUEUE_KEY, JSON.stringify(queue));
   } catch (caughtError) {
-    console.error("[ERROR] Caught exception at src/shared/desktop/improvement-plan.ts:184", caughtError);
+    logger.debug("queue_write_failed", "IMPROVEMENT_PLAN_QUEUE_WRITE_FAILED", { error: caughtError });
     // If local storage is full or unavailable, drop the oldest telemetry instead of affecting chat.
     try {
       storage.setItem(QUEUE_KEY, JSON.stringify(queue.slice(-Math.floor(MAX_QUEUE_ITEMS / 2))));
     } catch (caughtError) {
-      console.error("[ERROR] Caught exception at src/shared/desktop/improvement-plan.ts:188", caughtError);
+      logger.debug("queue_compaction_failed", "IMPROVEMENT_PLAN_QUEUE_COMPACTION_FAILED", { error: caughtError });
       // Ignore storage failures; participation is best effort.
     }
   }
@@ -240,7 +243,7 @@ async function hashStableId(value: string): Promise<string> {
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
     return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
   } catch (caughtError) {
-    console.error("[ERROR] Caught exception at src/shared/desktop/improvement-plan.ts:238", caughtError);
+    logger.debug("stable_hash_fallback", "IMPROVEMENT_PLAN_HASH_FALLBACK", { error: caughtError });
     let hash = 2166136261;
     for (let index = 0; index < value.length; index += 1) {
       hash ^= value.charCodeAt(index);

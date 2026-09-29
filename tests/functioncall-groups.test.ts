@@ -4,7 +4,7 @@ import {
   getFunctionCallGroupForTool,
   getFunctionCallGroups,
   getFunctionCallToolNames
-} from "../packages/app/src";
+} from "@geochat-ai/app/functioncalls";
 
 describe("function-call review groups", () => {
   test("classify every function-call tool exactly once", () => {

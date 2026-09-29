@@ -4,8 +4,8 @@ import {
   normalizeAgentRunThinkingEffort,
   type AgentRunLedgerRecord,
   type AgentRunToolRecord,
-  type FunctionCallToolName,
-} from "@geochat-ai/app";
+} from "@geochat-ai/app/agent-run";
+import type { FunctionCallToolName } from "@geochat-ai/app/functioncalls";
 import type { UIMessage } from "ai";
 import type { NativeChatRequest } from "./native-chat-request";
 import { nativeMessageText, nativeUserMessageFingerprint } from "./native-chat-request";

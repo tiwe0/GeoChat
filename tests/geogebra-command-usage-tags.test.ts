@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { collectGeoGebraCommandUsageStats } from "@geochat-ai/app/geometry";
 import {
-  collectGeoGebraCommandUsageStats,
   createAgentRunLedger,
   finishAgentRunLedger,
   upsertAgentRunTool
-} from "@geochat-ai/app";
+} from "@geochat-ai/app/agent-run";
 
 describe("GeoGebra command search telemetry", () => {
   test("normalizes tags, defaults tagMatch to any, and records untagged searches", () => {

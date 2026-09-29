@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent, type RefObject } from "react";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
+
+const logger = createStructuredLogger("assistant.panel-window");
 
 export type PanelView = "chat" | "user";
 export type ResizeDirection = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
@@ -134,7 +137,7 @@ export function usePanelWindow(view: PanelView, enabled = true) {
         expandedWidthRef.current = panel.style.width || null;
         expandedHeightRef.current = panel.style.height || null;
       }).catch((error) => {
-        console.error("[ERROR] Failed to restore panel geometry", error);
+        logger.debug("geometry_restore_failed", "PANEL_GEOMETRY_RESTORE_FAILED", { error });
       });
     });
     return () => {

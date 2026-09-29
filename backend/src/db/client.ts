@@ -6,8 +6,11 @@ import {
   compactAgentRunLedgerForStorage,
   finishAgentRunLedger,
   isAgentRunLedgerRecord,
-} from "@geochat-ai/app";
+} from "@geochat-ai/app/agent-run";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import { runSqliteMigrations } from "./migrations";
+
+const logger = createStructuredLogger("db.lifecycle");
 
 export type CreateDatabaseOptions = {
   databasePath?: string;
@@ -79,7 +82,7 @@ function reconcileInterruptedAgentRuns(sqlite: Database): void {
         }));
         update.run(terminal.status, terminal.revision, Date.parse(completedAt), JSON.stringify(terminal), row.run_id);
       } catch (error) {
-        console.error(`[ERROR] Failed to reconcile interrupted agent run runId=${row.run_id}`, error);
+        logger.warn("interrupted_run_reconcile_failed", "DB_RUN_RECONCILE_FAILED", { error, runId: row.run_id });
       }
     }
   })();

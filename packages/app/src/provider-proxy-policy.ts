@@ -1,3 +1,7 @@
+import { createStructuredLogger } from "./structured-logger";
+
+const logger = createStructuredLogger("provider.proxy-policy");
+
 export const providerProxySensitiveHeaders = [
   "host",
   "content-length",
@@ -138,7 +142,7 @@ function safeUrl(value: string) {
   try {
     return new URL(value);
   } catch (caughtError) {
-    console.error("[ERROR] Caught exception at packages/app/src/provider-proxy-policy.ts:140", caughtError);
+    logger.debug("url_parse_failed", "PROVIDER_URL_INVALID", { error: caughtError });
     return undefined;
   }
 }

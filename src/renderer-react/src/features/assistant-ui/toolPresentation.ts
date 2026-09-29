@@ -1,4 +1,7 @@
 import type { ToolCallMessagePartStatus } from "@assistant-ui/react";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
+
+const logger = createStructuredLogger("assistant.tool-presentation");
 
 export const GEOCHAT_DISPLAY_TOOL_NAMES = [
   "showSolutionSteps",
@@ -56,7 +59,7 @@ export function formatToolPayload(value: unknown, maxLength = 4_000) {
       : JSON.stringify(sanitizeToolValue(value), null, 2);
     return formatted.length > maxLength ? `${formatted.slice(0, maxLength)}\n…` : formatted;
   } catch (caughtError) {
-    console.error("[ERROR] Failed to format assistant tool payload", caughtError);
+    logger.debug("payload_format_failed", "ASSISTANT_TOOL_PAYLOAD_FORMAT_FAILED", { error: caughtError });
     return String(value);
   }
 }

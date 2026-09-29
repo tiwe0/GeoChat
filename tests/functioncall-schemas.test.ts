@@ -3,7 +3,7 @@ import {
   getFunctionCallInputJsonSchema,
   getFunctionCallModelInputJsonSchema,
   getFunctionCallToolNames
-} from "../packages/app/src";
+} from "@geochat-ai/app/functioncalls";
 
 type SchemaShape = {
   required: string[];

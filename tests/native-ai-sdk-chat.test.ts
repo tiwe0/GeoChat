@@ -188,9 +188,11 @@ describe("native AI SDK UI tool loop", () => {
     expect(firstStream).toContain('"toolName":"getCanvasContext"');
     expect(firstStream).toContain("canvas-call-1");
     expect(ledgers.get("run_native_tool_loop")?.status).toBe("running");
+    const assistantMessageId = ledgers.get("run_native_tool_loop")?.assistantMessageId;
+    expect(assistantMessageId).toBeTruthy();
 
     const assistantTool: UIMessage = {
-      id: "assistant-1",
+      id: assistantMessageId!,
       role: "assistant",
       parts: [{
         type: "tool-getCanvasContext",

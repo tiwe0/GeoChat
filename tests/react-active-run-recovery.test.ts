@@ -87,7 +87,15 @@ describe("active native run recovery", () => {
     }, { current: null }, request as typeof fetch);
 
     expect(run?.status).toBe("running");
-    expect(restored).toEqual([expect.objectContaining({ prompt: "恢复这道题", thinking: true, modelProvider: "deepseek" })]);
+    expect(restored).toEqual([{
+      conversationId: "conversation-recover",
+      modelProvider: "deepseek",
+      modelId: "deepseek-chat",
+      prompt: "恢复这道题",
+      thinking: true,
+      thinkingEffort: "extended",
+    }]);
+    expect(JSON.stringify(restored)).not.toContain("Agent Skill 策略");
     expect(calls).toEqual([
       "GET http://127.0.0.1:17369/v1/agent-runs",
       "POST http://127.0.0.1:17369/v1/agent-runs/run-recover/cancel",

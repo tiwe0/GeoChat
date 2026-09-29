@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Alert, CircularProgress } from "@mui/material";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useTranslation } from "react-i18next";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import { GeoGebraController } from "./geogebra/controller";
 import type { CanvasRecoveryState } from "./geogebra/canvas-transactions";
 import {
@@ -21,6 +22,8 @@ import { useInteractionMode } from "./features/fusion-mode";
 import { backendOrigin, desktopRuntimeError } from "./features/desktop/runtime";
 import { desktopLogger } from "./features/desktop/desktopLogger";
 import { consumeDesktopConfigRecoveryNotice } from "../../shared/desktop/desktop-config-recovery";
+
+const logger = createStructuredLogger("renderer.app");
 
 const AssistantPanel = lazy(async () => ({
   default: (await import("./components/AssistantPanel")).AssistantPanel,
@@ -79,7 +82,7 @@ export default function App() {
       else mountedApplet = mounted;
     }).catch((error) => {
         if (disposed || (error instanceof Error && error.name === "AbortError")) return;
-        console.error("[ERROR] Failed to mount the GeoGebra applet", error);
+        logger.error("applet_mount_failed", "GEOGEBRA_APPLET_MOUNT_FAILED", { error });
         setCanvasState("error");
         setCanvasError(error instanceof Error ? error.message : String(error));
       });
@@ -138,8 +141,7 @@ export default function App() {
         throw new Error("GeoGebra 画板重置失败。");
       }
     } catch (error) {
-      console.error("[ERROR] Caught exception at src/renderer-react/src/App.tsx:72", error);
-      console.warn("Failed to reset GeoGebra canvas", error);
+      logger.warn("canvas_reset_failed", "GEOGEBRA_CANVAS_RESET_FAILED", { error });
       desktopLogger.warn(error);
     } finally {
       setResetting(false);
@@ -153,7 +155,7 @@ export default function App() {
       controllerRef.current.setToolbarVisible(nextVisible);
       setToolbarVisible(nextVisible);
     } catch (error) {
-      console.error("[ERROR] Failed to toggle the GeoGebra toolbar", error);
+      logger.warn("toolbar_toggle_failed", "GEOGEBRA_TOOLBAR_TOGGLE_FAILED", { error });
       desktopLogger.warn(error);
     }
   }
@@ -166,7 +168,7 @@ export default function App() {
       return;
     }
     const error = new Error("GeoGebra 原生菜单尚未就绪。");
-    console.error("[ERROR] Failed to open the GeoGebra native menu", error);
+    logger.warn("native_menu_open_failed", "GEOGEBRA_NATIVE_MENU_OPEN_FAILED", { error });
     desktopLogger.warn(error);
   }
 

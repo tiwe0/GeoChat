@@ -1,4 +1,7 @@
 import type { GeoGebraApi } from "./ggbdeploy-wrapper";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
+
+const logger = createStructuredLogger("geogebra.selection-context");
 
 export type GeoGebraSelectionStatus = "known" | "empty" | "unavailable";
 export type GeoGebraSelectionMode = "events" | "discrete";
@@ -78,7 +81,7 @@ export function createGeoGebraSelectionContextBridge(
       // Registration closes the race before the initial observation.
       snapshot = readGeoGebraSelectionContext(applet, now);
     } catch (caughtError) {
-      console.error("[ERROR] Failed to register GeoGebra selection listener", caughtError);
+      logger.debug("listener_registration_failed", "GEOGEBRA_SELECTION_LISTENER_UNAVAILABLE", { error: caughtError });
     }
   }
 
@@ -99,7 +102,7 @@ export function createGeoGebraSelectionContextBridge(
       try {
         Reflect.apply(unregister as (...args: unknown[]) => unknown, applet, [clientListener]);
       } catch (caughtError) {
-        console.error("[ERROR] Failed to unregister GeoGebra selection listener", caughtError);
+        logger.debug("listener_unregistration_failed", "GEOGEBRA_SELECTION_LISTENER_CLEANUP_FAILED", { error: caughtError });
       } finally {
         listenerRegistered = false;
       }
@@ -134,7 +137,7 @@ export function readGeoGebraSelectionContext(
       observedAt: now().toISOString(),
     };
   } catch (caughtError) {
-    console.error("[ERROR] Failed to read GeoGebra selection context", caughtError);
+    logger.debug("selection_read_failed", "GEOGEBRA_SELECTION_READ_FAILED", { error: caughtError });
     return unavailableSelection();
   }
 }

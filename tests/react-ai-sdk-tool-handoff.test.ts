@@ -4,6 +4,7 @@ import {
   completeInterruptedToolParts,
   isRetryableNativeChatError,
   messagesWithSkillPolicy,
+  nativeChatTransportMessages,
   nativeChatNetworkRetryDelay,
   queueToolOutput,
   shouldAutomaticallyContinueNativeRun,
@@ -98,6 +99,11 @@ describe("native AI SDK renderer-tool handoff", () => {
     expect(requestMessages[0]?.parts[0]?.text).toContain("画一个三角形。");
     expect(requestMessages[0]?.parts[0]?.text).toContain("【Agent Skill 策略】");
     expect(requestMessages[0]?.parts[0]?.text).toContain("自动加载：开启");
+
+    const transport = nativeChatTransportMessages(messages, config, "zh-CN");
+    expect(transport.messages).toEqual(messages);
+    expect(transport.messages[0]?.parts[0]?.text).toBe("画一个三角形。");
+    expect(transport.providerMessages[0]?.parts[0]?.text).toContain("【Agent Skill 策略】");
   });
 
   test("continues only completed renderer tool handoffs", () => {

@@ -2,6 +2,7 @@ import { Box, ListItemText, Menu, MenuItem, Paper, type SxProps, type Theme } fr
 import { motion, useReducedMotion } from "motion/react";
 import { useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import {
   CHAT_PAGE_MIN_HEIGHT,
   DEFAULT_PANEL_HEIGHT,
@@ -14,6 +15,8 @@ import {
   type usePanelWindow,
 } from "../panel-window/usePanelWindow";
 import { AssistantWindowChrome } from "./AssistantWindowChrome";
+
+const logger = createStructuredLogger("assistant.window-shell");
 
 const MotionPaper = motion.create(Paper);
 
@@ -44,7 +47,7 @@ async function copyText(text: string) {
   try {
     await navigator.clipboard.writeText(text);
   } catch (error) {
-    console.error("[ERROR] Failed to copy assistant window selection", error);
+    logger.warn("selection_copy_failed", "ASSISTANT_SELECTION_COPY_FAILED", { error });
   }
 }
 
@@ -54,7 +57,7 @@ async function pasteText(target: PanelContextMenuState["editable"]) {
   try {
     text = await navigator.clipboard.readText();
   } catch (error) {
-    console.error("[ERROR] Failed to read clipboard for assistant window", error);
+    logger.warn("clipboard_read_failed", "ASSISTANT_CLIPBOARD_READ_FAILED", { error });
     return;
   }
   if (!text) return;

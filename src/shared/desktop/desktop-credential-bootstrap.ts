@@ -11,7 +11,10 @@ import {
   runLegacyDesktopCredentialMigration,
   type LegacyCredentialIdentity,
 } from "./desktop-credentials";
-import { recoverDesktopConfigBeforeLoad } from "./desktop-config-recovery";
+import {
+  isDesktopConfigStorageQuotaError,
+  recoverDesktopConfigBeforeLoad,
+} from "./desktop-config-recovery";
 
 export { CREDENTIAL_MIGRATION_BACKUP_KEY } from "./desktop-config";
 
@@ -135,5 +138,14 @@ export async function prepareDesktopConfigBeforeLoad(
   api?: MigrationApi,
 ) {
   await migrateLegacyDesktopCredentialsBeforeConfigLoad(storage, api);
-  return recoverDesktopConfigBeforeLoad(storage);
+  try {
+    return recoverDesktopConfigBeforeLoad(storage);
+  } catch (error) {
+    // Config recovery writes quarantine before replacement, so a quota failure
+    // leaves the current config bytes intact. Continue with the normalized
+    // read path instead of replacing the whole renderer with an error page.
+    // Credential migration errors are intentionally outside this catch.
+    if (isDesktopConfigStorageQuotaError(error)) return null;
+    throw error;
+  }
 }

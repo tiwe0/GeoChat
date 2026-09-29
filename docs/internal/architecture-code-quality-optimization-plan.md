@@ -1,6 +1,6 @@
 # GeoChat 架构与代码质量全面优化计划
 
-状态：执行中；Phase 0–3 已完成，Phase 4–5 正在收口
+状态：已完成；Phase 0–5 均已通过本地实现与验证门禁
 最后更新：2026-09-29
 Owner area：Desktop architecture / backend platform / renderer state
 适用范围：`/Users/ivory/Project/GeoChat` 当前 Tauri + React + Bun + SQLite 桌面项目
@@ -15,8 +15,8 @@ Owner area：Desktop architecture / backend platform / renderer state
 | Phase 1：凭据与配置 | 已完成 | 原生凭据库、无损配置恢复、安装包本地验收已落地 |
 | Phase 2：数据一致性 | 已完成 | backend 会话权威、画布事务、迁移与可恢复删除已落地 |
 | Phase 3：状态所有权 | 已完成 | session controller、run lease、assistant workspace 拆分及行为回归已落地 |
-| Phase 4：后端与契约 | 执行中 | native chat 端口化、运行时解码、数据库迁移正在集成 |
-| Phase 5：质量与发布 | 执行中 | 严格静态门禁、结构化日志、package CI、桌面 E2E 尚待最终闭环 |
+| Phase 4：后端与契约 | 已完成 | native chat 最小端口、lifecycle/transport/persistence 拆分、共享 contract facade 与版本化 SQLite migration 已落地 |
+| Phase 5：质量与发布 | 已完成 | 严格静态门禁、结构化日志、package CI、真实桌面重启 E2E、`.app`/DMG smoke 已闭环 |
 
 本表只描述当前执行状态，不替代下文各阶段的验收标准。每次状态变化必须由新鲜验证结果支撑。
 
@@ -43,7 +43,7 @@ Behavioral proof before release proof.
 
 ## 2. 当前基线与证据边界
 
-### 2.1 当前工作树
+### 2.1 实施前工作树基线（历史记录）
 
 当前工作树包含尚未提交的 assistant-ui / Fusion Mode 迁移。该迁移已经删除多条旧消息、composer 和滚动实现，但 `AssistantPanel` 仍承担大部分应用编排职责。本计划把这批改动视为进行中的迁移，不要求回退，也不把临时删除或未跟踪文件误判为仓库长期缺陷。
 
@@ -54,7 +54,7 @@ Behavioral proof before release proof.
 
 无论选择哪条路径，都要在首个实施 PR 记录 base commit、工作树状态和采用的迁移策略。不得在当前脏工作树直接穿插下文 PR 1–5。
 
-### 2.2 已通过的本地门禁
+### 2.2 实施前已通过的本地门禁（历史记录）
 
 - `bun run typecheck`
 - `bun test tests --max-concurrency=1`：609 pass，0 fail
@@ -64,7 +64,7 @@ Behavioral proof before release proof.
 - `bun run benchmark:validate`
 - `git diff --check`
 
-这些结果证明当前代码可通过现有类型、单元和局部集成门禁，但不证明：
+这些结果只代表实施前基线，证明当时代码可通过既有类型、单元和局部集成门禁，但不证明：
 
 - 本机 backend 已正确鉴权。
 - 真实 Tauri UI、GeoGebra、sidecar 和 renderer 的完整用户路径可用。
@@ -927,3 +927,24 @@ launch app
 - 平台安装包在上传前通过 layout、backend auth/health 和最小启动验证。
 - lint、typecheck、test、Clippy、format 和 frozen install 在 CI 中稳定执行。
 - 所有剩余未知边界均在发布说明中显式披露。
+
+## 19. 2026-09-29 最终执行记录
+
+本轮 Phase 0–5 已在当前集成分支完成。最终验证以同一工作树的新鲜结果为准：
+
+- `bun install --frozen-lockfile`：检查 639 个安装项、759 个包，无变更。
+- `bun run quality:check`：通过；包含严格 unused 检查、三套 TypeScript 配置和直接依赖使用检查。
+- `bun test tests`：861 pass，0 fail，覆盖 122 个测试文件、5710 个断言。
+- `bun run benchmark:validate`：`geochat-core-smoke@1.0.0` 的 12 个 case 通过，内容哈希为 `fnv1a64:d55b62a2c4fdb9d7`。
+- `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`：通过。
+- `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`：通过。
+- `cargo test --manifest-path src-tauri/Cargo.toml`：55 pass，0 fail。
+- `git diff --check`：通过。
+- `bun run e2e:desktop:debug`：真实 Tauri + WebView + backend + MCP + 本地 OpenAI-compatible fake provider 链路通过；真实 textarea 输入与发送按钮、输入清空、用户/助手消息 DOM、window/fusion 草稿与 conversation ID 连续性、aria-live、transcript/settings dialog 和 focus trap 双向循环均通过；provider 收到临时 Skill policy，但持久化消息、run prompt、blackboard 和重启 UI 均精确保留用户原文；重启后恢复 2 条消息并精确回放点 `A = (1, 2)`，配置与临时凭据清理全部成功，结束后无残留进程。证据写入 `.artifacts/desktop-debug-e2e.json`。
+- `bun run tauri:package:smoke`：macOS `.app` 资源布局通过。
+- `bun run package:backend-smoke`：构建目录与 `.app` 内 packaged backend 均通过鉴权运行 smoke。
+- `bun run package:launch-smoke`：直接启动 `.app` 内 arm64 主程序，`/health` 返回 200，受保护路由缺失/错误 token 均返回 401，应用、后端、端口与隔离数据均完成清理。
+- `hdiutil verify src-tauri/target/release/bundle/dmg/GeoChat_0.6.1_aarch64.dmg`：校验通过；最终当前源码构建的 DMG SHA-256 为 `bae132307b3b3768cd774e0bd7084e57ae90a67322f3a86fb55272f111bc73bc`。
+- `.app` 主程序为 arm64 Mach-O，SHA-256 为 `d74be4dfb2894883d151f1a25e1e3abf80cbcbe1c82b918842131d8ab645eb61`；bundle id 为 `ai.geochat.desktop`，版本为 `0.6.1`。
+
+证据边界：本轮证明本地源码、构建、真实桌面 debug 链路、macOS 应用包与 DMG 完整性；当前 `.app` 仅为 ad-hoc/linker-signed，未证明 Developer ID 签名、公证、Windows NSIS/MSI 安装及安装后启动、真实线上 provider 或完整人工视觉/屏幕阅读器验收。Windows CI 的 launch smoke 只启动 release-build executable，并在证据中显式标记安装器未验证。宿主 WebView 的 `prefers-reduced-motion` 环境未被测试 runner 强行伪造，代码与静态门禁覆盖该分支，但不将其记为本轮真实 WebView 证据。上述边界同时写入 `docs/release-boundaries.md`，tag 发布流程会把它们加入新建或既有 Release 的说明。

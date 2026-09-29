@@ -5,9 +5,9 @@ import {
   getFunctionCallSpec,
   isFunctionCallBackendExecutable,
   type FunctionCallArgsByName,
-  type AgentRunLedgerRecord,
   type FunctionCallToolName
-} from "@geochat-ai/app";
+} from "@geochat-ai/app/functioncalls";
+import type { AgentRunLedgerRecord } from "@geochat-ai/app/agent-run";
 import { skillRuntimePolicyFromPrompt, type AgentSkillSelectionPacket } from "./skill-selector";
 import { validateNativeToolInput, type NativeToolPolicyContext } from "./native-tool-policy";
 

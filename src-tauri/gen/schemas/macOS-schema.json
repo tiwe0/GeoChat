@@ -345,6 +345,516 @@
       "description": "Permission identifier",
       "oneOf": [
         {
+          "description": "Allows the GeoChat renderer to call the desktop application's public commands.\n#### This permission set includes:\n\n- `allow-get-runtime-info`\n- `allow-get-graphics-preferences`\n- `allow-set-graphics-preferences`\n- `allow-get-mcp-status`\n- `allow-set-mcp-enabled`\n- `allow-get-access-state`\n- `allow-check-access`\n- `allow-get-update-state`\n- `allow-check-for-updates`\n- `allow-check-all-updates`\n- `allow-download-update`\n- `allow-set-update-preferences`\n- `allow-get-improvement-plan-preferences`\n- `allow-set-improvement-plan-preferences`\n- `allow-upload-improvement-plan-samples`\n- `allow-get-logging-preferences`\n- `allow-set-logging-preferences`\n- `allow-open-log-directory`\n- `allow-write-app-log`\n- `allow-get-app-bundle-update-state`\n- `allow-check-app-bundle-update`\n- `allow-install-app-bundle-update`\n- `allow-rollback-app-bundle-update`\n- `allow-get-problem-bank-cache-state`\n- `allow-get-problem-bank-catalog`\n- `allow-get-problem-bank-download-states`\n- `allow-download-problem-bank`\n- `allow-open-problem-bank-cache-directory`\n- `allow-clear-problem-bank-cache`\n- `allow-check-problem-bank-update`\n- `allow-sync-problem-bank-metadata`\n- `allow-load-problem-bank-page`\n- `allow-load-problem-detail`\n- `allow-save-provider-credential`\n- `allow-import-legacy-credential`\n- `allow-delete-provider-credential`\n- `allow-list-provider-credential-metadata`\n- `allow-read-credential-migration-journal`\n- `allow-persist-credential-migration-journal`\n- `allow-delete-credential-migration-journal`\n- `allow-mark-renderer-ready`\n- `allow-install-update`",
+          "type": "string",
+          "const": "desktop-app",
+          "markdownDescription": "Allows the GeoChat renderer to call the desktop application's public commands.\n#### This permission set includes:\n\n- `allow-get-runtime-info`\n- `allow-get-graphics-preferences`\n- `allow-set-graphics-preferences`\n- `allow-get-mcp-status`\n- `allow-set-mcp-enabled`\n- `allow-get-access-state`\n- `allow-check-access`\n- `allow-get-update-state`\n- `allow-check-for-updates`\n- `allow-check-all-updates`\n- `allow-download-update`\n- `allow-set-update-preferences`\n- `allow-get-improvement-plan-preferences`\n- `allow-set-improvement-plan-preferences`\n- `allow-upload-improvement-plan-samples`\n- `allow-get-logging-preferences`\n- `allow-set-logging-preferences`\n- `allow-open-log-directory`\n- `allow-write-app-log`\n- `allow-get-app-bundle-update-state`\n- `allow-check-app-bundle-update`\n- `allow-install-app-bundle-update`\n- `allow-rollback-app-bundle-update`\n- `allow-get-problem-bank-cache-state`\n- `allow-get-problem-bank-catalog`\n- `allow-get-problem-bank-download-states`\n- `allow-download-problem-bank`\n- `allow-open-problem-bank-cache-directory`\n- `allow-clear-problem-bank-cache`\n- `allow-check-problem-bank-update`\n- `allow-sync-problem-bank-metadata`\n- `allow-load-problem-bank-page`\n- `allow-load-problem-detail`\n- `allow-save-provider-credential`\n- `allow-import-legacy-credential`\n- `allow-delete-provider-credential`\n- `allow-list-provider-credential-metadata`\n- `allow-read-credential-migration-journal`\n- `allow-persist-credential-migration-journal`\n- `allow-delete-credential-migration-journal`\n- `allow-mark-renderer-ready`\n- `allow-install-update`"
+        },
+        {
+          "description": "Enables the check_access command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-check-access",
+          "markdownDescription": "Enables the check_access command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the check_all_updates command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-check-all-updates",
+          "markdownDescription": "Enables the check_all_updates command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the check_app_bundle_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-check-app-bundle-update",
+          "markdownDescription": "Enables the check_app_bundle_update command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the check_for_updates command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-check-for-updates",
+          "markdownDescription": "Enables the check_for_updates command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the check_problem_bank_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-check-problem-bank-update",
+          "markdownDescription": "Enables the check_problem_bank_update command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the clear_problem_bank_cache command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-clear-problem-bank-cache",
+          "markdownDescription": "Enables the clear_problem_bank_cache command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the delete_credential_migration_journal command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-delete-credential-migration-journal",
+          "markdownDescription": "Enables the delete_credential_migration_journal command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the delete_provider_credential command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-delete-provider-credential",
+          "markdownDescription": "Enables the delete_provider_credential command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the download_problem_bank command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-download-problem-bank",
+          "markdownDescription": "Enables the download_problem_bank command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the download_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-download-update",
+          "markdownDescription": "Enables the download_update command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_access_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-access-state",
+          "markdownDescription": "Enables the get_access_state command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_app_bundle_update_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-app-bundle-update-state",
+          "markdownDescription": "Enables the get_app_bundle_update_state command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_graphics_preferences command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-graphics-preferences",
+          "markdownDescription": "Enables the get_graphics_preferences command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_improvement_plan_preferences command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-improvement-plan-preferences",
+          "markdownDescription": "Enables the get_improvement_plan_preferences command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_logging_preferences command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-logging-preferences",
+          "markdownDescription": "Enables the get_logging_preferences command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_mcp_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-mcp-status",
+          "markdownDescription": "Enables the get_mcp_status command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_problem_bank_cache_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-problem-bank-cache-state",
+          "markdownDescription": "Enables the get_problem_bank_cache_state command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_problem_bank_catalog command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-problem-bank-catalog",
+          "markdownDescription": "Enables the get_problem_bank_catalog command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_problem_bank_download_states command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-problem-bank-download-states",
+          "markdownDescription": "Enables the get_problem_bank_download_states command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_runtime_info command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-runtime-info",
+          "markdownDescription": "Enables the get_runtime_info command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_update_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-update-state",
+          "markdownDescription": "Enables the get_update_state command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the import_legacy_credential command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-import-legacy-credential",
+          "markdownDescription": "Enables the import_legacy_credential command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the install_app_bundle_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-install-app-bundle-update",
+          "markdownDescription": "Enables the install_app_bundle_update command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the install_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-install-update",
+          "markdownDescription": "Enables the install_update command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the list_provider_credential_metadata command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-provider-credential-metadata",
+          "markdownDescription": "Enables the list_provider_credential_metadata command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the load_problem_bank_page command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-load-problem-bank-page",
+          "markdownDescription": "Enables the load_problem_bank_page command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the load_problem_detail command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-load-problem-detail",
+          "markdownDescription": "Enables the load_problem_detail command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the mark_renderer_ready command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-mark-renderer-ready",
+          "markdownDescription": "Enables the mark_renderer_ready command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the open_log_directory command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-open-log-directory",
+          "markdownDescription": "Enables the open_log_directory command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the open_problem_bank_cache_directory command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-open-problem-bank-cache-directory",
+          "markdownDescription": "Enables the open_problem_bank_cache_directory command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the persist_credential_migration_journal command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-persist-credential-migration-journal",
+          "markdownDescription": "Enables the persist_credential_migration_journal command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the read_credential_migration_journal command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-read-credential-migration-journal",
+          "markdownDescription": "Enables the read_credential_migration_journal command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the rollback_app_bundle_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-rollback-app-bundle-update",
+          "markdownDescription": "Enables the rollback_app_bundle_update command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the save_provider_credential command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-save-provider-credential",
+          "markdownDescription": "Enables the save_provider_credential command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_graphics_preferences command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-graphics-preferences",
+          "markdownDescription": "Enables the set_graphics_preferences command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_improvement_plan_preferences command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-improvement-plan-preferences",
+          "markdownDescription": "Enables the set_improvement_plan_preferences command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_logging_preferences command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-logging-preferences",
+          "markdownDescription": "Enables the set_logging_preferences command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_mcp_enabled command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-mcp-enabled",
+          "markdownDescription": "Enables the set_mcp_enabled command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_update_preferences command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-update-preferences",
+          "markdownDescription": "Enables the set_update_preferences command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the sync_problem_bank_metadata command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-sync-problem-bank-metadata",
+          "markdownDescription": "Enables the sync_problem_bank_metadata command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the upload_improvement_plan_samples command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-upload-improvement-plan-samples",
+          "markdownDescription": "Enables the upload_improvement_plan_samples command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the write_app_log command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-write-app-log",
+          "markdownDescription": "Enables the write_app_log command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the check_access command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-check-access",
+          "markdownDescription": "Denies the check_access command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the check_all_updates command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-check-all-updates",
+          "markdownDescription": "Denies the check_all_updates command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the check_app_bundle_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-check-app-bundle-update",
+          "markdownDescription": "Denies the check_app_bundle_update command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the check_for_updates command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-check-for-updates",
+          "markdownDescription": "Denies the check_for_updates command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the check_problem_bank_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-check-problem-bank-update",
+          "markdownDescription": "Denies the check_problem_bank_update command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the clear_problem_bank_cache command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-clear-problem-bank-cache",
+          "markdownDescription": "Denies the clear_problem_bank_cache command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the delete_credential_migration_journal command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-delete-credential-migration-journal",
+          "markdownDescription": "Denies the delete_credential_migration_journal command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the delete_provider_credential command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-delete-provider-credential",
+          "markdownDescription": "Denies the delete_provider_credential command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the download_problem_bank command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-download-problem-bank",
+          "markdownDescription": "Denies the download_problem_bank command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the download_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-download-update",
+          "markdownDescription": "Denies the download_update command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_access_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-access-state",
+          "markdownDescription": "Denies the get_access_state command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_app_bundle_update_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-app-bundle-update-state",
+          "markdownDescription": "Denies the get_app_bundle_update_state command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_graphics_preferences command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-graphics-preferences",
+          "markdownDescription": "Denies the get_graphics_preferences command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_improvement_plan_preferences command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-improvement-plan-preferences",
+          "markdownDescription": "Denies the get_improvement_plan_preferences command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_logging_preferences command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-logging-preferences",
+          "markdownDescription": "Denies the get_logging_preferences command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_mcp_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-mcp-status",
+          "markdownDescription": "Denies the get_mcp_status command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_problem_bank_cache_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-problem-bank-cache-state",
+          "markdownDescription": "Denies the get_problem_bank_cache_state command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_problem_bank_catalog command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-problem-bank-catalog",
+          "markdownDescription": "Denies the get_problem_bank_catalog command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_problem_bank_download_states command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-problem-bank-download-states",
+          "markdownDescription": "Denies the get_problem_bank_download_states command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_runtime_info command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-runtime-info",
+          "markdownDescription": "Denies the get_runtime_info command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_update_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-update-state",
+          "markdownDescription": "Denies the get_update_state command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the import_legacy_credential command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-import-legacy-credential",
+          "markdownDescription": "Denies the import_legacy_credential command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the install_app_bundle_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-install-app-bundle-update",
+          "markdownDescription": "Denies the install_app_bundle_update command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the install_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-install-update",
+          "markdownDescription": "Denies the install_update command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_provider_credential_metadata command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-provider-credential-metadata",
+          "markdownDescription": "Denies the list_provider_credential_metadata command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the load_problem_bank_page command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-load-problem-bank-page",
+          "markdownDescription": "Denies the load_problem_bank_page command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the load_problem_detail command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-load-problem-detail",
+          "markdownDescription": "Denies the load_problem_detail command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the mark_renderer_ready command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-mark-renderer-ready",
+          "markdownDescription": "Denies the mark_renderer_ready command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the open_log_directory command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-open-log-directory",
+          "markdownDescription": "Denies the open_log_directory command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the open_problem_bank_cache_directory command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-open-problem-bank-cache-directory",
+          "markdownDescription": "Denies the open_problem_bank_cache_directory command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the persist_credential_migration_journal command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-persist-credential-migration-journal",
+          "markdownDescription": "Denies the persist_credential_migration_journal command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the read_credential_migration_journal command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-read-credential-migration-journal",
+          "markdownDescription": "Denies the read_credential_migration_journal command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the rollback_app_bundle_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-rollback-app-bundle-update",
+          "markdownDescription": "Denies the rollback_app_bundle_update command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the save_provider_credential command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-save-provider-credential",
+          "markdownDescription": "Denies the save_provider_credential command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_graphics_preferences command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-graphics-preferences",
+          "markdownDescription": "Denies the set_graphics_preferences command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_improvement_plan_preferences command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-improvement-plan-preferences",
+          "markdownDescription": "Denies the set_improvement_plan_preferences command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_logging_preferences command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-logging-preferences",
+          "markdownDescription": "Denies the set_logging_preferences command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_mcp_enabled command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-mcp-enabled",
+          "markdownDescription": "Denies the set_mcp_enabled command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_update_preferences command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-update-preferences",
+          "markdownDescription": "Denies the set_update_preferences command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the sync_problem_bank_metadata command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-sync-problem-bank-metadata",
+          "markdownDescription": "Denies the sync_problem_bank_metadata command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the upload_improvement_plan_samples command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-upload-improvement-plan-samples",
+          "markdownDescription": "Denies the upload_improvement_plan_samples command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the write_app_log command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-write-app-log",
+          "markdownDescription": "Denies the write_app_log command without any pre-configured scope."
+        },
+        {
           "description": "Default core plugins set.\n#### This default permission set includes:\n\n- `core:path:default`\n- `core:event:default`\n- `core:window:default`\n- `core:webview:default`\n- `core:app:default`\n- `core:image:default`\n- `core:resources:default`\n- `core:menu:default`\n- `core:tray:default`",
           "type": "string",
           "const": "core:default",

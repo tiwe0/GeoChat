@@ -1,4 +1,7 @@
 import { type GeoGebraApi } from "./ggbdeploy-wrapper";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
+
+const logger = createStructuredLogger("geogebra.canvas-context");
 
 type GeoGebraApplet = GeoGebraApi;
 
@@ -58,12 +61,13 @@ export function readSelectedObjects(applet: GeoGebraApplet): Pick<CanvasContext,
       selection_observed_at: new Date().toISOString()
     };
   } catch (caughtError) {
-    console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/canvas-context.ts:60", caughtError);
+    logger.debug("selection_read_failed", "CANVAS_SELECTION_UNAVAILABLE", { error: caughtError });
     return { selectedObjects: [], selection_status: "unknown", selection_source: "unavailable" };
   }
 }
 
 export function summarizeGeoGebraXml(xml: string, includeXml: boolean): CanvasContext {
+  if (typeof DOMParser === "undefined") throw new Error("DOMParser is unavailable in this runtime.");
   const document = new DOMParser().parseFromString(xml, "application/xml");
   if (document.querySelector("parsererror")) throw new Error("GeoGebra returned invalid XML.");
   const elements = [...document.querySelectorAll("construction > element")];
@@ -118,7 +122,7 @@ export function readActivePerspective(applet?: GeoGebraApplet): PerspectiveState
       const value = normalizePerspective(String(callGeoGebraApplet(applet, method)));
       if (value) return { perspective: value, perspective_source: "applet" };
     } catch (caughtError) {
-      console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/canvas-context.ts:119", caughtError);
+      logger.debug("perspective_api_failed", "CANVAS_PERSPECTIVE_UNAVAILABLE", { error: caughtError, method });
       // Optional API; continue with the other discovery mechanisms.
     }
   }
@@ -165,10 +169,13 @@ function normalizePerspective(value: string | null | undefined): string | null {
 }
 
 export function tryReadCanvasContext(applet: GeoGebraApplet, includeXml: boolean) {
+  if (typeof DOMParser === "undefined") {
+    return undefined;
+  }
   try {
     return readCanvasContext(applet, includeXml);
   } catch (caughtError) {
-    console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/canvas-context.ts:168", caughtError);
+    logger.debug("context_read_failed", "CANVAS_CONTEXT_READ_FAILED", { error: caughtError });
     return undefined;
   }
 }
@@ -179,7 +186,7 @@ export function getAppletXml(applet: GeoGebraApplet) {
     const value = callGeoGebraApplet(applet, "getXML");
     return typeof value === "string" ? value : String(value ?? "");
   } catch (caughtError) {
-    console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/canvas-context.ts:178", caughtError);
+    logger.debug("xml_read_failed", "CANVAS_XML_READ_FAILED", { error: caughtError });
     return undefined;
   }
 }

@@ -1,3 +1,7 @@
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
+
+const logger = createStructuredLogger("geogebra.runtime");
+
 export type GeoGebraApi = Record<string, unknown>;
 export const DEFAULT_GEOGEBRA_TOOLBAR_VISIBLE = false;
 export const DEFAULT_GEOGEBRA_MENU_VISIBLE = true;
@@ -151,7 +155,7 @@ function pinGeoGebraModuleBase(codebase: string) {
     sessionStorage.removeItem("__gwtDevModeHook:web3d");
     sessionStorage.removeItem("__gwtDevModeHook:webSimple");
   } catch (caughtError) {
-    console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:87", caughtError);
+    logger.debug("dev_hook_cleanup_failed", "GEOGEBRA_STORAGE_UNAVAILABLE", { error: caughtError });
     // Storage can be unavailable in a restricted WebView; the explicit
     // module-base meta tag above remains sufficient in that case.
   }
@@ -213,13 +217,13 @@ export async function mountGeoGebra(options: {
       const recalculateEnvironments = runtimeApi.recalculateEnvironments;
       if (typeof recalculateEnvironments === "function") recalculateEnvironments.call(runtimeApi);
     } catch (caughtError) {
-      console.error("[ERROR] Failed to recalculate GeoGebra environments after resize", caughtError);
+      logger.debug("resize_recalculate_failed", "GEOGEBRA_RESIZE_RECALCULATE_FAILED", { error: caughtError });
     }
     try {
       const refreshViews = runtimeApi.refreshViews;
       if (typeof refreshViews === "function") refreshViews.call(runtimeApi);
     } catch (caughtError) {
-      console.error("[ERROR] Failed to refresh GeoGebra views after resize", caughtError);
+      logger.debug("resize_refresh_failed", "GEOGEBRA_RESIZE_REFRESH_FAILED", { error: caughtError });
     }
   };
 
@@ -287,12 +291,12 @@ export async function mountGeoGebra(options: {
         setSize.call(runtimeApi, width, runtimeHeight);
         refreshRuntimeViews();
       } catch (caughtError) {
-        console.error("[ERROR] Failed to resize the GeoGebra runtime", caughtError);
+        logger.warn("runtime_resize_failed", "GEOGEBRA_RESIZE_FAILED", { error: caughtError });
       }
       return;
     }
     // Until the runtime API exists, deployggb's own resize() is all there is.
-    try { applet.resize?.(); } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:208", caughtError); /* best effort during teardown */ }
+    try { applet.resize?.(); } catch (caughtError) { logger.debug("applet_resize_failed", "GEOGEBRA_APPLET_RESIZE_FAILED", { error: caughtError }); /* best effort during teardown */ }
   };
 
   // ResizeObserver also covers window drags and shell layout changes. Coalesce
@@ -378,7 +382,7 @@ export async function mountGeoGebra(options: {
       runtimeApi = null;
       if (!isActiveMount()) return;
       activeMounts.delete(options.container);
-      try { applet.removeExistingApplet?.(options.container, false); } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:323", caughtError); /* best effort */ }
+      try { applet.removeExistingApplet?.(options.container, false); } catch (caughtError) { logger.debug("applet_remove_failed", "GEOGEBRA_APPLET_REMOVE_FAILED", { error: caughtError }); /* best effort */ }
       options.container.replaceChildren();
     },
   };

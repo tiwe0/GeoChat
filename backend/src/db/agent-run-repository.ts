@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
-import type { AgentRunLedgerRecord } from "@geochat-ai/app";
-import { compactAgentRunLedgerForStorage, isAgentRunLedgerRecord } from "@geochat-ai/app";
+import type { AgentRunLedgerRecord } from "@geochat-ai/app/agent-run";
+import { compactAgentRunLedgerForStorage, isAgentRunLedgerRecord } from "@geochat-ai/app/agent-run";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import type { GeoChatDatabaseRuntimeConfig } from "./runtime";
 import type { createDatabase } from "./client";
 import {
@@ -9,6 +10,8 @@ import {
   conversationMessages as sqliteConversationMessages,
   conversations as sqliteConversations,
 } from "./schema";
+
+const logger = createStructuredLogger("db.agent-run-repository");
 
 type SqliteDatabase = ReturnType<typeof createDatabase>;
 type SqliteTransaction = Parameters<Parameters<SqliteDatabase["transaction"]>[0]>[0];
@@ -240,7 +243,7 @@ function parseStoredPayload(value: unknown) {
   try {
     return JSON.parse(value);
   } catch (error) {
-    console.error("[ERROR] Failed to parse stored agent-run payload", error);
+    logger.warn("stored_payload_parse_failed", "AGENT_RUN_PAYLOAD_INVALID", { error });
     return undefined;
   }
 }

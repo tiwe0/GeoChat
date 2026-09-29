@@ -1,5 +1,8 @@
 import type { AgentRunLedgerRecord, AgentRunStatus, AgentRunToolRecord } from "./run-ledger";
 import type { GeoGebraCommandTagMatch } from "./geogebra-command-reference";
+import { createStructuredLogger } from "./structured-logger";
+
+const logger = createStructuredLogger("geogebra.command-usage");
 
 export type GeoGebraCommandUsageItem = {
   commandName: string;
@@ -325,7 +328,7 @@ function safeSerializeToolPayload(tool: AgentRunToolRecord) {
   try {
     return JSON.stringify({ args: tool.args, result: tool.result, error: tool.error });
   } catch (caughtError) {
-    console.error("[ERROR] Caught exception at packages/app/src/geogebra-command-usage.ts:323", caughtError);
+    logger.debug("tool_payload_serialize_failed", "GEOGEBRA_TOOL_PAYLOAD_SERIALIZE_FAILED", { error: caughtError });
     return `${tool.error ?? ""}`;
   }
 }

@@ -1,17 +1,23 @@
 import {
   agentWorkflowCanvasMutationTools,
   agentWorkflowCanvasVerificationTools,
+} from "@geochat-ai/app/agent-policy";
+import {
   isFunctionCallArgs,
   isFunctionCallToolName,
+  type FunctionCallToolName,
+} from "@geochat-ai/app/functioncalls";
+import type { PatchBlackboardArgs, ReadBlackboardArgs } from "@geochat-ai/app/blackboard";
+import {
   upsertAgentRunTool,
   type AgentRunLedgerRecord,
   type AgentRunToolRecord,
-  type FunctionCallToolName,
-  type PatchBlackboardArgs,
-  type ReadBlackboardArgs,
-} from "@geochat-ai/app";
+} from "@geochat-ai/app/agent-run";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import { getToolName, isToolUIPart, type UIMessage } from "ai";
 import type { NativeChatDependencies, NativeToolExecutionContext } from "./native-chat-ports";
+
+const logger = createStructuredLogger("agent.tool-orchestrator");
 
 export function createNativeToolExecutionContext(
   getRun: () => AgentRunLedgerRecord,
@@ -83,7 +89,12 @@ export function mergeCompletedNativeUITools(run: AgentRunLedgerRecord, messages:
       const previous = existingById.get(part.toolCallId);
       const args = completedUIToolArgs(part, toolName, previous?.args);
       if (args === null) {
-        console.error(`[ERROR] Ignoring invalid ${toolName} UI tool input while preserving runId=${run.runId}`);
+        logger.warn("invalid_ui_tool_input", "AGENT_TOOL_INPUT_INVALID", {
+          runId: run.runId,
+          conversationId: run.conversationId,
+          toolName,
+          toolCallId: part.toolCallId,
+        });
         continue;
       }
       const now = new Date().toISOString();

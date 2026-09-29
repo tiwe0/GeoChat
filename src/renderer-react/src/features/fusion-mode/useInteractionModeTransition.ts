@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useReducedMotion } from "motion/react";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import type { InteractionMode } from "../../../../shared/desktop/workbench-types";
 import type { FusionPoint } from "./geometry";
+
+const logger = createStructuredLogger("fusion.interaction-transition");
 
 export type InteractionModeTransitionState = {
   id: number;
@@ -87,7 +90,7 @@ export function useInteractionModeTransition(input: {
         });
         await viewTransition.finished;
       } catch (error) {
-        console.error("[ERROR] Interaction mode view transition failed", error);
+        logger.warn("view_transition_failed", "INTERACTION_VIEW_TRANSITION_FAILED", { error });
         input.setMode(to);
       } finally {
         root.classList.remove("interaction-mode-view-transition");

@@ -3,8 +3,8 @@ import {
   GEOCHAT_REPAIR_SYSTEM_PROMPT,
   GEOCHAT_SYSTEM_PROMPT_EN,
   GEOCHAT_SYSTEM_PROMPT,
-  type AgentRunLedgerRecord,
-} from "@geochat-ai/app";
+} from "@geochat-ai/app/agent-policy";
+import type { AgentRunLedgerRecord } from "@geochat-ai/app/agent-run";
 import {
   formatCommandReferencePacketPrompt,
   type AgentCommandReferencePacket,

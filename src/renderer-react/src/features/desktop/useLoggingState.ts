@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import type { DesktopLogLevel, DesktopLoggingState } from "../../../../shared/desktop-api";
 import { installedDesktopApi } from "../../../../shared/desktop/tauri-bridge";
+
+const logger = createStructuredLogger("desktop.logging-state");
 
 const INITIAL_STATE: DesktopLoggingState = {
   enabled: false,
@@ -26,11 +29,11 @@ export function useLoggingState() {
       .then((next) => {
         if (!disposed) {
           setStatus(next);
-          console.debug(`[DEBUG] Loaded logging preferences enabled=${next.enabled} level=${next.level}`);
+          logger.debug("preferences_loaded", "DESKTOP_LOGGING_PREFERENCES_LOADED", { enabled: next.enabled, level: next.level });
         }
       })
       .catch((reason) => {
-        console.error("[ERROR] Failed to read desktop logging preferences", reason);
+        logger.warn("preferences_read_failed", "DESKTOP_LOGGING_READ_FAILED", { error: reason });
         if (!disposed) setError(errorMessage(reason));
       })
       .finally(() => {
@@ -49,9 +52,9 @@ export function useLoggingState() {
     try {
       const next = await api.setLoggingPreferences(preferences);
       setStatus(next);
-      console.info(`[INFO] Logging preferences updated enabled=${next.enabled} level=${next.level}`);
+      logger.info("preferences_updated", "DESKTOP_LOGGING_UPDATED", { enabled: next.enabled, level: next.level });
     } catch (reason) {
-      console.error("[ERROR] Caught exception at src/renderer-react/src/features/desktop/useLoggingState.ts:47", reason);
+      logger.warn("preferences_update_failed", "DESKTOP_LOGGING_UPDATE_FAILED", { error: reason });
       setError(errorMessage(reason));
     } finally {
       setBusy(false);
@@ -65,9 +68,9 @@ export function useLoggingState() {
     try {
       const logDirectory = await api.openLogDirectory();
       setStatus((current) => ({ ...current, logDirectory }));
-      console.info("[INFO] Opened the local log directory");
+      logger.info("log_directory_opened", "DESKTOP_LOG_DIRECTORY_OPENED");
     } catch (reason) {
-      console.error("[ERROR] Caught exception at src/renderer-react/src/features/desktop/useLoggingState.ts:61", reason);
+      logger.warn("log_directory_open_failed", "DESKTOP_LOG_DIRECTORY_OPEN_FAILED", { error: reason });
       setError(errorMessage(reason));
     }
   }, []);

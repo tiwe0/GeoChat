@@ -1,3 +1,7 @@
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
+
+const logger = createStructuredLogger("desktop.problem-bank-cache");
+
 const CACHE_DB_NAME = "geochat-problem-bank-cache";
 const JSON_CACHE_STORE_NAME = "cloud-json";
 const MEDIA_CACHE_STORE_NAME = "cloud-media";
@@ -38,14 +42,14 @@ export async function readCachedCloudProblemJson<T>(url: string): Promise<T | un
   );
   if (!row) return undefined;
   void touchCachedCloudProblemJson(db, url).catch((error) => {
-    console.error("[ERROR] Failed to update cached problem JSON access time", error);
+    logger.debug("json_access_time_update_failed", "PROBLEM_BANK_CACHE_TOUCH_FAILED", { error, url });
   });
   try {
     return JSON.parse(row.bodyText) as T;
   } catch (caughtError) {
-    console.error("[ERROR] Caught exception at src/shared/desktop/problem-bank-cache.ts:43", caughtError);
+    logger.warn("cached_json_parse_failed", "PROBLEM_BANK_CACHE_JSON_INVALID", { error: caughtError, url });
     void deleteCachedCloudProblemJson(db, url).catch((deleteError) => {
-      console.error("[ERROR] Failed to delete invalid cached problem JSON", deleteError);
+      logger.debug("invalid_json_delete_failed", "PROBLEM_BANK_CACHE_DELETE_FAILED", { error: deleteError, url });
     });
     return undefined;
   }
@@ -77,7 +81,7 @@ export async function readCachedCloudProblemMedia(url: string): Promise<Blob | u
   );
   if (!row) return undefined;
   void touchCachedCloudProblemMedia(db, url).catch((error) => {
-    console.error("[ERROR] Failed to update cached problem media access time", error);
+    logger.debug("media_access_time_update_failed", "PROBLEM_BANK_CACHE_TOUCH_FAILED", { error, url });
   });
   return row.blob;
 }

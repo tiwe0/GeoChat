@@ -14,6 +14,14 @@
       "types": "./src/contracts.ts",
       "default": "./src/contracts.ts"
     },
+    "./agent-run": {
+      "types": "./src/agent-run.ts",
+      "default": "./src/agent-run.ts"
+    },
+    "./agent-policy": {
+      "types": "./src/agent-policy.ts",
+      "default": "./src/agent-policy.ts"
+    },
     "./desktop-contracts": {
       "types": "./src/desktop-contracts.ts",
       "default": "./src/desktop-contracts.ts"
@@ -21,6 +29,18 @@
     "./functioncalls": {
       "types": "./src/functioncalls.ts",
       "default": "./src/functioncalls.ts"
+    },
+    "./geometry": {
+      "types": "./src/geometry.ts",
+      "default": "./src/geometry.ts"
+    },
+    "./models": {
+      "types": "./src/models.ts",
+      "default": "./src/models.ts"
+    },
+    "./problem-bank": {
+      "types": "./src/problem-bank.ts",
+      "default": "./src/problem-bank.ts"
     },
     "./geogebra-style-policy": {
       "types": "./src/geogebra-style-policy.ts",
@@ -65,6 +85,10 @@
     "./runtime-decode": {
       "types": "./src/runtime-decode.ts",
       "default": "./src/runtime-decode.ts"
+    },
+    "./structured-logger": {
+      "types": "./src/structured-logger.ts",
+      "default": "./src/structured-logger.ts"
     }
   },
   "scripts": {

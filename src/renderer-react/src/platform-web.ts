@@ -1,3 +1,7 @@
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
+
+const logger = createStructuredLogger("renderer.web-platform");
+
 /** Small Web adapter for Web features that persist state through browser.storage. */
 export type WebStorageArea = {
   get(keys?: string | string[] | Record<string, unknown>): Promise<Record<string, unknown>>;
@@ -24,7 +28,7 @@ function storageArea(): WebStorageArea {
 function readValue(key: string): unknown {
   const raw = localStorage.getItem(key);
   if (raw === null) return undefined;
-  try { return JSON.parse(raw); } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/platform-web.ts:27", caughtError); return raw; }
+  try { return JSON.parse(raw); } catch (caughtError) { logger.debug("storage_value_parse_failed", "WEB_STORAGE_VALUE_INVALID", { error: caughtError, key }); return raw; }
 }
 
 export function installWebPlatform() {

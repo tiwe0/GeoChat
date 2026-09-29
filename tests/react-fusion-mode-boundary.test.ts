@@ -3,6 +3,11 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const moduleRoot = join(import.meta.dir, "../src/renderer-react/src/features/fusion-mode");
+const workspaceRoot = join(import.meta.dir, "../src/renderer-react/src/features/assistant-workspace");
+const workspace = readFileSync(join(workspaceRoot, "AssistantWorkspace.tsx"), "utf8");
+const windowSurface = readFileSync(join(workspaceRoot, "AssistantWindowSurface.tsx"), "utf8");
+const fusionSurface = readFileSync(join(workspaceRoot, "AssistantFusionSurface.tsx"), "utf8");
+const fusionPanelState = readFileSync(join(workspaceRoot, "useAssistantFusionPanel.ts"), "utf8");
 
 describe("fusion-mode module boundary", () => {
   test("keeps the fusion interface independent from legacy panel components", () => {
@@ -22,18 +27,18 @@ describe("fusion-mode module boundary", () => {
     expect(source).toContain("GeoChatDisplayToolById");
   });
 
-  test("limits the legacy panel to a single fusion-mode integration point", () => {
-    const panel = readFileSync(join(import.meta.dir, "../src/renderer-react/src/components/AssistantPanel.tsx"), "utf8");
-    expect(panel).toContain("<FusionModeSurface");
-    expect(panel).toContain("<InteractionModeButton");
-    expect(panel).not.toContain("FusionComposer");
-    expect(panel).not.toContain("FusionBubbleStack");
+  test("limits the workspace to dedicated fusion and window surface integrations", () => {
+    expect(workspace).toContain("<AssistantFusionSurface");
+    expect(workspace).toContain("<AssistantWindowSurface");
+    expect(fusionSurface).toContain("<FusionModeSurface");
+    expect(windowSurface).toContain("<InteractionModeButton");
+    expect(workspace).not.toContain("FusionComposer");
+    expect(workspace).not.toContain("FusionBubbleStack");
   });
 
   test("keeps the mode switch animated and available in both top bars", () => {
     const button = readFileSync(join(moduleRoot, "InteractionModeButton.tsx"), "utf8");
     const toolbar = readFileSync(join(moduleRoot, "FusionToolbar.tsx"), "utf8");
-    const panel = readFileSync(join(import.meta.dir, "../src/renderer-react/src/components/AssistantPanel.tsx"), "utf8");
     const transition = readFileSync(join(moduleRoot, "InteractionModeTransition.tsx"), "utf8");
     expect(button).toContain("<AnimatePresence");
     expect(button).toContain("data-interaction-mode-toggle");
@@ -44,7 +49,7 @@ describe("fusion-mode module boundary", () => {
     expect(button).not.toContain("disabled");
     expect(toolbar).toContain("<InteractionModeButton");
     expect(toolbar).not.toContain('<InteractionModeButton mode="fusion" disabled=');
-    expect(panel).not.toContain('<InteractionModeButton\n                mode="window"\n                disabled=');
+    expect(windowSurface).not.toContain('<InteractionModeButton mode="window" disabled=');
     const transitionHook = readFileSync(join(moduleRoot, "useInteractionModeTransition.ts"), "utf8");
     expect(transitionHook).toContain("startViewTransition");
     expect(transitionHook).toContain("Math.hypot");
@@ -136,7 +141,6 @@ describe("fusion-mode module boundary", () => {
 
   test("keeps keyboard focus inside viewport cards without trapping portaled menus", () => {
     const viewportCard = readFileSync(join(moduleRoot, "FusionViewportCard.tsx"), "utf8");
-    const panel = readFileSync(join(import.meta.dir, "../src/renderer-react/src/components/AssistantPanel.tsx"), "utf8");
     expect(viewportCard).toContain('FocusTrap from "@mui/material/Unstable_TrapFocus"');
     expect(viewportCard).toContain("<FocusTrap open disableRestoreFocus isEnabled={isViewportFocusTrapEnabled}>");
     expect(viewportCard).toContain("!document.querySelector('[role=\"menu\"], [role=\"listbox\"]')");
@@ -144,10 +148,10 @@ describe("fusion-mode module boundary", () => {
     expect(viewportCard).toContain("keepViewportTabFocusInside(event)");
     expect(viewportCard).toContain("event.target instanceof HTMLElement");
     expect(viewportCard).toContain("last.focus({ preventScroll: true })");
-    expect(panel).toContain("restoreFusionPanelTrigger");
-    expect(panel).toContain("scheduleFusionPanelFocusRestore");
-    expect(panel).toContain("reduceMotion ? 0 : 400");
-    expect(panel).toContain("trigger.focus({ preventScroll: true })");
+    expect(fusionPanelState).toContain("restoreTrigger");
+    expect(fusionPanelState).toContain("focusRestoreTimerRef.current = globalThis.setTimeout");
+    expect(fusionPanelState).toContain("input.reduceMotion ? 0 : 400");
+    expect(fusionPanelState).toContain("trigger.focus({ preventScroll: true })");
   });
 
   test("keeps complete bubble cards visible while only their body scrolls without a visible scrollbar", () => {
@@ -174,15 +178,14 @@ describe("fusion-mode module boundary", () => {
   });
 
   test("keeps the live chat state above the surface split and mounts GeoGebra only once", () => {
-    const panel = readFileSync(join(import.meta.dir, "../src/renderer-react/src/components/AssistantPanel.tsx"), "utf8");
     const panelWindow = readFileSync(join(import.meta.dir, "../src/renderer-react/src/features/panel-window/usePanelWindow.ts"), "utf8");
     const app = readFileSync(join(import.meta.dir, "../src/renderer-react/src/App.tsx"), "utf8");
-    expect(panel.indexOf("useAgentRunChat({")).toBeGreaterThan(-1);
-    expect(panel.indexOf('if (interaction.mode === "fusion")')).toBeGreaterThan(panel.indexOf("useAgentRunChat({"));
-    expect(panel).toContain('usePanelWindow(panelView, interaction.mode === "window")');
-    expect(panel).toContain("fusionPanelFromWindowState");
-    expect(panel).toContain("windowStateFromFusionPanel");
-    expect(panel).not.toContain('closeFusionPanel({ restoreFocus: false });\n          modeTransition.requestMode("window", origin);');
+    expect(workspace.indexOf("useAgentRunChat({")).toBeGreaterThan(-1);
+    expect(workspace.indexOf('if (interaction.mode === "fusion")')).toBeGreaterThan(workspace.indexOf("useAgentRunChat({"));
+    expect(workspace).toContain('usePanelWindow(panelView, interaction.mode === "window")');
+    expect(fusionPanelState).toContain("fusionPanelFromWindowState");
+    expect(fusionPanelState).toContain("windowStateFromFusionPanel");
+    expect(workspace).not.toContain('closeFusionPanel({ restoreFocus: false });\n          modeTransition.requestMode("window", origin);');
     expect(panelWindow).toContain("export function usePanelWindow(view: PanelView, enabled = true)");
     expect(panelWindow).toContain("if (!enabled || collapsed) return");
     expect(panelWindow).toContain("}, [enabled]);");
@@ -191,10 +194,9 @@ describe("fusion-mode module boundary", () => {
   });
 
   test("completes a spatial turn only from the native chat finish event", () => {
-    const panel = readFileSync(join(import.meta.dir, "../src/renderer-react/src/components/AssistantPanel.tsx"), "utf8");
     const turns = readFileSync(join(moduleRoot, "spatialTurns.ts"), "utf8");
-    expect(panel).toContain("onFinish: () => {");
-    expect(panel).toContain("fusionController.completeActiveTurn();");
+    expect(workspace).toContain("onFinish: () => {");
+    expect(workspace).toContain("fusionController.completeActiveTurn();");
     expect(turns).not.toContain('input.chatStatus === "ready" && Boolean(group)');
   });
 
@@ -219,9 +221,8 @@ describe("fusion-mode module boundary", () => {
   });
 
   test("delegates window follow behavior to the assistant-ui thread viewport", () => {
-    const panel = readFileSync(join(import.meta.dir, "../src/renderer-react/src/components/AssistantPanel.tsx"), "utf8");
     const thread = readFileSync(join(import.meta.dir, "../src/renderer-react/src/features/assistant-ui/GeoChatThread.tsx"), "utf8");
-    expect(panel).not.toContain("useMessageScroll");
+    expect(workspace).not.toContain("useMessageScroll");
     expect(thread).toContain("<ThreadPrimitive.Viewport");
     expect(thread).toContain("autoScroll={autoScroll}");
     expect(thread).toContain("turnAnchor={turnAnchor}");

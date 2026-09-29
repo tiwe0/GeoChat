@@ -18,7 +18,7 @@ export type ConstructionRecipe = {
   createPlan: (input: Record<string, unknown>, locale?: FunctionCallLocale | null) => GeometryPlan;
 };
 
-export const CONSTRUCTION_RECIPES = [
+const CONSTRUCTION_RECIPES = [
   {
     id: "function.parabola.vertex",
     title: "绘制抛物线并标出顶点",
@@ -163,11 +163,12 @@ export const CONSTRUCTION_RECIPES = [
 ] as const satisfies readonly ConstructionRecipe[];
 
 export function getConstructionRecipes() {
-  return [...CONSTRUCTION_RECIPES];
+  return CONSTRUCTION_RECIPES.map(cloneConstructionRecipe);
 }
 
 export function getConstructionRecipe(id: string) {
-  return CONSTRUCTION_RECIPES.find((recipe) => recipe.id === id);
+  const recipe = CONSTRUCTION_RECIPES.find((entry) => entry.id === id);
+  return recipe ? cloneConstructionRecipe(recipe) : undefined;
 }
 
 export function isConstructionRecipeId(value: unknown): value is ConstructionRecipeId {
@@ -176,7 +177,17 @@ export function isConstructionRecipeId(value: unknown): value is ConstructionRec
 
 export function findConstructionRecipesForIntent(prompt: string) {
   const normalized = prompt.toLowerCase();
-  return CONSTRUCTION_RECIPES.filter((recipe) => matchesConstructionRecipeIntent(recipe.id, normalized));
+  return CONSTRUCTION_RECIPES
+    .filter((recipe) => matchesConstructionRecipeIntent(recipe.id, normalized))
+    .map(cloneConstructionRecipe);
+}
+
+function cloneConstructionRecipe(recipe: ConstructionRecipe): ConstructionRecipe {
+  return {
+    ...recipe,
+    intentPatterns: [...recipe.intentPatterns],
+    inputSpecs: recipe.inputSpecs.map((input) => ({ ...input }))
+  };
 }
 
 function matchesConstructionRecipeIntent(recipeId: ConstructionRecipeId, normalizedPrompt: string) {

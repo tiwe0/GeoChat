@@ -1,4 +1,5 @@
-import type { AgentRunLedgerRecord, PatchBlackboardArgs, ReadBlackboardArgs } from "@geochat-ai/app";
+import type { AgentRunLedgerRecord } from "@geochat-ai/app/agent-run";
+import type { PatchBlackboardArgs, ReadBlackboardArgs } from "@geochat-ai/app/blackboard";
 import type { CredentialResolver } from "../credentials/resolver";
 import type { AgentRunRepository } from "../db/agent-run-repository";
 import type { BlackboardRepository } from "../db/blackboard-repository";

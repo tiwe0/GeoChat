@@ -3,11 +3,11 @@ import {
   decodeModelDiscoveryRequest,
   parseAgentModelListResponse
 } from "@geochat-ai/app/model-discovery";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import {
   CredentialResolutionError,
   type CredentialResolver
 } from "../credentials/resolver";
-import { sanitizeProviderError } from "../agent/provider-error";
 import {
   ProviderResponseReadError,
   ProviderResponseTooLargeError,
@@ -15,6 +15,7 @@ import {
 } from "./provider-proxy";
 
 const MODEL_DISCOVERY_TIMEOUT_MS = 15_000;
+const logger = createStructuredLogger("models.discovery-service");
 
 export type ModelDiscoveryLimits = {
   maxProviderResponseBodyBytes: number;
@@ -54,7 +55,7 @@ export async function discoverCredentialModels(
     if (error instanceof CredentialResolutionError) {
       return result(error.status, { error: error.code, message: error.message });
     }
-    console.error(`[ERROR] Credential resolution failed during model discovery: ${sanitizeProviderError(error)}`);
+    logger.error("credential_resolution_failed", "MODEL_DISCOVERY_CREDENTIAL_RESOLUTION_FAILED", { error });
     return result(502, {
       error: "credential_resolution_failed",
       message: "The saved credential could not be resolved."
@@ -105,7 +106,7 @@ export async function discoverCredentialModels(
     cleanup();
     if (downstreamAborted) return cancelledResult();
     if (timedOut) return timeoutResult();
-    console.error(`[ERROR] Model discovery request failed provider=${credential.provider}: ${sanitizeProviderError(error)}`);
+    logger.warn("provider_request_failed", "MODEL_DISCOVERY_PROVIDER_REQUEST_FAILED", { error, provider: credential.provider });
     return result(502, {
       error: "model_discovery_failed",
       message: "The provider model catalog could not be reached."
@@ -129,7 +130,7 @@ export async function discoverCredentialModels(
     if (downstreamAborted) return cancelledResult();
     if (timedOut) return timeoutResult();
     if (error instanceof ProviderResponseReadError) {
-      console.error(`[ERROR] Model discovery response read failed provider=${credential.provider}: ${sanitizeProviderError(error.cause)}`);
+      logger.warn("provider_response_read_failed", "MODEL_DISCOVERY_RESPONSE_READ_FAILED", { error: error.cause, provider: credential.provider });
     }
     return result(502, {
       error: "model_discovery_response_failed",

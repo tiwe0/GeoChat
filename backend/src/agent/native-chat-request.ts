@@ -2,13 +2,15 @@ import {
   agentModelSupportsReasoning,
   getAgentModelPolicy,
   isAgentModelConfig,
-  normalizeAgentRunThinkingEffort,
   type AgentModelConfig,
-} from "@geochat-ai/app";
+} from "@geochat-ai/app/models";
+import { normalizeAgentRunThinkingEffort } from "@geochat-ai/app/agent-run";
 import type { UIMessage } from "ai";
 
 export type NativeChatRequest = Readonly<{
   messages: UIMessage[];
+  /** Provider-only prompt augmentation. Never persist this transcript. */
+  providerMessages?: UIMessage[];
   runId: string;
   conversationId: string;
   model: AgentModelConfig;
@@ -26,6 +28,7 @@ export function isNativeChatRequest(value: unknown): value is NativeChatRequest 
   if (!model || hasForbiddenTransportFields(payload) || hasForbiddenTransportFields(model)) return false;
   return (
     Array.isArray(payload.messages) &&
+    (payload.providerMessages === undefined || Array.isArray(payload.providerMessages)) &&
     typeof payload.runId === "string" && Boolean(payload.runId.trim()) &&
     typeof payload.conversationId === "string" && Boolean(payload.conversationId.trim()) &&
     isAgentModelConfig(payload.model) &&

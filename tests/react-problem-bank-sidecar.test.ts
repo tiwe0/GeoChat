@@ -40,8 +40,16 @@ describe("problem-bank sidecar", () => {
   });
 
   test("is wired as an animated, retractable companion card", () => {
-    const panelSource = readFileSync(
-      new URL("../src/renderer-react/src/components/AssistantPanel.tsx", import.meta.url),
+    const workspaceSource = readFileSync(
+      new URL("../src/renderer-react/src/features/assistant-workspace/AssistantWorkspace.tsx", import.meta.url),
+      "utf8",
+    );
+    const surfaceSource = readFileSync(
+      new URL("../src/renderer-react/src/features/assistant-workspace/AssistantWindowSurface.tsx", import.meta.url),
+      "utf8",
+    );
+    const panelStateSource = readFileSync(
+      new URL("../src/renderer-react/src/features/assistant-workspace/useProblemBankPanel.ts", import.meta.url),
       "utf8",
     );
     const windowChromeSource = readFileSync(
@@ -52,18 +60,18 @@ describe("problem-bank sidecar", () => {
       new URL("../src/renderer-react/src/components/ProblemBankSidecar.tsx", import.meta.url),
       "utf8",
     );
-    expect(panelSource).toContain("<LibraryBigIcon");
-    expect(panelSource).toContain('aria-expanded={problemBankOpen}');
+    expect(surfaceSource).toContain("<LibraryBigIcon");
+    expect(surfaceSource).toContain('aria-expanded={props.problemBankOpen}');
     expect(sidecarSource).toContain('id="copilot-problem-bank-sidecar"');
-    expect(panelSource).toContain("<AnimatePresence");
-    expect(panelSource).toContain('height: "100%"');
-    expect(panelSource).toContain("<ProblemBankSidecar onClose={closeProblemBank} onUseProblem={useProblemInComposer} />");
+    expect(surfaceSource).toContain("<AnimatePresence");
+    expect(surfaceSource).toContain('height: "100%"');
+    expect(surfaceSource).toContain("<ProblemBankSidecar onClose={props.problemBank.close} onUseProblem={props.problemBank.useProblem} />");
     expect(windowChromeSource).toContain("onPointerDown={props.panelWindow.startDragging}");
-    expect(panelSource).toContain("onHeaderPointerMove={movePanel}");
+    expect(workspaceSource).toContain("onHeaderPointerMove={movePanel}");
     expect(windowChromeSource).toContain("onPointerMove={props.onHeaderPointerMove}");
-    expect(panelSource).toContain("problemBankRestorePositionRef.current = null;");
-    expect(panelSource).toContain("resolvePanelWindowHost(panel)");
-    expect(panelSource).not.toContain("const host = panel?.parentElement;");
+    expect(panelStateSource).toContain("restorePositionRef.current = null;");
+    expect(panelStateSource).toContain("resolvePanelWindowHost(panel)");
+    expect(panelStateSource).not.toContain("const host = panel?.parentElement;");
     expect(sidecarSource).toContain("loadProblemBankPage");
     expect(sidecarSource).toContain("onScroll={handleBodyScroll}");
     expect(sidecarSource).toContain("syncProblemBankMetadata");
@@ -81,10 +89,10 @@ describe("problem-bank sidecar", () => {
     expect(sidecarSource).toContain("problemBankSession.pageResults");
     expect(sidecarSource).toContain("problemBankSession.detailResults");
     expect(sidecarSource).toContain("export async function preloadProblemBankSidecar");
-    expect(panelSource).toContain("void preloadProblemBankSidecar()");
+    expect(panelStateSource).toContain("void preloadProblemBankSidecar()");
     expect(sidecarSource).toContain('t("problemBank.useInComposer")');
-    expect(panelSource).toContain("fusionController.summonAt(fusionController.composerPoint)");
-    expect(panelSource).toContain("focusComposerAfterProblemBankCloseRef.current = true");
+    expect(workspaceSource).toContain("fusionController.summonAt(fusionController.composerPoint)");
+    expect(panelStateSource).toContain("restoreComposerFocusRef.current = true");
     expect(sidecarSource).not.toContain('t("problemBank.cloudLazyDescription")');
   });
 

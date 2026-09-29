@@ -1,4 +1,4 @@
-import type { AgentModelProtocol } from "@geochat-ai/app";
+import type { AgentModelProtocol } from "@geochat-ai/app/models";
 
 const CREDENTIAL_BROKER_TIMEOUT_MS = 5_000;
 

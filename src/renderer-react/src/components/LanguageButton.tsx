@@ -4,6 +4,9 @@ import { motion } from "motion/react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { changeAppLanguage, resolveAppLanguage } from "../i18n";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
+
+const logger = createStructuredLogger("renderer.language-button");
 
 const MotionIconButton = motion.create(IconButton);
 
@@ -34,7 +37,7 @@ export function LanguageButton({
       if (transitionLanguage) await transitionLanguage(change);
       else await change();
     } catch (caughtError) {
-      console.error("[ERROR] Failed to switch application language", caughtError);
+      logger.warn("language_switch_failed", "LANGUAGE_SWITCH_FAILED", { error: caughtError, language: nextLanguage });
     } finally {
       setSwitching(false);
     }

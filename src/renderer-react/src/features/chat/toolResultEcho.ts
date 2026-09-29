@@ -1,3 +1,7 @@
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
+
+const logger = createStructuredLogger("chat.tool-result-echo");
+
 type MessagePartLike = {
   type?: unknown;
   state?: unknown;
@@ -22,7 +26,7 @@ export function isInternalToolResultEcho(parts: readonly unknown[], textIndex: n
     try {
       return JSON.stringify(parsedText) === JSON.stringify(candidate.output);
     } catch (caughtError) {
-      console.error("[ERROR] Failed to compare a rendered tool-result echo", caughtError);
+      logger.debug("echo_compare_failed", "TOOL_RESULT_ECHO_COMPARE_FAILED", { error: caughtError });
       return false;
     }
   }

@@ -5,7 +5,7 @@ import {
   type BlackboardPatchResult,
   type PatchBlackboardArgs,
   type ReadBlackboardArgs
-} from "@geochat-ai/app";
+} from "@geochat-ai/app/blackboard";
 import type { GeoChatDatabaseRuntimeConfig } from "./runtime";
 import type { createDatabase } from "./client";
 import { conversationBlackboardEntries as sqliteConversationBlackboardEntries } from "./schema";

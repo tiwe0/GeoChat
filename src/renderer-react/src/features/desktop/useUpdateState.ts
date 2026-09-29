@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import {
   DEFAULT_APP_BUNDLE_UPDATE_STATE,
   DEFAULT_UNIFIED_UPDATE_STATE,
@@ -15,6 +16,8 @@ import type {
   RendererUnifiedUpdateState,
   RendererUpdateState
 } from "../../../../shared/desktop/workbench-types";
+
+const logger = createStructuredLogger("desktop.update-state");
 
 /**
  * Desktop update state, subscribed through the shell bridge.
@@ -66,10 +69,10 @@ export function useUpdateState() {
     const api = window.geochatDesktop;
     if (!api) return;
     void api.getUpdateState().then((next) => { if (aliveRef.current) applyShell(next); }).catch((error) => {
-      console.error("[ERROR] Failed to read shell update state", error);
+      logger.warn("shell_state_read_failed", "DESKTOP_UPDATE_STATE_READ_FAILED", { error });
     });
     void api.getAppBundleUpdateState?.().then((next) => { if (aliveRef.current) applyAppBundle(next); }).catch((error) => {
-      console.error("[ERROR] Failed to read app bundle update state", error);
+      logger.warn("bundle_state_read_failed", "APP_BUNDLE_UPDATE_STATE_READ_FAILED", { error });
     });
     // The shell pushes progress during download, so polling is unnecessary.
     const unsubscribeShell = api.onUpdateState?.((next) => { if (aliveRef.current) applyShell(next); });
@@ -88,7 +91,7 @@ export function useUpdateState() {
     try {
       await action(api);
     } catch (error) {
-      console.error("[ERROR] Caught exception at src/renderer-react/src/features/desktop/useUpdateState.ts:86", error);
+      logger.warn("primary_action_failed", "DESKTOP_UPDATE_ACTION_FAILED", { error });
       if (!aliveRef.current) return;
       const message = error instanceof Error ? error.message : String(error);
       // A failed action leaves the last known state in place and reports the

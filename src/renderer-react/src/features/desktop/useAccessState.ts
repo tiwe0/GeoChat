@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import type { RendererAccessState } from "../../../../shared/desktop/workbench-types";
 import {
   resolveWorkbenchDesktopRuntime,
   type WorkbenchDesktopRuntime
 } from "../../../../shared/desktop/workbench-desktop-runtime";
+
+const logger = createStructuredLogger("desktop.access-state");
 
 /**
  * React counterpart of the Solid renderer's createWorkbenchAccessState.
@@ -60,7 +63,7 @@ export function useAccessState(input: {
     const desktopApi = runtimeRef.current.desktopApi();
     if (!desktopApi?.getAccessState) return applyState(DEFAULT_ACCESS_STATE);
     const state = await desktopApi.getAccessState().catch((error) => {
-      console.error("[ERROR] Failed to read desktop access state", error);
+      logger.warn("state_read_failed", "DESKTOP_ACCESS_STATE_READ_FAILED", { error });
       return {
         ...DEFAULT_ACCESS_STATE,
         available: true,
@@ -78,7 +81,7 @@ export function useAccessState(input: {
     setAccessBusy(true);
     try {
       const state = await desktopApi.checkAccess().catch((error) => {
-        console.error("[ERROR] Failed to check desktop access", error);
+        logger.warn("access_check_failed", "DESKTOP_ACCESS_CHECK_FAILED", { error });
         return {
           ...stateRef.current,
           status: "error" as const,

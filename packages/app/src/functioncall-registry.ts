@@ -17,7 +17,7 @@ const executeGeoGebraCommandsDescriptionEn = [
   geogebraCanvasVisualGuidance("en-US")
 ].join(" ");
 
-export const FUNCTION_CALL_REGISTRY = {
+const FUNCTION_CALL_REGISTRY = {
   searchGeoGebraCommands: {
     name: "searchGeoGebraCommands",
     label: "搜索 GeoGebra 构造参考",

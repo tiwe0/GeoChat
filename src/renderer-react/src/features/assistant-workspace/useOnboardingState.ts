@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
+
+const logger = createStructuredLogger("assistant.onboarding-state");
 
 export const ONBOARDING_TOUR_STORAGE_KEY = "geogebraCopilotOnboardingTourCompleted";
 export const ONBOARDING_TOUR_VERSION = 3;
@@ -11,7 +14,7 @@ export function useOnboardingState() {
       .get(ONBOARDING_TOUR_STORAGE_KEY)
       .then((stored) => setReady(stored[ONBOARDING_TOUR_STORAGE_KEY] !== ONBOARDING_TOUR_VERSION))
       .catch((error) => {
-        console.error("[ERROR] Failed to read onboarding state", error);
+        logger.debug("state_read_failed", "ONBOARDING_STATE_READ_FAILED", { error });
         setReady(true);
       });
   }, []);

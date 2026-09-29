@@ -2,10 +2,12 @@ import { eq } from "drizzle-orm";
 import {
   isBlackboardCategory,
   isBlackboardEntryStatus,
-  type MigrationConversationBundle,
-  type MigrationExportPackage,
-  type MigrationImportResult
-} from "@geochat-ai/app";
+} from "@geochat-ai/app/blackboard";
+import type {
+  MigrationConversationBundle,
+  MigrationExportPackage,
+  MigrationImportResult
+} from "@geochat-ai/app/migration";
 import type { GeoChatDatabaseRuntimeConfig } from "./runtime";
 import type { createDatabase } from "./client";
 import {

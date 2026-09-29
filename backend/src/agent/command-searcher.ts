@@ -1,10 +1,10 @@
 import {
-  agentRoutingPrompt,
   findGeoGebraCommandReferenceEntry,
   searchGeoGebraCommandReference,
-  type FunctionCallLocale,
   type GeoGebraCommandReferenceEntry
-} from "@geochat-ai/app";
+} from "@geochat-ai/app/geometry";
+import { agentRoutingPrompt } from "@geochat-ai/app/agent-policy";
+import type { FunctionCallLocale } from "@geochat-ai/app/functioncalls";
 
 type CommandSearchSelectionInput = {
   status: string;

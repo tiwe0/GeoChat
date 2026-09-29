@@ -1,76 +1,168 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
+import { dirname, normalize, resolve } from "node:path";
+import packageJson from "../packages/app/package.json";
+import { getAdvancedDrawingToolDefinitions as getAdvancedDrawingToolDefinitionsFromRoot } from "@geochat-ai/app";
+import { getFunctionCallGroups, getFunctionCallSpec } from "@geochat-ai/app/functioncalls";
+import {
+  AGENT_MODEL_REGISTRY,
+  AGENT_PROVIDER_REGISTRY,
+  createAgentModelRegistrySchema,
+  getAgentModelDefinition,
+  getAgentProviderDefinition
+} from "@geochat-ai/app/models";
+
+const REQUIRED_DOMAIN_EXPORTS = [
+  "./contracts",
+  "./agent-run",
+  "./functioncalls",
+  "./geometry",
+  "./models",
+  "./problem-bank",
+  "./migration"
+] as const;
+
+const ROOT_EXPORTS = [
+  "desktop-contracts",
+  "agent-run",
+  "blackboard",
+  "benchmark",
+  "functioncalls",
+  "migration",
+  "problem-bank",
+  "structured-logger"
+] as const;
 
 describe("@geochat-ai/app export policy", () => {
-  test("documents shared export classes and verification gates", () => {
-    expect(existsSync("packages/app/README.md")).toBe(true);
-    const readme = readFileSync("packages/app/README.md", "utf8");
+  test("publishes the required stable domain subpaths", () => {
+    for (const subpath of REQUIRED_DOMAIN_EXPORTS) {
+      expect(packageJson.exports[subpath]).toBeDefined();
+    }
+  });
 
-    for (const heading of [
-      "Stable Contracts",
-      "Policy Modules",
-      "Implementation Helpers",
-      "Generated Or Bulky Data"
+  test("keeps the root barrel narrow and stable", () => {
+    const index = readFileSync("packages/app/src/index.ts", "utf8");
+    const exports = [...index.matchAll(/^export \* from "\.\/([^"]+)";$/gm)].map((match) => match[1]);
+
+    expect(exports).toEqual(ROOT_EXPORTS);
+    expect(index).not.toMatch(/agent-prompts|workflow-policy|geogebra-command-reference/);
+    expect(getAdvancedDrawingToolDefinitionsFromRoot().length).toBeGreaterThan(0);
+  });
+
+  test("keeps internal registry and grouped schema modules behind public facades", () => {
+    for (const internalSubpath of [
+      "./functioncall-registry",
+      "./functioncall-types",
+      "./functioncall-schemas/cards",
+      "./advanced-drawing/registry"
     ]) {
-      expect(readme).toContain(`### ${heading}`);
+      expect(packageJson.exports).not.toHaveProperty(internalSubpath);
     }
 
-    for (const heading of [
-      "Adding Exports",
-      "Verification"
-    ]) {
-      expect(readme).toContain(`## ${heading}`);
-    }
-
-    expect(readme).toContain("bun run typecheck");
-    expect(readme).toContain("tests/model-registry-schema.test.ts");
-    expect(readme).toContain("tests/agent-harness.test.ts");
-    expect(readme).toContain("tests/ai-sdk-native-boundaries.test.ts");
+    const functioncalls = readFileSync("packages/app/src/functioncalls.ts", "utf8");
+    expect(functioncalls).not.toMatch(/export\s*\{[^}]*FUNCTION_CALL_REGISTRY/s);
   });
 
-  test("classifies current public exports from the package barrel", () => {
-    const index = readFileSync("packages/app/src/index.ts", "utf8");
-    const readme = readFileSync("packages/app/README.md", "utf8");
-
-    const publicExports = [...index.matchAll(/^export \* from "\.\/([^"]+)";$/gm)].map((match) => match[1]);
-    expect(publicExports.length).toBeGreaterThan(20);
-
-    for (const exportedModule of publicExports) {
-      expect(readme).toContain(`\`${exportedModule}\``);
-    }
+  test("keeps generated command data opaque", () => {
+    expect(packageJson.exports).not.toHaveProperty("./geogebra-command-reference-data");
+    expect(readFileSync("packages/app/src/index.ts", "utf8")).not.toContain("geogebra-command-reference");
+    expect(readFileSync("packages/app/README.md", "utf8")).toContain("Generated Or Bulky Data");
   });
 
-  test("keeps function-call ownership modules internal behind public facades", () => {
-    const index = readFileSync("packages/app/src/index.ts", "utf8");
+  test("returns isolated registry and lookup snapshots", () => {
+    expect(Object.isFrozen(AGENT_PROVIDER_REGISTRY)).toBe(true);
+    expect(Object.isFrozen(AGENT_PROVIDER_REGISTRY[0])).toBe(true);
+    expect(Object.isFrozen(AGENT_MODEL_REGISTRY)).toBe(true);
+    expect(Object.isFrozen(AGENT_MODEL_REGISTRY[0].capabilities)).toBe(true);
 
-    for (const internalModule of [
-      "functioncall-types",
-      "functioncall-registry",
-      "functioncall-display",
-      "functioncall-executors",
-      "geogebra-command-normalization"
-    ]) {
-      expect(index).not.toContain(`export * from "./${internalModule}";`);
-    }
+    const firstSchema = createAgentModelRegistrySchema();
+    const secondSchema = createAgentModelRegistrySchema();
+    (firstSchema.providers[0].allowedHosts as string[]).push("mutated.invalid");
+    (firstSchema.models[0].capabilities as string[]).push("mutated" as never);
+    expect(secondSchema.providers[0].allowedHosts).not.toContain("mutated.invalid");
+    expect(secondSchema.models[0].capabilities).not.toContain("mutated");
 
-    expect(index).toContain('export * from "./functioncalls";');
-    expect(index).toContain('export * from "./functioncall-schemas";');
+    const firstProvider = getAgentProviderDefinition("openai")!;
+    const secondProvider = getAgentProviderDefinition("openai")!;
+    (firstProvider.allowedHosts as string[]).push("mutated.invalid");
+    expect(secondProvider.allowedHosts).not.toContain("mutated.invalid");
+
+    const firstModel = getAgentModelDefinition("openai", "gpt-5.6-sol")!;
+    const secondModel = getAgentModelDefinition("openai", "gpt-5.6-sol")!;
+    (firstModel.capabilities as string[]).push("mutated" as never);
+    expect(secondModel.capabilities).not.toContain("mutated");
+
+    const firstTool = getFunctionCallSpec("executeGeoGebraCommands");
+    const secondTool = getFunctionCallSpec("executeGeoGebraCommands");
+    firstTool.display.label = "mutated";
+    expect(secondTool.display.label).not.toBe("mutated");
+
+    const firstGroups = getFunctionCallGroups();
+    const secondGroups = getFunctionCallGroups();
+    (firstGroups[0].toolNames as string[]).push("mutated");
+    expect(secondGroups[0].toolNames).not.toContain("mutated");
   });
 
-  test("keeps grouped schema implementation modules internal behind the schema facade", () => {
-    const index = readFileSync("packages/app/src/index.ts", "utf8");
+  test("has no cycles reachable from public facades", () => {
+    const roots = ["index", ...REQUIRED_DOMAIN_EXPORTS.map((entry) => entry.slice(2))]
+      .map((name) => resolve("packages/app/src", `${name}.ts`));
+    const visiting = new Set<string>();
+    const visited = new Set<string>();
 
-    expect(index).not.toMatch(/export \* from "\.\/functioncall-schemas\//);
-    expect(index).toContain('export * from "./functioncall-schemas";');
+    const visit = (file: string, ancestry: string[]) => {
+      if (visiting.has(file)) throw new Error(`Public export cycle: ${[...ancestry, file].join(" -> ")}`);
+      if (visited.has(file)) return;
+      visiting.add(file);
+      for (const dependency of relativeTypeScriptDependencies(file)) visit(dependency, [...ancestry, file]);
+      visiting.delete(file);
+      visited.add(file);
+    };
+
+    for (const root of roots) visit(root, []);
+    expect(visited.size).toBeGreaterThan(20);
   });
 
-  test("marks GeoGebra command reference as generated opaque data", () => {
-    const readme = readFileSync("packages/app/README.md", "utf8");
-    const index = readFileSync("packages/app/src/index.ts", "utf8");
+  test("forbids backend and renderer source-path imports into the shared package", () => {
+    const sourcePathImport = Bun.spawnSync([
+      "rg",
+      "-n",
+      "packages/app/src/",
+      "backend",
+      "src/renderer-react",
+      "src/shared",
+      "--glob",
+      "*.ts",
+      "--glob",
+      "*.tsx"
+    ]);
+    expect(sourcePathImport.exitCode).toBe(1);
 
-    expect(index).toContain('export * from "./geogebra-command-reference";');
-    expect(readme).toContain("`geogebra-command-reference`");
-    expect(readme).toContain("generated or vendor-derived reference data");
-    expect(readme).toContain("Do not make\nmanual semantic edits directly in generated reference data.");
+    const broadRootImport = Bun.spawnSync([
+      "rg",
+      "-n",
+      "from [\\\"']@geochat-ai/app[\\\"']",
+      "backend",
+      "src/renderer-react",
+      "src/shared",
+      "--glob",
+      "*.ts",
+      "--glob",
+      "*.tsx"
+    ]);
+    expect(broadRootImport.exitCode).toBe(1);
   });
 });
+
+function relativeTypeScriptDependencies(file: string) {
+  const source = readFileSync(file, "utf8")
+    .replace(/import\s+type[\s\S]*?from\s+["'][^"']+["'];?/g, "")
+    .replace(/export\s+type[\s\S]*?from\s+["'][^"']+["'];?/g, "");
+  const specifiers = [...source.matchAll(/(?:from\s+|import\s*\()\s*["'](\.[^"']+)["']/g)]
+    .map((match) => match[1]);
+  return specifiers.flatMap((specifier) => {
+    const base = resolve(dirname(file), specifier);
+    const candidates = [`${base}.ts`, resolve(base, "index.ts")];
+    const dependency = candidates.find(existsSync);
+    return dependency ? [normalize(dependency)] : [];
+  });
+}

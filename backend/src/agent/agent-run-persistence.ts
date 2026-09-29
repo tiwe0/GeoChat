@@ -1,4 +1,5 @@
-import type { AgentRunLedgerRecord, PatchBlackboardArgs } from "@geochat-ai/app";
+import type { AgentRunLedgerRecord } from "@geochat-ai/app/agent-run";
+import type { PatchBlackboardArgs } from "@geochat-ai/app/blackboard";
 import type { UIMessage } from "ai";
 import { AgentRunLedgerConflictError } from "../db/agent-run-repository";
 import type { ConversationDataScope } from "../db/conversation-repository";
@@ -60,6 +61,10 @@ export async function persistNativeConversationMessages(
   if (!dataScope || !conversations) return;
   for (const message of messages) {
     if (message.role !== "user" && message.role !== "assistant") continue;
+    // AI SDK may expose an in-progress assistant snapshot before assigning its
+    // stable message id. Persisting that transient row makes the conversation
+    // unreadable because the restore contract deliberately rejects empty ids.
+    if (!message.id.trim()) continue;
     const existing = await conversations.findMessageById(message.id, dataScope);
     const content = nativeMessageText(message) || (message.role === "user" ? "Image attachment" : "Agent process completed");
     const createdAt = existing?.createdAt ?? new Date().toISOString();

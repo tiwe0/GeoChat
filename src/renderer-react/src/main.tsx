@@ -15,7 +15,10 @@ import { installWebPlatform } from "./platform-web";
 import { installTauriDesktopBridge, installedDesktopApi } from "../../shared/desktop/tauri-bridge";
 import { loadDesktopRuntime } from "./features/desktop/runtime";
 import { desktopLogger, installDesktopLogging } from "./features/desktop/desktopLogger";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import { prepareDesktopConfigBeforeLoad } from "../../shared/desktop/desktop-credential-bootstrap";
+
+const logger = createStructuredLogger("renderer.bootstrap");
 
 installWebPlatform();
 const emotionCache = createCache({ key: "geochat-web" });
@@ -24,8 +27,7 @@ async function bootstrap() {
   await installTauriDesktopBridge();
   await prepareDesktopConfigBeforeLoad(localStorage, installedDesktopApi());
   installDesktopLogging();
-  // Must precede the first render so the native chat transport receives the
-  // backend URL selected by the desktop shell.
+  // Resolve the shell-selected backend before the transport is mounted.
   await loadDesktopRuntime();
   await initializeI18n();
   createRoot(document.getElementById("root")!).render(
@@ -38,8 +40,7 @@ async function bootstrap() {
       </ThemeProvider>
     </CacheProvider>,
   );
-  // Tells the shell the renderer painted, which releases its splash state.
-  void window.geochatDesktop?.markRendererReady().catch((error) => console.error("[ERROR] Failed to mark the renderer ready", error));
+  void window.geochatDesktop?.markRendererReady().catch((error) => logger.warn("renderer_ready_signal_failed", "RENDERER_READY_SIGNAL_FAILED", { error }));
 }
 
 void bootstrap().catch((error) => {

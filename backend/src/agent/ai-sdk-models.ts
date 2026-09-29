@@ -5,7 +5,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { createProviderRegistry, customProvider, type LanguageModel } from "ai";
-import type { AgentModelConfig, AgentModelProtocol } from "@geochat-ai/app";
+import type { AgentModelConfig, AgentModelProtocol } from "@geochat-ai/app/models";
 import {
   CredentialResolutionError,
   type CredentialResolver,

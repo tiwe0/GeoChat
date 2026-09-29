@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createAgentRunLedger, finishAgentRunLedger, type AgentRunLedgerRecord } from "@geochat-ai/app";
 import { gateNativeChatTerminalEvents } from "../backend/src/agent/ai-sdk-sse-transport";
 import { failNativeRun, NATIVE_AGENT_RUN_TRANSITIONS } from "../backend/src/agent/agent-run-lifecycle";
-import { NativeRunPersistenceCoordinator } from "../backend/src/agent/agent-run-persistence";
+import { NativeRunPersistenceCoordinator, persistNativeConversationMessages } from "../backend/src/agent/agent-run-persistence";
 import type { NativeChatRunStore } from "../backend/src/agent/native-chat-ports";
 
 function runningRun(runId: string) {
@@ -51,6 +51,27 @@ function memoryRunStore(initial: AgentRunLedgerRecord) {
 }
 
 describe("native chat application boundaries", () => {
+  test("does not persist transient AI SDK messages before they have a stable id", async () => {
+    const persisted: string[] = [];
+    const conversations = {
+      findMessageById: async () => undefined,
+      upsertConversationMessage: async (input: { message: { id: string } }) => {
+        persisted.push(input.message.id);
+        return {};
+      },
+    };
+    await persistNativeConversationMessages(
+      conversations as never,
+      "conversation-restore",
+      [
+        { id: "", role: "assistant", parts: [{ type: "text", text: "transient" }] },
+        { id: "assistant-stable", role: "assistant", parts: [{ type: "text", text: "done" }] },
+      ] as never,
+      {},
+    );
+    expect(persisted).toEqual(["assistant-stable"]);
+  });
+
   test("declares terminal states as self-only transitions", () => {
     expect(NATIVE_AGENT_RUN_TRANSITIONS.running).toEqual(["running", "succeeded", "failed", "cancelled"]);
     expect(NATIVE_AGENT_RUN_TRANSITIONS.succeeded).toEqual(["succeeded"]);

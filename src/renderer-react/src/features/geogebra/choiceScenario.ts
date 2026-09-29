@@ -2,9 +2,12 @@ import {
   findForbiddenTwoDimensionalStyleCommands,
   twoDimensionalStylePolicyMessage
 } from "@geochat-ai/app/geogebra-style-policy";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import type { Locale } from "../../../../shared/desktop/locale";
 import { getFrontendGeoGebraController } from "../../geogebra/runtime";
 import { runRendererCanvasTransaction } from "../agent-run/toolWorker";
+
+const logger = createStructuredLogger("geogebra.choice-scenario");
 
 /**
  * Draw one multiple-choice option onto the canvas, and be able to take it back.
@@ -83,7 +86,7 @@ export async function previewChoiceScenario(
       return { ok: true, error: null };
     });
   } catch (error) {
-    console.error("[ERROR] Caught exception at src/renderer-react/src/features/geogebra/choiceScenario.ts:74", error);
+    logger.warn("choice_render_failed", "GEOGEBRA_CHOICE_RENDER_FAILED", { error });
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
 }

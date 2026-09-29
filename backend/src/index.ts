@@ -1,6 +1,9 @@
 import { Effect, Schema } from "effect";
 import { createBackendHttpContext } from "./http/context";
 import { createBackendHttpHandler } from "./http";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
+
+const logger = createStructuredLogger("backend.lifecycle");
 
 const Environment = Schema.Struct({
   GEOCHAT_DESKTOP_BACKEND_PORT: Schema.optionalWith(Schema.NumberFromString, {
@@ -45,4 +48,4 @@ function shutdown() {
 process.once("SIGINT", shutdown);
 process.once("SIGTERM", shutdown);
 
-console.info(`[INFO] GeoChat backend listening on http://${instance.hostname}:${instance.port}`);
+logger.info("server_listening", "BACKEND_SERVER_LISTENING", { hostname: instance.hostname, port: instance.port });

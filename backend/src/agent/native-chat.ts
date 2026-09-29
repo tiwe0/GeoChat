@@ -1,14 +1,19 @@
 import {
   agentThinkingProviderOptions,
-  deriveAgentWorkflowStateFromTools,
-  evaluateAgentWorkflowToolCall,
-  getAgentModelPolicy,
   incrementAgentRunModelStep,
   mergeAgentRunUsage,
   normalizeAgentRunThinkingEffort,
   upsertAgentRunTool,
   type AgentRunSkillSelectionRecord,
-} from "@geochat-ai/app";
+} from "@geochat-ai/app/agent-run";
+import {
+  deriveAgentWorkflowStateFromTools,
+  evaluateAgentWorkflowToolCall,
+} from "@geochat-ai/app/agent-policy";
+import {
+  getAgentModelPolicy,
+} from "@geochat-ai/app/models";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import {
   createAgentUIStreamResponse,
   generateText,
@@ -16,9 +21,12 @@ import {
   safeValidateUIMessages,
   stepCountIs,
   ToolLoopAgent,
+  type Experimental_InferAgentUIMessage,
   type LanguageModel,
   type LanguageModelUsage,
+  type UIMessage,
 } from "ai";
+import { isDeepStrictEqual } from "node:util";
 import type { ConversationDataScope } from "../db/conversation-repository";
 import { AgentRunLedgerConflictError } from "../db/agent-run-repository";
 import { CredentialResolutionError } from "../credentials/resolver";
@@ -41,6 +49,8 @@ import {
   persistNativeConversationMessages,
   seedNativeRunBlackboard,
 } from "./agent-run-persistence";
+
+const logger = createStructuredLogger("agent.native-chat");
 import {
   activeNativeToolNames,
   countVerifiedCanvasMutationCycles,
@@ -54,6 +64,7 @@ import { buildCommandReferencePacketForRun } from "./command-searcher";
 import type { NativeChatDependencies } from "./native-chat-ports";
 import {
   isNativeChatRequest,
+  nativeMessageText,
   validateNativeChatModelPolicy,
   type NativeChatRequest,
 } from "./native-chat-request";
@@ -78,8 +89,18 @@ export async function createNativeChatResponse(
   const validated = await safeValidateUIMessages({ messages: input.messages });
   if (!validated.success) return jsonError(validated.error.message, 400);
   const messages = validated.data;
+  const validatedProvider = input.providerMessages
+    ? await safeValidateUIMessages({ messages: input.providerMessages })
+    : validated;
+  if (!validatedProvider.success) return jsonError(validatedProvider.error.message, 400);
+  const providerMessages = validatedProvider.data;
+  if (!isProviderOnlyMessageAugmentation(messages, providerMessages)) {
+    return jsonError("Provider messages may only append policy text to the latest user message.", 400);
+  }
   const latestUser = [...messages].reverse().find((message) => message.role === "user");
   if (!latestUser) return jsonError("A user message is required.", 400);
+  const latestProviderUser = [...providerMessages].reverse().find((message) => message.role === "user");
+  if (!latestProviderUser) return jsonError("A provider user message is required.", 400);
 
   let model = options.model;
   if (!model) {
@@ -138,7 +159,13 @@ export async function createNativeChatResponse(
   const maxModelSteps = persistence.current.maxToolSteps ?? getAgentModelPolicy(input.model).maxToolSteps;
   const selectSkills = dependencies.selectSkills ?? selectAgentSkillsForRun;
   const skillSelection = await selectSkills({
-    run: persistence.current,
+    // Skill policy is a provider-only transport augmentation. Give the selector
+    // a transient view of that prompt without contaminating the ledger,
+    // blackboard, recovery composer, or persisted conversation title.
+    run: {
+      ...persistence.current,
+      prompt: nativeMessageText(latestProviderUser),
+    },
     model,
     temperature: getAgentModelPolicy(input.model).defaultTemperature,
     timeout: persistence.current.modelStepTimeoutMs ?? 120_000,
@@ -290,13 +317,19 @@ export async function createNativeChatResponse(
   });
   const response = await createAgentUIStreamResponse({
     agent,
-    uiMessages: messages,
+    uiMessages: providerMessages,
+    originalMessages: messages as Experimental_InferAgentUIMessage<typeof agent>[],
+    generateMessageId: dependencies.createId ?? (() => crypto.randomUUID()),
     ...(options.abortSignal ? { abortSignal: options.abortSignal } : {}),
     timeout: persistence.current.modelStepTimeoutMs ?? 120_000,
     sendReasoning: true,
     onError: (error) => {
       const sanitized = sanitizeProviderError(error);
-      console.error(`[ERROR] Native AI SDK chat stream failed runId=${persistence.current.runId}: ${sanitized}`);
+      logger.error("stream_failed", "AGENT_STREAM_FAILED", {
+        error,
+        runId: persistence.current.runId,
+        conversationId: persistence.current.conversationId,
+      });
       return sanitized || "Agent run failed.";
     },
     onEnd: async ({ messages: finalMessages, isAborted, outcome }) => {
@@ -323,7 +356,11 @@ export async function createNativeChatResponse(
         resolveTerminalPersistence({ status: persisted.status, error: persisted.error });
       } catch (error) {
         const sanitized = sanitizeProviderError(error);
-        console.error(`[ERROR] Failed to persist native AI SDK chat runId=${persistence.current.runId}: ${sanitized}`);
+        logger.error("terminal_persistence_failed", "AGENT_PERSISTENCE_FAILED", {
+          error,
+          runId: persistence.current.runId,
+          conversationId: persistence.current.conversationId,
+        });
         try {
           await persistence.commit((current) => {
             const withUsage = finalUsage
@@ -335,15 +372,56 @@ export async function createNativeChatResponse(
             );
           });
         } catch (terminalError) {
-          console.error(
-            `[ERROR] Failed to record native AI SDK persistence failure runId=${persistence.current.runId}: ${sanitizeProviderError(terminalError)}`,
-          );
+          logger.error("persistence_failure_record_failed", "AGENT_PERSISTENCE_TERMINALIZATION_FAILED", {
+            error: terminalError,
+            runId: persistence.current.runId,
+            conversationId: persistence.current.conversationId,
+          });
         }
         rejectTerminalPersistence(error);
       }
     },
   });
   return gateNativeChatTerminalEvents(response, terminalPersistence);
+}
+
+export function isProviderOnlyMessageAugmentation(
+  visibleMessages: UIMessage[],
+  providerMessages: UIMessage[],
+) {
+  if (visibleMessages.length !== providerMessages.length) return false;
+  const latestUserIndex = lastIndexMatching(visibleMessages, (message) => message.role === "user");
+  if (latestUserIndex < 0) return isDeepStrictEqual(visibleMessages, providerMessages);
+  const visibleUser = visibleMessages[latestUserIndex]!;
+  const providerUser = providerMessages[latestUserIndex];
+  if (!providerUser || providerUser.id !== visibleUser.id || providerUser.role !== "user") return false;
+  const latestTextIndex = lastIndexMatching(visibleUser.parts, (part) => part.type === "text");
+  if (latestTextIndex < 0) return isDeepStrictEqual(visibleMessages, providerMessages);
+  const visiblePart = visibleUser.parts[latestTextIndex];
+  const providerPart = providerUser.parts[latestTextIndex];
+  if (visiblePart?.type !== "text" || providerPart?.type !== "text") return false;
+  if (
+    providerPart.text !== visiblePart.text
+    && !providerPart.text.startsWith(`${visiblePart.text}\n\n`)
+  ) return false;
+
+  const normalizedProvider = providerMessages.map((message, messageIndex) => {
+    if (messageIndex !== latestUserIndex) return message;
+    return {
+      ...message,
+      parts: message.parts.map((part, partIndex) => partIndex === latestTextIndex
+        ? { ...part, text: visiblePart.text }
+        : part),
+    } as UIMessage;
+  });
+  return isDeepStrictEqual(visibleMessages, normalizedProvider);
+}
+
+function lastIndexMatching<T>(items: readonly T[], predicate: (item: T) => boolean) {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    if (predicate(items[index]!)) return index;
+  }
+  return -1;
 }
 
 export function skillSelectionRecord(

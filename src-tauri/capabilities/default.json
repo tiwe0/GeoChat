@@ -9,6 +9,7 @@
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-close",
-    "opener:default"
+    "opener:default",
+    "desktop-app"
   ]
 }

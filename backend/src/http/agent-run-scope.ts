@@ -1,4 +1,4 @@
-import type { AgentRunLedgerRecord } from "@geochat-ai/app";
+import type { AgentRunLedgerRecord } from "@geochat-ai/app/agent-run";
 import type { AgentErrorEventOutput } from "../db/agent-run-repository";
 import type { ConversationDataScope } from "../db/conversation-repository";
 import type { BackendHttpContext } from "./context";

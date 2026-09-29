@@ -238,9 +238,11 @@ export function isDiscoverableAgentProvider(provider: string) {
   return provider in PROVIDER_DISCOVERY;
 }
 
-export const DISCOVERABLE_AGENT_PROVIDERS = AGENT_PROVIDER_REGISTRY
-  .map((provider) => provider.id)
-  .filter((id) => id in PROVIDER_DISCOVERY);
+export const DISCOVERABLE_AGENT_PROVIDERS: readonly string[] = Object.freeze(
+  AGENT_PROVIDER_REGISTRY
+    .map((provider) => provider.id)
+    .filter((id) => id in PROVIDER_DISCOVERY)
+);
 
 function readIds(payload: unknown, key: string, pick: (entry: Record<string, unknown>) => string | null) {
   if (!payload || typeof payload !== "object") return [];

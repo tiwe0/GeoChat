@@ -1,6 +1,6 @@
 import type { ExecuteGeoGebraCommandsArgs, FunctionCallLocale } from "../functioncalls";
 
-export const ADVANCED_DRAWING_TOOL_NAMES = [
+export const ADVANCED_DRAWING_TOOL_NAMES = Object.freeze([
   "drawTriangularPrismSkeleton",
   "drawSquarePyramidSkeleton",
   "drawTetrahedronCircumsphere",
@@ -9,7 +9,7 @@ export const ADVANCED_DRAWING_TOOL_NAMES = [
   "drawParabolaFocusDirectrix",
   "drawQuadraticVertexDiagram",
   "drawClassicalProbabilityGrid"
-] as const;
+] as const);
 
 export type AdvancedDrawingToolName = (typeof ADVANCED_DRAWING_TOOL_NAMES)[number];
 

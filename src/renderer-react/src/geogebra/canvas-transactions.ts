@@ -1,3 +1,7 @@
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
+
+const logger = createStructuredLogger("geogebra.canvas-transactions");
+
 export type CanvasTransactionOptions = {
   label: string;
   shouldContinue?: () => boolean;
@@ -198,7 +202,7 @@ export class CanvasTransactionCoordinator {
       try {
         listener();
       } catch (error) {
-        console.error("[ERROR] Canvas recovery subscriber failed", error);
+        logger.warn("recovery_subscriber_failed", "CANVAS_RECOVERY_SUBSCRIBER_FAILED", { error });
       }
     }
   }

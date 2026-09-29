@@ -3,6 +3,9 @@ import type {
   CodeHighlighterPlugin,
   ThemeInput,
 } from "streamdown";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
+
+const logger = createStructuredLogger("chat.code-highlighter");
 
 type HighlightResult = Exclude<ReturnType<CodeHighlighterPlugin["highlight"]>, null>;
 
@@ -160,7 +163,7 @@ export const curatedCodeHighlighter: CodeHighlighterPlugin = {
           inFlightHighlights.delete(key);
         })
         .catch((error: unknown) => {
-          console.error("[Streamdown Code] Failed to highlight code:", error);
+          logger.warn("highlight_failed", "CODE_HIGHLIGHT_FAILED", { error });
           pendingCallbacks.delete(key);
           inFlightHighlights.delete(key);
         });

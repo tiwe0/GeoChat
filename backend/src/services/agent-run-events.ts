@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type {
   AgentRunLedgerRecord
-} from "@geochat-ai/app";
+} from "@geochat-ai/app/agent-run";
 import type { AgentErrorEventInput, AgentRunRepository } from "../db/agent-run-repository";
 
 export function createAgentRunEventService(agentRunRepository: AgentRunRepository) {

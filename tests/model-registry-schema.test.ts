@@ -9,7 +9,7 @@ import {
   normalizeAgentModelRegistrySchema,
   normalizeAgentModelConfig,
   type AgentModelRegistrySchema
-} from "@geochat-ai/app";
+} from "@geochat-ai/app/models";
 
 describe("agent model registry schema", () => {
   test("exports the bundled registry as a valid schema", () => {

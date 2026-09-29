@@ -8,6 +8,9 @@
  * the executor differs, because it reaches into renderer-specific surfaces.
  */
 import type { RendererMcpStatus } from "./workbench-types";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
+
+const logger = createStructuredLogger("desktop.mcp-debug-actions");
 
 export type DesktopDebugAction =
   | {
@@ -32,7 +35,45 @@ export type DesktopDebugAction =
       type: "send_message";
       conversationId?: string;
       content: string;
+    }
+  | {
+      id: string;
+      type: "restore_conversation";
+      conversationId: string;
+    }
+  | {
+      id: string;
+      type: "configure_test_provider";
+      baseUrl: string;
+      model: string;
+      nonce: string;
+    }
+  | {
+      id: string;
+      type: "clear_test_provider";
+      nonce: string;
+      credentialRef: string;
+      restoreConfigJson: string;
+    }
+  | {
+      id: string;
+      type: "probe_real_ui";
+      nonce: string;
+      operation: DesktopRealUiProbeOperation;
+      text?: string;
+      target?: DesktopRealUiProbeTarget;
     };
+
+export type DesktopRealUiProbeOperation =
+  | "snapshot"
+  | "set_composer_text"
+  | "submit_composer"
+  | "switch_mode"
+  | "open_fusion_panel"
+  | "close_fusion_panel"
+  | "cycle_dialog_focus";
+
+export type DesktopRealUiProbeTarget = "window" | "fusion" | "history" | "settings" | "transcript";
 
 export const DEFAULT_MCP_STATUS: RendererMcpStatus = {
   available: false,
@@ -100,7 +141,7 @@ export async function runMcpDebugActionPollOnce(input: {
     try {
       action = await input.fetchNextDebugAction(input.endpoint, input.authToken);
     } catch (error) {
-      console.error("[ERROR] Failed to poll the desktop MCP debug-action queue", error);
+      logger.warn("queue_poll_failed", "MCP_DEBUG_QUEUE_POLL_FAILED", { error });
       return;
     }
     if (!action || input.isCancelled?.()) return;
@@ -109,7 +150,7 @@ export async function runMcpDebugActionPollOnce(input: {
     try {
       result = await input.executeDebugAction(action);
     } catch (error) {
-      console.error("[ERROR] Failed to execute the desktop MCP debug action", error);
+      logger.warn("action_execution_failed", "MCP_DEBUG_ACTION_FAILED", { error, requestId: action.id });
       await input.reportDebugAction(input.endpoint, action.id, {
         ok: false,
         error: error instanceof Error ? error.message : String(error)
@@ -147,7 +188,7 @@ export function createMcpDebugActionPolling(input: {
       executeDebugAction: input.executeDebugAction,
       isCancelled: () => cancelled
     }).catch((error) => {
-      console.error("[ERROR] Failed to report the desktop MCP debug-action result", error);
+      logger.warn("result_report_failed", "MCP_DEBUG_RESULT_REPORT_FAILED", { error });
     });
   }
 

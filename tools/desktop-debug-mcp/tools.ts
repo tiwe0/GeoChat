@@ -351,6 +351,94 @@ export function registerDesktopDebugTools(server: McpServer, { config, actions }
   );
 
   server.registerTool(
+    "configure_deterministic_test_provider",
+    {
+      title: "Configure the deterministic debug provider",
+      description:
+        "仅供 debug desktop E2E：在 renderer 中保存一个仅指向 loopback 的假 provider 凭据，并选择指定测试模型。release 构建拒绝执行。",
+      inputSchema: {
+        baseUrl: z.string().url(),
+        model: z.string().min(1).max(180),
+        nonce: z.string().uuid()
+      }
+    },
+    async ({ baseUrl, model, nonce }) => toolResult({
+      ok: true,
+      queued: true,
+      action: actions.enqueue({ type: "configure_test_provider", baseUrl, model, nonce }),
+      note: "Debug-only setup action. It never accepts or exposes a real provider credential."
+    })
+  );
+
+  server.registerTool(
+    "clear_deterministic_test_provider",
+    {
+      title: "Clear the deterministic debug provider credential",
+      description: "仅供 debug desktop E2E：删除本次测试写入本机凭据存储的假 provider 凭据。",
+      inputSchema: {
+        nonce: z.string().uuid(),
+        credentialRef: z.string().min(1).max(512),
+        restoreConfigJson: z.string().min(2).max(65_536)
+      }
+    },
+    async ({ nonce, credentialRef, restoreConfigJson }) => toolResult({
+      ok: true,
+      queued: true,
+      action: actions.enqueue({ type: "clear_test_provider", nonce, credentialRef, restoreConfigJson })
+    })
+  );
+
+  server.registerTool(
+    "probe_desktop_real_ui",
+    {
+      title: "Probe the real desktop WebView UI",
+      description:
+        "仅供已鉴权的 debug desktop E2E：执行固定枚举的真实 WebView UI 动作。每个动作都要求当前 deterministic provider 的运行 nonce；不提供任意 selector、脚本或 JavaScript eval。",
+      inputSchema: {
+        nonce: z.string().uuid(),
+        operation: z.enum([
+          "snapshot",
+          "set_composer_text",
+          "submit_composer",
+          "switch_mode",
+          "open_fusion_panel",
+          "close_fusion_panel",
+          "cycle_dialog_focus"
+        ]),
+        text: z.string().max(20_000).optional(),
+        target: z.enum(["window", "fusion", "history", "settings", "transcript"]).optional()
+      }
+    },
+    async ({ nonce, operation, text, target }) => toolResult({
+      ok: true,
+      queued: true,
+      action: actions.enqueue({ type: "probe_real_ui", nonce, operation, text, target }),
+      note: "Restricted debug-only WebView action; poll list_desktop_debug_actions for its result."
+    })
+  );
+
+  server.registerTool(
+    "restore_desktop_conversation",
+    {
+      title: "Restore a desktop conversation",
+      description:
+        "通过桌面 renderer 的真实会话选择链路恢复后端消息并回放 GeoGebra 画布。返回 conversationId、messageCount 和恢复状态。",
+      inputSchema: {
+        conversationId: idSchema
+      }
+    },
+    async ({ conversationId }) => {
+      const action = actions.enqueue({ type: "restore_conversation", conversationId });
+      return toolResult({
+        ok: true,
+        queued: true,
+        action,
+        note: "Poll list_desktop_debug_actions until this action succeeds, then inspect action.result recovery evidence."
+      });
+    }
+  );
+
+  server.registerTool(
     "send_desktop_message",
     {
       title: "Send a message through the desktop UI",
@@ -673,8 +761,9 @@ export function registerDesktopDebugTools(server: McpServer, { config, actions }
             `,
             [conversationId]
           ).map((row) => redactRow(row, redact)),
-          toolRequests: all(
+          toolRequests: allIfTableExists(
             db,
+            "agent_run_remote_tool_requests",
             `
               select r.*
               from agent_run_remote_tool_requests r
@@ -685,8 +774,9 @@ export function registerDesktopDebugTools(server: McpServer, { config, actions }
             `,
             [conversationId]
           ).map((row) => redactRow(row, redact)),
-          policyDecisions: all(
+          policyDecisions: allIfTableExists(
             db,
+            "agent_run_policy_decisions",
             `
               select p.*
               from agent_run_policy_decisions p
@@ -697,8 +787,9 @@ export function registerDesktopDebugTools(server: McpServer, { config, actions }
             `,
             [conversationId]
           ).map((row) => redactRow(row, redact)),
-          modelSteps: all(
+          modelSteps: allIfTableExists(
             db,
+            "agent_run_model_steps",
             `
               select s.*
               from agent_run_model_steps s
@@ -754,6 +845,9 @@ export function registerDesktopDebugTools(server: McpServer, { config, actions }
           params.push(Date.parse(sinceIso));
         }
         if (toolName) {
+          if (!tableExists(db, "agent_run_remote_tool_requests")) {
+            return { ok: true, runs: [] };
+          }
           where.push(`
             exists (
               select 1
@@ -849,8 +943,9 @@ export function registerDesktopDebugTools(server: McpServer, { config, actions }
               [conversationId]
             ).map((row) => redactRow(row, redact))
             : [],
-          toolRequests: all(
+          toolRequests: allIfTableExists(
             db,
+            "agent_run_remote_tool_requests",
             `
               select *
               from agent_run_remote_tool_requests
@@ -859,8 +954,9 @@ export function registerDesktopDebugTools(server: McpServer, { config, actions }
             `,
             [runId]
           ).map((row) => redactRow(row, redact)),
-          policyDecisions: all(
+          policyDecisions: allIfTableExists(
             db,
+            "agent_run_policy_decisions",
             `
               select *
               from agent_run_policy_decisions
@@ -869,8 +965,9 @@ export function registerDesktopDebugTools(server: McpServer, { config, actions }
             `,
             [runId]
           ).map((row) => redactRow(row, redact)),
-          modelSteps: all(
+          modelSteps: allIfTableExists(
             db,
+            "agent_run_model_steps",
             `
               select *
               from agent_run_model_steps
@@ -1385,6 +1482,15 @@ function readGroupedCount(db: Parameters<typeof all>[0], table: string, column: 
       order by count desc, ${quoteIdentifier(column)} asc
     `
   );
+}
+
+function allIfTableExists(
+  db: Parameters<typeof all>[0],
+  table: string,
+  sql: string,
+  params: SqliteBinding[] = []
+) {
+  return tableExists(db, table) ? all(db, sql, params) : [];
 }
 
 function tableExists(db: Parameters<typeof all>[0], table: string) {

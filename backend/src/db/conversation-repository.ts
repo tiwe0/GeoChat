@@ -5,7 +5,8 @@ import type {
   DesktopConversationMessagePayload,
   DesktopConversationSummary,
   UpsertDesktopConversationMessageInput
-} from "@geochat-ai/app";
+} from "@geochat-ai/app/desktop-contracts";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import type { GeoChatDatabaseRuntimeConfig } from "./runtime";
 import type { createDatabase } from "./client";
 import {
@@ -16,6 +17,8 @@ import {
   conversations as sqliteConversations,
   problemAttempts as sqliteProblemAttempts
 } from "./schema";
+
+const logger = createStructuredLogger("db.conversation-repository");
 
 type SqliteDatabase = ReturnType<typeof createDatabase>;
 type ConversationRow = typeof sqliteConversations.$inferSelect;
@@ -239,7 +242,7 @@ function parseConversationJsonPayload(value: unknown): DesktopConversationMessag
   try {
     return JSON.parse(value) as DesktopConversationMessagePayload;
   } catch (caughtError) {
-    console.error("[ERROR] Caught exception at backend/src/db/conversation-repository.ts:226", caughtError);
+    logger.warn("message_payload_parse_failed", "CONVERSATION_PAYLOAD_INVALID", { error: caughtError });
     return {
       id: "",
       role: "assistant",

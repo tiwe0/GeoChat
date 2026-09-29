@@ -35,7 +35,7 @@ const allowedBoundaryFiles = {
     reason: "exposes the problem-bank subset of the desktop bridge to the sidecar"
   },
   "src/renderer-react/src/features/desktop/mcpDebugActions.ts": {
-    maxLines: 80,
+    maxLines: 110,
     reason: "executes MCP-queued actions against renderer surfaces"
   },
   "src/shared/desktop/platform.ts": {

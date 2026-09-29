@@ -6,6 +6,9 @@ import {
   decodeModelDiscoveryResponse,
   type ModelDiscoveryFailureResponse
 } from "@geochat-ai/app/model-discovery";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
+
+const logger = createStructuredLogger("models.discovery");
 
 const CACHE_PREFIX = "geochatDesktopModelCatalog:";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -33,7 +36,7 @@ function readCache(key: string): CachedDiscovery | null {
     if (typeof fetchedAt !== "number") return null;
     return { ids, fetchedAt };
   } catch (caughtError) {
-    console.error("[ERROR] Caught exception at src/renderer-react/src/features/models/modelDiscovery.ts:39", caughtError);
+    logger.debug("cache_read_failed", "MODEL_DISCOVERY_CACHE_READ_FAILED", { error: caughtError });
     return null;
   }
 }
@@ -43,7 +46,7 @@ function writeCache(key: string, value: CachedDiscovery) {
   try {
     window.localStorage.setItem(key, JSON.stringify(value));
   } catch (caughtError) {
-    console.error("[ERROR] Caught exception at src/renderer-react/src/features/models/modelDiscovery.ts:47", caughtError);
+    logger.debug("cache_write_failed", "MODEL_DISCOVERY_CACHE_WRITE_FAILED", { error: caughtError });
     // A full or blocked store costs freshness on the next launch, nothing more.
   }
 }
@@ -79,7 +82,7 @@ export async function discoverProviderModels(input: {
       signal: AbortSignal.timeout(15_000)
     });
   } catch (error) {
-    console.error("[ERROR] Caught exception at src/renderer-react/src/features/models/modelDiscovery.ts:101", error);
+    logger.warn("request_failed", "MODEL_DISCOVERY_REQUEST_FAILED", { error });
     return { status: "failed", message: error instanceof Error ? error.message : String(error) };
   }
   try {

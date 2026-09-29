@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { agentModelSupportsReasoning, GEOCHAT_SYSTEM_PROMPT } from "../packages/app/src";
+import { agentModelSupportsReasoning } from "@geochat-ai/app/models";
+import { GEOCHAT_SYSTEM_PROMPT } from "@geochat-ai/app/agent-policy";
 import { readSelectedObjects } from "../src/renderer-react/src/geogebra/canvas-context";
 import { executeBackendToolRequest } from "../backend/src/agent/backend-tools";
 import { createBackendPlanningTools } from "../backend/src/agent/ai-sdk-tools";
@@ -79,7 +80,7 @@ describe("P1 harness contracts", () => {
   });
 
   test("summarizes reasoning into a bounded collapsed preview", async () => {
-    const { summarizeAgentReasoning } = await import("../packages/app/src/agent-thinking");
+    const { summarizeAgentReasoning } = await import("@geochat-ai/app/agent-run");
     const summary = summarizeAgentReasoning("先读取画布\n" + "非常长的推理内容 ".repeat(100));
     expect(summary.length).toBeLessThanOrEqual(180);
     expect(summary).toContain("先读取画布");

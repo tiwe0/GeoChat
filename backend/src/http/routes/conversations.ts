@@ -8,6 +8,7 @@ import {
   type DesktopConversationBlackboardResponse,
   type ReadBlackboardArgs
 } from "@geochat-ai/app/blackboard";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import {
   ConversationOwnershipError,
   ConversationRunActiveError
@@ -20,6 +21,8 @@ import {
 } from "../paths";
 import { json, readJson } from "../response";
 import type { DataScopeResolver } from "../scope";
+
+const logger = createStructuredLogger("http.conversations");
 
 export async function handleConversationRoute(
   request: Request,
@@ -68,10 +71,19 @@ export async function handleConversationRoute(
         { status: 201 }
       );
     } catch (error) {
-      console.error("[ERROR] Caught exception at backend/src/http/routes/conversations.ts:61", error);
       if (error instanceof ConversationOwnershipError) {
+        logger.warn("conversation_scope_conflict", "CONVERSATION_SCOPE_CONFLICT", {
+          error,
+          conversationId: conversationMessagePath,
+          requestId: request.headers.get("x-request-id") ?? undefined,
+        });
         return json({ error: "conversation_scope_conflict", message: "Conversation belongs to another account or offline scope." }, { status: 409 });
       }
+      logger.error("conversation_message_upsert_failed", "CONVERSATION_MESSAGE_UPSERT_FAILED", {
+        error,
+        conversationId: conversationMessagePath,
+        requestId: request.headers.get("x-request-id") ?? undefined,
+      });
       throw error;
     }
   }

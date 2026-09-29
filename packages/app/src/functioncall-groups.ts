@@ -1,4 +1,4 @@
-import type { FunctionCallToolName } from "./functioncalls";
+import type { FunctionCallToolName } from "./functioncall-types";
 
 export type FunctionCallGroupId =
   | "geogebraExecution"
@@ -16,7 +16,7 @@ export type FunctionCallGroup = {
   toolNames: readonly FunctionCallToolName[];
 };
 
-export const FUNCTION_CALL_GROUPS = {
+const FUNCTION_CALL_GROUP_DATA = {
   geogebraExecution: {
     id: "geogebraExecution",
     label: "GeoGebra execution",
@@ -72,10 +72,24 @@ export const FUNCTION_CALL_GROUPS = {
   }
 } as const satisfies Record<FunctionCallGroupId, FunctionCallGroup>;
 
+/** @deprecated Prefer getFunctionCallGroups() or getFunctionCallGroupForTool(). */
+export const FUNCTION_CALL_GROUPS = Object.freeze(
+  Object.fromEntries(
+    Object.entries(FUNCTION_CALL_GROUP_DATA).map(([id, group]) => [
+      id,
+      Object.freeze({ ...group, toolNames: Object.freeze([...group.toolNames]) })
+    ])
+  )
+) as Readonly<Record<FunctionCallGroupId, Readonly<FunctionCallGroup>>>;
+
 export function getFunctionCallGroups(): FunctionCallGroup[] {
-  return Object.values(FUNCTION_CALL_GROUPS);
+  return Object.values(FUNCTION_CALL_GROUPS).map(cloneFunctionCallGroup);
 }
 
 export function getFunctionCallGroupForTool(toolName: FunctionCallToolName): FunctionCallGroup | undefined {
   return getFunctionCallGroups().find((group) => group.toolNames.includes(toolName));
+}
+
+function cloneFunctionCallGroup(group: FunctionCallGroup): FunctionCallGroup {
+  return { ...group, toolNames: [...group.toolNames] };
 }

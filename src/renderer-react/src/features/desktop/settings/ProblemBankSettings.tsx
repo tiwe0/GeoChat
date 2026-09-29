@@ -8,7 +8,8 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import type { ProblemImportResponse, ProblemSetSummary } from "@geochat-ai/app";
+import type { ProblemImportResponse, ProblemSetSummary } from "@geochat-ai/app/problem-bank";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import type {
   DesktopProblemBankCatalog,
   DesktopProblemBankDownloadState,
@@ -18,6 +19,8 @@ import { useTranslation } from "react-i18next";
 import { desktopProblemBankApi } from "../problemBankDesktop";
 import { backendAuthToken, backendOrigin } from "../runtime";
 import { fetchProblemSets, reindexProblemBank } from "./problemBankApi";
+
+const logger = createStructuredLogger("desktop.problem-bank-settings");
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -46,7 +49,7 @@ export function ProblemBankSettings() {
       return true;
     } catch (caughtError) {
       if (signal?.aborted || version !== requestVersion.current) return false;
-      console.error("[ERROR] Failed to load the local problem bank", caughtError);
+      logger.warn("local_catalog_load_failed", "PROBLEM_BANK_LOCAL_LOAD_FAILED", { error: caughtError });
       setError(caughtError instanceof Error ? caughtError.message : String(caughtError));
       setLoadState("error");
       return false;
@@ -75,7 +78,7 @@ export function ProblemBankSettings() {
       setDownloadStates(Object.fromEntries(nextDownloadStates.map((state) => [state.bankSlug, state])));
       return true;
     } catch (caughtError) {
-      console.error("[ERROR] Failed to load the cloud problem-bank catalog", caughtError);
+      logger.warn("cloud_catalog_load_failed", "PROBLEM_BANK_CLOUD_LOAD_FAILED", { error: caughtError });
       setCacheError(caughtError instanceof Error ? caughtError.message : String(caughtError));
       return false;
     }
@@ -95,7 +98,7 @@ export function ProblemBankSettings() {
       void api.getProblemBankCatalog().then((nextCatalog) => {
         if (!disposed) setCatalog(nextCatalog);
       }).catch((caughtError) => {
-        console.error("[ERROR] Failed to refresh the cloud problem-bank catalog", caughtError);
+        logger.warn("cloud_catalog_refresh_failed", "PROBLEM_BANK_CLOUD_REFRESH_FAILED", { error: caughtError });
       });
     });
     const unsubscribeDownload = api.onProblemBankDownloadState((state) => {
@@ -117,7 +120,7 @@ export function ProblemBankSettings() {
       setLastImport(result);
       await load();
     } catch (caughtError) {
-      console.error("[ERROR] Failed to reindex the local problem bank", caughtError);
+      logger.warn("local_reindex_failed", "PROBLEM_BANK_REINDEX_FAILED", { error: caughtError });
       setError(caughtError instanceof Error ? caughtError.message : String(caughtError));
       setLoadState("error");
     } finally {
@@ -135,7 +138,7 @@ export function ProblemBankSettings() {
       const nextCatalog = await api.getProblemBankCatalog();
       setCatalog(nextCatalog);
     } catch (caughtError) {
-      console.error("[ERROR] Failed to sync the cloud problem-bank catalog", caughtError);
+      logger.warn("cloud_catalog_sync_failed", "PROBLEM_BANK_SYNC_FAILED", { error: caughtError });
       setCacheError(caughtError instanceof Error ? caughtError.message : String(caughtError));
     } finally {
       setCloudSyncing(false);
@@ -150,7 +153,7 @@ export function ProblemBankSettings() {
       const next = await api.downloadProblemBank(bankSlug);
       setDownloadStates((current) => ({ ...current, [next.bankSlug]: next }));
     } catch (caughtError) {
-      console.error(`[ERROR] Failed to download problem bank ${bankSlug}`, caughtError);
+      logger.warn("bank_download_failed", "PROBLEM_BANK_DOWNLOAD_FAILED", { error: caughtError, bankSlug });
       setCacheError(caughtError instanceof Error ? caughtError.message : String(caughtError));
     }
   }, []);

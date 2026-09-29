@@ -1,7 +1,10 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import { en } from "./locales/en";
 import { zhCN } from "./locales/zh-CN";
+
+const logger = createStructuredLogger("renderer.i18n");
 
 export const LANGUAGE_STORAGE_KEY = "geogebraCopilotLanguage";
 export const APP_LANGUAGES = ["zh-CN", "en"] as const;
@@ -19,7 +22,7 @@ export async function initializeI18n(_apiOrigin?: string) {
     const stored = await browser.storage.local.get(LANGUAGE_STORAGE_KEY);
     storedLanguage = stored[LANGUAGE_STORAGE_KEY];
   } catch (caughtError) {
-    console.error("[ERROR] Caught exception at src/renderer-react/src/i18n/index.ts:21", caughtError);
+    logger.debug("stored_language_read_failed", "I18N_LANGUAGE_READ_FAILED", { error: caughtError });
     // Browser language remains the fallback when extension storage is unavailable.
   }
 
@@ -49,7 +52,7 @@ export async function changeAppLanguage(language: AppLanguage) {
   try {
     await browser.storage.local.set({ [LANGUAGE_STORAGE_KEY]: language });
   } catch (caughtError) {
-    console.error("[ERROR] Caught exception at src/renderer-react/src/i18n/index.ts:50", caughtError);
+    logger.debug("language_persist_failed", "I18N_LANGUAGE_PERSIST_FAILED", { error: caughtError, language });
     // Keep the in-memory selection even if persistence is unavailable.
   }
 }

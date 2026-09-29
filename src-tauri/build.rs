@@ -1,3 +1,48 @@
+const APP_COMMANDS: &[&str] = &[
+    "get_runtime_info",
+    "get_graphics_preferences",
+    "set_graphics_preferences",
+    "get_mcp_status",
+    "set_mcp_enabled",
+    "get_access_state",
+    "check_access",
+    "get_update_state",
+    "check_for_updates",
+    "check_all_updates",
+    "download_update",
+    "set_update_preferences",
+    "get_improvement_plan_preferences",
+    "set_improvement_plan_preferences",
+    "upload_improvement_plan_samples",
+    "get_logging_preferences",
+    "set_logging_preferences",
+    "open_log_directory",
+    "write_app_log",
+    "get_app_bundle_update_state",
+    "check_app_bundle_update",
+    "install_app_bundle_update",
+    "rollback_app_bundle_update",
+    "get_problem_bank_cache_state",
+    "get_problem_bank_catalog",
+    "get_problem_bank_download_states",
+    "download_problem_bank",
+    "open_problem_bank_cache_directory",
+    "clear_problem_bank_cache",
+    "check_problem_bank_update",
+    "sync_problem_bank_metadata",
+    "load_problem_bank_page",
+    "load_problem_detail",
+    "save_provider_credential",
+    "import_legacy_credential",
+    "delete_provider_credential",
+    "list_provider_credential_metadata",
+    "read_credential_migration_journal",
+    "persist_credential_migration_journal",
+    "delete_credential_migration_journal",
+    "mark_renderer_ready",
+    "install_update",
+];
+
 fn main() {
     for name in [
         "GEOCHAT_APP_BUNDLE_MANIFEST_URL",
@@ -11,5 +56,7 @@ fn main() {
             std::env::var(name).unwrap_or_default()
         );
     }
-    tauri_build::build()
+    let attributes = tauri_build::Attributes::new()
+        .app_manifest(tauri_build::AppManifest::new().commands(APP_COMMANDS));
+    tauri_build::try_build(attributes).expect("failed to build GeoChat Tauri configuration")
 }

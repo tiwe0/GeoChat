@@ -4,6 +4,9 @@ import {
   isAllowedOrigin,
   type BackendHttpSecurity
 } from "./security";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
+
+const logger = createStructuredLogger("http.response");
 
 export function corsHeadersFor(request: Request, security: BackendHttpSecurity) {
   const origin = request.headers.get("origin");
@@ -48,7 +51,7 @@ export async function readJson(request: Request) {
   try {
     return await request.json();
   } catch (caughtError) {
-    console.error("[ERROR] Caught exception at backend/src/http/response.ts:43", caughtError);
+    logger.debug("request_json_parse_failed", "HTTP_REQUEST_JSON_INVALID", { error: caughtError });
     return undefined;
   }
 }

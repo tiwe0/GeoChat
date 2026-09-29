@@ -14,7 +14,8 @@ const steps = [
     "Smoke Tauri packaged layout",
     ["bun", "run", "tauri:package:smoke", "--", "--json-out", "dist/tauri-package-evidence.local.json"]
   ],
-  ["Smoke packaged backend runtime", ["bun", "run", "package:backend-smoke"]]
+  ["Smoke packaged backend runtime", ["bun", "run", "package:backend-smoke"]],
+  ["Smoke packaged app launch", ["bun", "run", "package:launch-smoke"]]
 ];
 
 for (const [label, command] of steps) {

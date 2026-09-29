@@ -1,4 +1,4 @@
-import type { ProblemSummary } from "@geochat-ai/app";
+import type { ProblemSummary } from "@geochat-ai/app/problem-bank";
 
 export const problemBankSourceId = "geochat-benchmark-cases";
 

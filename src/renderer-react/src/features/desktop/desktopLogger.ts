@@ -1,5 +1,6 @@
 import type { DesktopLogLevel } from "../../../../shared/desktop-api";
 import { installedDesktopApi } from "../../../../shared/desktop/tauri-bridge";
+import { sanitizeLogContext } from "@geochat-ai/app/structured-logger";
 
 const MAX_RENDERER_LOG_CHARS = 16 * 1024;
 const nativeConsole = {
@@ -12,20 +13,22 @@ const nativeConsole = {
 };
 
 function normalizeLogMessage(message: unknown) {
-  const text = message instanceof Error
-    ? `${message.name}: ${message.message}${message.stack ? `\n${message.stack}` : ""}`
-    : typeof message === "string"
-      ? message
-      : String(message);
+  const sanitized = sanitizeLogContext({ message }).message;
+  const text = typeof sanitized === "string" ? sanitized : JSON.stringify(sanitized) ?? String(sanitized);
   return text.slice(0, MAX_RENDERER_LOG_CHARS);
 }
 
 function write(level: DesktopLogLevel, message: unknown) {
   const api = installedDesktopApi();
   if (!api) return;
-  void api.writeAppLog(level, normalizeLogMessage(message)).catch((error) => {
+  void api.writeAppLog(level, normalizeLogMessage(message)).catch(() => {
     // The logging transport cannot report its own failure through itself.
-    nativeConsole.error("[ERROR] Failed to write the desktop log entry", error);
+    nativeConsole.error(JSON.stringify({
+      module: "desktop.logging",
+      event: "transport_failed",
+      severity: "error",
+      errorCode: "DESKTOP_LOG_TRANSPORT_FAILED",
+    }));
   });
 }
 
@@ -43,13 +46,15 @@ export function installDesktopLogging() {
   if (!installedDesktopApi() || globalHandlersInstalled) return;
   globalHandlersInstalled = true;
   console.log = (...messages: unknown[]) => {
-    nativeConsole.log(...messages);
-    write("info", messages.map(normalizeLogMessage).join(" "));
+    const normalized = messages.map(normalizeLogMessage);
+    nativeConsole.log(...normalized);
+    write("info", normalized.join(" "));
   };
   for (const level of ["error", "warn", "info", "debug", "trace"] as const) {
     console[level] = (...messages: unknown[]) => {
-      nativeConsole[level](...messages);
-      write(level, messages.map(normalizeLogMessage).join(" "));
+      const normalized = messages.map(normalizeLogMessage);
+      nativeConsole[level](...normalized);
+      write(level, normalized.join(" "));
     };
   }
   window.addEventListener("error", (event) => {

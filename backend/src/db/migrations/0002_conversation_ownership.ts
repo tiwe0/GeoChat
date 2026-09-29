@@ -13,7 +13,7 @@ export const conversationOwnershipMigration: SqliteMigration = {
     sqlite.run("CREATE INDEX IF NOT EXISTS conversations_owner_updated_at_idx ON conversations (owner_user_id, updated_at)");
     sqlite.run(`
       CREATE TABLE IF NOT EXISTS legacy_conversation_import_receipts (
-        id TEXT PRIMARY KEY,
+        id TEXT PRIMARY KEY NOT NULL,
         owner_scope_key TEXT NOT NULL,
         owner_user_id TEXT,
         source_fingerprint TEXT NOT NULL,

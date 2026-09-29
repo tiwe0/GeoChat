@@ -157,6 +157,14 @@ jobs:
           GEOCHAT_PACKAGED_BACKEND_EVIDENCE_PATH: .artifacts/package-smoke/backend-${{ matrix.platform }}.json
         run: bun run package:backend-smoke
 
+      # macOS launches the executable inside the generated .app bundle.
+      # Windows launches target/release/geochat-desktop-tauri.exe; this does
+      # not claim that either the NSIS or MSI installer was installed.
+      - name: Smoke platform launch target
+        env:
+          GEOCHAT_PACKAGED_LAUNCH_EVIDENCE_PATH: .artifacts/package-smoke/launch-${{ matrix.platform }}.json
+        run: bun run package:launch-smoke
+
       - name: Upload package smoke evidence
         uses: actions/upload-artifact@v4
         with:
@@ -206,8 +214,16 @@ jobs:
 
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             gh release upload "$TAG_NAME" --clobber "${assets[@]}"
+            current_notes="$(gh release view "$TAG_NAME" --json body --jq '.body')"
+            if [[ "$current_notes" != *'## Verification boundaries'* ]]; then
+              gh release edit "$TAG_NAME" \
+                --notes "$(cat docs/release-boundaries.md)"$'\n\n'"$current_notes"
+            fi
           else
-            gh release create "$TAG_NAME" --generate-notes "${assets[@]}"
+            gh release create "$TAG_NAME" \
+              --generate-notes \
+              --notes "$(cat docs/release-boundaries.md)" \
+              "${assets[@]}"
           fi
 
   mirror:

@@ -39,6 +39,11 @@ export class DesktopConfigSensitiveDataRecoveryRequiredError extends Error {
   }
 }
 
+export function isDesktopConfigStorageQuotaError(error: unknown): boolean {
+  if (!(error instanceof DOMException)) return false;
+  return error.name === "QuotaExceededError" || error.code === 22 || error.code === 1014;
+}
+
 const SENSITIVE_CONFIG_KEY = /(?:["']\s*[^"']*(?:api[_-]?key|secret|token|authorization|password|private[_-]?key|access[_-]?key|cookie)[^"']*["']|(?:^|[,{]\s*)(?:api[_-]?key|secret|token|authorization|password|private[_-]?key|access[_-]?key|cookie))\s*:/i;
 
 function malformedConfigMayContainSensitiveData(rawJson: string) {
@@ -167,7 +172,11 @@ export function recoverDesktopConfigBeforeLoad(
     throw new DesktopCredentialMigrationRequiredError();
   }
   if (rawJson === null) {
-    storage?.setItem(CONFIG_STORAGE_KEY, JSON.stringify(createDefaultDesktopConfig()));
+    // A fresh profile already reads as the default config. Do not seed an
+    // equivalent localStorage value during bootstrap: WebView storage can be
+    // unavailable or temporarily over quota, and that must not prevent React
+    // from mounting. The first user-initiated change remains the persistence
+    // boundary and can report its own write failure.
     return null;
   }
   let rawConfig: Record<string, unknown>;

@@ -47,7 +47,69 @@ export type DesktopDebugAction =
       completedAt?: string;
       result?: unknown;
       error?: string;
+    }
+  | {
+      id: string;
+      type: "restore_conversation";
+      conversationId: string;
+      createdAt: string;
+      status: DesktopDebugActionStatus;
+      claimedAt?: string;
+      completedAt?: string;
+      result?: unknown;
+      error?: string;
+    }
+  | {
+      id: string;
+      type: "configure_test_provider";
+      baseUrl: string;
+      model: string;
+      nonce: string;
+      createdAt: string;
+      status: DesktopDebugActionStatus;
+      claimedAt?: string;
+      completedAt?: string;
+      result?: unknown;
+      error?: string;
+    }
+  | {
+      id: string;
+      type: "clear_test_provider";
+      nonce: string;
+      credentialRef: string;
+      restoreConfigJson: string;
+      createdAt: string;
+      status: DesktopDebugActionStatus;
+      claimedAt?: string;
+      completedAt?: string;
+      result?: unknown;
+      error?: string;
+    }
+  | {
+      id: string;
+      type: "probe_real_ui";
+      nonce: string;
+      operation: DesktopRealUiProbeOperation;
+      text?: string;
+      target?: DesktopRealUiProbeTarget;
+      createdAt: string;
+      status: DesktopDebugActionStatus;
+      claimedAt?: string;
+      completedAt?: string;
+      result?: unknown;
+      error?: string;
     };
+
+export type DesktopRealUiProbeOperation =
+  | "snapshot"
+  | "set_composer_text"
+  | "submit_composer"
+  | "switch_mode"
+  | "open_fusion_panel"
+  | "close_fusion_panel"
+  | "cycle_dialog_focus";
+
+export type DesktopRealUiProbeTarget = "window" | "fusion" | "history" | "settings" | "transcript";
 
 export type DesktopDebugActionInput =
   | { type: "get_ui_status" }
@@ -57,7 +119,17 @@ export type DesktopDebugActionInput =
       toolName: string;
       args: Record<string, unknown>;
     }
-  | { type: "send_message"; conversationId?: string; content: string };
+  | { type: "send_message"; conversationId?: string; content: string }
+  | { type: "restore_conversation"; conversationId: string }
+  | { type: "configure_test_provider"; baseUrl: string; model: string; nonce: string }
+  | { type: "clear_test_provider"; nonce: string; credentialRef: string; restoreConfigJson: string }
+  | {
+      type: "probe_real_ui";
+      nonce: string;
+      operation: DesktopRealUiProbeOperation;
+      text?: string;
+      target?: DesktopRealUiProbeTarget;
+    };
 
 export type DesktopDebugActionQueue = ReturnType<typeof createDesktopDebugActionQueue>;
 

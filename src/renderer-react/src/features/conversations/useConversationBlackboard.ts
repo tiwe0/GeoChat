@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BlackboardEntry } from "@geochat-ai/app/blackboard";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import type { AuthSessionController } from "../local-session/useLocalSession";
 import { fetchConversationBlackboard } from "./api";
+
+const logger = createStructuredLogger("conversations.blackboard");
 
 export function useConversationBlackboard(options: {
   apiOrigin: string;
@@ -40,7 +43,7 @@ export function useConversationBlackboard(options: {
       if (requestVersionRef.current !== requestVersion || !authSessionRef.current.isCurrent(session)) return;
       setEntries(loaded);
     } catch (caught) {
-      console.error("[ERROR] Caught exception at src/renderer-react/src/features/conversations/useConversationBlackboard.ts:42", caught);
+      logger.warn("blackboard_load_failed", "CONVERSATION_BLACKBOARD_LOAD_FAILED", { error: caught, conversationId });
       if (requestVersionRef.current !== requestVersion || !authSessionRef.current.isCurrent(session)) return;
       setError(caught instanceof Error && caught.message.trim() ? caught.message : loadFailedMessage);
     } finally {

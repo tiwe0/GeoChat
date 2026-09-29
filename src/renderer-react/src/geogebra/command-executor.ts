@@ -1,4 +1,7 @@
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import type { GeoGebraApi as GeoGebraApplet } from "./ggbdeploy-wrapper";
+
+const logger = createStructuredLogger("geogebra.command-executor");
 
 function callGeoGebraApplet(applet: GeoGebraApplet, method: string, ...args: unknown[]) {
   const fn = applet[method];
@@ -93,7 +96,7 @@ async function evaluateCommandOnce(applet: GeoGebraApplet, command: string): Pro
       const result = normalizeCommandResult(command, invocation, method, Math.round(performance.now() - startedAt));
       return result;
     } catch (error) {
-      console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/command-executor.ts:95", error);
+      logger.warn("command_invoke_failed", "GEOGEBRA_COMMAND_INVOKE_FAILED", { error, method });
       const message = error instanceof Error ? error.message : String(error);
       return { command, success: false, label: "", error: message, lastError: message, method, resultAvailable: false, durationMs: Math.round(performance.now() - startedAt) };
     }
@@ -143,7 +146,7 @@ function invokeNativeScriptingCommand(
       durationMs: Math.round(performance.now() - startedAt),
     };
   } catch (error) {
-    console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/command-executor.ts:144", error);
+    logger.warn("native_command_failed", "GEOGEBRA_NATIVE_COMMAND_FAILED", { error, method });
     const message = error instanceof Error ? error.message : String(error);
     return {
       command,
@@ -163,7 +166,7 @@ function decodeGeoGebraString(value: string) {
     const decoded = JSON.parse(`"${value}"`) as unknown;
     return typeof decoded === "string" ? decoded : undefined;
   } catch (caughtError) {
-    console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/command-executor.ts:163", caughtError);
+    logger.debug("string_decode_failed", "GEOGEBRA_STRING_DECODE_FAILED", { error: caughtError });
     return undefined;
   }
 }
@@ -263,7 +266,7 @@ function tryParseJson(value: string) {
   try {
     return JSON.parse(value) as unknown;
   } catch (caughtError) {
-    console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/command-executor.ts:262", caughtError);
+    logger.debug("result_json_parse_failed", "GEOGEBRA_RESULT_JSON_INVALID", { error: caughtError });
     return value;
   }
 }

@@ -7,7 +7,8 @@
   ],
   "remote": {
     "urls": [
-      "http://127.0.0.1:1421"
+      "http://127.0.0.1:1421",
+      "http://localhost:1421"
     ]
   },
   "permissions": [
@@ -16,6 +17,7 @@
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-close",
-    "opener:default"
+    "opener:default",
+    "desktop-app"
   ]
 }

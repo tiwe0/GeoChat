@@ -13,6 +13,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useTranslation } from "react-i18next";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import {
   AGENT_MODEL_REGISTRY,
   CUSTOM_AGENT_PROVIDER_ID,
@@ -20,6 +21,8 @@ import {
   getAgentProviderOptions,
   type AgentModelProtocol,
 } from "@geochat-ai/app/model-registry";
+
+const logger = createStructuredLogger("desktop.model-settings");
 import {
   credentialsForProvider,
   normalizeCustomProviderConfig,
@@ -193,11 +196,11 @@ export function ModelSettings() {
       if (isCustom) setCustomProvider(readDesktopConfig().customProvider);
       setCredentialSave({ status: "valid" });
       setSaved(true);
-      console.info(`[INFO] Saved model provider settings for provider=${provider}`);
+      logger.info("provider_settings_saved", "MODEL_PROVIDER_SETTINGS_SAVED", { provider });
     } catch (caughtError) {
       const message = caughtError instanceof Error ? caughtError.message : String(caughtError);
       setCredentialSave({ status: "invalid", message });
-      console.warn(`[WARN] Model provider credential save failed for provider=${provider}: ${message}`);
+      logger.warn("provider_credential_save_failed", "MODEL_PROVIDER_CREDENTIAL_SAVE_FAILED", { provider, message });
     } finally {
       setSaving(false);
     }
@@ -488,13 +491,13 @@ export async function replaceProviderCredential(input: {
     input.commit(metadata);
   } catch (error) {
     await input.desktopApi.deleteProviderCredential(metadata.credentialRef).catch((deleteError) => {
-      console.error("[ERROR] Failed to delete an uncommitted provider credential", deleteError);
+      logger.warn("uncommitted_credential_delete_failed", "MODEL_CREDENTIAL_DELETE_FAILED", { error: deleteError });
     });
     throw error;
   }
   if (input.previousCredentialRef && input.previousCredentialRef !== metadata.credentialRef) {
     await input.desktopApi.deleteProviderCredential(input.previousCredentialRef).catch((error) => {
-      console.error("[ERROR] Failed to delete the replaced provider credential", error);
+      logger.warn("replaced_credential_delete_failed", "MODEL_CREDENTIAL_DELETE_FAILED", { error });
     });
   }
   return metadata;
@@ -507,7 +510,7 @@ function isValidRequiredBaseUrl(value: string) {
     const url = new URL(trimmed);
     return url.protocol === "http:" || url.protocol === "https:";
   } catch (caughtError) {
-    console.error("[ERROR] Caught exception at src/renderer-react/src/features/desktop/settings/ModelSettings.tsx:432", caughtError);
+    logger.debug("provider_base_url_invalid", "MODEL_PROVIDER_BASE_URL_INVALID", { error: caughtError });
     return false;
   }
 }

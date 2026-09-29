@@ -1,18 +1,20 @@
 import {
+  isFunctionCallArgs,
+  type ExecuteGeoGebraCommandsArgs,
+  type FunctionCallArgsByName,
+  type FunctionCallToolName,
+} from "@geochat-ai/app/functioncalls";
+import {
   findForbiddenFixedAxisObjectCommands,
   findForbiddenTwoDimensionalStyleCommands,
   findForbiddenViewportScaleCommands,
   findGeoGebraCommandBatchPolicyViolations,
   fixedAxisObjectPolicyMessage,
   geogebraCommandBatchPolicyMessage,
-  isFunctionCallArgs,
   repairViewportScaleCommand,
   twoDimensionalStylePolicyMessage,
   viewportScalePolicyMessage,
-  type ExecuteGeoGebraCommandsArgs,
-  type FunctionCallArgsByName,
-  type FunctionCallToolName,
-} from "@geochat-ai/app";
+} from "@geochat-ai/app/geometry";
 
 export type NativeToolPolicyContext = {
   prompt: string;

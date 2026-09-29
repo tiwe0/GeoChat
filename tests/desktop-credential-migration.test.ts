@@ -4,6 +4,7 @@ import {
   canonicalizeCredentialEndpoint,
   hasLegacyPlaintextCredentials,
   planLegacyDesktopCredentialMigration,
+  planLegacyDesktopCredentialMigrationAsync,
   rollbackLegacyDesktopCredentialMigration,
   runLegacyDesktopCredentialMigration,
   type CredentialMigrationJournal,
@@ -90,6 +91,27 @@ describe("legacy desktop credential migration", () => {
     expect(JSON.stringify(plan.journal)).not.toContain("same-secret");
     expect(JSON.stringify(plan.journal)).not.toContain("vision-secret");
     expect(JSON.stringify(plan.journal)).not.toContain("local-secret");
+  });
+
+  test("supports cryptographic asynchronous fingerprints without exposing secrets in the journal", async () => {
+    const plan = await planLegacyDesktopCredentialMigrationAsync(raw, {
+      async fingerprint(identity) {
+        const bytes = new TextEncoder().encode(JSON.stringify([
+          identity.provider,
+          identity.secret,
+          identity.canonicalBaseUrl,
+          identity.protocol,
+        ]));
+        const digest = await crypto.subtle.digest("SHA-256", bytes);
+        return `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+      },
+      createCredentialRef: () => crypto.randomUUID(),
+    });
+
+    expect(plan.items).toHaveLength(3);
+    expect(plan.items.every((item) => item.sourceFingerprint.startsWith("sha256:"))).toBe(true);
+    expect(plan.items.every((item) => /^[0-9a-f-]{36}$/.test(item.credentialRef))).toBe(true);
+    expect(JSON.stringify(plan.journal)).not.toContain("same-secret");
   });
 
   test("sanitizes every plaintext mirror while preserving non-sensitive config", () => {

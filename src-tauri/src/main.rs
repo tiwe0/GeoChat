@@ -5,6 +5,7 @@ mod app_bundle;
 mod app_bundle_protocol;
 mod commands;
 mod credential_broker;
+mod credential_migration;
 mod credentials;
 mod env_config;
 mod installed_client_smoke;
@@ -31,8 +32,9 @@ use commands::app_bundle_update::{
     rollback_app_bundle_update,
 };
 use commands::credentials::{
-    delete_provider_credential, import_legacy_credential, list_provider_credential_metadata,
-    save_provider_credential, CredentialCommandState,
+    delete_credential_migration_journal, delete_provider_credential, import_legacy_credential,
+    list_provider_credential_metadata, persist_credential_migration_journal,
+    read_credential_migration_journal, save_provider_credential, CredentialCommandState,
 };
 use commands::graphics::{get_graphics_preferences, set_graphics_preferences, DesktopGraphicsMode};
 use commands::improvement::{
@@ -170,6 +172,9 @@ fn main() {
             import_legacy_credential,
             delete_provider_credential,
             list_provider_credential_metadata,
+            read_credential_migration_journal,
+            persist_credential_migration_journal,
+            delete_credential_migration_journal,
             mark_renderer_ready,
             install_update
         ])
@@ -269,7 +274,7 @@ fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
         &local_backend_auth_token,
         credential_broker,
     )?;
-    app.manage(CredentialCommandState::new(credential_vault));
+    app.manage(CredentialCommandState::new(credential_vault, &app_data_dir));
     let shell_update_state = initial_shell_update_state(settings.update_preferences.clone());
     // Resolving verifies every asset in the manifest by hash, so it happens
     // exactly once here and everything downstream reads the cached result.

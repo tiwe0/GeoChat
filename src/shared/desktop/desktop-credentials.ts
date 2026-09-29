@@ -62,6 +62,12 @@ export type LegacyCredentialMigrationPlanner = Readonly<{
   previousJournal?: CredentialMigrationJournal;
 }>;
 
+export type AsyncLegacyCredentialMigrationPlanner = Readonly<{
+  createCredentialRef: (sourceFingerprint: string) => string;
+  fingerprint: (identity: LegacyCredentialIdentity) => Promise<string>;
+  previousJournal?: CredentialMigrationJournal;
+}>;
+
 export type CredentialMigrationCallbacks = Readonly<{
   persistJournal: (journal: CredentialMigrationJournal) => void | Promise<void>;
   credentialExists: (credentialRef: string) => boolean | Promise<boolean>;
@@ -243,6 +249,26 @@ export function planLegacyDesktopCredentialMigration(
   rawJson: string,
   planner: LegacyCredentialMigrationPlanner
 ): LegacyCredentialMigrationPlan {
+  const grouped = groupLegacyCredentialCandidates(rawJson);
+  return createLegacyCredentialMigrationPlan(
+    grouped,
+    grouped.groups.map(({ identity }) => planner.fingerprint(identity)),
+    planner
+  );
+}
+
+export async function planLegacyDesktopCredentialMigrationAsync(
+  rawJson: string,
+  planner: AsyncLegacyCredentialMigrationPlanner
+): Promise<LegacyCredentialMigrationPlan> {
+  const grouped = groupLegacyCredentialCandidates(rawJson);
+  const fingerprints = await Promise.all(
+    grouped.groups.map(({ identity }) => planner.fingerprint(identity))
+  );
+  return createLegacyCredentialMigrationPlan(grouped, fingerprints, planner);
+}
+
+function groupLegacyCredentialCandidates(rawJson: string) {
   const rawConfig = parseRawDesktopConfig(rawJson);
   const { candidates, conflicts } = collectLegacyCredentialCandidates(rawConfig);
   const groups = new Map<string, { identity: LegacyCredentialIdentity; sources: LegacyCredentialSource[] }>();
@@ -253,11 +279,21 @@ export function planLegacyDesktopCredentialMigration(
     if (existing) existing.sources.push(source);
     else groups.set(key, { identity, sources: [source] });
   }
+  return { rawConfig, conflicts, groups: Array.from(groups.values()) };
+}
+
+function createLegacyCredentialMigrationPlan(
+  grouped: ReturnType<typeof groupLegacyCredentialCandidates>,
+  fingerprints: readonly string[],
+  planner: Pick<LegacyCredentialMigrationPlanner, "createCredentialRef" | "previousJournal">
+): LegacyCredentialMigrationPlan {
+  const { rawConfig, conflicts, groups } = grouped;
   const previousByFingerprint = new Map(
     planner.previousJournal?.entries.map((entry) => [entry.sourceFingerprint, entry]) ?? []
   );
-  const items = Array.from(groups.values()).map(({ identity, sources }) => {
-    const sourceFingerprint = planner.fingerprint(identity);
+  const items = groups.map(({ identity, sources }, index) => {
+    const sourceFingerprint = fingerprints[index];
+    if (!sourceFingerprint) throw new Error("Credential source fingerprint is required");
     const previous = previousByFingerprint.get(sourceFingerprint);
     return Object.freeze({
       ...identity,

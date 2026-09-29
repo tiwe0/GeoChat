@@ -243,6 +243,12 @@ impl CredentialVault {
     }
 }
 
+impl ImportLegacyCredentialRequest {
+    pub(crate) fn credential_ref(&self) -> &str {
+        &self.credential_ref
+    }
+}
+
 fn encode_envelope(
     secret: &str,
     provider: &str,
@@ -304,7 +310,7 @@ fn validate_credential_ref(credential_ref: &str) -> Result<(), CredentialError> 
     Ok(())
 }
 
-fn validate_provider(provider: &str) -> Result<&str, CredentialError> {
+pub(crate) fn validate_provider(provider: &str) -> Result<&str, CredentialError> {
     if provider.is_empty()
         || provider.len() > MAX_PROVIDER_LENGTH
         || !provider
@@ -316,7 +322,7 @@ fn validate_provider(provider: &str) -> Result<&str, CredentialError> {
     Ok(provider)
 }
 
-fn validate_protocol(protocol: &str) -> Result<&str, CredentialError> {
+pub(crate) fn validate_protocol(protocol: &str) -> Result<&str, CredentialError> {
     SUPPORTED_PROTOCOLS
         .contains(&protocol)
         .then_some(protocol)
@@ -330,7 +336,7 @@ fn validate_secret(secret: &str) -> Result<(), CredentialError> {
     Ok(())
 }
 
-fn canonicalize_endpoint(endpoint: &str) -> Result<String, CredentialError> {
+pub(crate) fn canonicalize_endpoint(endpoint: &str) -> Result<String, CredentialError> {
     let trimmed = endpoint.trim();
     if trimmed.is_empty() || trimmed.contains('?') || trimmed.contains('#') {
         return Err(CredentialError::InvalidEndpoint);

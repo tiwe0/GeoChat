@@ -18,6 +18,7 @@ pub(crate) enum CredentialError {
     StoreUnavailable,
     StoreFailure,
     TaskFailure,
+    MigrationDisabled,
 }
 
 impl CredentialError {
@@ -33,6 +34,7 @@ impl CredentialError {
             Self::StoreUnavailable => "credential_store_unavailable",
             Self::StoreFailure => "credential_store_failure",
             Self::TaskFailure => "credential_task_failure",
+            Self::MigrationDisabled => "credential_migration_disabled",
         }
     }
 }

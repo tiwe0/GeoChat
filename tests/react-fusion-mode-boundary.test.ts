@@ -187,7 +187,7 @@ describe("fusion-mode module boundary", () => {
     expect(panelWindow).toContain("if (!enabled || collapsed) return");
     expect(panelWindow).toContain("}, [enabled]);");
     expect(app.match(/mountGeoGebra\(/g)).toHaveLength(1);
-    expect(app).toContain("  }, []);");
+    expect(app).toContain("  }, [canvasMountGeneration]);");
   });
 
   test("completes a spatial turn only from the native chat finish event", () => {

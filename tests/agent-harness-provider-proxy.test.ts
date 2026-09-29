@@ -36,6 +36,18 @@ describe("provider proxy policy", () => {
     expect(message.length).toBeLessThanOrEqual(600);
   });
 
+  test("redacts query-string and provider-specific credential forms", () => {
+    const message = sanitizeProviderError(
+      "GET https://generativelanguage.googleapis.com/v1beta/models?key=AIzaSyExampleSecret123456 " +
+      "x-api-key: anthropic-secret-value authorization=raw-provider-token-value"
+    );
+
+    expect(message).not.toContain("AIzaSyExampleSecret123456");
+    expect(message).not.toContain("anthropic-secret-value");
+    expect(message).not.toContain("raw-provider-token-value");
+    expect(message).toContain("key=[redacted]");
+  });
+
   test("allows only registered provider hosts or the explicit custom base URL host", () => {
     expect(parseProviderProxyUrl("https://api.openai.com/v1/responses")?.host).toBe("api.openai.com");
     expect(parseProviderProxyUrl("not a url")).toBeUndefined();

@@ -108,6 +108,9 @@ pub(crate) fn sanitize_message(message: &str) -> String {
         "api key",
         "api_key",
         "apikey",
+        "?key=",
+        "&key=",
+        "x-api-key",
         "access_token",
         "refresh_token",
         "password",
@@ -156,6 +159,10 @@ mod tests {
     fn sensitive_and_oversized_messages_are_bounded() {
         assert_eq!(
             sanitize_message("Authorization: Bearer example"),
+            "[redacted sensitive log message]"
+        );
+        assert_eq!(
+            sanitize_message("GET /v1beta/models?key=AIzaSyExampleSecret123456"),
             "[redacted sensitive log message]"
         );
         assert_eq!(

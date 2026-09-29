@@ -11,8 +11,9 @@ export function sanitizeProviderError(error: unknown) {
         )
       : withoutToolCallIds;
   return userFacing
+    .replace(/([?&](?:key|api[_-]?key|access[_-]?token)=)[^&#\s]+/gi, "$1[redacted]")
     .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
-    .replace(/(api[_-]?key["'\s:=]+)[A-Za-z0-9._-]{8,}/gi, "$1[redacted]")
+    .replace(/((?:api[_-]?key|x-api-key|authorization)["'\s:=]+)[^\s,;}&]{8,}/gi, "$1[redacted]")
     .replace(/\b(?:sk|sk-ant|sk-proj|sk-or|AIza)[A-Za-z0-9._-]{12,}\b/g, "[redacted-key]")
     .slice(0, 600);
 }

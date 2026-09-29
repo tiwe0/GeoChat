@@ -68,10 +68,16 @@ jobs:
             patchelf
 
       - name: Install JavaScript dependencies
-        run: bun install --no-save
+        run: bun install --frozen-lockfile
 
-      - name: Typecheck
-        run: bun run typecheck
+      - name: TypeScript quality gates
+        run: bun run quality:check
+
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+
+      - name: Lint Rust targets
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
       - name: Test
         run: bun test tests
@@ -135,14 +141,28 @@ jobs:
         with:
           workspaces: src-tauri
 
-      # The public checkout retains legacy workspace entries in bun.lock that
-      # are not present in this sanitized tree. --no-save keeps CI installs
-      # reproducible without rewriting the tracked lockfile.
       - name: Install JavaScript dependencies
-        run: bun install --no-save
+        run: bun install --frozen-lockfile
 
       - name: Build Tauri bundles
         run: bunx tauri build --bundles "${{ matrix.bundles }}"
+
+      - name: Smoke packaged layout
+        env:
+          GEOCHAT_TAURI_PACKAGE_EVIDENCE_PATH: .artifacts/package-smoke/layout-${{ matrix.platform }}.json
+        run: bun run tauri:package:smoke
+
+      - name: Smoke packaged backend authentication
+        env:
+          GEOCHAT_PACKAGED_BACKEND_EVIDENCE_PATH: .artifacts/package-smoke/backend-${{ matrix.platform }}.json
+        run: bun run package:backend-smoke
+
+      - name: Upload package smoke evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-smoke-${{ matrix.platform }}-${{ github.sha }}
+          if-no-files-found: error
+          path: .artifacts/package-smoke/*.json
 
       - name: Upload packaged artifacts
         uses: actions/upload-artifact@v4

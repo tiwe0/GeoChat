@@ -17,8 +17,7 @@
     "allowSyntheticDefaultImports": true
   },
   "include": [
-    "vite.web.config.ts",
-    "vite.tauri.config.ts",
+    "vite.react.config.ts",
     "src/shared/**/*.ts",
     "backend/**/*.ts",
     "tools/**/*.ts",

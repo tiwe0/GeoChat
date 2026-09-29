@@ -1,16 +1,27 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export async function runPackagedBackendSmoke(
   args = process.argv.slice(2),
   environment = process.env,
 ) {
+  const jsonOutIndex = args.indexOf("--json-out");
+  const jsonOutArg = jsonOutIndex >= 0 ? args[jsonOutIndex + 1] : undefined;
+  if (jsonOutIndex >= 0 && (!jsonOutArg || jsonOutArg.startsWith("--"))) {
+    throw new Error("Missing path after --json-out.");
+  }
+  const positionalArgs = args.filter((argument, index) => (
+    argument !== "--"
+    && argument !== "--json-out"
+    && index !== jsonOutIndex + 1
+  ));
   const explicitRoots = [
-    ...args,
+    ...positionalArgs,
     ...(environment.GEOCHAT_PACKAGED_RESOURCES_ROOT ? [environment.GEOCHAT_PACKAGED_RESOURCES_ROOT] : [])
   ].filter(Boolean);
   const resourceRoots = explicitRoots.length > 0 ? explicitRoots.map((root) => resolve(root)) : discoverResourceRoots();
@@ -19,9 +30,24 @@ export async function runPackagedBackendSmoke(
     throw new Error("No packaged resources root found. Pass GEOCHAT_PACKAGED_RESOURCES_ROOT or a path argument.");
   }
 
+  const checks = [];
   for (const root of resourceRoots) {
-    await smokeBackendRuntime(root);
+    checks.push(await smokeBackendRuntime(root));
   }
+  const evidence = {
+    kind: "geochat-packaged-backend-smoke-evidence",
+    status: "complete",
+    checks,
+  };
+  const jsonOut = jsonOutArg ?? environment.GEOCHAT_PACKAGED_BACKEND_EVIDENCE_PATH;
+  if (jsonOut) writePackagedBackendSmokeEvidence(jsonOut, evidence);
+  return evidence;
+}
+
+export function writePackagedBackendSmokeEvidence(path, evidence) {
+  const target = resolve(path);
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, `${JSON.stringify(evidence, null, 2)}\n`);
 }
 
 function discoverResourceRoots() {
@@ -71,11 +97,25 @@ async function smokeBackendRuntime(root) {
     stderr += chunk.toString();
   });
 
+  let evidence;
   try {
     const origin = `http://127.0.0.1:${port}`;
-    await waitForHealth(`${origin}/health`, child);
-    await verifyAuthenticationBoundary(origin, authToken);
+    const healthStatus = await waitForHealth(`${origin}/health`, child);
+    const authentication = await verifyAuthenticationBoundary(origin, authToken);
     console.log(`Packaged backend runtime ok: ${root}`);
+    evidence = {
+      status: "complete",
+      resourceRoot: relative(process.cwd(), root),
+      runtime: relative(process.cwd(), runtime),
+      backendEntry: relative(process.cwd(), backendEntry),
+      health: { status: healthStatus },
+      authentication,
+      sha256: {
+        manifest: sha256File(join(root, "app-bundle-manifest.json")),
+        runtime: sha256File(runtime),
+        backendEntry: sha256File(backendEntry),
+      },
+    };
   } finally {
     await stopChild(child);
     rmSync(tmp, { recursive: true, force: true });
@@ -84,6 +124,7 @@ async function smokeBackendRuntime(root) {
   if (child.exitCode !== null && child.exitCode !== 0) {
     fail(`Packaged backend exited with code ${child.exitCode}.\n${stderr}`);
   }
+  return evidence;
 }
 
 export async function verifyAuthenticationBoundary(origin, authToken) {
@@ -108,6 +149,11 @@ export async function verifyAuthenticationBoundary(origin, authToken) {
   if (!authorized.ok) {
     throw new Error(`Packaged backend rejected its injected bearer token: status=${authorized.status}.`);
   }
+  return {
+    missingTokenStatus: missing.status,
+    incorrectTokenStatus: incorrect.status,
+    authorizedStatus: authorized.status,
+  };
 }
 
 async function waitForHealth(url, child) {
@@ -124,7 +170,7 @@ async function waitForHealth(url, child) {
 
     try {
       const response = await fetch(url, { signal: AbortSignal.timeout(800) });
-      if (response.ok) return;
+      if (response.ok) return response.status;
     } catch {
       // Keep polling until the backend has finished booting or exits.
     }
@@ -132,6 +178,10 @@ async function waitForHealth(url, child) {
   }
 
   throw new Error("Packaged backend did not pass health check within 12000ms.");
+}
+
+function sha256File(path) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
 function bindEphemeralLoopbackPort() {

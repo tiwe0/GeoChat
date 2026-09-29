@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { verifyAuthenticationBoundary } from "../scripts/smoke-packaged-backend-runtime.mjs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  verifyAuthenticationBoundary,
+  writePackagedBackendSmokeEvidence,
+} from "../scripts/smoke-packaged-backend-runtime.mjs";
 
 describe("packaged backend smoke", () => {
   test("proves missing, incorrect, and injected bearer-token behavior", async () => {
@@ -21,7 +27,11 @@ describe("packaged backend smoke", () => {
     try {
       await expect(
         verifyAuthenticationBoundary(`http://${server.hostname}:${server.port}`, token),
-      ).resolves.toBeUndefined();
+      ).resolves.toEqual({
+        missingTokenStatus: 401,
+        incorrectTokenStatus: 401,
+        authorizedStatus: 200,
+      });
       expect(seenAuthorization).toEqual([
         null,
         "Bearer incorrect-packaged-smoke-token",
@@ -45,6 +55,26 @@ describe("packaged backend smoke", () => {
       ).rejects.toThrow("without authentication");
     } finally {
       server.stop(true);
+    }
+  });
+
+  test("writes machine-readable evidence without claiming signing or notarization", () => {
+    const root = mkdtempSync(join(tmpdir(), "geochat-package-smoke-test-"));
+    const path = join(root, "nested", "backend.json");
+    const evidence = {
+      kind: "geochat-packaged-backend-smoke-evidence",
+      status: "complete",
+      checks: [{ authentication: { missingTokenStatus: 401, incorrectTokenStatus: 401, authorizedStatus: 200 } }],
+    };
+
+    try {
+      writePackagedBackendSmokeEvidence(path, evidence);
+      const written = JSON.parse(readFileSync(path, "utf8"));
+      expect(written).toEqual(evidence);
+      expect(written.signing).toBeUndefined();
+      expect(written.notarization).toBeUndefined();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });

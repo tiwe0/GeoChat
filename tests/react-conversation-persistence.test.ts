@@ -1,11 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { parseConversationMessages } from "../src/renderer-react/src/features/conversations/api";
 import { restoreConversationMessages } from "../src/renderer-react/src/features/conversations/messageAdapter";
-import {
-  readLocalConversation,
-  saveLocalConversation,
-} from "../src/renderer-react/src/features/conversations/localStore";
-import { mergeConversationSummaries } from "../src/renderer-react/src/features/conversations/useConversations";
 
 const originalLocalStorage = globalThis.localStorage;
 
@@ -46,125 +41,23 @@ describe("conversation transcript persistence", () => {
     expect(message?.metadata?.tokenUsage?.totalTokens).toBe(6);
   });
 
-  test("round-trips local native UI messages through the versioned envelope", () => {
-    const values = new Map<string, string>();
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: {
-        getItem: (key: string) => values.get(key) ?? null,
-        setItem: (key: string, value: string) => { values.set(key, value); },
-        removeItem: (key: string) => { values.delete(key); },
-      },
-    });
-    saveLocalConversation({
-      id: "conversation-1",
-      model: "deepseek-chat",
-      title: "测试",
-      messages: [{
-        id: "assistant-local",
-        role: "assistant",
-        parts: [
-          { type: "reasoning", text: "思考。" },
-          {
-            type: "tool-resetCanvas",
-            toolCallId: "reset-local",
-            state: "output-available",
-            input: {},
-            output: { ok: true },
-          } as never,
-        ],
-      }],
-    });
-
-    const raw = values.get("geochatDesktopConversations");
-    expect(raw).toContain('"version":1');
-    expect(readLocalConversation("conversation-1")?.messages[0]?.parts.map((part) => part.type)).toEqual([
-      "reasoning",
-      "tool-resetCanvas",
-    ]);
+  test("keeps backend payload parsing independent from legacy renderer cache timestamps", () => {
+    const stored = parseConversationMessages([{
+      id: "message-backend",
+      clientMessageId: "assistant-backend",
+      role: "assistant",
+      content: "backend",
+      payload: { parts: [{ type: "text", text: "backend" }] },
+    }]);
+    expect(restoreConversationMessages(stored)[0]?.parts).toEqual([{ type: "text", text: "backend" }]);
   });
 
-  test("rejects malformed local UI message snapshots", () => {
-    const values = new Map<string, string>();
-    values.set("geochatDesktopConversations", JSON.stringify([{
-      summary: {
-        id: "conversation-invalid",
-        model: "deepseek-chat",
-        title: "bad",
-        createdAt: "2026-01-01T00:00:00.000Z",
-        updatedAt: "2026-01-01T00:00:00.000Z",
-        messageCount: 1,
-      },
-      messages: [{ id: "message-invalid", role: "assistant", parts: [{ type: "tool-resetCanvas" }] }],
-    }]));
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: {
-        getItem: (key: string) => values.get(key) ?? null,
-        setItem: (key: string, value: string) => { values.set(key, value); },
-        removeItem: (key: string) => { values.delete(key); },
-      },
-    });
-
-    expect(readLocalConversation("conversation-invalid")).toBeNull();
-  });
-
-  test("reports local persistence failures instead of silently claiming success", () => {
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: {
-        getItem: () => null,
-        setItem: () => { throw new Error("quota exceeded"); },
-        removeItem: () => undefined,
-      },
-    });
-
-    expect(() => saveLocalConversation({
-      id: "conversation-quota",
-      model: "deepseek-chat",
-      title: "quota",
-      messages: [{ id: "user-quota", role: "user", parts: [{ type: "text", text: "test" }] }],
-    })).toThrow("quota exceeded");
-  });
-
-  test("omits large binary tool payloads from local snapshots", () => {
-    const values = new Map<string, string>();
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: {
-        getItem: (key: string) => values.get(key) ?? null,
-        setItem: (key: string, value: string) => { values.set(key, value); },
-        removeItem: (key: string) => { values.delete(key); },
-      },
-    });
-    const png = "A".repeat(32_000);
-
-    saveLocalConversation({
-      id: "conversation-png",
-      model: "deepseek-chat",
-      title: "PNG",
-      messages: [{
-        id: "assistant-png",
-        role: "assistant",
-        parts: [{
-          type: "tool-getPNGBase64",
-          toolCallId: "png-1",
-          state: "output-available",
-          input: {},
-          output: { ok: true, base64: png, byteEstimate: 24_000 },
-        } as never],
-      }],
-    });
-
-    const raw = values.get("geochatDesktopConversations") ?? "";
-    expect(raw).not.toContain(png);
-    expect(raw).toContain("[binary content omitted from local cache]");
-    expect(readLocalConversation("conversation-png")?.messages).toHaveLength(1);
-  });
-
-  test("prefers the freshest conversation summary instead of always shadowing backend history with local data", () => {
-    const local = [{ id: "conversation-1", model: "deepseek-chat", title: "local", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:01.000Z", messageCount: 1 }];
-    const backend = [{ id: "conversation-1", model: "deepseek-chat", title: "backend", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:02.000Z", messageCount: 4 }];
-    expect(mergeConversationSummaries(local, backend)).toEqual(backend);
+  test("uses backend history as the sole runtime authority after legacy migration", async () => {
+    const source = await Bun.file(new URL("../src/renderer-react/src/features/conversations/useConversations.ts", import.meta.url)).text();
+    expect(source).toContain("migrateLegacyConversationCache");
+    expect(source).not.toContain("saveLocalConversation");
+    expect(source).not.toContain("readLocalConversation");
+    expect(source).not.toContain("mergeConversationSummaries");
+    expect(source).not.toContain("Falling back to local conversation snapshot");
   });
 });

@@ -1,4 +1,9 @@
 import type { ChatMessageMetadata } from "@geochat-ai/app/contracts";
+import type {
+  LegacyConversationImportRequest,
+  LegacyConversationImportResponse,
+  LegacyConversationImportResult,
+} from "@geochat-ai/app/legacy-conversation-import";
 import type { UIMessage } from "ai";
 import { isFunctionCallArgs, isFunctionCallToolName } from "@geochat-ai/app";
 import {
@@ -156,6 +161,31 @@ export async function deleteConversation(apiOrigin: string, token: string | null
   if (response.status === 404) return;
   const data = await response.json() as { deleted?: unknown; error?: unknown; message?: unknown };
   if (!response.ok) throw new Error(responseError(data, "Unable to delete this conversation."));
+}
+
+export async function importLegacyConversation(
+  apiOrigin: string,
+  token: string | null,
+  body: LegacyConversationImportRequest,
+  request: typeof fetch = fetch,
+): Promise<LegacyConversationImportResult> {
+  const response = await request(`${apiOrigin.replace(/\/$/, "")}/v1/legacy-conversations/import`, {
+    method: "POST",
+    headers: { ...conversationHeaders(token), "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json() as Partial<LegacyConversationImportResponse> & { error?: unknown };
+  const result = data.importResult;
+  if (!result || !["imported", "skipped", "conflict"].includes(result.outcome)) {
+    throw new Error(typeof data.error === "string" ? data.error : "Legacy conversation import returned an invalid response.");
+  }
+  if (!response.ok && !(response.status === 409 && result.outcome === "conflict")) {
+    throw new Error(typeof data.error === "string" ? data.error : `Legacy conversation import failed (${response.status}).`);
+  }
+  if (result.conversationId !== body.conversation.id || result.sourceFingerprint !== body.sourceFingerprint) {
+    throw new Error("Legacy conversation import receipt did not match the source item.");
+  }
+  return result;
 }
 
 export async function fetchConversationBlackboard(apiOrigin: string, token: string | null, conversationId: string, request: typeof fetch = fetch) {

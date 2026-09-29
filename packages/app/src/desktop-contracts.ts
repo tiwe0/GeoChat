@@ -48,6 +48,7 @@ export type DesktopConversationMessage = {
 
 export type DesktopConversationSummary = {
   id: string;
+  model: string | null;
   title: string;
   summary: string;
   messageCount: number;
@@ -70,6 +71,7 @@ export type DesktopConversationDetailResponse = {
 
 export type UpsertDesktopConversationMessageInput = {
   conversationId: string;
+  model?: string;
   message: {
     id: string;
     role: DesktopConversationMessageRole;

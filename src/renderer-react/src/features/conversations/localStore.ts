@@ -1,128 +1,87 @@
-import type { ChatMessage } from "./messageAdapter";
-import { parseConversationParts, parseConversationSummaries, type ConversationSummary } from "./api";
+import type { LegacyConversationImportMessage } from "@geochat-ai/app/legacy-conversation-import";
 
-const LOCAL_CONVERSATIONS_KEY = "geochatDesktopConversations";
-const LOCAL_CONVERSATIONS_VERSION = 1;
-const LARGE_BINARY_STRING_THRESHOLD = 4_096;
-const LOCAL_BINARY_OMISSION = "[binary content omitted from local cache]";
+export const LEGACY_CONVERSATIONS_KEY = "geochatDesktopConversations";
+export const LEGACY_CONVERSATIONS_VERSION = 1 as const;
+export const LEGACY_CONVERSATION_BINARY_OMISSION = "[binary content omitted from local cache]";
 
-type LocalConversation = {
-  summary: ConversationSummary;
-  messages: ChatMessage[];
+export type LegacyConversationStorage = Pick<Storage, "getItem" | "setItem" | "removeItem" | "key" | "length">;
+
+export type LegacyConversationRecord = {
+  summary: { id: string; model: string; title: string | null; createdAt: string; updatedAt: string };
+  messages: LegacyConversationImportMessage[];
 };
 
-function readAll(): LocalConversation[] {
-  try {
-    const raw = globalThis.localStorage?.getItem(LOCAL_CONVERSATIONS_KEY);
-    if (!raw) return [];
-    const value: unknown = JSON.parse(raw);
-    const records = Array.isArray(value)
-      ? value
-      : value && typeof value === "object" && !Array.isArray(value)
-        && (value as Record<string, unknown>).version === LOCAL_CONVERSATIONS_VERSION
-        && Array.isArray((value as Record<string, unknown>).conversations)
-        ? (value as { conversations: unknown[] }).conversations
-        : [];
-    return records.flatMap((item) => {
-      if (!item || typeof item !== "object" || Array.isArray(item)) return [];
-      const data = item as Record<string, unknown>;
-      const summary = parseConversationSummaries([data.summary])[0];
-      const messages = parseLocalMessages(data.messages);
-      if (!summary || !messages) return [];
-      return [{ summary, messages }];
-    });
-  } catch (caughtError) {
-    console.error("[ERROR] Caught exception at src/renderer-react/src/features/conversations/localStore.ts:24", caughtError);
-    return [];
-  }
-}
+export type ParsedLegacyConversationItem =
+  | { valid: true; index: number; rawItem: unknown; conversation: LegacyConversationRecord }
+  | { valid: false; index: number; rawItem: unknown; error: string };
 
-function writeAll(conversations: LocalConversation[]) {
-  try {
-    globalThis.localStorage?.setItem(LOCAL_CONVERSATIONS_KEY, JSON.stringify({
-      version: LOCAL_CONVERSATIONS_VERSION,
-      conversations: conversations.map((conversation) => ({
-        ...conversation,
-        messages: compactLocalMessages(conversation.messages),
-      })),
-    }));
-  } catch (caughtError) {
-    console.error("[ERROR] Caught exception at src/renderer-react/src/features/conversations/localStore.ts:32", caughtError);
-    throw caughtError;
-  }
-}
+export type ParsedLegacyConversationCache = {
+  envelopeValid: boolean;
+  items: ParsedLegacyConversationItem[];
+  envelopeError?: string;
+};
 
-function compactLocalMessages(messages: ChatMessage[]): ChatMessage[] {
-  return messages.map((message) => ({
-    ...message,
-    parts: message.parts.map((part) => compactLocalValue(part) as typeof part),
-  }));
-}
-
-function compactLocalValue(value: unknown, key = ""): unknown {
-  if (typeof value === "string") {
-    const isBinaryField = /(?:base64|dataurl|imagedata|filedata|binary)$/i.test(key);
-    return isBinaryField && value.length > LARGE_BINARY_STRING_THRESHOLD
-      ? LOCAL_BINARY_OMISSION
-      : value;
-  }
-  if (Array.isArray(value)) return value.map((item) => compactLocalValue(item));
-  if (!value || typeof value !== "object") return value;
-  return Object.fromEntries(Object.entries(value).map(([childKey, childValue]) => [
-    childKey,
-    compactLocalValue(childValue, childKey),
-  ]));
-}
-
-export function listLocalConversations() {
-  return readAll()
-    .map(({ summary }) => summary)
-    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-}
-
-export function readLocalConversation(id: string) {
-  return readAll().find((conversation) => conversation.summary.id === id) ?? null;
-}
-
-export function saveLocalConversation(input: {
-  id: string;
-  model: string;
-  title: string | null;
-  messages: ChatMessage[];
-}) {
-  const now = new Date().toISOString();
-  const conversations = readAll();
-  const existing = conversations.find((conversation) => conversation.summary.id === input.id);
-  const summary: ConversationSummary = {
-    id: input.id,
-    model: input.model,
-    title: input.title,
-    createdAt: existing?.summary.createdAt ?? now,
-    updatedAt: now,
-    messageCount: input.messages.length,
+/** Parse the immutable v1 bytes without the former metadata-dropping adapter. */
+export function parseLegacyConversationCache(raw: string): ParsedLegacyConversationCache {
+  let value: unknown;
+  try { value = JSON.parse(raw); } catch { return { envelopeValid: false, items: [], envelopeError: "invalid_json" }; }
+  const records = Array.isArray(value)
+    ? value
+    : isRecord(value) && value.version === LEGACY_CONVERSATIONS_VERSION && Array.isArray(value.conversations)
+      ? value.conversations
+      : null;
+  if (!records) return { envelopeValid: false, items: [], envelopeError: "invalid_v1_envelope" };
+  return {
+    envelopeValid: true,
+    items: records.map((rawItem, index) => {
+      const parsed = parseLegacyConversationRecord(rawItem);
+      return parsed
+        ? { valid: true as const, index, rawItem, conversation: parsed }
+        : { valid: false as const, index, rawItem, error: "invalid_v1_conversation" };
+    }),
   };
-  const next = { summary, messages: input.messages } satisfies LocalConversation;
-  writeAll([next, ...conversations.filter((conversation) => conversation.summary.id !== input.id)]);
 }
 
-export function deleteLocalConversation(id: string) {
-  writeAll(readAll().filter((conversation) => conversation.summary.id !== id));
-}
-
-function parseLocalMessages(value: unknown): ChatMessage[] | null {
-  if (!Array.isArray(value)) return null;
-  const messages: ChatMessage[] = [];
-  for (const item of value) {
-    if (!item || typeof item !== "object" || Array.isArray(item)) return null;
-    const message = item as Record<string, unknown>;
-    if (
-      typeof message.id !== "string"
-      || (message.role !== "user" && message.role !== "assistant")
-      || !Array.isArray(message.parts)
-    ) return null;
-    const parts = parseConversationParts(message.parts);
-    if (parts.length !== message.parts.length) return null;
-    messages.push({ id: message.id, role: message.role, parts } as ChatMessage);
+function parseLegacyConversationRecord(value: unknown): LegacyConversationRecord | null {
+  if (!isRecord(value) || !isRecord(value.summary) || !Array.isArray(value.messages)) return null;
+  const summary = value.summary;
+  if (
+    typeof summary.id !== "string" || !summary.id || typeof summary.model !== "string"
+    || (summary.title !== null && typeof summary.title !== "string")
+    || typeof summary.createdAt !== "string" || typeof summary.updatedAt !== "string"
+  ) return null;
+  const messages: LegacyConversationImportMessage[] = [];
+  for (const valueMessage of value.messages) {
+    if (!isRecord(valueMessage) || typeof valueMessage.id !== "string" || !valueMessage.id) return null;
+    if (valueMessage.role !== "user" && valueMessage.role !== "assistant") return null;
+    if (!Array.isArray(valueMessage.parts)) return null;
+    if (valueMessage.createdAt !== undefined && typeof valueMessage.createdAt !== "string") return null;
+    if (valueMessage.metadata !== undefined && !isRecord(valueMessage.metadata)) return null;
+    messages.push({
+      id: valueMessage.id,
+      role: valueMessage.role,
+      ...(typeof valueMessage.createdAt === "string" ? { createdAt: valueMessage.createdAt } : {}),
+      parts: valueMessage.parts,
+      ...(isRecord(valueMessage.metadata) ? { metadata: valueMessage.metadata } : {}),
+    });
   }
-  return messages;
+  return {
+    summary: { id: summary.id, model: summary.model, title: summary.title, createdAt: summary.createdAt, updatedAt: summary.updatedAt },
+    messages,
+  };
+}
+
+export function markMissingLegacyAttachmentPayloads(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(markMissingLegacyAttachmentPayloads);
+  if (!isRecord(value)) return value;
+  let attachmentPayloadMissing = value.attachmentPayloadMissing === true;
+  const entries = Object.entries(value).map(([key, child]) => {
+    if (child === LEGACY_CONVERSATION_BINARY_OMISSION) attachmentPayloadMissing = true;
+    return [key, markMissingLegacyAttachmentPayloads(child)] as const;
+  });
+  return { ...Object.fromEntries(entries), ...(attachmentPayloadMissing ? { attachmentPayloadMissing: true } : {}) };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

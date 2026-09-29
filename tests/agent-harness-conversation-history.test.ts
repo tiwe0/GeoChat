@@ -126,7 +126,7 @@ describe("conversation history", () => {
       await request(`/v1/conversations/${encodeURIComponent(conversationId)}/messages`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ conversationId, message: userMessage })
+        body: JSON.stringify({ conversationId, model: "deepseek-chat", message: userMessage })
       })
     ).toMatchObject({ status: 201 });
     expect(
@@ -168,6 +168,7 @@ describe("conversation history", () => {
     expect(detail.status).toBe(200);
     expect(detail.json.conversation).toMatchObject({
       id: conversationId,
+      model: "deepseek-chat",
       title: "画一个椭圆，并标出焦点。",
       summary: "椭圆已经绘制完成。",
       messageCount: 2

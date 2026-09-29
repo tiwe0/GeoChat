@@ -85,6 +85,7 @@ function createSqliteConversationRepository(db: SqliteDatabase): ConversationRep
       db.insert(sqliteConversations)
         .values({
           id: input.conversationId,
+          model: input.model ?? existing?.model ?? null,
           title: existing?.title ?? conversationTitle(input.message.content),
           summary: existing?.summary ?? conversationSummary(input.message.content),
           ownerUserId,
@@ -94,7 +95,10 @@ function createSqliteConversationRepository(db: SqliteDatabase): ConversationRep
         })
         .onConflictDoUpdate({
           target: sqliteConversations.id,
-          set: { updatedAt: now }
+          set: {
+            updatedAt: now,
+            ...(input.model ? { model: input.model } : {})
+          }
         })
         .run();
 
@@ -210,6 +214,7 @@ function refreshSqliteConversationSummary(db: SqliteDatabase, conversationId: st
 function conversationSummaryFromRow(row: ConversationRow): DesktopConversationSummary {
   return {
     id: row.id,
+    model: row.model,
     title: row.title,
     summary: row.summary,
     messageCount: row.messageCount,

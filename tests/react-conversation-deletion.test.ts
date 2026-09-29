@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
   deleteConversationAfterRemoteConfirmation,
-  filterHiddenConversations,
-  retryPendingLocalConversationDeletes,
 } from "../src/renderer-react/src/features/conversations/deletion";
 
 const conversation = {
@@ -15,37 +13,30 @@ const conversation = {
 };
 
 describe("conversation deletion coordination", () => {
-  test("does not touch local or UI state when the backend rejects deletion", async () => {
+  test("does not touch UI state when the backend rejects deletion", async () => {
     const events: string[] = [];
-    const hidden = new Set<string>();
 
     await expect(deleteConversationAfterRemoteConfirmation({
       conversation,
       deleteRemote: async () => { events.push("remote"); throw new Error("conflict"); },
-      deleteLocal: () => { events.push("local"); },
-      hiddenConversationIds: hidden,
       removeFromUi: () => { events.push("ui"); },
       onDeleted: () => { events.push("onDelete"); },
     })).rejects.toThrow("conflict");
 
     expect(events).toEqual(["remote"]);
-    expect(hidden.size).toBe(0);
   });
 
-  test("confirms backend deletion before removing local, UI, and current conversation state", async () => {
+  test("confirms backend deletion before removing UI and current conversation state", async () => {
     const events: string[] = [];
 
-    const result = await deleteConversationAfterRemoteConfirmation({
+    await deleteConversationAfterRemoteConfirmation({
       conversation,
       deleteRemote: async () => { events.push("remote"); },
-      deleteLocal: () => { events.push("local"); },
-      hiddenConversationIds: new Set(),
       removeFromUi: () => { events.push("ui"); },
       onDeleted: () => { events.push("onDelete"); },
     });
 
-    expect(events).toEqual(["remote", "ui", "local", "onDelete"]);
-    expect(result.localCleanupError).toBeNull();
+    expect(events).toEqual(["remote", "ui", "onDelete"]);
   });
 
   test("preserves the active thread for background deletes and clears it for current deletes", async () => {
@@ -53,8 +44,6 @@ describe("conversation deletion coordination", () => {
     const remove = async (id: string) => deleteConversationAfterRemoteConfirmation({
       conversation: { ...conversation, id },
       deleteRemote: async () => undefined,
-      deleteLocal: () => undefined,
-      hiddenConversationIds: new Set(),
       removeFromUi: () => undefined,
       onDeleted: () => {
         if (currentConversationId === id) currentConversationId = null;
@@ -67,25 +56,4 @@ describe("conversation deletion coordination", () => {
     expect(currentConversationId).toBeNull();
   });
 
-  test("keeps a remotely deleted conversation hidden when local cleanup fails, then retries", async () => {
-    const hidden = new Set<string>();
-    let attempts = 0;
-    const result = await deleteConversationAfterRemoteConfirmation({
-      conversation,
-      deleteRemote: async () => undefined,
-      deleteLocal: () => { attempts += 1; throw new Error("quota"); },
-      hiddenConversationIds: hidden,
-      removeFromUi: () => undefined,
-      onDeleted: () => undefined,
-    });
-
-    expect(result.localCleanupError?.message).toBe("quota");
-    expect(hidden.has(conversation.id)).toBe(true);
-    expect(filterHiddenConversations([conversation], hidden)).toEqual([]);
-
-    const errors = retryPendingLocalConversationDeletes(hidden, () => { attempts += 1; });
-    expect(errors).toEqual([]);
-    expect(attempts).toBe(2);
-    expect(hidden.size).toBe(0);
-  });
 });

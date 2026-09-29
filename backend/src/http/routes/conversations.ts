@@ -169,7 +169,11 @@ function isDesktopConversationMessageUsage(value: unknown) {
 function isUpsertDesktopConversationMessageInput(value: unknown): value is UpsertDesktopConversationMessageInput {
   if (!value || typeof value !== "object") return false;
   const input = value as Record<string, unknown>;
-  return typeof input.conversationId === "string" && isDesktopConversationMessagePayload(input.message);
+  return (
+    typeof input.conversationId === "string"
+    && (input.model === undefined || (typeof input.model === "string" && Boolean(input.model.trim())))
+    && isDesktopConversationMessagePayload(input.message)
+  );
 }
 
 function readBlackboardArgsFromUrl(url: URL): ReadBlackboardArgs {

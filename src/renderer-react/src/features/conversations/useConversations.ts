@@ -3,12 +3,12 @@ import { deleteConversation, fetchConversationMessages, fetchConversationSummari
 import { restoreConversationMessages, type ChatMessage } from "./messageAdapter";
 import type { AuthSessionController } from "../local-session/useLocalSession";
 import { extractCanvasReplayActions, replayConversationCanvas } from "./replay";
-import { deleteLocalConversation, listLocalConversations, readLocalConversation, saveLocalConversation } from "./localStore";
+import { deleteConversationAfterRemoteConfirmation } from "./deletion";
 import {
-  deleteConversationAfterRemoteConfirmation,
-  filterHiddenConversations,
-  retryPendingLocalConversationDeletes,
-} from "./deletion";
+  exportLegacyConversationRecovery,
+  formatLegacyConversationMigrationSummary,
+  migrateLegacyConversationCache,
+} from "./legacyMigration";
 
 export function useConversations(options: {
   apiOrigin: string;
@@ -25,83 +25,71 @@ export function useConversations(options: {
   model: string;
   title: string | null;
 }) {
-  const { apiOrigin, authSessionRef, isStreaming, setMessages, changeModel, followLatest, onSelect, onDelete, t, messages, conversationId, model, title } = options;
+  const { apiOrigin, authSessionRef, isStreaming, setMessages, changeModel, followLatest, onSelect, onDelete, t } = options;
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectingId, setSelectingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [migrationRecoveryAvailable, setMigrationRecoveryAvailable] = useState(false);
   const selectionGenerationRef = useRef(0);
-  const hiddenConversationIdsRef = useRef(new Set<string>());
+  const migrationPromiseRef = useRef<ReturnType<typeof migrateLegacyConversationCache> | null>(null);
+  const migrationSummaryShownRef = useRef(false);
 
   const load = useCallback(async (silent = false) => {
     const session = authSessionRef.current.snapshot();
-    const cleanupErrors = retryPendingLocalConversationDeletes(hiddenConversationIdsRef.current, deleteLocalConversation);
-    if (cleanupErrors.length) console.warn("[WARN] Local conversation cleanup remains pending", cleanupErrors[0]);
-    const local = filterHiddenConversations(listLocalConversations(), hiddenConversationIdsRef.current);
-    setConversations(local);
-    // Desktop conversations are local-first, but the local backend is also
-    // available to guest/browser sessions. Send the request without an auth
-    // header when no token exists instead of treating that as signed-out.
-    if (!silent) setLoading(true); setError(null);
+    let migrationSummary: string | null = null;
+    if (!silent) setLoading(true);
+    setError(null);
     try {
+      migrationPromiseRef.current ??= migrateLegacyConversationCache({ apiOrigin, token: session.token });
+      const pendingMigration = migrationPromiseRef.current;
+      const migration = await pendingMigration.finally(() => {
+        if (migrationPromiseRef.current === pendingMigration) migrationPromiseRef.current = null;
+      });
+      if (migration.requiresUserAction && !migrationSummaryShownRef.current) {
+        migrationSummaryShownRef.current = true;
+        migrationSummary = formatLegacyConversationMigrationSummary(migration);
+        setError(migrationSummary);
+      }
+      setMigrationRecoveryAvailable(migration.requiresUserAction);
       const loaded = await fetchConversationSummaries(apiOrigin, session.token);
       if (!authSessionRef.current.isCurrent(session)) return;
-      setConversations(filterHiddenConversations(
-        mergeConversationSummaries(local, loaded),
-        hiddenConversationIdsRef.current,
-      ));
-      console.debug(`[DEBUG] Conversation index loaded local=${local.length} backend=${loaded.length}`);
-    } catch (e) { console.error("[ERROR] Caught exception at src/renderer-react/src/features/conversations/useConversations.ts:43", e); setError(e instanceof Error && e.message.trim() ? e.message : t("history.loadFailed")); }
+      setConversations(loaded);
+      console.debug(`[DEBUG] Conversation index loaded backend=${loaded.length}`);
+    } catch (e) {
+      console.error("[ERROR] Caught exception at src/renderer-react/src/features/conversations/useConversations.ts:43", e);
+      const loadError = e instanceof Error && e.message.trim() ? e.message : t("history.loadFailed");
+      setError(migrationSummary ? `${migrationSummary} ${loadError}` : loadError);
+    }
     finally { if (!silent) setLoading(false); }
   }, [apiOrigin, authSessionRef, t]);
 
   useEffect(() => { void load(); }, [load]);
 
-  // Keep the current chat available after the app is closed, without making
-  // local history depend on an account or a backend request. During a stream,
-  // do not mirror every AI SDK message snapshot into React state: that creates
-  // an unrelated render for each chunk and can defeat the SDK's publication
-  // throttle on slower WebKit builds. Persist the final coherent snapshot as
-  // soon as the run becomes terminal instead.
-  useEffect(() => {
-    if (isStreaming || !conversationId || !messages.length || hiddenConversationIdsRef.current.has(conversationId)) return;
-    try {
-      saveLocalConversation({ id: conversationId, model, title, messages });
-      setConversations((current) => mergeConversationSummaries(listLocalConversations(), current));
-    } catch (caughtError) {
-      console.error("[ERROR] Failed to persist local conversation snapshot", caughtError);
-      setError(caughtError instanceof Error && caughtError.message.trim() ? caughtError.message : t("history.saveFailed"));
-    }
-  }, [conversationId, isStreaming, messages, model, title]);
-
   const select = useCallback(async (conversation: ConversationSummary) => {
     const session = authSessionRef.current.snapshot();
-    if (isStreaming || deletingId || hiddenConversationIdsRef.current.has(conversation.id)) return;
+    if (isStreaming || deletingId) return;
     const generation = ++selectionGenerationRef.current;
     const isCurrent = () => selectionGenerationRef.current === generation;
     setSelectingId(conversation.id); setError(null);
     let restoringCanvas = false;
     try {
-      const local = readLocalConversation(conversation.id);
-      let stored: Awaited<ReturnType<typeof fetchConversationMessages>> | null = null;
-      try {
-        stored = await fetchConversationMessages(apiOrigin, session.token, conversation.id);
-      } catch (backendError) {
-        if (!local) throw backendError;
-        console.warn(`[WARN] Falling back to local conversation snapshot conversationId=${conversation.id}`);
-      }
+      const stored = await fetchConversationMessages(apiOrigin, session.token, conversation.id);
       if (!isCurrent() || !authSessionRef.current.isCurrent(session)) return;
-      const useLocal = Boolean(local && (!stored?.updatedAt || local.summary.updatedAt > stored.updatedAt));
-      const restoredMessages = useLocal ? local!.messages : restoreConversationMessages(stored?.messages ?? []);
+      const restoredMessages = restoreConversationMessages(stored.messages);
       restoringCanvas = true;
-      await replayConversationCanvas(extractCanvasReplayActions(restoredMessages), undefined, isCurrent);
+      await replayConversationCanvas(
+        extractCanvasReplayActions(restoredMessages),
+        undefined,
+        () => isCurrent() && authSessionRef.current.isCurrent(session),
+      );
       if (!isCurrent() || !authSessionRef.current.isCurrent(session)) return;
       if (conversation.model) changeModel(conversation.model);
       setMessages(restoredMessages); onSelect(conversation); window.requestAnimationFrame(followLatest);
-      console.info(`[INFO] Conversation selected conversationId=${conversation.id} source=${useLocal ? "local" : "backend"}`);
+      console.info(`[INFO] Conversation selected conversationId=${conversation.id} source=backend`);
     } catch (e) {
-      if (!isCurrent() || (e instanceof DOMException && e.name === "AbortError")) return;
+      if (!isCurrent() || !authSessionRef.current.isCurrent(session) || (e instanceof DOMException && e.name === "AbortError")) return;
       console.error("[ERROR] Caught exception at src/renderer-react/src/features/conversations/useConversations.ts:72", e);
       const fallback = t(restoringCanvas ? "history.replayFailed" : "history.loadConversationFailed");
       setError(e instanceof Error && e.message.trim() ? e.message : fallback);
@@ -116,18 +104,12 @@ export function useConversations(options: {
     setDeletingId(conversation.id);
     setError(null);
     try {
-      const result = await deleteConversationAfterRemoteConfirmation({
+      await deleteConversationAfterRemoteConfirmation({
         conversation,
         deleteRemote: () => deleteConversation(apiOrigin, session.token, conversation.id),
-        deleteLocal: () => deleteLocalConversation(conversation.id),
-        hiddenConversationIds: hiddenConversationIdsRef.current,
         removeFromUi: () => setConversations((current) => current.filter((item) => item.id !== conversation.id)),
         onDeleted: () => onDelete(conversation),
       });
-      if (result.localCleanupError) {
-        console.warn(`[WARN] Conversation deleted remotely; local cleanup remains pending conversationId=${conversation.id}`, result.localCleanupError);
-        setError(result.localCleanupError.message.trim() || t("history.deleteFailed"));
-      }
       console.info(`[INFO] Conversation deleted conversationId=${conversation.id}`);
       return true;
     } catch (e) {
@@ -139,16 +121,27 @@ export function useConversations(options: {
     }
   }, [apiOrigin, authSessionRef, deletingId, isStreaming, onDelete, selectingId, t]);
 
-  return { conversations, loading, error, selectingId, deletingId, setError, load, select, remove };
-}
+  const exportMigrationRecovery = useCallback(() => {
+    if (!migrationRecoveryAvailable) return;
+    const url = URL.createObjectURL(new Blob([exportLegacyConversationRecovery()], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `geochat-legacy-conversation-recovery-${Date.now()}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, [migrationRecoveryAvailable]);
 
-export function mergeConversationSummaries(local: ConversationSummary[], backend: ConversationSummary[]) {
-  const merged = new Map<string, ConversationSummary>();
-  for (const conversation of [...local, ...backend]) {
-    const current = merged.get(conversation.id);
-    if (!current || conversation.updatedAt > current.updatedAt || (
-      conversation.updatedAt === current.updatedAt && conversation.messageCount > current.messageCount
-    )) merged.set(conversation.id, conversation);
-  }
-  return [...merged.values()].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  return {
+    conversations,
+    loading,
+    error,
+    selectingId,
+    deletingId,
+    migrationRecoveryAvailable,
+    exportMigrationRecovery,
+    setError,
+    load,
+    select,
+    remove,
+  };
 }

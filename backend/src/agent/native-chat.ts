@@ -130,7 +130,14 @@ export async function createNativeChatResponse(
     throw error;
   }
   try {
-    await persistNativeConversationMessages(context, input.conversationId, [latestUser], options.dataScope);
+    await persistNativeConversationMessages(
+      context,
+      input.conversationId,
+      [latestUser],
+      options.dataScope,
+      undefined,
+      input.model.model,
+    );
   } catch (error) {
     const sanitized = sanitizeProviderError(error);
     run = finishAgentRunLedger(run, {
@@ -360,6 +367,7 @@ export async function createNativeChatResponse(
               finalMessages,
               options.dataScope,
               next.usage,
+              input.model.model,
             ));
         resolveTerminalPersistence({ status: persisted.status, error: persisted.error });
       } catch (error) {
@@ -541,6 +549,7 @@ async function persistNativeConversationMessages(
   messages: UIMessage[],
   dataScope?: ConversationDataScope,
   usage?: AgentRunLedgerRecord["usage"],
+  model?: string,
 ) {
   if (!dataScope || !context.repositories.conversations) return;
   for (const message of messages) {
@@ -550,6 +559,7 @@ async function persistNativeConversationMessages(
     const createdAt = existing?.createdAt ?? new Date().toISOString();
     await context.repositories.conversations.upsertConversationMessage({
       conversationId,
+      ...(model ? { model } : {}),
       message: {
         id: message.id,
         role: message.role,

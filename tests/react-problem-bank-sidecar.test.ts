@@ -44,6 +44,10 @@ describe("problem-bank sidecar", () => {
       new URL("../src/renderer-react/src/components/AssistantPanel.tsx", import.meta.url),
       "utf8",
     );
+    const windowChromeSource = readFileSync(
+      new URL("../src/renderer-react/src/features/assistant-workspace/AssistantWindowChrome.tsx", import.meta.url),
+      "utf8",
+    );
     const sidecarSource = readFileSync(
       new URL("../src/renderer-react/src/components/ProblemBankSidecar.tsx", import.meta.url),
       "utf8",
@@ -54,8 +58,9 @@ describe("problem-bank sidecar", () => {
     expect(panelSource).toContain("<AnimatePresence");
     expect(panelSource).toContain('height: "100%"');
     expect(panelSource).toContain("<ProblemBankSidecar onClose={closeProblemBank} onUseProblem={useProblemInComposer} />");
-    expect(panelSource).toContain("onPointerDown={panelWindow.startDragging}");
-    expect(panelSource).toContain("onPointerMove={movePanel}");
+    expect(windowChromeSource).toContain("onPointerDown={props.panelWindow.startDragging}");
+    expect(panelSource).toContain("onHeaderPointerMove={movePanel}");
+    expect(windowChromeSource).toContain("onPointerMove={props.onHeaderPointerMove}");
     expect(panelSource).toContain("problemBankRestorePositionRef.current = null;");
     expect(panelSource).toContain("resolvePanelWindowHost(panel)");
     expect(panelSource).not.toContain("const host = panel?.parentElement;");

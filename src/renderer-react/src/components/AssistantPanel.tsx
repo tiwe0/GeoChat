@@ -3,9 +3,6 @@ import {
   Box,
   ButtonBase,
   IconButton,
-  ListItemText,
-  Menu,
-  MenuItem,
   Paper,
   Stack,
   Typography,
@@ -40,13 +37,6 @@ import { useConversations } from "../features/conversations/useConversations";
 import { useConversationBlackboard } from "../features/conversations/useConversationBlackboard";
 import { AssistantSessionController } from "../features/session/assistantSessionController";
 import {
-  CHAT_PAGE_MIN_HEIGHT,
-  DEFAULT_PANEL_HEIGHT,
-  DEFAULT_PANEL_WIDTH,
-  MIN_PANEL_WIDTH,
-  RESIZE_HANDLES,
-  USER_PAGE_MIN_HEIGHT,
-  USER_PAGE_MIN_WIDTH,
   resolvePanelWindowHost,
   usePanelWindow,
 } from "../features/panel-window/usePanelWindow";
@@ -72,9 +62,6 @@ import { backendAuthToken, backendOrigin } from "../features/desktop/runtime";
 import type { GeoGebraSelectionContext, GeoGebraSelectionRefreshReason } from "../geogebra/selection-context";
 import {
   FusionModeSurface,
-  FusionOnboardingTour,
-  FusionTranscript,
-  FusionViewportCard,
   InteractionModeButton,
   InteractionModeTransition,
   fusionPanelFromWindowState,
@@ -95,9 +82,10 @@ import {
   useGeoChatAssistantRuntime,
   type GeoChatAssistantSubmission,
 } from "../features/assistant-ui";
+import { AssistantWindowShell } from "../features/assistant-workspace/AssistantWindowShell";
+import { FusionAssistantOverlays } from "../features/assistant-workspace/FusionAssistantOverlays";
+import { useOnboardingState } from "../features/assistant-workspace/useOnboardingState";
 
-const ONBOARDING_TOUR_STORAGE_KEY = "geogebraCopilotOnboardingTourCompleted";
-const ONBOARDING_TOUR_VERSION = 3;
 const THINKING_ENABLED_STORAGE_KEY = "geogebraCopilotThinkingEnabled";
 const LEGACY_REASONING_MODE_STORAGE_KEY = "geogebraCopilotReasoningMode";
 const THINKING_EFFORT_STORAGE_KEY = "geogebraCopilotThinkingEffort";
@@ -120,48 +108,6 @@ function compactConversationTitle(value: string) {
     .trim();
   if (!normalized) return "";
   return normalized.length > 60 ? `${normalized.slice(0, 60).trimEnd()}…` : normalized;
-}
-
-type PanelContextMenuState = {
-  left: number;
-  top: number;
-  selectedText: string;
-  editable: HTMLInputElement | HTMLTextAreaElement | HTMLElement | null;
-};
-
-function contextMenuEditableTarget(target: EventTarget | null) {
-  if (!(target instanceof Element)) return null;
-  const editable = target.closest("input, textarea, [contenteditable='true'], [contenteditable='']");
-  return editable instanceof HTMLElement ? editable : null;
-}
-
-function contextMenuSelectedText(target: Element | null) {
-  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-    const start = target.selectionStart ?? 0;
-    const end = target.selectionEnd ?? start;
-    return target.value.slice(Math.min(start, end), Math.max(start, end));
-  }
-  return target?.ownerDocument.getSelection()?.toString() ?? "";
-}
-
-async function writeContextMenuText(text: string) {
-  if (!text) return;
-  try { await navigator.clipboard.writeText(text); } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/components/AssistantPanel.tsx:123", caughtError); /* clipboard permission is browser-controlled */ }
-}
-
-async function pasteContextMenuText(target: PanelContextMenuState["editable"]) {
-  if (!target) return;
-  let text = "";
-  try { text = await navigator.clipboard.readText(); } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/components/AssistantPanel.tsx:129", caughtError); return; }
-  if (!text) return;
-  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-    const start = target.selectionStart ?? target.value.length;
-    const end = target.selectionEnd ?? start;
-    target.setRangeText(text, start, end, "end");
-    target.dispatchEvent(new Event("input", { bubbles: true }));
-    return;
-  }
-  target.ownerDocument.execCommand("insertText", false, text);
 }
 
 function WindowThreadEmpty({ onSubmit }: { onSubmit: (prompt: string) => void }) {
@@ -258,7 +204,6 @@ export function AssistantPanel({
   const modeTransition = useInteractionModeTransition(interaction);
   const fusionController = useFusionModeController(interaction.mode === "fusion");
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
-  const [contextMenu, setContextMenu] = useState<PanelContextMenuState | null>(null);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [panelView, setPanelView] = useState<"chat" | "user">("chat");
   const [problemBankOpen, setProblemBankOpen] = useState(false);
@@ -298,7 +243,7 @@ export function AssistantPanel({
   const fusionPanelTriggerRef = useRef<HTMLButtonElement | null>(null);
   const fusionPanelFocusRestoreTimerRef = useRef<number | null>(null);
   const previousInteractionModeRef = useRef(interaction.mode);
-  const [onboardingTourReady, setOnboardingTourReady] = useState<boolean | null>(null);
+  const onboarding = useOnboardingState();
   const suppressBlackboardToggleRef = useRef(false);
   const assistantRuntimeRef = useRef<AssistantRuntime | null>(null);
   const pendingFusionSelectionRef = useRef<readonly string[] | null>(null);
@@ -337,7 +282,7 @@ export function AssistantPanel({
     loadFailedMessage: t("blackboard.loadFailed"),
   });
   const panelWindow = usePanelWindow(panelView, interaction.mode === "window");
-  const { panelRef, collapsed, setCollapsed, dragging, resizing } = panelWindow;
+  const { panelRef, collapsed, setCollapsed } = panelWindow;
   const { messages, setMessages, sendMessage, retry, canRetry, stop, status, error } = useAgentRunChat({
     apiOrigin: API_ORIGIN,
     getAuthToken: () => authSessionRef.current.token,
@@ -522,17 +467,6 @@ export function AssistantPanel({
     assistantSessionController.setThinkingEnabled(false);
     void browser.storage.local.set({ [THINKING_ENABLED_STORAGE_KEY]: false });
   }, [assistantSessionController, selectedModel, thinkingEnabled, thinkingSupported]);
-  // Show the tour once on first launch. Completion and skipping are persisted
-  // locally so returning users are not interrupted.
-  useEffect(() => {
-    void browser.storage.local
-      .get(ONBOARDING_TOUR_STORAGE_KEY)
-      .then((stored) => setOnboardingTourReady(stored[ONBOARDING_TOUR_STORAGE_KEY] !== ONBOARDING_TOUR_VERSION))
-      .catch((error) => {
-        console.error("[ERROR] Failed to read onboarding state", error);
-        setOnboardingTourReady(true);
-      });
-  }, []);
   useEffect(() => {
     void browser.storage.local.get([THINKING_ENABLED_STORAGE_KEY, LEGACY_REASONING_MODE_STORAGE_KEY, THINKING_EFFORT_STORAGE_KEY]).then((stored) => {
       const storedThinking = stored[THINKING_ENABLED_STORAGE_KEY];
@@ -556,21 +490,12 @@ export function AssistantPanel({
     });
   }, [assistantSessionController]);
 
-  function completeOnboardingTour() {
-    setOnboardingTourReady(false);
-    void browser.storage.local.set({ [ONBOARDING_TOUR_STORAGE_KEY]: ONBOARDING_TOUR_VERSION });
-  }
-
   function restartOnboardingTour() {
     setPanelView("chat");
     closeProblemBank();
     setConversationDrawerOpen(false);
     setBlackboardOpen(false);
-    setOnboardingTourReady(false);
-    void browser.storage.local.remove(ONBOARDING_TOUR_STORAGE_KEY).then(
-      () => setOnboardingTourReady(true),
-      () => setOnboardingTourReady(true),
-    );
+    onboarding.restart();
   }
 
   const onboardingSteps: Step[] = [
@@ -595,7 +520,7 @@ export function AssistantPanel({
     // The assistant-ui ThreadPrimitive.Viewport owns auto-scroll. Conversation
     // switches also remount the viewport through its conversation key below.
     followLatest: () => undefined,
-    onSelect: (conversation) => {
+    onSelect: () => {
       fusionController.resetTurns();
       setConversationDrawerOpen(false);
       setBlackboardOpen(false);
@@ -1027,61 +952,38 @@ export function AssistantPanel({
           modeTransition.requestMode("window", origin);
         }}
       />
-      <ConversationDrawer
-        viewport
-        open={fusionPanel === "history"}
-        interactionDisabled={isStreaming}
-        loading={conversationHistoryLoading}
-        selectingId={selectingConversationId}
-        deletingId={deletingConversationId}
-        error={conversationHistoryError}
-        onExportRecovery={conversationHistory.migrationRecoveryAvailable ? conversationHistory.exportMigrationRecovery : undefined}
-        conversations={conversations}
-        currentConversationId={currentConversationId}
-        onClose={closeFusionPanel}
-        onSelect={(conversation) => {
-          void conversationHistory.select(conversation).finally(() => closeFusionPanel());
+      <FusionAssistantOverlays
+        activePanel={fusionPanel}
+        panelTitle={panelTitle}
+        isStreaming={isStreaming}
+        conversationHistory={{
+          conversations,
+          loading: conversationHistoryLoading,
+          selectingId: selectingConversationId,
+          deletingId: deletingConversationId,
+          error: conversationHistoryError,
+          migrationRecoveryAvailable: conversationHistory.migrationRecoveryAvailable,
+          exportMigrationRecovery: conversationHistory.exportMigrationRecovery,
+          select: conversationHistory.select,
+          remove: conversationHistory.remove,
         }}
-        onDelete={conversationHistory.remove}
-      />
-      <BlackboardDrawer
-        viewport
-        open={fusionPanel === "blackboard"}
-        conversationId={currentConversationId}
-        loading={blackboard.loading}
-        error={blackboard.error}
-        entries={blackboard.entries}
+        currentConversationId={currentConversationId}
+        blackboard={blackboard}
         onClose={closeFusionPanel}
-        onRefresh={() => void blackboard.load()}
+        onUseProblem={useProblemInComposer}
+        settings={(
+          <SettingsPanel
+            mcp={mcp}
+            onRestartTour={restartOnboardingTour}
+            thinkingEnabled={thinkingEnabled}
+            thinkingSupported={thinkingSupported}
+            thinkingEffort={thinkingEffort}
+            modelLabel={selectedModelOption?.label ?? selectedModel}
+          />
+        )}
+        onboardingReady={onboarding.ready === true}
+        onCompleteOnboarding={onboarding.complete}
       />
-      <AnimatePresence initial={false}>
-        {fusionPanel === "transcript" && (
-          <FusionViewportCard key="fusion-transcript" panelId="transcript" title={panelTitle} closeLabel={t("history.close")} onClose={closeFusionPanel}>
-            <FusionTranscript
-              emptyLabel={t("history.empty")}
-              ariaLabel={t("fusion.transcript")}
-            />
-          </FusionViewportCard>
-        )}
-        {fusionPanel === "problem-bank" && (
-          <FusionViewportCard key="fusion-problem-bank" panelId="problem-bank" title={t("problemBank.title")} closeLabel={t("problemBank.close")} onClose={closeFusionPanel} hideHeader>
-            <ProblemBankSidecar onClose={closeFusionPanel} onUseProblem={useProblemInComposer} />
-          </FusionViewportCard>
-        )}
-        {fusionPanel === "settings" && (
-          <FusionViewportCard key="fusion-settings" panelId="settings" wide title={t("settings.title")} closeLabel={t("settings.back")} onClose={closeFusionPanel}>
-            <SettingsPanel
-              mcp={mcp}
-              onRestartTour={restartOnboardingTour}
-              thinkingEnabled={thinkingEnabled}
-              thinkingSupported={thinkingSupported}
-              thinkingEffort={thinkingEffort}
-              modelLabel={selectedModelOption?.label ?? selectedModel}
-            />
-          </FusionViewportCard>
-        )}
-      </AnimatePresence>
-      <FusionOnboardingTour run={onboardingTourReady === true} onComplete={completeOnboardingTour} />
       </AssistantRuntimeProvider>
     );
   }
@@ -1091,37 +993,12 @@ export function AssistantPanel({
     <InteractionModeTransition
       transition={modeTransition.transition}
     />
-    <MotionPaper
-      ref={panelRef}
-      className="geochat-panel"
-      aria-label={t("common.appName")}
-      lang={i18n.resolvedLanguage ?? i18n.language}
-      elevation={dragging || resizing ? 10 : 6}
-      // Keep layout measurement enabled during restore. The collapsed control
-      // starts the transition from the drag surface, before dragging state is
-      // released, so disabling layout here would make the restore snap open.
-      layout={!resizing}
-      initial={reduceMotion ? false : { opacity: 0, scale: 0.985, y: 8 }}
-      animate={{ borderRadius: collapsed ? 20 : 4, opacity: 1, scale: 1, y: 0 }}
-      transition={{
-        layout: { duration: 0.24, ease: [0.22, 1, 0.36, 1] },
-        opacity: { duration: reduceMotion ? 0 : 0.18 },
-        scale: { duration: reduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] },
-        y: { duration: reduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] },
-      }}
-      onContextMenuCapture={(event) => {
-        const target = event.target instanceof Element ? event.target : null;
-        const editable = contextMenuEditableTarget(event.target);
-        const selectedText = contextMenuSelectedText(editable ?? target).trim();
-        if (editable || selectedText) {
-          event.preventDefault();
-          event.stopPropagation();
-          setContextMenu({ left: event.clientX, top: event.clientY, selectedText, editable });
-          return;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-      }}
+    <AssistantWindowShell
+      panelWindow={panelWindow}
+      panelView={panelView}
+      appLabel={t("common.appName")}
+      language={i18n.resolvedLanguage ?? i18n.language}
+      onHeaderPointerMove={movePanel}
       onPointerDownCapture={(event) => {
         if (!blackboardOpen || !(event.target instanceof Element)) return;
         if (event.target.closest("#copilot-blackboard-drawer")) return;
@@ -1131,86 +1008,8 @@ export function AssistantPanel({
         }
         setBlackboardOpen(false);
       }}
-      sx={{
-        width: collapsed ? 40 : `min(${DEFAULT_PANEL_WIDTH}px, calc(100vw - 40px))`,
-        minWidth: collapsed ? 40 : panelView === "user"
-          ? `min(${USER_PAGE_MIN_WIDTH}px, calc(100vw - 40px))`
-          : `min(${MIN_PANEL_WIDTH}px, calc(100vw - 40px))`,
-        maxWidth: collapsed ? 40 : undefined,
-        height: collapsed ? 40 : `min(${DEFAULT_PANEL_HEIGHT}px, calc(100vh - 40px))`,
-        minHeight: collapsed
-          ? 40
-          : panelView === "user"
-            ? `min(${USER_PAGE_MIN_HEIGHT}px, calc(100vh - 40px))`
-            : `min(${CHAT_PAGE_MIN_HEIGHT}px, calc(100vh - 40px))`,
-        maxHeight: collapsed ? 40 : "calc(100vh - 40px)",
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-        position: "relative",
-        border: 1,
-        borderColor: "divider",
-        borderRadius: collapsed ? "50%" : 1,
-        color: "text.primary",
-        transition: (theme) => theme.transitions.create("box-shadow", { duration: 160 }),
-        "@media (prefers-reduced-motion: reduce)": { transition: "none" },
-      }}
-    >
-      {collapsed ? (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.72 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.16, ease: "easeOut" }}
-          onPointerDown={(event) => panelWindow.startDragging(event, true)}
-          onPointerMove={panelWindow.moveDragging}
-          onPointerUp={panelWindow.stopDragging}
-          onPointerCancel={panelWindow.stopDragging}
-          onLostPointerCapture={panelWindow.stopDragging}
-          style={{
-            display: "grid",
-            width: "100%",
-            height: "100%",
-            placeItems: "center",
-            cursor: dragging ? "grabbing" : "grab",
-            touchAction: "none",
-            userSelect: "none",
-          }}
-        >
-          <IconButton
-            type="button"
-            onClick={panelWindow.handleCollapsedRestoreClick}
-            aria-label={t("panel.restoreWindow")}
-            title={t("panel.restoreWindow")}
-            sx={{ width: 40, height: 40, borderRadius: "50%", color: "primary.main", cursor: "inherit" }}
-          >
-            <BrandIcon size={34} />
-          </IconButton>
-        </motion.div>
-      ) : (
-      <Box
-        component="header"
-        data-language-transition-surface
-        onPointerDown={panelWindow.startDragging}
-        onPointerMove={movePanel}
-        onPointerUp={panelWindow.stopDragging}
-        onPointerCancel={panelWindow.stopDragging}
-        onLostPointerCapture={panelWindow.stopDragging}
-        sx={{
-          minHeight: 48,
-          px: 1.5,
-          py: 0.5,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 1,
-          borderTop: 0,
-          borderBottom: 0,
-          bgcolor: "background.paper",
-          cursor: dragging ? "grabbing" : "grab",
-          touchAction: "none",
-          userSelect: "none",
-        }}
-      >
+      header={(
+        <>
         <Stack direction="row" spacing={1} sx={{ minWidth: 0, flex: 1, minHeight: 36, alignItems: "center" }}>
           {/* The brand mark is identity, not a control, in every view. */}
           <Box
@@ -1357,8 +1156,9 @@ export function AssistantPanel({
             {collapsed ? <SquareIcon size={18} /> : <MinusIcon size={18} />}
           </IconButton>
         </Stack>
-      </Box>
+        </>
       )}
+    >
       {!collapsed && panelView === "chat" && (
         <>
           <ConversationDrawer
@@ -1454,7 +1254,7 @@ export function AssistantPanel({
           </motion.div>
         </AnimatePresence>
       )}
-      {onboardingTourReady && !collapsed && panelView === "chat" && panelRef.current && (
+      {onboarding.ready && !collapsed && panelView === "chat" && panelRef.current && (
         <Joyride
           steps={onboardingSteps}
           run
@@ -1494,56 +1294,12 @@ export function AssistantPanel({
           }}
           tooltipComponent={OnboardingTooltip}
           onEvent={(data) => {
-            if (data.status === STATUS.FINISHED || data.status === STATUS.SKIPPED) completeOnboardingTour();
+            if (data.status === STATUS.FINISHED || data.status === STATUS.SKIPPED) onboarding.complete();
           }}
         />
       )}
-      {!collapsed && RESIZE_HANDLES.map((handle) => (
-        <Box
-          key={handle.direction}
-          aria-hidden="true"
-          onPointerDown={panelWindow.startResizing(handle.direction)}
-          onPointerMove={panelWindow.moveResizing}
-          onPointerUp={panelWindow.stopResizing}
-          onPointerCancel={panelWindow.stopResizing}
-          onLostPointerCapture={panelWindow.stopResizing}
-          sx={{
-            position: "absolute",
-            zIndex: 2,
-            cursor: handle.cursor,
-            touchAction: "none",
-            ...handle.position,
-          }}
-        />
-      ))}
-      <Menu
-        open={Boolean(contextMenu)}
-        onClose={() => setContextMenu(null)}
-        anchorReference="anchorPosition"
-        anchorPosition={contextMenu ? { top: contextMenu.top, left: contextMenu.left } : undefined}
-        container={() => panelRef.current?.parentElement ?? null}
-      >
-        <MenuItem
-          disabled={!contextMenu?.selectedText}
-          onClick={() => {
-            if (contextMenu?.selectedText) void writeContextMenuText(contextMenu.selectedText);
-            setContextMenu(null);
-          }}
-        >
-          <ListItemText primary={t("common.copy")} />
-        </MenuItem>
-        <MenuItem
-          disabled={!contextMenu?.editable}
-          onClick={() => {
-            void pasteContextMenuText(contextMenu?.editable ?? null);
-            setContextMenu(null);
-          }}
-        >
-          <ListItemText primary={t("common.paste")} />
-        </MenuItem>
-      </Menu>
       <ErrorToast message={toastError} />
-    </MotionPaper>
+    </AssistantWindowShell>
     <AnimatePresence initial={false} onExitComplete={restorePanelAfterProblemBankClose}>
       {problemBankOpen && !collapsed && panelView === "chat" ? (
         <MotionPaper

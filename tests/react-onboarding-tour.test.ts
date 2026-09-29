@@ -7,6 +7,10 @@ const panelSource = readFileSync(
   new URL("../src/renderer-react/src/components/AssistantPanel.tsx", import.meta.url),
   "utf8",
 );
+const onboardingStateSource = readFileSync(
+  new URL("../src/renderer-react/src/features/assistant-workspace/useOnboardingState.ts", import.meta.url),
+  "utf8",
+);
 const targetSource = [
   panelSource,
   readFileSync(new URL("../src/renderer-react/src/features/assistant-ui/GeoChatComposer.tsx", import.meta.url), "utf8"),
@@ -45,9 +49,11 @@ describe("initial onboarding tour", () => {
   });
 
   test("versions completion so the expanded tutorial is shown once after upgrade", () => {
-    expect(panelSource).toContain("const ONBOARDING_TOUR_VERSION = 3;");
-    expect(panelSource).toContain("stored[ONBOARDING_TOUR_STORAGE_KEY] !== ONBOARDING_TOUR_VERSION");
-    expect(panelSource).toContain("[ONBOARDING_TOUR_STORAGE_KEY]: ONBOARDING_TOUR_VERSION");
+    expect(onboardingStateSource).toContain("export const ONBOARDING_TOUR_VERSION = 3;");
+    expect(onboardingStateSource).toContain("stored[ONBOARDING_TOUR_STORAGE_KEY] !== ONBOARDING_TOUR_VERSION");
+    expect(onboardingStateSource).toContain("[ONBOARDING_TOUR_STORAGE_KEY]: ONBOARDING_TOUR_VERSION");
+    expect(panelSource).toContain("const onboarding = useOnboardingState();");
+    expect(panelSource).toContain("onRestartTour={restartOnboardingTour}");
   });
 
   test("covers the fusion workflow without relying on the window toolbar", () => {

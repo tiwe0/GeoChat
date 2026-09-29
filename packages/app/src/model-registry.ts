@@ -639,12 +639,12 @@ export function getDefaultAgentProvider() {
 
 export function normalizeAgentModelConfig(value: Partial<AgentModelConfig> | undefined): AgentModelConfig {
   const defaultProvider = getDefaultAgentProvider();
+  const requestedModel = typeof value?.model === "string" ? value.model.trim() : "";
   const hasKnownProvider = AGENT_PROVIDER_REGISTRY.some((entry) => entry.id === value?.provider);
-  const hasCustomProvider = value?.provider === CUSTOM_AGENT_PROVIDER_ID && Boolean(value.model?.trim());
+  const hasCustomProvider = value?.provider === CUSTOM_AGENT_PROVIDER_ID && Boolean(requestedModel);
   const provider = hasKnownProvider || hasCustomProvider ? value!.provider! : defaultProvider.id;
   const modelOptions = getAgentModelOptions(provider);
   const defaultModel = modelOptions[0];
-  const requestedModel = value?.model?.trim();
   const model = (hasKnownProvider || hasCustomProvider) && requestedModel ? requestedModel : defaultModel.value;
 
   return Object.freeze({

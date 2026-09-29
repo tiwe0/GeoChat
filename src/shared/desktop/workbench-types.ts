@@ -129,6 +129,7 @@ export type InteractionConfig = {
 };
 
 export type DesktopConfig = {
+  schemaVersion: 1;
   model: ModelConfig;
   visionModel: ModelConfig;
   providerCredentials: Record<string, ProviderCredentialConfig>;

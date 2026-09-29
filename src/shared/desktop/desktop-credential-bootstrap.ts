@@ -1,5 +1,9 @@
 import type { GeoChatDesktopApi } from "../desktop-api";
-import { CONFIG_STORAGE_KEY } from "./desktop-config";
+import {
+  CONFIG_STORAGE_KEY,
+  CREDENTIAL_MIGRATION_BACKUP_KEY,
+  DESKTOP_CONFIG_SCHEMA_VERSION,
+} from "./desktop-config";
 import {
   hasLegacyPlaintextCredentials,
   parseRawDesktopConfig,
@@ -7,8 +11,9 @@ import {
   runLegacyDesktopCredentialMigration,
   type LegacyCredentialIdentity,
 } from "./desktop-credentials";
+import { recoverDesktopConfigBeforeLoad } from "./desktop-config-recovery";
 
-export const CREDENTIAL_MIGRATION_BACKUP_KEY = `${CONFIG_STORAGE_KEY}:credential-migration-backup:v1`;
+export { CREDENTIAL_MIGRATION_BACKUP_KEY } from "./desktop-config";
 
 type MigrationApi = Pick<
   GeoChatDesktopApi,
@@ -54,7 +59,25 @@ export async function migrateLegacyDesktopCredentialsBeforeConfigLoad(
 ) {
   const desktopApi = api;
   const rawJson = storage.getItem(CONFIG_STORAGE_KEY) ?? "{}";
-  const rawConfig = parseRawDesktopConfig(rawJson);
+  let rawConfig: Record<string, unknown>;
+  try {
+    rawConfig = parseRawDesktopConfig(rawJson);
+  } catch {
+    // Config recovery owns quarantine and deterministic fallback. Never alter
+    // unparseable bytes in the credential migration stage.
+    if (desktopApi && await desktopApi.readCredentialMigrationJournal()) {
+      throw new Error("Credential migration recovery is incomplete");
+    }
+    return;
+  }
+  if (rawConfig.schemaVersion !== undefined && rawConfig.schemaVersion !== DESKTOP_CONFIG_SCHEMA_VERSION) {
+    // A future schema may encode credential locations differently. Preserve it
+    // byte-for-byte for config recovery instead of guessing or leaking data.
+    if (desktopApi && await desktopApi.readCredentialMigrationJournal()) {
+      throw new Error("Credential migration recovery is incomplete");
+    }
+    return;
+  }
   const containsPlaintext = hasLegacyPlaintextCredentials(rawConfig);
 
   if (!desktopApi) {
@@ -104,4 +127,13 @@ export async function migrateLegacyDesktopCredentialsBeforeConfigLoad(
     deleteJournal: () => desktopApi.deleteCredentialMigrationJournal(),
   });
   storage.removeItem(CREDENTIAL_MIGRATION_BACKUP_KEY);
+}
+
+/** Enforces credential migration before versioned config recovery. */
+export async function prepareDesktopConfigBeforeLoad(
+  storage: MigrationStorage = localStorage,
+  api?: MigrationApi,
+) {
+  await migrateLegacyDesktopCredentialsBeforeConfigLoad(storage, api);
+  return recoverDesktopConfigBeforeLoad(storage);
 }

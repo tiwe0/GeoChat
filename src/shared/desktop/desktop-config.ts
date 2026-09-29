@@ -27,7 +27,11 @@ import {
 import { detectPreferredLocale, type Locale } from "./locale";
 
 export const CONFIG_STORAGE_KEY = "geochat-desktop-ui-config";
+export const DESKTOP_CONFIG_SCHEMA_VERSION = 1 as const;
+export const CREDENTIAL_MIGRATION_BACKUP_KEY = `${CONFIG_STORAGE_KEY}:credential-migration-backup:v1`;
 export const DESKTOP_CONFIG_CHANGED_EVENT = "geochat:desktop-config-changed";
+
+type ConfigStorage = Pick<Storage, "getItem" | "setItem">;
 
 export const DEFAULT_CUSTOM_PROVIDER_CONFIG: CustomProviderConfig = {
   name: "",
@@ -229,6 +233,7 @@ function createDefaultSkillConfig(): SkillConfig {
 
 export function createDefaultDesktopConfig(locale: Locale = detectPreferredLocale()): DesktopConfig {
   return {
+    schemaVersion: DESKTOP_CONFIG_SCHEMA_VERSION,
     model: DEFAULT_MODEL_CONFIG,
     visionModel: DEFAULT_VISION_MODEL_CONFIG,
     providerCredentials: {
@@ -406,6 +411,7 @@ export function normalizeDesktopConfig(value: Partial<DesktopConfig> | undefined
   const activeCredentials = credentialsForProvider(providerCredentials, model.provider);
   const visionCredentials = credentialsForProvider(providerCredentials, visionModel.provider);
   return {
+    schemaVersion: DESKTOP_CONFIG_SCHEMA_VERSION,
     model: {
       ...model,
       credentialRef: model.credentialRef || activeCredentials.credentialRef,
@@ -443,9 +449,34 @@ export function readDesktopConfig(): DesktopConfig {
   }
 }
 
-export function persistDesktopConfig(config: DesktopConfig) {
+function rawConfigRequiresRecoveryBeforePersist(rawJson: string | null) {
+  if (rawJson === null) return false;
+  try {
+    const rawConfig = parseRawDesktopConfig(rawJson);
+    return hasLegacyPlaintextCredentials(rawConfig)
+      || (rawConfig.schemaVersion !== undefined && rawConfig.schemaVersion !== DESKTOP_CONFIG_SCHEMA_VERSION);
+  } catch {
+    // A caller must pass malformed data through the quarantine path rather
+    // than silently replacing bytes that may contain an unparseable secret.
+    return true;
+  }
+}
+
+export function persistDesktopConfig(
+  config: DesktopConfig,
+  storage: ConfigStorage = globalThis.localStorage,
+) {
   if (hasLegacyPlaintextCredentials(config)) throw new DesktopCredentialMigrationRequiredError();
-  globalThis.localStorage?.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
+  if (
+    rawConfigRequiresRecoveryBeforePersist(storage?.getItem(CONFIG_STORAGE_KEY) ?? null)
+    || rawConfigRequiresRecoveryBeforePersist(storage?.getItem(CREDENTIAL_MIGRATION_BACKUP_KEY) ?? null)
+  ) {
+    throw new DesktopCredentialMigrationRequiredError();
+  }
+  storage?.setItem(CONFIG_STORAGE_KEY, JSON.stringify({
+    ...config,
+    schemaVersion: DESKTOP_CONFIG_SCHEMA_VERSION,
+  }));
   if (typeof globalThis.dispatchEvent === "function" && typeof Event !== "undefined") {
     globalThis.dispatchEvent(new Event(DESKTOP_CONFIG_CHANGED_EVENT));
   }

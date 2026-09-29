@@ -4,6 +4,64 @@ import {
   type AgentModelProtocol,
   type AgentModelProvider
 } from "./model-registry";
+import {
+  isRuntimeRecord,
+  runtimeDecodeFailure,
+  runtimeDecodeSuccess,
+  type RuntimeDecodeResult
+} from "./runtime-decode";
+
+export type ModelDiscoveryRequest = {
+  credentialRef: string;
+};
+
+export type ModelDiscoverySuccessResponse = {
+  ids: string[];
+};
+
+export type ModelDiscoveryFailureResponse = {
+  error: string;
+  message: string;
+  status?: number;
+};
+
+export type ModelDiscoveryResponse = ModelDiscoverySuccessResponse | ModelDiscoveryFailureResponse;
+
+export function decodeModelDiscoveryRequest(
+  value: unknown
+): RuntimeDecodeResult<ModelDiscoveryRequest, "model_discovery_request_invalid"> {
+  if (
+    !isRuntimeRecord(value)
+    || Object.keys(value).length !== 1
+    || typeof value.credentialRef !== "string"
+    || !value.credentialRef.trim()
+  ) {
+    return runtimeDecodeFailure("model_discovery_request_invalid");
+  }
+  return runtimeDecodeSuccess({ credentialRef: value.credentialRef });
+}
+
+export function decodeModelDiscoveryResponse(
+  value: unknown
+): RuntimeDecodeResult<ModelDiscoveryResponse, "model_discovery_response_invalid"> {
+  if (!isRuntimeRecord(value)) return runtimeDecodeFailure("model_discovery_response_invalid");
+  if (Array.isArray(value.ids) && value.ids.length > 0 && value.ids.every((id) => typeof id === "string" && Boolean(id.trim()))) {
+    return runtimeDecodeSuccess({ ids: [...value.ids] });
+  }
+  if (
+    typeof value.error === "string"
+    && Boolean(value.error.trim())
+    && typeof value.message === "string"
+    && (value.status === undefined || (typeof value.status === "number" && Number.isInteger(value.status)))
+  ) {
+    return runtimeDecodeSuccess({
+      error: value.error,
+      message: value.message,
+      ...(typeof value.status === "number" ? { status: value.status } : {})
+    });
+  }
+  return runtimeDecodeFailure("model_discovery_response_invalid");
+}
 
 /**
  * Ask a provider which models it currently serves.

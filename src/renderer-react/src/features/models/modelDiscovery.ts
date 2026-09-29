@@ -2,6 +2,11 @@
  * Ask the backend to discover models with a credential stored by the native
  * broker. The renderer never receives or reconstructs provider authentication.
  */
+import {
+  decodeModelDiscoveryResponse,
+  type ModelDiscoveryFailureResponse
+} from "@geochat-ai/app/model-discovery";
+
 const CACHE_PREFIX = "geochatDesktopModelCatalog:";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
@@ -10,7 +15,7 @@ type CachedDiscovery = { ids: string[]; fetchedAt: number };
 export type DiscoveryOutcome =
   | { status: "ok"; ids: string[]; fetchedAt: number; fromCache: boolean }
   | { status: "unsupported" }
-  | { status: "failed"; message: string };
+  | { status: "failed"; message: string; errorCode?: string };
 
 function cacheKey(credentialRef: string) {
   return `${CACHE_PREFIX}${credentialRef}`;
@@ -62,8 +67,9 @@ export async function discoverProviderModels(input: {
   }
 
   let payload: unknown;
+  let response: Response;
   try {
-    const response = await fetch(`${input.apiOrigin}/v1/models/discover`, {
+    response = await fetch(`${input.apiOrigin}/v1/models/discover`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -72,46 +78,41 @@ export async function discoverProviderModels(input: {
       body: JSON.stringify({ credentialRef }),
       signal: AbortSignal.timeout(15_000)
     });
-    if (!response.ok) {
-      const failure = await readModelDiscoveryFailure(response);
-      return {
-        status: "failed",
-        message: failure?.error === "provider_http_error" && typeof failure.status === "number"
-          ? `Provider responded ${failure.status}`
-          : failure?.message ?? `HTTP ${response.status}`
-      };
-    }
-    payload = await response.json();
   } catch (error) {
-    console.error("[ERROR] Caught exception at src/renderer-react/src/features/models/modelDiscovery.ts:104", error);
+    console.error("[ERROR] Caught exception at src/renderer-react/src/features/models/modelDiscovery.ts:101", error);
     return { status: "failed", message: error instanceof Error ? error.message : String(error) };
   }
+  try {
+    payload = await response.json();
+  } catch {
+    return {
+      status: "failed",
+      message: "The provider model discovery response did not match the runtime contract.",
+      errorCode: "model_discovery_response_invalid"
+    };
+  }
 
-  const ids = readDiscoveredIds(payload);
-  if (!ids.length) return { status: "failed", message: "The provider returned no models." };
+  const decoded = decodeModelDiscoveryResponse(payload);
+  if (!decoded.ok) {
+    return {
+      status: "failed",
+      message: "The provider model discovery response did not match the runtime contract.",
+      errorCode: decoded.errorCode
+    };
+  }
+  if (!("ids" in decoded.value)) return discoveryFailureOutcome(decoded.value, response.status);
+  const ids = decoded.value.ids;
   const fetchedAt = Date.now();
   writeCache(key, { ids, fetchedAt });
   return { status: "ok", ids, fetchedAt, fromCache: false };
 }
 
-function readDiscoveredIds(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
-  const ids = (value as Record<string, unknown>).ids;
-  if (!Array.isArray(ids)) return [];
-  return ids.filter((id): id is string => typeof id === "string" && Boolean(id.trim()));
-}
-
-async function readModelDiscoveryFailure(response: Response) {
-  try {
-    const value = await response.json() as unknown;
-    if (!value || typeof value !== "object") return null;
-    const failure = value as Record<string, unknown>;
-    return {
-      error: typeof failure.error === "string" ? failure.error : undefined,
-      message: typeof failure.message === "string" ? failure.message : undefined,
-      status: typeof failure.status === "number" ? failure.status : undefined
-    };
-  } catch {
-    return null;
-  }
+function discoveryFailureOutcome(failure: ModelDiscoveryFailureResponse, responseStatus: number): DiscoveryOutcome {
+  return {
+    status: "failed",
+    message: failure.error === "provider_http_error" && typeof failure.status === "number"
+      ? `Provider responded ${failure.status}`
+      : failure.message || `HTTP ${responseStatus}`,
+    errorCode: failure.error
+  };
 }

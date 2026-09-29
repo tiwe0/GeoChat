@@ -1,4 +1,4 @@
-import type { MigrationExportResponse, MigrationImportResponse } from "@geochat-ai/app";
+import type { MigrationExportResponse, MigrationImportResponse } from "@geochat-ai/app/migration";
 import {
   createMigrationExportPackage,
   importMigrationPackage
@@ -30,7 +30,11 @@ export async function handleMigrationRoute(
     if ("response" in dataScope) return dataScope.response;
     const result = await importMigrationPackage(context, await readJson(request), dataScope.scope);
     if (!result.imported) {
-      return json({ error: "invalid_migration_package", message: "Migration package is missing, unsupported, or exceeds import limits." }, { status: 400 });
+      return json({
+        error: "invalid_migration_package",
+        errorCode: result.errorCode,
+        message: "Migration package is missing, unsupported, or exceeds import limits."
+      }, { status: 400 });
     }
     return json({ importResult: result.importResult } satisfies MigrationImportResponse);
   }

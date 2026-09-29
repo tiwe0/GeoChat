@@ -1,5 +1,6 @@
 import {
   agentModelListRequest,
+  decodeModelDiscoveryRequest,
   parseAgentModelListResponse
 } from "@geochat-ai/app/model-discovery";
 import {
@@ -36,16 +37,19 @@ export async function discoverCredentialModels(
   limits: ModelDiscoveryLimits,
   runtime: ModelDiscoveryRuntime = {}
 ): Promise<ModelDiscoveryResult> {
-  if (!isModelDiscoveryPayload(payload)) {
+  const decoded = decodeModelDiscoveryRequest(payload);
+  if (!decoded.ok) {
     return result(400, {
       error: "invalid_request",
+      errorCode: decoded.errorCode,
       message: "Model discovery requires exactly one credentialRef."
     });
   }
+  const request = decoded.value;
 
   let credential;
   try {
-    credential = await credentials.resolve(payload.credentialRef, runtime.downstreamSignal);
+    credential = await credentials.resolve(request.credentialRef, runtime.downstreamSignal);
   } catch (error) {
     if (error instanceof CredentialResolutionError) {
       return result(error.status, { error: error.code, message: error.message });
@@ -161,12 +165,6 @@ export async function discoverCredentialModels(
     });
   }
   return result(200, { ids });
-}
-
-function isModelDiscoveryPayload(value: unknown): value is { credentialRef: string } {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const payload = value as Record<string, unknown>;
-  return Object.keys(payload).length === 1 && typeof payload.credentialRef === "string";
 }
 
 function cancelledResult() {

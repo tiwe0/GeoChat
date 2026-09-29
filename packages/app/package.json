@@ -57,6 +57,14 @@
     "./legacy-conversation-import": {
       "types": "./src/legacy-conversation-import.ts",
       "default": "./src/legacy-conversation-import.ts"
+    },
+    "./migration": {
+      "types": "./src/migration.ts",
+      "default": "./src/migration.ts"
+    },
+    "./runtime-decode": {
+      "types": "./src/runtime-decode.ts",
+      "default": "./src/runtime-decode.ts"
     }
   },
   "scripts": {

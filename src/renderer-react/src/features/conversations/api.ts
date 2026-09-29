@@ -1,9 +1,10 @@
 import type { ChatMessageMetadata } from "@geochat-ai/app/contracts";
+import { decodeDesktopConversationDetailResponse } from "@geochat-ai/app/desktop-contracts";
 import type {
   LegacyConversationImportRequest,
-  LegacyConversationImportResponse,
   LegacyConversationImportResult,
 } from "@geochat-ai/app/legacy-conversation-import";
+import { decodeLegacyConversationImportResponse } from "@geochat-ai/app/legacy-conversation-import";
 import type { UIMessage } from "ai";
 import { isFunctionCallArgs, isFunctionCallToolName } from "@geochat-ai/app";
 import {
@@ -137,15 +138,19 @@ export async function fetchConversationMessages(apiOrigin: string, token: string
   const response = await request(`${apiOrigin}/v1/conversations/${encodeURIComponent(conversationId)}`, {
     headers: conversationHeaders(token),
   });
-  const data = await response.json() as { conversation?: { messages?: unknown }; error?: unknown; message?: unknown };
-  if (!response.ok || !data.conversation || !Array.isArray(data.conversation.messages)) {
+  const data = await readRuntimeJson(response, "conversation_restore_invalid", "The conversation restore response was not valid JSON.");
+  if (!response.ok) {
     throw new Error(responseError(data, "Unable to load this conversation."));
   }
+  const decoded = decodeDesktopConversationDetailResponse(data);
+  if (!decoded.ok) {
+    throw Object.assign(new Error("The conversation restore response did not match the runtime contract."), {
+      errorCode: decoded.errorCode
+    });
+  }
   return {
-    messages: parseConversationMessages(data.conversation.messages, apiOrigin),
-    updatedAt: typeof (data.conversation as Record<string, unknown>).updatedAt === "string"
-      ? (data.conversation as Record<string, unknown>).updatedAt as string
-      : "",
+    messages: parseConversationMessages(decoded.value.conversation.messages, apiOrigin),
+    updatedAt: decoded.value.conversation.updatedAt,
   } satisfies ConversationRestore;
 }
 
@@ -174,18 +179,32 @@ export async function importLegacyConversation(
     headers: { ...conversationHeaders(token), "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-  const data = await response.json() as Partial<LegacyConversationImportResponse> & { error?: unknown };
-  const result = data.importResult;
-  if (!result || !["imported", "skipped", "conflict"].includes(result.outcome)) {
-    throw new Error(typeof data.error === "string" ? data.error : "Legacy conversation import returned an invalid response.");
+  const data = await readRuntimeJson(
+    response,
+    "legacy_conversation_import_response_invalid",
+    "Legacy conversation import returned invalid JSON."
+  );
+  const decoded = decodeLegacyConversationImportResponse(data);
+  if (!decoded.ok) {
+    const serverError = responseError(data, "Legacy conversation import returned an invalid response.");
+    throw Object.assign(new Error(serverError), { errorCode: decoded.errorCode });
   }
+  const result = decoded.value.importResult;
   if (!response.ok && !(response.status === 409 && result.outcome === "conflict")) {
-    throw new Error(typeof data.error === "string" ? data.error : `Legacy conversation import failed (${response.status}).`);
+    throw new Error(responseError(data, `Legacy conversation import failed (${response.status}).`));
   }
   if (result.conversationId !== body.conversation.id || result.sourceFingerprint !== body.sourceFingerprint) {
     throw new Error("Legacy conversation import receipt did not match the source item.");
   }
   return result;
+}
+
+async function readRuntimeJson(response: Response, errorCode: string, message: string): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    throw Object.assign(new Error(message), { errorCode });
+  }
 }
 
 export async function fetchConversationBlackboard(apiOrigin: string, token: string | null, conversationId: string, request: typeof fetch = fetch) {

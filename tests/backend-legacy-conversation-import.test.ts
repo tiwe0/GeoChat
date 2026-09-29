@@ -200,6 +200,9 @@ describe("legacy conversation import", () => {
       sourceFingerprint: "not-a-sha256",
     });
     expect(response.status).toBe(400);
-    expect(response.json).toMatchObject({ error: "invalid_legacy_conversation_import" });
+    expect(response.json).toMatchObject({
+      error: "invalid_legacy_conversation_import",
+      errorCode: "legacy_conversation_import_request_invalid",
+    });
   });
 });

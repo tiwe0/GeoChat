@@ -35,7 +35,7 @@ describe("model settings API key probe", () => {
       apiOrigin: "http://127.0.0.1:17382",
       credentialRef: "credential-ref",
       force: true,
-    })).resolves.toEqual({ status: "failed", message: "Provider responded 401" });
+    })).resolves.toEqual({ status: "failed", message: "Provider responded 401", errorCode: "provider_http_error" });
   });
 
   test("preserves structured discovery failures instead of collapsing them to HTTP 502", async () => {
@@ -48,6 +48,20 @@ describe("model settings API key probe", () => {
       apiOrigin: "http://127.0.0.1:17382",
       credentialRef: "credential-ref",
       force: true,
-    })).resolves.toEqual({ status: "failed", message: "Model discovery timed out." });
+    })).resolves.toEqual({ status: "failed", message: "Model discovery timed out.", errorCode: "model_discovery_timeout" });
+  });
+
+  test("reports malformed provider responses with a stable contract error code", async () => {
+    globalThis.fetch = (async () => new Response("not-json")) as typeof fetch;
+
+    await expect(discoverProviderModels({
+      apiOrigin: "http://127.0.0.1:17382",
+      credentialRef: "credential-ref",
+      force: true,
+    })).resolves.toEqual({
+      status: "failed",
+      message: "The provider model discovery response did not match the runtime contract.",
+      errorCode: "model_discovery_response_invalid"
+    });
   });
 });

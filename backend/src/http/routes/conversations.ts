@@ -1,12 +1,13 @@
 import {
-  isAgentRunTimestamp,
+  decodeUpsertDesktopConversationMessageInput,
+  type DesktopConversationDetailResponse,
+  type DesktopConversationListResponse
+} from "@geochat-ai/app/desktop-contracts";
+import {
   isBlackboardCategory,
   type DesktopConversationBlackboardResponse,
-  type DesktopConversationDetailResponse,
-  type DesktopConversationListResponse,
-  type ReadBlackboardArgs,
-  type UpsertDesktopConversationMessageInput
-} from "@geochat-ai/app";
+  type ReadBlackboardArgs
+} from "@geochat-ai/app/blackboard";
 import {
   ConversationOwnershipError,
   ConversationRunActiveError
@@ -39,10 +40,15 @@ export async function handleConversationRoute(
   if (request.method === "POST" && conversationMessagePath) {
     const dataScope = await authenticatedDataScope(request);
     if ("response" in dataScope) return dataScope.response;
-    const payload = await readJson(request);
-    if (!isUpsertDesktopConversationMessageInput(payload) || payload.conversationId !== conversationMessagePath) {
-      return json({ error: "invalid_request", message: "Invalid conversation message payload." }, { status: 400 });
+    const decoded = decodeUpsertDesktopConversationMessageInput(await readJson(request));
+    if (!decoded.ok || decoded.value.conversationId !== conversationMessagePath) {
+      return json({
+        error: "invalid_request",
+        errorCode: decoded.ok ? "conversation_message_path_mismatch" : decoded.errorCode,
+        message: "Invalid conversation message payload."
+      }, { status: 400 });
     }
+    const payload = decoded.value;
     const existingMessage = await conversationRepository.findMessageById(payload.message.id, dataScope.scope);
     if (existingMessage && existingMessage.conversationId !== conversationMessagePath) {
       return json(
@@ -121,58 +127,6 @@ export async function handleConversationRoute(
   }
 
   return undefined;
-}
-
-function isDesktopConversationMessagePayload(value: unknown): value is UpsertDesktopConversationMessageInput["message"] {
-  if (!value || typeof value !== "object") return false;
-  const message = value as Record<string, unknown>;
-  return (
-    typeof message.id === "string" &&
-    Boolean(message.id.trim()) &&
-    (message.role === "user" || message.role === "assistant") &&
-    typeof message.content === "string" &&
-    Boolean(message.content.trim()) &&
-    typeof message.createdAt === "string" &&
-    isAgentRunTimestamp(message.createdAt) &&
-    isDesktopConversationMessageSnapshot(message.payload)
-  );
-}
-
-function isDesktopConversationMessageSnapshot(value: unknown): value is UpsertDesktopConversationMessageInput["message"]["payload"] {
-  if (!value || typeof value !== "object") return false;
-  const payload = value as Record<string, unknown>;
-  return (
-    typeof payload.id === "string" &&
-    Boolean(payload.id.trim()) &&
-    (payload.role === "user" || payload.role === "assistant") &&
-    typeof payload.content === "string" &&
-    typeof payload.createdAt === "string" &&
-    (payload.attachments === undefined || Array.isArray(payload.attachments)) &&
-    (payload.toolCalls === undefined || Array.isArray(payload.toolCalls)) &&
-    (payload.cards === undefined || Array.isArray(payload.cards)) &&
-    (payload.parts === undefined || Array.isArray(payload.parts)) &&
-    (payload.usage === undefined || isDesktopConversationMessageUsage(payload.usage))
-  );
-}
-
-function isDesktopConversationMessageUsage(value: unknown) {
-  if (!value || typeof value !== "object") return false;
-  const usage = value as Record<string, unknown>;
-  return (
-    (usage.inputTokens === undefined || typeof usage.inputTokens === "number") &&
-    (usage.outputTokens === undefined || typeof usage.outputTokens === "number") &&
-    (usage.totalTokens === undefined || typeof usage.totalTokens === "number")
-  );
-}
-
-function isUpsertDesktopConversationMessageInput(value: unknown): value is UpsertDesktopConversationMessageInput {
-  if (!value || typeof value !== "object") return false;
-  const input = value as Record<string, unknown>;
-  return (
-    typeof input.conversationId === "string"
-    && (input.model === undefined || (typeof input.model === "string" && Boolean(input.model.trim())))
-    && isDesktopConversationMessagePayload(input.message)
-  );
 }
 
 function readBlackboardArgsFromUrl(url: URL): ReadBlackboardArgs {

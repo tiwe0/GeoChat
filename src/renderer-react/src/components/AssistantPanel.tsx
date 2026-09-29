@@ -731,8 +731,7 @@ export function AssistantPanel({
       return {
         provider: "custom",
         model: selected.id,
-        apiKey: config.customProvider.apiKey,
-        customBaseUrl: config.customProvider.baseUrl,
+        credentialRef: config.customProvider.credentialRef,
         protocol: config.customProvider.protocol,
         supportsImages: selected.capabilities.includes("imageInput"),
       };
@@ -744,8 +743,8 @@ export function AssistantPanel({
       ...config.model,
       provider: selected.provider,
       model: selected.id,
-      apiKey: credentials.apiKey,
-      customBaseUrl: "",
+      credentialRef: credentials.credentialRef,
+      protocol: credentials.protocol,
     };
   }
 

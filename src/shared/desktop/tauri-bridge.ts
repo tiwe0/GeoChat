@@ -17,11 +17,10 @@ import type {
 } from "../../shared/desktop-api";
 import { RuntimeInfo } from "@geochat-ai/app/desktop-contracts";
 import { Schema } from "effect";
-
+import { createTauriCredentialBridge, TAURI_CREDENTIAL_COMMANDS } from "./tauri-credential-bridge";
 type TauriInvoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 type TauriListen = typeof import("@tauri-apps/api/event").listen;
 type BridgeSlice<K extends keyof GeoChatDesktopApi> = Pick<GeoChatDesktopApi, K>;
-
 function subscribe<T>(listen: TauriListen, event: string, callback: (state: T) => void) {
   let disposed = false;
   let unlisten: (() => void) | undefined;
@@ -36,6 +35,7 @@ function subscribe<T>(listen: TauriListen, event: string, callback: (state: T) =
 }
 
 export const TAURI_DESKTOP_COMMANDS = {
+  credentials: TAURI_CREDENTIAL_COMMANDS,
   runtime: {
     getRuntimeInfo: "get_runtime_info",
     markRendererReady: "mark_renderer_ready"
@@ -120,6 +120,7 @@ export function createTauriDesktopApi(
   listen: TauriListen
 ): GeoChatDesktopApi {
   return {
+    ...createTauriCredentialBridge(invoke),
     ...createRuntimeBridge(invoke),
     ...createGraphicsBridge(invoke),
     ...createMcpBridge(invoke),

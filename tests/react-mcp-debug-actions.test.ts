@@ -6,7 +6,7 @@ import { DEFAULT_MODEL_CONFIG } from "../src/shared/desktop/desktop-config";
 import type { GeoGebraController } from "../src/renderer-react/src/geogebra/controller";
 import type { ModelConfig } from "../src/shared/desktop/workbench-types";
 
-const CONFIGURED: ModelConfig = { ...DEFAULT_MODEL_CONFIG, apiKey: "sk-test" };
+const CONFIGURED: ModelConfig = { ...DEFAULT_MODEL_CONFIG, credentialRef: "credential-ref" };
 
 function harness(overrides: {
   model?: ModelConfig;
@@ -45,6 +45,7 @@ describe("react MCP debug action executor", () => {
     const result = await execute({ id: "1", type: "get_ui_status" }) as Record<string, any>;
     expect(result.geogebra.ready).toBe(true);
     expect(result.model.hasApiKey).toBe(true);
+    expect(result.model.hasCredential).toBe(true);
     expect(result.mcp.endpoint).toBe("http://127.0.0.1:17369/mcp");
   });
 
@@ -123,7 +124,7 @@ describe("react MCP debug action executor", () => {
 
   test("refuses to send without a configured key, rather than starting a run that cannot finish", async () => {
     const { execute, sent } = harness({ model: DEFAULT_MODEL_CONFIG, controller: { ready: true } });
-    await expect(execute({ id: "1", type: "send_message", content: "hi" })).rejects.toThrow(/API key/);
+    await expect(execute({ id: "1", type: "send_message", content: "hi" })).rejects.toThrow(/API credential/);
     expect(sent).toEqual([]);
   });
 

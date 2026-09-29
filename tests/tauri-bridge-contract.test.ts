@@ -8,6 +8,13 @@ import {
 } from "../src/shared/desktop/tauri-bridge";
 
 const expectedCommandByMethod = {
+  saveProviderCredential: "save_provider_credential",
+  deleteProviderCredential: "delete_provider_credential",
+  listProviderCredentialMetadata: "list_provider_credential_metadata",
+  importLegacyCredential: "import_legacy_credential",
+  readCredentialMigrationJournal: "read_credential_migration_journal",
+  persistCredentialMigrationJournal: "persist_credential_migration_journal",
+  deleteCredentialMigrationJournal: "delete_credential_migration_journal",
   getRuntimeInfo: "get_runtime_info",
   markRendererReady: "mark_renderer_ready",
   getGraphicsPreferences: "get_graphics_preferences",
@@ -48,6 +55,15 @@ const expectedCommandByMethod = {
 describe("Tauri desktop bridge contract", () => {
   test("groups command names by capability without changing public API keys", () => {
     expect(TAURI_DESKTOP_COMMANDS).toEqual({
+      credentials: {
+        saveProviderCredential: "save_provider_credential",
+        deleteProviderCredential: "delete_provider_credential",
+        listProviderCredentialMetadata: "list_provider_credential_metadata",
+        importLegacyCredential: "import_legacy_credential",
+        readCredentialMigrationJournal: "read_credential_migration_journal",
+        persistCredentialMigrationJournal: "persist_credential_migration_journal",
+        deleteCredentialMigrationJournal: "delete_credential_migration_journal"
+      },
       runtime: {
         getRuntimeInfo: "get_runtime_info",
         markRendererReady: "mark_renderer_ready"
@@ -106,6 +122,7 @@ describe("Tauri desktop bridge contract", () => {
     const api = createTauriDesktopApi(async () => undefined, fakeListen());
     expect(Object.keys(api).sort()).toEqual([
       ...Object.keys(expectedCommandByMethod),
+      "getProviderCredentialStatus",
       "onAppBundleUpdateState",
       "onProblemBankCacheState",
       "onProblemBankDownloadState",
@@ -117,6 +134,7 @@ describe("Tauri desktop bridge contract", () => {
     const calls: Array<{ command: string; args?: Record<string, unknown> }> = [];
     const api = createTauriDesktopApi(async (command, args) => {
       calls.push({ command, args });
+      if (command === "list_provider_credential_metadata") return [] as never;
       return (command === "get_runtime_info" ? {
         platform: "darwin",
         appVersion: "0.6.1",
@@ -125,6 +143,25 @@ describe("Tauri desktop bridge contract", () => {
       } : undefined) as never;
     }, fakeListen());
 
+    await api.saveProviderCredential({
+      provider: "deepseek",
+      protocol: "openai-compatible",
+      baseUrl: "https://api.deepseek.com",
+      secret: "test-secret"
+    });
+    await api.deleteProviderCredential("old-ref");
+    await api.getProviderCredentialStatus("status-ref");
+    await api.listProviderCredentialMetadata(["listed-ref"]);
+    await api.importLegacyCredential({
+      credentialRef: "legacy-ref",
+      provider: "deepseek",
+      protocol: "openai-compatible",
+      baseUrl: "https://api.deepseek.com",
+      secret: "legacy-secret"
+    });
+    await api.readCredentialMigrationJournal();
+    await api.persistCredentialMigrationJournal({ schemaVersion: 1, entries: [] });
+    await api.deleteCredentialMigrationJournal();
     await api.getRuntimeInfo();
     await api.markRendererReady();
     await api.getGraphicsPreferences();
@@ -161,7 +198,44 @@ describe("Tauri desktop bridge contract", () => {
     await api.loadProblemBankPage("gaokao", "2");
     await api.loadProblemDetail("gaokao", "problem-1");
 
-    expect(calls.map((call) => call.command)).toEqual(Object.values(expectedCommandByMethod));
+    expect(calls.map((call) => call.command)).toEqual([
+      "save_provider_credential",
+      "delete_provider_credential",
+      "list_provider_credential_metadata",
+      "list_provider_credential_metadata",
+      "import_legacy_credential",
+      "read_credential_migration_journal",
+      "persist_credential_migration_journal",
+      "delete_credential_migration_journal",
+      ...Object.values(expectedCommandByMethod).slice(7)
+    ]);
+    expect(calls.find((call) => call.command === "save_provider_credential")?.args).toEqual({
+      request: {
+        provider: "deepseek",
+        protocol: "openai-compatible",
+        baseUrl: "https://api.deepseek.com",
+        secret: "test-secret"
+      }
+    });
+    expect(calls.find((call) => call.command === "delete_provider_credential")?.args).toEqual({
+      credentialRef: "old-ref"
+    });
+    expect(calls.filter((call) => call.command === "list_provider_credential_metadata").map((call) => call.args)).toEqual([
+      { request: { credentialRefs: ["status-ref"] } },
+      { request: { credentialRefs: ["listed-ref"] } }
+    ]);
+    expect(calls.find((call) => call.command === "import_legacy_credential")?.args).toEqual({
+      request: {
+        credentialRef: "legacy-ref",
+        provider: "deepseek",
+        protocol: "openai-compatible",
+        baseUrl: "https://api.deepseek.com",
+        secret: "legacy-secret"
+      }
+    });
+    expect(calls.find((call) => call.command === "persist_credential_migration_journal")?.args).toEqual({
+      journal: { schemaVersion: 1, entries: [] }
+    });
     expect(calls.find((call) => call.command === "set_mcp_enabled")?.args).toEqual({ enabled: true });
     expect(calls.find((call) => call.command === "set_graphics_preferences")?.args).toEqual({
       preferences: { hardwareAcceleration: false }
@@ -219,6 +293,26 @@ describe("Tauri desktop bridge contract", () => {
       backendBaseUrl: "http://127.0.0.1:17365"
     }) as never, fakeListen());
     await expect(invalid.getRuntimeInfo()).rejects.toThrow();
+  });
+
+  test("exposes metadata-only credential status without a secret read method", async () => {
+    const api = createTauriDesktopApi(async (command) => command === "list_provider_credential_metadata"
+      ? [{
+          credentialRef: "configured-ref",
+          provider: "deepseek",
+          protocol: "openai-compatible",
+          canonicalBaseUrl: "https://api.deepseek.com"
+        }]
+      : undefined as never, fakeListen());
+
+    await expect(api.getProviderCredentialStatus("configured-ref")).resolves.toMatchObject({
+      credentialRef: "configured-ref",
+      configured: true,
+      metadata: { credentialRef: "configured-ref" }
+    });
+    expect(Object.keys(api)).not.toContain("resolveProviderCredential");
+    expect(Object.keys(api)).not.toContain("readProviderCredential");
+    expect(Object.keys(api)).not.toContain("getProviderCredentialSecret");
   });
 
   test("maps update listeners to stable Tauri event names", async () => {

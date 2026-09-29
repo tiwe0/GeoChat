@@ -1,4 +1,4 @@
-import { hasConfiguredApiKey } from "../../../../shared/desktop/desktop-config";
+import { hasConfiguredCredential } from "../../../../shared/desktop/desktop-config";
 import type { DesktopDebugAction } from "../../../../shared/desktop/mcp-debug-actions";
 import type { ModelConfig, RendererMcpStatus } from "../../../../shared/desktop/workbench-types";
 import { getFrontendGeoGebraController } from "../../geogebra/runtime";
@@ -33,8 +33,8 @@ export function createDesktopDebugActionExecutor(input: {
         model: {
           provider: model.provider,
           model: model.model,
-          hasApiKey: hasConfiguredApiKey(model),
-          customBaseUrlConfigured: Boolean(model.customBaseUrl.trim())
+          hasApiKey: hasConfiguredCredential(model),
+          hasCredential: hasConfiguredCredential(model)
         },
         geogebra: { ready: Boolean(controller?.ready) },
         running: input.isRunning(),
@@ -61,7 +61,7 @@ export function createDesktopDebugActionExecutor(input: {
     if (action.type === "send_message") {
       const content = action.content.trim();
       if (!content) throw new Error("send_message needs non-empty content.");
-      if (!hasConfiguredApiKey(input.getModelConfig())) throw new Error("No API key is configured; set one in Settings first.");
+      if (!hasConfiguredCredential(input.getModelConfig())) throw new Error("No API credential is configured; set one in Settings first.");
       if (!controller?.ready) throw new Error("The GeoGebra canvas is not ready.");
       await input.activateConversation(action.conversationId);
       input.showChat();

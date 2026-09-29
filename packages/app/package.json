@@ -53,6 +53,10 @@
     "./model-discovery": {
       "types": "./src/model-discovery.ts",
       "default": "./src/model-discovery.ts"
+    },
+    "./legacy-conversation-import": {
+      "types": "./src/legacy-conversation-import.ts",
+      "default": "./src/legacy-conversation-import.ts"
     }
   },
   "scripts": {

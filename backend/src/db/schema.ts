@@ -18,7 +18,9 @@ export const conversations = sqliteTable(
   {
     id: text("id").primaryKey(),
     title: text("title").notNull(),
+    sourceTitle: text("source_title"),
     summary: text("summary").notNull(),
+    model: text("model"),
     ownerUserId: text("owner_user_id"),
     messageCount: integer("message_count").notNull().default(0),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
@@ -27,6 +29,28 @@ export const conversations = sqliteTable(
   (table) => [
     index("conversations_owner_updated_at_idx").on(table.ownerUserId, table.updatedAt),
     index("conversations_updated_at_idx").on(table.updatedAt)
+  ]
+);
+
+export const legacyConversationImportReceipts = sqliteTable(
+  "legacy_conversation_import_receipts",
+  {
+    id: text("id").primaryKey(),
+    ownerScopeKey: text("owner_scope_key").notNull(),
+    ownerUserId: text("owner_user_id"),
+    sourceFingerprint: text("source_fingerprint").notNull(),
+    contentFingerprint: text("content_fingerprint").notNull(),
+    conversationId: text("conversation_id").notNull(),
+    outcome: text("outcome", { enum: ["imported", "skipped", "conflict"] }).notNull(),
+    reason: text("reason", {
+      enum: ["conversation_content_conflict", "message_id_conflict", "source_fingerprint_mismatch"]
+    }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
+  },
+  (table) => [
+    uniqueIndex("legacy_conversation_import_receipts_scope_source_uidx")
+      .on(table.ownerScopeKey, table.sourceFingerprint),
+    index("legacy_conversation_import_receipts_conversation_idx").on(table.conversationId)
   ]
 );
 

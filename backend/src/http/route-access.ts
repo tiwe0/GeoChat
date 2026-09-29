@@ -10,6 +10,7 @@ import { handleModelDiscoveryRoute } from "./routes/model-discovery";
 import { handleNativeChatRoute } from "./routes/native-chat";
 import { handleProblemBankRoute } from "./routes/problem-bank";
 import { handleSkillCatalogRoute } from "./routes/skills";
+import { handleLegacyConversationImportRoute } from "./routes/legacy-conversation-import";
 
 export type BackendRouteAccess = "public" | "authenticated";
 
@@ -111,6 +112,13 @@ export const BACKEND_ROUTE_ACCESS_CATALOG = [
     methods: ["POST"],
     matches: exactPath("/v1/migration/import"),
     handle: handleMigrationRoute
+  },
+  {
+    id: "legacy-conversation-import",
+    access: "authenticated",
+    methods: ["POST"],
+    matches: exactPath("/v1/legacy-conversations/import"),
+    handle: handleLegacyConversationImportRoute
   },
   {
     id: "problem-bank-import",

@@ -24,6 +24,7 @@ const routeCases: ReadonlyArray<{
   { id: "messages", path: "/v1/messages", access: "authenticated", methods: ["GET", "POST"] },
   { id: "migration-export", path: "/v1/migration/export", access: "authenticated", methods: ["GET"] },
   { id: "migration-import", path: "/v1/migration/import", access: "authenticated", methods: ["POST"] },
+  { id: "legacy-conversation-import", path: "/v1/legacy-conversations/import", access: "authenticated", methods: ["POST"] },
   { id: "problem-bank-import", path: "/v1/problem-bank/import", access: "authenticated", methods: ["POST"] },
   { id: "problem-sets", path: "/v1/problem-sets", access: "authenticated", methods: ["GET"] },
   { id: "problem-set-problems", path: "/v1/problem-sets/set-1/problems", access: "authenticated", methods: ["GET"] },

@@ -10,6 +10,7 @@ import { createBenchmarkRepository } from "../db/benchmark-repository";
 import { readDatabaseRuntimeConfig } from "../db/runtime";
 import { defaultProblemCasesRoot } from "../problem-cases";
 import { createCredentialResolverFromEnvironment } from "../credentials/resolver";
+import { createLegacyConversationImportRepository } from "../db/legacy-conversation-import-repository";
 
 export function createBackendHttpContext() {
   const database = createDatabase();
@@ -22,6 +23,7 @@ export function createBackendHttpContext() {
     credentials: createCredentialResolverFromEnvironment(),
     repositories: {
       conversations: createConversationRepository(databaseRuntime, database),
+      legacyConversationImports: createLegacyConversationImportRepository(database),
       blackboard: createBlackboardRepository(databaseRuntime, database),
       problemBank: createProblemBankRepository(databaseRuntime, database),
       migration: createMigrationRepository(databaseRuntime, database),

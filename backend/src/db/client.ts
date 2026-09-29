@@ -77,12 +77,37 @@ export function createDatabase() {
     CREATE TABLE IF NOT EXISTS conversations (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
+      source_title TEXT,
       summary TEXT NOT NULL,
+      model TEXT,
       owner_user_id TEXT,
       message_count INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     )
+  `);
+
+  ensureColumn(sqlite, "conversations", "source_title", "source_title TEXT");
+  ensureColumn(sqlite, "conversations", "model", "model TEXT");
+
+  db.run(sql`
+    CREATE TABLE IF NOT EXISTS legacy_conversation_import_receipts (
+      id TEXT PRIMARY KEY,
+      owner_scope_key TEXT NOT NULL,
+      owner_user_id TEXT,
+      source_fingerprint TEXT NOT NULL,
+      content_fingerprint TEXT NOT NULL,
+      conversation_id TEXT NOT NULL,
+      outcome TEXT NOT NULL CHECK (outcome IN ('imported', 'skipped', 'conflict')),
+      reason TEXT CHECK (reason IS NULL OR reason IN ('conversation_content_conflict', 'message_id_conflict', 'source_fingerprint_mismatch')),
+      created_at INTEGER NOT NULL,
+      UNIQUE (owner_scope_key, source_fingerprint)
+    )
+  `);
+
+  db.run(sql`
+    CREATE INDEX IF NOT EXISTS legacy_conversation_import_receipts_conversation_idx
+    ON legacy_conversation_import_receipts (conversation_id)
   `);
 
   db.run(sql`

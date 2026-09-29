@@ -1,16 +1,6 @@
-import {
-  agentModelListRequest,
-  parseAgentModelListResponse
-} from "@geochat-ai/app/model-discovery";
-import type { AgentModelProtocol } from "@geochat-ai/app/model-registry";
-
 /**
- * Ask a provider what it currently serves, through the backend's proxy.
- *
- * The request never leaves the machine directly: /v1/provider-fetch already
- * exists for exactly this shape of call and enforces a host allowlist, so the
- * key travels to the local backend and out from there, and the renderer is not
- * making cross-origin calls to provider APIs from a webview.
+ * Ask the backend to discover models with a credential stored by the native
+ * broker. The renderer never receives or reconstructs provider authentication.
  */
 const CACHE_PREFIX = "geochatDesktopModelCatalog:";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -22,8 +12,8 @@ export type DiscoveryOutcome =
   | { status: "unsupported" }
   | { status: "failed"; message: string };
 
-function cacheKey(provider: string, baseUrl: string, protocol?: AgentModelProtocol) {
-  return `${CACHE_PREFIX}${provider}:${protocol ?? "default"}:${baseUrl}`;
+function cacheKey(credentialRef: string) {
+  return `${CACHE_PREFIX}${credentialRef}`;
 }
 
 function readCache(key: string): CachedDiscovery | null {
@@ -56,23 +46,14 @@ function writeCache(key: string, value: CachedDiscovery) {
 export async function discoverProviderModels(input: {
   apiOrigin: string;
   authToken?: string | null;
-  provider: string;
-  apiKey: string;
-  customBaseUrl?: string;
-  protocol?: AgentModelProtocol;
+  credentialRef: string;
   /** Skip the cache when the user asked for this explicitly. */
   force?: boolean;
 }): Promise<DiscoveryOutcome> {
-  const request = agentModelListRequest({
-    provider: input.provider,
-    apiKey: input.apiKey,
-    customBaseUrl: input.customBaseUrl,
-    protocol: input.protocol
-  });
-  if (!request) return { status: "unsupported" };
+  const credentialRef = input.credentialRef.trim();
+  if (!credentialRef) return { status: "unsupported" };
 
-  // The key is part of the Gemini URL, so it must never reach the cache key.
-  const key = cacheKey(input.provider, input.customBaseUrl?.trim() ?? "", input.protocol);
+  const key = cacheKey(credentialRef);
   if (!input.force) {
     const cached = readCache(key);
     if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
@@ -82,23 +63,17 @@ export async function discoverProviderModels(input: {
 
   let payload: unknown;
   try {
-    const response = await fetch(`${input.apiOrigin}/v1/provider-fetch`, {
+    const response = await fetch(`${input.apiOrigin}/v1/models/discover`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
         ...(input.authToken ? { Authorization: `Bearer ${input.authToken}` } : {})
       },
-      body: JSON.stringify({
-        provider: input.provider,
-        customBaseUrl: input.customBaseUrl,
-        url: request.url,
-        method: request.method,
-        headers: request.headers
-      }),
+      body: JSON.stringify({ credentialRef }),
       signal: AbortSignal.timeout(15_000)
     });
     if (!response.ok) {
-      const failure = await readProviderProxyFailure(response);
+      const failure = await readModelDiscoveryFailure(response);
       return {
         status: "failed",
         message: failure?.error === "provider_http_error" && typeof failure.status === "number"
@@ -106,32 +81,27 @@ export async function discoverProviderModels(input: {
           : failure?.message ?? `HTTP ${response.status}`
       };
     }
-    const proxied = await response.json() as { status?: number; bodyBase64?: string };
-    if (typeof proxied.status !== "number" || proxied.status >= 400) {
-      // A 401 here means the key is wrong, which the caller should say plainly
-      // rather than reporting an empty catalog.
-      return { status: "failed", message: `Provider responded ${proxied.status ?? "with no status"}` };
-    }
-    payload = JSON.parse(decodeBase64Utf8(proxied.bodyBase64 ?? ""));
+    payload = await response.json();
   } catch (error) {
     console.error("[ERROR] Caught exception at src/renderer-react/src/features/models/modelDiscovery.ts:104", error);
     return { status: "failed", message: error instanceof Error ? error.message : String(error) };
   }
 
-  const ids = parseAgentModelListResponse(input.provider, payload, input.protocol);
+  const ids = readDiscoveredIds(payload);
   if (!ids.length) return { status: "failed", message: "The provider returned no models." };
   const fetchedAt = Date.now();
   writeCache(key, { ids, fetchedAt });
   return { status: "ok", ids, fetchedAt, fromCache: false };
 }
 
-function decodeBase64Utf8(value: string) {
-  const binary = atob(value);
-  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
+function readDiscoveredIds(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const ids = (value as Record<string, unknown>).ids;
+  if (!Array.isArray(ids)) return [];
+  return ids.filter((id): id is string => typeof id === "string" && Boolean(id.trim()));
 }
 
-async function readProviderProxyFailure(response: Response) {
+async function readModelDiscoveryFailure(response: Response) {
   try {
     const value = await response.json() as unknown;
     if (!value || typeof value !== "object") return null;

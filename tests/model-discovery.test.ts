@@ -16,45 +16,45 @@ describe("agent model discovery requests", () => {
   test("appends the version segment only for providers whose base URL lacks one", () => {
     // Base URLs differ in shape across providers, and getting this wrong is a
     // 404 rather than a type error, so each one is pinned.
-    expect(agentModelListRequest({ provider: "deepseek", apiKey: "k" })?.url)
+    expect(agentModelListRequest({ provider: "deepseek", secret: "k", canonicalBaseUrl: "https://api.deepseek.com" })?.url)
       .toBe("https://api.deepseek.com/models");
-    expect(agentModelListRequest({ provider: "openai", apiKey: "k" })?.url)
+    expect(agentModelListRequest({ provider: "openai", secret: "k", canonicalBaseUrl: "https://api.openai.com" })?.url)
       .toBe("https://api.openai.com/v1/models");
-    expect(agentModelListRequest({ provider: "anthropic", apiKey: "k" })?.url)
+    expect(agentModelListRequest({ provider: "anthropic", secret: "k", canonicalBaseUrl: "https://api.anthropic.com" })?.url)
       .toBe("https://api.anthropic.com/v1/models");
-    expect(agentModelListRequest({ provider: "openrouter", apiKey: "k" })?.url)
+    expect(agentModelListRequest({ provider: "openrouter", secret: "k", canonicalBaseUrl: "https://openrouter.ai/api/v1" })?.url)
       .toBe("https://openrouter.ai/api/v1/models");
-    expect(agentModelListRequest({ provider: "qwen", apiKey: "k" })?.url)
+    expect(agentModelListRequest({ provider: "qwen", secret: "k", canonicalBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1" })?.url)
       .toBe("https://dashscope.aliyuncs.com/compatible-mode/v1/models");
   });
 
   test("carries the key the way each provider expects it", () => {
-    expect(agentModelListRequest({ provider: "deepseek", apiKey: "k" })?.headers.authorization).toBe("Bearer k");
-    const anthropic = agentModelListRequest({ provider: "anthropic", apiKey: "k" })?.headers;
+    expect(agentModelListRequest({ provider: "deepseek", secret: "k", canonicalBaseUrl: "https://api.deepseek.com" })?.headers.authorization).toBe("Bearer k");
+    const anthropic = agentModelListRequest({ provider: "anthropic", secret: "k", canonicalBaseUrl: "https://api.anthropic.com" })?.headers;
     expect(anthropic?.["x-api-key"]).toBe("k");
     expect(anthropic?.["anthropic-version"]).toBe("2023-06-01");
     // Gemini takes the key as a query parameter and no auth header.
-    const google = agentModelListRequest({ provider: "google", apiKey: "k" });
+    const google = agentModelListRequest({ provider: "google", secret: "k", canonicalBaseUrl: "https://generativelanguage.googleapis.com" });
     expect(google?.url).toBe("https://generativelanguage.googleapis.com/v1beta/models?key=k");
     expect(google?.headers.authorization).toBeUndefined();
   });
 
   test("honours a custom base URL and trims its trailing slash", () => {
-    expect(agentModelListRequest({ provider: "openai", apiKey: "k", customBaseUrl: "https://llm.local/v1/" })?.url)
+    expect(agentModelListRequest({ provider: "openai", secret: "k", canonicalBaseUrl: "https://llm.local/v1/" })?.url)
       .toBe("https://llm.local/v1/models");
-    expect(agentModelListRequest({ provider: "deepseek", apiKey: "k", customBaseUrl: "https://mirror.test/" })?.url)
+    expect(agentModelListRequest({ provider: "deepseek", secret: "k", canonicalBaseUrl: "https://mirror.test/" })?.url)
       .toBe("https://mirror.test/models");
-    expect(agentModelListRequest({ provider: "google", apiKey: "k", customBaseUrl: "https://gemini.local/v1beta/" })?.url)
+    expect(agentModelListRequest({ provider: "google", secret: "k", canonicalBaseUrl: "https://gemini.local/v1beta/" })?.url)
       .toBe("https://gemini.local/v1beta/models?key=k");
-    expect(agentModelListRequest({ provider: "qwen", apiKey: "k", customBaseUrl: "http://127.0.0.1:11434/v1" })?.url)
+    expect(agentModelListRequest({ provider: "qwen", secret: "k", canonicalBaseUrl: "http://127.0.0.1:11434/v1" })?.url)
       .toBe("http://127.0.0.1:11434/v1/models");
   });
 
   test("discovers models from a custom provider according to its protocol", () => {
     const openaiCompatible = agentModelListRequest({
       provider: "custom",
-      apiKey: "k",
-      customBaseUrl: "http://127.0.0.1:11434/v1",
+      secret: "k",
+      canonicalBaseUrl: "http://127.0.0.1:11434/v1",
       protocol: "openai-compatible",
     });
     expect(openaiCompatible?.url).toBe("http://127.0.0.1:11434/v1/models");
@@ -62,8 +62,8 @@ describe("agent model discovery requests", () => {
 
     const anthropic = agentModelListRequest({
       provider: "custom",
-      apiKey: "k",
-      customBaseUrl: "https://llm.example/api",
+      secret: "k",
+      canonicalBaseUrl: "https://llm.example/api",
       protocol: "anthropic",
     });
     expect(anthropic?.url).toBe("https://llm.example/api/v1/models");
@@ -71,15 +71,15 @@ describe("agent model discovery requests", () => {
 
     expect(agentModelListRequest({
       provider: "custom",
-      apiKey: "k",
-      customBaseUrl: "https://gemini.example",
+      secret: "k",
+      canonicalBaseUrl: "https://gemini.example",
       protocol: "google",
     })?.url).toBe("https://gemini.example/v1beta/models?key=k");
   });
 
   test("declines without a key or for an unknown provider", () => {
-    expect(agentModelListRequest({ provider: "deepseek", apiKey: "   " })).toBeNull();
-    expect(agentModelListRequest({ provider: "nope", apiKey: "k" })).toBeNull();
+    expect(agentModelListRequest({ provider: "deepseek", secret: "   ", canonicalBaseUrl: "https://api.deepseek.com" })).toBeNull();
+    expect(agentModelListRequest({ provider: "nope", secret: "k", canonicalBaseUrl: "https://example.com" })).toBeNull();
   });
 });
 

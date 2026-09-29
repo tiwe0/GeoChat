@@ -40,7 +40,7 @@ const OPENAI_COMPATIBLE: Pick<ProviderDiscovery, "auth" | "parse"> = {
 };
 
 const PROVIDER_DISCOVERY: Record<AgentModelProvider, ProviderDiscovery> = {
-  // Base is the bare origin; DeepSeek serves the catalog off the root.
+  // DeepSeek's SDK base is the bare origin; the catalog is rooted at /models.
   deepseek: { path: "/models", ...OPENAI_COMPATIBLE },
   openai: { path: "/v1/models", ...OPENAI_COMPATIBLE },
   // Base already carries /api/v1.
@@ -82,8 +82,8 @@ const CUSTOM_PROVIDER_DISCOVERY: Record<AgentModelProtocol, ProviderDiscovery> =
 
 export function agentModelListRequest(input: {
   provider: string;
-  apiKey: string;
-  customBaseUrl?: string;
+  secret: string;
+  canonicalBaseUrl: string;
   protocol?: AgentModelProtocol;
 }): AgentModelListRequest | null {
   const definition = getAgentProviderDefinition(input.provider);
@@ -91,12 +91,17 @@ export function agentModelListRequest(input: {
     ? CUSTOM_PROVIDER_DISCOVERY[input.protocol]
     : PROVIDER_DISCOVERY[input.provider as AgentModelProvider];
   if (!discovery || (!definition && input.provider !== "custom")) return null;
-  const apiKey = input.apiKey.trim();
-  if (!apiKey) return null;
-  const base = (input.customBaseUrl?.trim() || definition?.defaultBaseUrl || "").replace(/\/+$/, "");
+  const secret = input.secret.trim();
+  if (!secret) return null;
+  const base = input.canonicalBaseUrl.trim().replace(/\/+$/, "");
   if (!base) return null;
-  const { headers = {}, query } = discovery.auth(apiKey);
-  const url = appendProviderPath(base, discovery.path);
+  let url: URL;
+  try {
+    url = appendProviderPath(base, discovery.path);
+  } catch {
+    return null;
+  }
+  const { headers = {}, query } = discovery.auth(secret);
   for (const [key, value] of Object.entries(query ?? {})) url.searchParams.set(key, value);
   return { url: url.toString(), method: "GET", headers: { accept: "application/json", ...headers } };
 }

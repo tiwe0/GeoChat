@@ -8,20 +8,17 @@ afterEach(() => {
 });
 
 describe("model settings API key probe", () => {
-  test("treats a provider model response as a valid credential", async () => {
-    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
-      const request = JSON.parse(String(init?.body)) as { headers: Record<string, string> };
-      expect(request.headers.authorization).toBe("Bearer test-key");
-      return Response.json({
-        status: 200,
-        bodyBase64: Buffer.from(JSON.stringify({ data: [{ id: "deepseek-chat" }] })).toString("base64"),
-      });
+  test("sends only the credential reference and accepts discovered ids", async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe("http://127.0.0.1:17382/v1/models/discover");
+      expect(JSON.parse(String(init?.body))).toEqual({ credentialRef: "credential-ref" });
+      expect(String(init?.body)).not.toContain("test-key");
+      return Response.json({ ids: ["deepseek-chat"] });
     }) as typeof fetch;
 
     await expect(discoverProviderModels({
       apiOrigin: "http://127.0.0.1:17382",
-      provider: "deepseek",
-      apiKey: "test-key",
+      credentialRef: "credential-ref",
       force: true,
     })).resolves.toMatchObject({ status: "ok", ids: ["deepseek-chat"] });
   });
@@ -36,23 +33,21 @@ describe("model settings API key probe", () => {
 
     await expect(discoverProviderModels({
       apiOrigin: "http://127.0.0.1:17382",
-      provider: "deepseek",
-      apiKey: "wrong-key",
+      credentialRef: "credential-ref",
       force: true,
     })).resolves.toEqual({ status: "failed", message: "Provider responded 401" });
   });
 
-  test("preserves structured proxy failures instead of collapsing them to HTTP 502", async () => {
+  test("preserves structured discovery failures instead of collapsing them to HTTP 502", async () => {
     globalThis.fetch = (async () => Response.json({
-      error: "provider_fetch_timeout",
-      message: "Provider proxy request timed out."
+      error: "model_discovery_timeout",
+      message: "Model discovery timed out."
     }, { status: 504 })) as typeof fetch;
 
     await expect(discoverProviderModels({
       apiOrigin: "http://127.0.0.1:17382",
-      provider: "deepseek",
-      apiKey: "test-key",
+      credentialRef: "credential-ref",
       force: true,
-    })).resolves.toEqual({ status: "failed", message: "Provider proxy request timed out." });
+    })).resolves.toEqual({ status: "failed", message: "Model discovery timed out." });
   });
 });

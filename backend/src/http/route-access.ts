@@ -6,9 +6,9 @@ import { handleConversationRoute } from "./routes/conversations";
 import { handleHealthAndAssetRoute } from "./routes/health-assets";
 import { handleMessageRoute } from "./routes/messages";
 import { handleMigrationRoute } from "./routes/migration";
+import { handleModelDiscoveryRoute } from "./routes/model-discovery";
 import { handleNativeChatRoute } from "./routes/native-chat";
 import { handleProblemBankRoute } from "./routes/problem-bank";
-import { handleProviderProxyRoute } from "./routes/provider-proxy";
 import { handleSkillCatalogRoute } from "./routes/skills";
 
 export type BackendRouteAccess = "public" | "authenticated";
@@ -232,11 +232,11 @@ export const BACKEND_ROUTE_ACCESS_CATALOG = [
     handle: handleAgentRunObservabilityRoute
   },
   {
-    id: "provider-fetch",
+    id: "model-discovery",
     access: "authenticated",
     methods: ["POST"],
-    matches: exactPath("/v1/provider-fetch"),
-    handle: handleProviderProxyRoute
+    matches: exactPath("/v1/models/discover"),
+    handle: handleModelDiscoveryRoute
   }
 ] as const satisfies readonly BackendRouteAccessEntry[];
 

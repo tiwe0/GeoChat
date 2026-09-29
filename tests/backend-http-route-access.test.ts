@@ -41,7 +41,7 @@ const routeCases: ReadonlyArray<{
   { id: "agent-runs", path: "/v1/agent-runs", access: "authenticated", methods: ["GET"] },
   { id: "agent-command-usage", path: "/v1/agent-command-usage", access: "authenticated", methods: ["GET"] },
   { id: "agent-error-events", path: "/v1/agent-error-events", access: "authenticated", methods: ["GET"] },
-  { id: "provider-fetch", path: "/v1/provider-fetch", access: "authenticated", methods: ["POST"] }
+  { id: "model-discovery", path: "/v1/models/discover", access: "authenticated", methods: ["POST"] }
 ];
 
 describe("backend HTTP route access catalog", () => {

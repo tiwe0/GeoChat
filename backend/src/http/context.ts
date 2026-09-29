@@ -12,11 +12,20 @@ import { defaultProblemCasesRoot } from "../problem-cases";
 import { createCredentialResolverFromEnvironment } from "../credentials/resolver";
 import { createLegacyConversationImportRepository } from "../db/legacy-conversation-import-repository";
 
-export function createBackendHttpContext() {
-  const database = createDatabase();
-  const databaseRuntime = readDatabaseRuntimeConfig();
+export type BackendHttpContextOptions = {
+  databasePath?: string;
+  reconcileInterruptedRuntimeState?: boolean;
+};
+
+export function createBackendHttpContext(options: BackendHttpContextOptions = {}) {
+  const database = createDatabase(options);
+  const databaseRuntime = {
+    ...readDatabaseRuntimeConfig(),
+    ...(options.databasePath ? { sqlitePath: resolve(options.databasePath) } : {})
+  };
   const resourceRoot = resolve(Bun.env.GEOCHAT_DESKTOP_RESOURCE_ROOT ?? resolve(import.meta.dir, "../../.."));
 
+  let closed = false;
   return {
     database,
     databaseRuntime,
@@ -39,10 +48,13 @@ export function createBackendHttpContext() {
     routeLimits: {
       maxProviderRequestBodyBytes: 24 * 1024 * 1024,
       maxProviderResponseBodyBytes: 48 * 1024 * 1024
+    },
+    close() {
+      if (closed) return;
+      closed = true;
+      database.close();
     }
   };
 }
 
 export type BackendHttpContext = ReturnType<typeof createBackendHttpContext>;
-
-export const backendHttpContext = createBackendHttpContext();

@@ -47,8 +47,13 @@ const agentErrorEventsTableSql = `
   )
 `;
 
-export function createDatabase() {
-  const databasePath = resolve(Bun.env.GEOCHAT_DESKTOP_DB_PATH ?? "./data/geochat-desktop.sqlite");
+export type CreateDatabaseOptions = {
+  databasePath?: string;
+  reconcileInterruptedRuntimeState?: boolean;
+};
+
+export function createDatabase(options: CreateDatabaseOptions = {}) {
+  const databasePath = resolve(options.databasePath ?? Bun.env.GEOCHAT_DESKTOP_DB_PATH ?? "./data/geochat-desktop.sqlite");
   mkdirSync(dirname(databasePath), { recursive: true });
 
   const sqlite = new Database(databasePath);
@@ -165,7 +170,9 @@ export function createDatabase() {
 
   db.run(sql.raw(agentRunLedgersTableSql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS")));
   ensureColumn(sqlite, "agent_run_ledgers", "revision", "revision INTEGER NOT NULL DEFAULT 0");
-  reconcileInterruptedAgentRuns(sqlite);
+  if (options.reconcileInterruptedRuntimeState) {
+    reconcileInterruptedAgentRuns(sqlite);
+  }
   db.run(sql.raw(agentErrorEventsTableSql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS")));
 
   db.run(sql`
@@ -337,7 +344,9 @@ export function createDatabase() {
   db.run(sql`CREATE INDEX IF NOT EXISTS benchmark_runs_owner_started_idx ON benchmark_runs (owner_user_id, started_at)`);
   db.run(sql`CREATE INDEX IF NOT EXISTS benchmark_runs_suite_started_idx ON benchmark_runs (suite_id, started_at)`);
   db.run(sql`CREATE INDEX IF NOT EXISTS benchmark_case_results_run_idx ON benchmark_case_results (run_id, completed_at)`);
-  reconcileInterruptedBenchmarkRuns(sqlite);
+  if (options.reconcileInterruptedRuntimeState) {
+    reconcileInterruptedBenchmarkRuns(sqlite);
+  }
 
   db.run(sql`
     CREATE TABLE IF NOT EXISTS unified_problem_sources (
@@ -392,7 +401,14 @@ export function createDatabase() {
   db.run(sql`CREATE INDEX IF NOT EXISTS unified_problem_records_shape_idx ON unified_problem_records (construction, modality)`);
   db.run(sql`CREATE INDEX IF NOT EXISTS unified_problem_records_taxonomy_idx ON unified_problem_records (subject, grade)`);
 
-  return db;
+  let closed = false;
+  return Object.assign(db, {
+    close() {
+      if (closed) return;
+      closed = true;
+      sqlite.close();
+    }
+  });
 }
 
 function configureSqliteConnection(sqlite: Database) {

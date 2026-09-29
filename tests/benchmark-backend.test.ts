@@ -157,8 +157,12 @@ describe("benchmark backend", () => {
       body: JSON.stringify(validRunPayload())
     });
     const runId = created.json.run.id as string;
+    first.close();
 
-    const restarted = await createHttpHarness({ databasePath });
+    const restarted = await createHttpHarness({
+      databasePath,
+      reconcileInterruptedRuntimeState: true
+    });
     const detail = await restarted.request(`/v1/benchmark-runs/${encodeURIComponent(runId)}`);
     expect(detail.status).toBe(200);
     expect(detail.json.run).toMatchObject({
@@ -167,6 +171,7 @@ describe("benchmark backend", () => {
       error: "Backend restarted before benchmark completion."
     });
     expect(detail.json.run.completedAt).toBeString();
+    restarted.close();
   });
 
   test("validates run and result payloads and returns not-found consistently", async () => {

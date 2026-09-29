@@ -72,7 +72,7 @@ describe("native AI SDK sqlite schema", () => {
     Bun.env.GEOCHAT_DESKTOP_DB_PATH = databasePath;
 
     try {
-      createDatabase();
+      createDatabase().close();
       const migrated = new Database(databasePath);
       const columns = migrated.query("PRAGMA table_info(agent_run_ledgers)").all() as Array<{ name: string }>;
       expect(columns.map((column) => column.name)).not.toContain("mode");
@@ -89,7 +89,7 @@ describe("native AI SDK sqlite schema", () => {
     const databasePath = `/tmp/geochat-native-schema-interrupted-${crypto.randomUUID()}.sqlite`;
     Bun.env.GEOCHAT_DESKTOP_DB_PATH = databasePath;
     try {
-      createDatabase();
+      createDatabase().close();
       const sqlite = new Database(databasePath);
       const run = createAgentRunLedger({
         runId: "interrupted-run",
@@ -106,7 +106,7 @@ describe("native AI SDK sqlite schema", () => {
       `).run(run.runId, run.conversationId, run.modelProvider, run.modelId, Date.parse(run.startedAt), JSON.stringify(run));
       sqlite.close();
 
-      createDatabase();
+      createDatabase({ reconcileInterruptedRuntimeState: true }).close();
       const reopened = new Database(databasePath);
       const row = reopened.query("SELECT status, revision, completed_at, payload FROM agent_run_ledgers WHERE run_id = ?").get(run.runId) as {
         status: string;
@@ -131,7 +131,7 @@ describe("native AI SDK sqlite schema", () => {
     const databasePath = `/tmp/geochat-native-schema-finished-${crypto.randomUUID()}.sqlite`;
     Bun.env.GEOCHAT_DESKTOP_DB_PATH = databasePath;
     try {
-      createDatabase();
+      createDatabase().close();
       const sqlite = new Database(databasePath);
       const run = createAgentRunLedger({
         runId: "finished-before-restart",
@@ -166,7 +166,7 @@ describe("native AI SDK sqlite schema", () => {
       `).run(run.runId, run.conversationId, run.modelProvider, run.modelId, Date.parse(run.startedAt), JSON.stringify(interrupted));
       sqlite.close();
 
-      createDatabase();
+      createDatabase({ reconcileInterruptedRuntimeState: true }).close();
       const reopened = new Database(databasePath);
       const row = reopened.query("SELECT status, revision, completed_at, payload FROM agent_run_ledgers WHERE run_id = ?").get(run.runId) as {
         status: string;

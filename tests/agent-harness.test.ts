@@ -996,13 +996,14 @@ describe("function call registry", () => {
     ]));
   });
 
-  test("keeps GeoGebra command execution interval at 80ms", async () => {
-    // The renderer paces batches so the applet can settle between commands.
+  test("keeps GeoGebra command execution interval at 0ms", async () => {
+    // Command batches run without an artificial pause between commands.
     // Behaviour is covered in tests/react-geogebra-boundary.test.ts; this
     // pins the constant itself so a silent edit cannot change the pacing.
     const source = await readFile(join(process.cwd(), "src/renderer-react/src/geogebra/controller.ts"), "utf8");
 
-    expect(source).toContain("const COMMAND_DELAY_MS = 80;");
+    expect(source).toContain("const COMMAND_DELAY_MS = 0;");
+    expect(source).toContain("if (COMMAND_DELAY_MS > 0 && index < commands.length - 1)");
     expect(source).toContain("commandDelayMs: commands.length > 1 ? COMMAND_DELAY_MS : 0");
   });
 

@@ -4,7 +4,7 @@ import { normalizeGeoGebraCommandSyntax, normalizeGeoGebraFreeParameterCommands 
 import { evaluateCommand, type CommandResult } from "./command-executor";
 import { GeoGebraAnimationRuntime, type AnimationScheduler, type GeoGebraAnimationEasing, type GeoGebraAnimationMode } from "./animation-runtime";
 
-const COMMAND_DELAY_MS = 80;
+const COMMAND_DELAY_MS = 0;
 
 export class GeoGebraController {
   private api: GeoGebraApi | null = null;
@@ -137,7 +137,7 @@ export class GeoGebraController {
       const result = await evaluateCommand(this.api!, commands[index]!);
       results.push(result);
       if (!result.success) break;
-      if (index < commands.length - 1) await wait(COMMAND_DELAY_MS);
+      if (COMMAND_DELAY_MS > 0 && index < commands.length - 1) await wait(COMMAND_DELAY_MS);
     }
 
     const failedIndex = results.findIndex((result) => !result.success);

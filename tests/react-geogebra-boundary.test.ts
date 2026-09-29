@@ -178,13 +178,13 @@ describe("controller tool boundary", () => {
     expect((result.clientMeta as Record<string, unknown>).restoredAfterError).toBe(true);
   });
 
-  test("keeps the inter-command delay at 80ms, and charges nothing for a single command", async () => {
+  test("runs command batches without an artificial inter-command delay", async () => {
     const controller = new GeoGebraController();
     controller.setApi(api({ evalCommand: () => true }));
     const single = await controller.executeTool("executeGeoGebraCommands", { commands: ["A=(1,2)"] }) as Record<string, unknown>;
     const many = await controller.executeTool("executeGeoGebraCommands", { commands: ["A=(1,2)", "B=(3,4)"] }) as Record<string, unknown>;
     expect((single.clientMeta as Record<string, unknown>).commandDelayMs).toBe(0);
-    expect((many.clientMeta as Record<string, unknown>).commandDelayMs).toBe(80);
+    expect((many.clientMeta as Record<string, unknown>).commandDelayMs).toBe(0);
   });
 
   test("normalizes 0-255 RGB values at the final applet execution boundary", async () => {

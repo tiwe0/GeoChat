@@ -20,5 +20,10 @@ export async function handleNativeChatRoute(
   if (ownerUserId !== undefined && ownerUserId !== (dataScope.scope.ownerUserId ?? null)) {
     return json({ error: "not_found", message: "Conversation was not found." }, { status: 404 });
   }
-  return createNativeChatResponse(payload, context, { abortSignal: request.signal, dataScope: dataScope.scope });
+  return createNativeChatResponse(payload, {
+    credentials: context.credentials,
+    runs: context.repositories.agentRuns,
+    conversations: context.repositories.conversations,
+    blackboard: context.repositories.blackboard,
+  }, { abortSignal: request.signal, dataScope: dataScope.scope });
 }

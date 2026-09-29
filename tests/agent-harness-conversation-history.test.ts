@@ -275,7 +275,8 @@ describe("conversation history", () => {
     expect(response).toMatchObject({
       status: 400,
       json: {
-        error: "invalid_request"
+        error: "invalid_request",
+        errorCode: "conversation_message_upsert_invalid"
       }
     });
     expect((await request(`/v1/conversations/${encodeURIComponent(conversationId)}`)).status).toBe(404);
@@ -333,7 +334,7 @@ describe("conversation history", () => {
     });
     expect(invalid).toMatchObject({
       status: 400,
-      json: { error: "invalid_migration_package" }
+      json: { error: "invalid_migration_package", errorCode: "migration_package_invalid" }
     });
 
     const imported = await request("/v1/migration/import", {
@@ -368,7 +369,8 @@ describe("conversation history", () => {
     expect(response).toMatchObject({
       status: 400,
       json: {
-        error: "invalid_request"
+        error: "invalid_request",
+        errorCode: "conversation_message_upsert_invalid"
       }
     });
     expect((await request(`/v1/conversations/${encodeURIComponent(conversationId)}`)).status).toBe(404);

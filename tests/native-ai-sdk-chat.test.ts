@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { MockLanguageModelV3, simulateReadableStream } from "ai/test";
 import { APICallError, type UIMessage } from "ai";
-import { createNativeChatResponse, type NativeChatRequest } from "../backend/src/agent/native-chat";
-import type { BackendHttpContext } from "../backend/src/http/context";
+import {
+  createNativeChatResponse,
+  type NativeChatDependencies,
+  type NativeChatRequest,
+} from "../backend/src/agent/native-chat";
 import type { AgentRunLedgerRecord } from "@geochat-ai/app";
 
 const usage = {
@@ -12,9 +15,8 @@ const usage = {
 
 function contextWithLedgerStore() {
   const ledgers = new Map<string, AgentRunLedgerRecord>();
-  const context = {
-    repositories: {
-      agentRuns: {
+  const context: NativeChatDependencies = {
+      runs: {
         getLedger: async (runId: string) => ledgers.get(runId),
         createLedger: async (record: AgentRunLedgerRecord) => {
           if (ledgers.has(record.runId)) throw new Error("Agent run ledger revision conflict");
@@ -37,10 +39,9 @@ function contextWithLedgerStore() {
       },
       blackboard: {
         listEntries: async () => [],
-        patchEntries: async () => ({ entries: [], applied: 0 }),
+        patchEntries: async () => ({ entries: [], changed: 0, archived: 0 }),
       },
-    },
-  } as unknown as BackendHttpContext;
+  };
   return { context, ledgers };
 }
 
@@ -227,8 +228,8 @@ describe("native AI SDK UI tool loop", () => {
 
   test("serializes backend-tool, step, and terminal ledger writes in one model turn", async () => {
     const { context, ledgers } = contextWithLedgerStore();
-    const compareAndSwap = context.repositories.agentRuns.compareAndSwapLedger.bind(context.repositories.agentRuns);
-    context.repositories.agentRuns.compareAndSwapLedger = async (record, expectedRevision) => {
+    const compareAndSwap = context.runs.compareAndSwapLedger.bind(context.runs);
+    context.runs.compareAndSwapLedger = async (record, expectedRevision) => {
       // SQLite writes complete asynchronously in the desktop runtime. This
       // delay makes overlapping AI SDK callbacks deterministic in the test.
       await Bun.sleep(5);
@@ -734,7 +735,7 @@ describe("native AI SDK UI tool loop", () => {
   test("persists native reasoning and tool UI parts for backend history restore", async () => {
     const { context } = contextWithLedgerStore();
     const stored = new Map<string, { payload: { parts?: unknown[] } }>();
-    context.repositories.conversations = {
+    context.conversations = {
       findMessageById: async (id: string) => stored.get(id) as never,
       upsertConversationMessage: async (input: { message: { id: string; payload: { parts?: unknown[] } } }) => {
         stored.set(input.message.id, structuredClone(input.message));
@@ -784,8 +785,8 @@ describe("native AI SDK UI tool loop", () => {
 
   test("turns terminal ledger persistence failure into a stream error", async () => {
     const { context, ledgers } = contextWithLedgerStore();
-    const compareAndSwap = context.repositories.agentRuns.compareAndSwapLedger.bind(context.repositories.agentRuns);
-    context.repositories.agentRuns.compareAndSwapLedger = async (record, expectedRevision) => {
+    const compareAndSwap = context.runs.compareAndSwapLedger.bind(context.runs);
+    context.runs.compareAndSwapLedger = async (record, expectedRevision) => {
       if (record.status === "succeeded") throw new Error("terminal persistence refused");
       return compareAndSwap(record, expectedRevision);
     };
@@ -814,7 +815,7 @@ describe("native AI SDK UI tool loop", () => {
   test("fails the ledger when final conversation persistence fails instead of recording a false success", async () => {
     const { context, ledgers } = contextWithLedgerStore();
     const stored = new Map<string, unknown>();
-    context.repositories.conversations = {
+    context.conversations = {
       findMessageById: async (id: string) => stored.get(id) as never,
       upsertConversationMessage: async (input: { message: { id: string; role: string } }) => {
         if (input.message.role === "assistant") throw new Error("conversation persistence refused");

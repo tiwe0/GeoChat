@@ -79,7 +79,11 @@ describe("credential-backed model discovery", () => {
     );
     expect(rejected).toEqual({
       httpStatus: 400,
-      body: { error: "invalid_request", message: "Model discovery requires exactly one credentialRef." }
+      body: {
+        error: "invalid_request",
+        errorCode: "model_discovery_request_invalid",
+        message: "Model discovery requires exactly one credentialRef."
+      }
     });
     expect(fetchCalls).toBe(0);
   });

@@ -381,3 +381,106 @@ export const unifiedProblemRecords = sqliteTable(
     index("unified_problem_records_taxonomy_idx").on(table.subject, table.grade)
   ]
 );
+
+/**
+ * Runtime-independent contract used to prove that the versioned SQLite
+ * migrations still produce the shape consumed by the Drizzle query schema.
+ */
+export const sqliteSchemaContract = {
+  messages: {
+    columns: ["id", "role", "content", "owner_user_id", "created_at"],
+    indexes: ["messages_owner_created_at_idx"],
+    checks: ["role IN ('user', 'assistant', 'system')"],
+  },
+  conversations: {
+    columns: ["id", "title", "source_title", "summary", "model", "owner_user_id", "message_count", "created_at", "updated_at"],
+    indexes: ["conversations_updated_at_idx", "conversations_owner_updated_at_idx"],
+    checks: [],
+  },
+  legacy_conversation_import_receipts: {
+    columns: ["id", "owner_scope_key", "owner_user_id", "source_fingerprint", "content_fingerprint", "conversation_id", "outcome", "reason", "created_at"],
+    indexes: ["legacy_conversation_import_receipts_scope_source_uidx", "legacy_conversation_import_receipts_conversation_idx"],
+    checks: ["outcome IN ('imported', 'skipped', 'conflict')", "reason IS NULL OR reason IN ('conversation_content_conflict', 'message_id_conflict', 'source_fingerprint_mismatch')"],
+  },
+  conversation_messages: {
+    columns: ["id", "conversation_id", "role", "content", "created_at", "payload"],
+    indexes: ["conversation_messages_conversation_idx"],
+    checks: ["role IN ('user', 'assistant')"],
+  },
+  conversation_blackboard_entries: {
+    columns: ["id", "conversation_id", "key", "category", "value", "status", "confidence", "reason", "source_message_id", "source_tool_call_id", "source_run_id", "created_at", "updated_at", "archived_at"],
+    indexes: ["conversation_blackboard_entries_conversation_key_uidx", "conversation_blackboard_entries_lookup_idx"],
+    checks: ["status IN ('active', 'archived')", "confidence >= 0 AND confidence <= 1000"],
+  },
+  agent_run_ledgers: {
+    columns: ["run_id", "conversation_id", "status", "revision", "model_provider", "model_id", "started_at", "completed_at", "payload"],
+    indexes: [],
+    checks: [
+      "status IN ('running', 'succeeded', 'failed', 'cancelled')",
+      "(status = 'running' AND completed_at IS NULL) OR (status IN ('succeeded', 'failed', 'cancelled') AND completed_at IS NOT NULL)",
+      "completed_at IS NULL OR completed_at >= started_at",
+    ],
+  },
+  agent_error_events: {
+    columns: ["event_id", "run_id", "conversation_id", "source", "code", "severity", "message", "model_provider", "model_id", "tool_call_id", "tool_name", "created_at", "payload"],
+    indexes: ["agent_error_events_run_id_idx", "agent_error_events_conversation_idx", "agent_error_events_source_idx"],
+    checks: ["source IN ('run', 'tool')", "severity IN ('warning', 'error')"],
+  },
+  problem_sources: {
+    columns: ["id", "kind", "name", "version", "source_path", "source_hash", "imported_at", "raw_metadata"],
+    indexes: [],
+    checks: ["kind IN ('geochat_benchmark_case', 'gaokao_source_collection', 'manual')"],
+  },
+  problems: {
+    columns: ["id", "source_id", "source_item_id", "title", "prompt", "answer", "analysis", "kind", "task_type", "question_type", "paper", "year", "score", "category", "difficulty", "visual_potential", "raw_payload", "created_at", "updated_at"],
+    indexes: ["problems_source_item_uidx", "problems_search_idx"],
+    checks: ["kind IN ('math_problem', 'exploration', 'regression')", "difficulty IN ('easy', 'medium', 'hard')", "visual_potential IN (0, 1)"],
+  },
+  problem_tags: { columns: ["problem_id", "tag"], indexes: ["problem_tags_uidx", "problem_tags_tag_idx"], checks: [] },
+  problem_topics: { columns: ["problem_id", "topic"], indexes: ["problem_topics_uidx", "problem_topics_topic_idx"], checks: [] },
+  problem_sets: { columns: ["id", "slug", "title", "description", "source_id", "kind", "created_at"], indexes: ["problem_sets_slug_uidx"], checks: ["kind IN ('curated', 'generated', 'imported', 'eval')"] },
+  problem_set_items: { columns: ["set_id", "problem_id", "sort_order"], indexes: ["problem_set_items_uidx", "problem_set_items_set_order_idx"], checks: [] },
+  problem_attempts: {
+    columns: ["id", "problem_id", "conversation_id", "owner_user_id", "run_id", "status", "model_provider", "model_id", "started_at", "completed_at", "user_rating", "notes"],
+    indexes: ["problem_attempts_owner_idx", "problem_attempts_problem_idx"],
+    checks: ["status IN ('started', 'completed', 'failed')", "(status = 'started' AND completed_at IS NULL) OR (status IN ('completed', 'failed') AND completed_at IS NOT NULL)"],
+  },
+  benchmark_runs: {
+    columns: ["id", "owner_user_id", "suite_id", "suite_version", "suite_hash", "config_hash", "status", "total_cases", "completed_cases", "passed_cases", "failed_cases", "config", "metrics", "evidence_refs", "error", "started_at", "completed_at"],
+    indexes: ["benchmark_runs_owner_started_idx", "benchmark_runs_suite_started_idx"],
+    checks: ["status IN ('running', 'completed', 'failed', 'interrupted', 'cancelled')", "total_cases >= 0", "completed_cases <= total_cases", "passed_cases + failed_cases <= completed_cases"],
+  },
+  benchmark_case_results: {
+    columns: ["id", "run_id", "case_id", "status", "score", "metrics", "evidence_refs", "error", "started_at", "completed_at"],
+    indexes: ["benchmark_case_results_run_case_uidx", "benchmark_case_results_run_idx"],
+    checks: ["status IN ('passed', 'failed', 'error', 'skipped')", "score IS NULL OR (score >= 0 AND score <= 1)", "started_at IS NULL OR completed_at >= started_at"],
+  },
+  unified_problem_sources: {
+    columns: ["id", "requested_id", "repo_id", "group_name", "commit_sha", "license", "local_dir", "source_hash", "imported_at", "raw_metadata"],
+    indexes: ["unified_problem_sources_repo_uidx", "unified_problem_sources_group_idx"],
+    checks: ["group_name IN ('production', 'external', 'reasoning', 'evaluation')"],
+  },
+  unified_problem_records: {
+    columns: ["id", "source_id", "source_item_id", "source_file", "source_index", "source_split", "dataset_id", "group_name", "modality", "construction", "prompt", "answer_final", "answer_type", "subject", "grade", "difficulty", "language", "license", "media_count", "choice_count", "record_payload", "created_at", "updated_at"],
+    indexes: ["unified_problem_records_source_item_uidx", "unified_problem_records_dataset_split_idx", "unified_problem_records_group_idx", "unified_problem_records_shape_idx", "unified_problem_records_taxonomy_idx"],
+    checks: ["modality IN ('text', 'image', 'multimodal')", "construction IN ('open_ended', 'multiple_choice', 'fill_blank', 'worked_solution', 'reasoning_trace')"],
+  },
+} as const;
+
+export const sqlitePrimaryKeyContract = {
+  messages: ["id"],
+  conversations: ["id"],
+  legacy_conversation_import_receipts: ["id"],
+  conversation_messages: ["id"],
+  conversation_blackboard_entries: ["id"],
+  agent_run_ledgers: ["run_id"],
+  agent_error_events: ["event_id"],
+  problem_sources: ["id"],
+  problems: ["id"],
+  problem_sets: ["id"],
+  problem_attempts: ["id"],
+  benchmark_runs: ["id"],
+  benchmark_case_results: ["id"],
+  unified_problem_sources: ["id"],
+  unified_problem_records: ["id"],
+} as const;

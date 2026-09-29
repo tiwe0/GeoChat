@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  ASSISTANT_SESSION_TRANSITION_TABLE,
   AssistantSessionController,
   AssistantSessionTransitionKind,
 } from "../src/renderer-react/src/features/session/assistantSessionController";
@@ -14,6 +15,27 @@ function createController(overrides: ConstructorParameters<typeof AssistantSessi
 }
 
 describe("AssistantSessionController", () => {
+  test.each([
+    [AssistantSessionTransitionKind.Idle, "begin-new-conversation", AssistantSessionTransitionKind.NewConversation],
+    [AssistantSessionTransitionKind.Idle, "begin-select-conversation", AssistantSessionTransitionKind.SelectConversation],
+    [AssistantSessionTransitionKind.NewConversation, "commit-new-conversation", AssistantSessionTransitionKind.Idle],
+    [AssistantSessionTransitionKind.NewConversation, "begin-select-conversation", AssistantSessionTransitionKind.SelectConversation],
+    [AssistantSessionTransitionKind.SelectConversation, "commit-select-conversation", AssistantSessionTransitionKind.Idle],
+    [AssistantSessionTransitionKind.SelectConversation, "cancel-select-conversation", AssistantSessionTransitionKind.Idle],
+    [AssistantSessionTransitionKind.SelectConversation, "delete-pending-selection", AssistantSessionTransitionKind.Idle],
+  ] as const)("declares the %s --%s--> %s transition", (current, action, next) => {
+    expect(ASSISTANT_SESSION_TRANSITION_TABLE[current][action]).toBe(next);
+  });
+
+  test.each([
+    [AssistantSessionTransitionKind.Idle, "commit-new-conversation"],
+    [AssistantSessionTransitionKind.Idle, "commit-select-conversation"],
+    [AssistantSessionTransitionKind.NewConversation, "commit-select-conversation"],
+    [AssistantSessionTransitionKind.SelectConversation, "commit-new-conversation"],
+  ] as const)("rejects the undeclared %s --%s transition", (current, action) => {
+    expect(ASSISTANT_SESSION_TRANSITION_TABLE[current][action]).toBeUndefined();
+  });
+
   test("only the newest A-B-C transition may commit", () => {
     const controller = createController();
     const selectA = controller.beginSelectConversation("conversation-a");

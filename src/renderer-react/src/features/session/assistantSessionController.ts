@@ -6,6 +6,50 @@ export enum AssistantSessionTransitionKind {
   SelectConversation = "select-conversation",
 }
 
+export type AssistantSessionAction =
+  | "begin-new-conversation"
+  | "commit-new-conversation"
+  | "begin-select-conversation"
+  | "commit-select-conversation"
+  | "cancel-select-conversation"
+  | "restore"
+  | "activate-for-submit"
+  | "delete-current-conversation"
+  | "delete-pending-selection";
+
+type AssistantSessionTransitionTable = Readonly<Record<
+  AssistantSessionTransitionKind,
+  Readonly<Partial<Record<AssistantSessionAction, AssistantSessionTransitionKind>>>
+>>;
+
+export const ASSISTANT_SESSION_TRANSITION_TABLE: AssistantSessionTransitionTable = Object.freeze({
+  [AssistantSessionTransitionKind.Idle]: Object.freeze({
+    "begin-new-conversation": AssistantSessionTransitionKind.NewConversation,
+    "begin-select-conversation": AssistantSessionTransitionKind.SelectConversation,
+    restore: AssistantSessionTransitionKind.Idle,
+    "activate-for-submit": AssistantSessionTransitionKind.Idle,
+    "delete-current-conversation": AssistantSessionTransitionKind.Idle,
+  }),
+  [AssistantSessionTransitionKind.NewConversation]: Object.freeze({
+    "begin-new-conversation": AssistantSessionTransitionKind.NewConversation,
+    "commit-new-conversation": AssistantSessionTransitionKind.Idle,
+    "begin-select-conversation": AssistantSessionTransitionKind.SelectConversation,
+    restore: AssistantSessionTransitionKind.Idle,
+    "activate-for-submit": AssistantSessionTransitionKind.Idle,
+    "delete-current-conversation": AssistantSessionTransitionKind.Idle,
+  }),
+  [AssistantSessionTransitionKind.SelectConversation]: Object.freeze({
+    "begin-new-conversation": AssistantSessionTransitionKind.NewConversation,
+    "begin-select-conversation": AssistantSessionTransitionKind.SelectConversation,
+    "commit-select-conversation": AssistantSessionTransitionKind.Idle,
+    "cancel-select-conversation": AssistantSessionTransitionKind.Idle,
+    restore: AssistantSessionTransitionKind.Idle,
+    "activate-for-submit": AssistantSessionTransitionKind.Idle,
+    "delete-current-conversation": AssistantSessionTransitionKind.Idle,
+    "delete-pending-selection": AssistantSessionTransitionKind.Idle,
+  }),
+});
+
 export type AssistantSessionTransition =
   | Readonly<{ kind: AssistantSessionTransitionKind.Idle }>
   | Readonly<{
@@ -139,6 +183,7 @@ export class AssistantSessionController {
       generation: this.#snapshot.generation + 1,
       threadId: this.#threadIdFactory(),
     }) satisfies NewConversationToken;
+    this.#assertTransition("begin-new-conversation", token.kind);
     this.#replace({
       generation: token.generation,
       transition: token,
@@ -148,6 +193,7 @@ export class AssistantSessionController {
 
   commitNewConversation(token: NewConversationToken): boolean {
     if (!this.#matchesNewConversation(token)) return false;
+    this.#assertTransition("commit-new-conversation", AssistantSessionTransitionKind.Idle);
     this.#replace({
       conversationId: null,
       title: null,
@@ -163,6 +209,7 @@ export class AssistantSessionController {
       generation: this.#snapshot.generation + 1,
       conversationId,
     }) satisfies SelectConversationToken;
+    this.#assertTransition("begin-select-conversation", token.kind);
     this.#replace({
       generation: token.generation,
       transition: token,
@@ -175,6 +222,7 @@ export class AssistantSessionController {
     selected: SelectedConversationSession,
   ): boolean {
     if (!this.#matchesSelectConversation(token)) return false;
+    this.#assertTransition("commit-select-conversation", AssistantSessionTransitionKind.Idle);
     this.#replace({
       conversationId: token.conversationId,
       title: selected.title,
@@ -189,12 +237,14 @@ export class AssistantSessionController {
 
   cancelSelectConversation(token: SelectConversationToken): boolean {
     if (!this.#matchesSelectConversation(token)) return false;
+    this.#assertTransition("cancel-select-conversation", AssistantSessionTransitionKind.Idle);
     this.#replace({ transition: IDLE_TRANSITION });
     return true;
   }
 
   restore(restored: RestoredAssistantSession): AssistantSessionSnapshot {
     const generation = this.#snapshot.generation + 1;
+    this.#assertTransition("restore", AssistantSessionTransitionKind.Idle);
     this.#replace({
       conversationId: restored.conversationId,
       title: restored.title,
@@ -214,6 +264,7 @@ export class AssistantSessionController {
       ?? previousConversationId
       ?? this.#snapshot.threadId;
     const switchedConversation = conversationId !== previousConversationId;
+    this.#assertTransition("activate-for-submit", AssistantSessionTransitionKind.Idle);
     this.#replace({
       conversationId,
       title: activation.title === undefined
@@ -228,6 +279,7 @@ export class AssistantSessionController {
 
   deleteConversation(conversationId: string): "current" | "background" {
     if (conversationId === this.#snapshot.conversationId) {
+      this.#assertTransition("delete-current-conversation", AssistantSessionTransitionKind.Idle);
       this.#replace({
         conversationId: null,
         title: null,
@@ -243,6 +295,7 @@ export class AssistantSessionController {
       transition.kind === AssistantSessionTransitionKind.SelectConversation
       && transition.conversationId === conversationId
     ) {
+      this.#assertTransition("delete-pending-selection", AssistantSessionTransitionKind.Idle);
       this.#replace({
         generation: this.#snapshot.generation + 1,
         transition: IDLE_TRANSITION,
@@ -275,6 +328,13 @@ export class AssistantSessionController {
     return transition.kind === AssistantSessionTransitionKind.SelectConversation
       && transition.generation === token.generation
       && transition.conversationId === token.conversationId;
+  }
+
+  #assertTransition(action: AssistantSessionAction, next: AssistantSessionTransitionKind): void {
+    const current = this.#snapshot.transition.kind;
+    if (ASSISTANT_SESSION_TRANSITION_TABLE[current][action] !== next) {
+      throw new Error(`Invalid assistant session transition: ${current} --${action}--> ${next}`);
+    }
   }
 
   #replace(patch: Partial<Omit<AssistantSessionSnapshot, "transition">> & {

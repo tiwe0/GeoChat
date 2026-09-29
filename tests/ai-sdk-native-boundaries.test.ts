@@ -117,17 +117,26 @@ describe("AI SDK native integration boundaries", () => {
   });
 
   test.each([
-    [{ provider: "openai", model: "gpt-5.1", apiKey: "test", customBaseUrl: "" }, "openai.responses"],
-    [{ provider: "openrouter", model: "openai/gpt-5.1", apiKey: "test", customBaseUrl: "" }, "openrouter"],
-    [{ provider: "qwen", model: "qwen-max", apiKey: "test", customBaseUrl: "" }, "alibaba.chat"],
-    [{ provider: "anthropic", model: "claude-sonnet-4-5", apiKey: "test", customBaseUrl: "" }, "anthropic.messages"],
-    [{ provider: "google", model: "gemini-2.5-pro", apiKey: "test", customBaseUrl: "" }, "google.generative-ai"],
-    [{ provider: "deepseek", model: "deepseek-chat", apiKey: "test", customBaseUrl: "" }, "deepseek.chat"],
-    [{ provider: "custom", model: "private-model", apiKey: "test", customBaseUrl: "https://example.invalid/v1", protocol: "openai-compatible" }, "openai.chat"],
+    [{ provider: "openai", model: "gpt-5.1", credentialRef: "9db97593-5568-40fa-b800-8d0febc67907" }, "openai.responses"],
+    [{ provider: "openrouter", model: "openai/gpt-5.1", credentialRef: "9db97593-5568-40fa-b800-8d0febc67907" }, "openrouter"],
+    [{ provider: "qwen", model: "qwen-max", credentialRef: "9db97593-5568-40fa-b800-8d0febc67907" }, "alibaba.chat"],
+    [{ provider: "anthropic", model: "claude-sonnet-4-5", credentialRef: "9db97593-5568-40fa-b800-8d0febc67907" }, "anthropic.messages"],
+    [{ provider: "google", model: "gemini-2.5-pro", credentialRef: "9db97593-5568-40fa-b800-8d0febc67907" }, "google.generative-ai"],
+    [{ provider: "deepseek", model: "deepseek-chat", credentialRef: "9db97593-5568-40fa-b800-8d0febc67907" }, "deepseek.chat"],
+    [{ provider: "custom", model: "private-model", credentialRef: "9db97593-5568-40fa-b800-8d0febc67907", protocol: "openai-compatible" }, "openai.chat"],
   ] satisfies Array<[AgentModelConfig, string]>) (
     "resolves $provider through an AI SDK provider registry",
-    (config, expectedProvider) => {
-      const model = createBackendLanguageModel(config);
+    async (config, expectedProvider) => {
+      const protocol = config.protocol ?? (config.provider === "anthropic" ? "anthropic" : config.provider === "google" ? "google" : "openai-compatible");
+      const model = await createBackendLanguageModel(config, {
+        resolve: async () => ({
+          schemaVersion: 1,
+          secret: "test",
+          provider: config.provider,
+          protocol,
+          canonicalBaseUrl: config.provider === "custom" ? "https://example.invalid/v1" : `https://${config.provider}.example/v1`,
+        }),
+      });
       expect(model.modelId).toBe(config.model);
       expect(model.provider).toBe(expectedProvider);
     },

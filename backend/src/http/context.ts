@@ -9,6 +9,7 @@ import { createAgentRunRepository } from "../db/agent-run-repository";
 import { createBenchmarkRepository } from "../db/benchmark-repository";
 import { readDatabaseRuntimeConfig } from "../db/runtime";
 import { defaultProblemCasesRoot } from "../problem-cases";
+import { createCredentialResolverFromEnvironment } from "../credentials/resolver";
 
 export function createBackendHttpContext() {
   const database = createDatabase();
@@ -18,6 +19,7 @@ export function createBackendHttpContext() {
   return {
     database,
     databaseRuntime,
+    credentials: createCredentialResolverFromEnvironment(),
     repositories: {
       conversations: createConversationRepository(databaseRuntime, database),
       blackboard: createBlackboardRepository(databaseRuntime, database),

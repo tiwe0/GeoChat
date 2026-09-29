@@ -50,6 +50,7 @@ import { systemPromptForRun } from "./agent-prompt";
 import { refineExecuteGeoGebraCommands } from "./native-tool-policy";
 import { AgentRunLedgerConflictError } from "../db/agent-run-repository";
 import { sanitizeProviderError } from "./provider-error";
+import { CredentialResolutionError } from "../credentials/resolver";
 
 export type NativeChatRequest = {
   messages: UIMessage[];
@@ -64,6 +65,10 @@ export type NativeChatRequest = {
 export function isNativeChatRequest(value: unknown): value is NativeChatRequest {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const payload = value as Record<string, unknown>;
+  const model = payload.model && typeof payload.model === "object" && !Array.isArray(payload.model)
+    ? payload.model as Record<string, unknown>
+    : undefined;
+  if (!model || hasForbiddenTransportFields(payload) || hasForbiddenTransportFields(model)) return false;
   return (
     Array.isArray(payload.messages) &&
     typeof payload.runId === "string" && Boolean(payload.runId.trim()) &&
@@ -83,12 +88,23 @@ export async function createNativeChatResponse(
   const policy = validateModelPolicy(input);
   if (policy) return jsonError(policy, 400);
 
-  const model = options.model ?? createBackendLanguageModel(input.model);
   const validated = await safeValidateUIMessages({ messages: input.messages });
   if (!validated.success) return jsonError(validated.error.message, 400);
   const messages = validated.data;
   const latestUser = [...messages].reverse().find((message) => message.role === "user");
   if (!latestUser) return jsonError("A user message is required.", 400);
+
+  let model = options.model;
+  if (!model) {
+    try {
+      model = await createBackendLanguageModel(input.model, context.credentials, {
+        abortSignal: options.abortSignal,
+      });
+    } catch (error) {
+      if (error instanceof CredentialResolutionError) return jsonError(error.message, error.status);
+      throw error;
+    }
+  }
 
   const loaded = await loadOrCreateRun(input, context, latestUser);
   let run = loaded.run;
@@ -505,7 +521,6 @@ function validateRunContinuation(run: AgentRunLedgerRecord, input: NativeChatReq
   if (run.userMessageId && run.userMessageId !== latestUser.id) return "Agent run user-message lineage does not match the continuation request.";
   if (run.modelProvider !== input.model.provider || run.modelId !== input.model.model) return "Agent run model does not match the continuation request.";
   if ((run.modelProtocol ?? null) !== (input.model.protocol ?? null)) return "Agent run model protocol does not match the continuation request.";
-  if ((run.modelBaseUrl ?? null) !== (input.model.customBaseUrl.trim() || null)) return "Agent run model endpoint does not match the continuation request.";
   if (run.prompt !== messageText(latestUser)) return "Agent run prompt does not match the continuation request.";
   if (run.attachmentCount !== latestUser.parts.filter((part) => part.type === "file").length) return "Agent run attachments do not match the continuation request.";
   if (run.requestFingerprint && run.requestFingerprint !== nativeUserMessageFingerprint(latestUser)) return "Agent run request fingerprint does not match the continuation request.";
@@ -514,6 +529,10 @@ function validateRunContinuation(run: AgentRunLedgerRecord, input: NativeChatReq
   const effort = normalizeAgentRunThinkingEffort(input.thinkingEffort) ?? "standard";
   if ((run.thinkingEffort ?? effort) !== effort) return "Agent run reasoning effort does not match the continuation request.";
   return undefined;
+}
+
+function hasForbiddenTransportFields(payload: Record<string, unknown>) {
+  return ["apiKey", "customBaseUrl", "url", "headers"].some((field) => field in payload);
 }
 
 async function persistNativeConversationMessages(

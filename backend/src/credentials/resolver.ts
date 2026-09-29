@@ -135,7 +135,10 @@ function parseBrokerUrl(value: string | undefined) {
 
 async function readBrokerPayload(response: Response) {
   try {
-    return await response.json() as unknown;
+    const payload = await response.json() as unknown;
+    return payload && typeof payload === "object" && !Array.isArray(payload)
+      ? payload as Record<string, unknown>
+      : undefined;
   } catch {
     return undefined;
   }

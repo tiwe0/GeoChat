@@ -25,7 +25,7 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": "default-src 'self' geochat-bundle:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:*; script-src 'self' geochat-bundle: 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' geochat-bundle: 'unsafe-inline'; img-src 'self' geochat-bundle: https://assets.chat-with-geogebra.com data: blob:; font-src 'self' geochat-bundle: data:; worker-src 'self' geochat-bundle: blob:; child-src 'self' geochat-bundle: blob:; manifest-src 'self' geochat-bundle:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
       "capabilities": [
         "default"
       ]

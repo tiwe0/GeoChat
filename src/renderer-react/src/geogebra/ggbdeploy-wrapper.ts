@@ -159,7 +159,7 @@ function pinGeoGebraModuleBase(codebase: string) {
 
 export async function mountGeoGebra(options: {
   container: HTMLElement;
-  /** Base URL of the local backend, which serves vendor/geogebra. */
+  /** Base URL of the local backend, used for GeoGebra assets during development. */
   backendBaseUrl: string;
   /** Cancels an in-flight mount (notably React StrictMode effect replay). */
   signal?: AbortSignal;
@@ -168,11 +168,10 @@ export async function mountGeoGebra(options: {
   const mountToken = Symbol("geogebra-mount");
   activeMounts.set(options.container, mountToken);
   const isActiveMount = () => activeMounts.get(options.container) === mountToken;
-  // The desktop app serves one vendored GeoGebra runtime from its own backend,
-  // so there is no version path and no original/patched split — the web build
-  // needed those because it fetched releases from a hosted origin.
-  const origin = options.backendBaseUrl.replace(/\/$/, "");
-  const assetBase = `${origin}/tools/geogebra-assets-v2`;
+  // Development serves the vendored runtime from the loopback backend. A
+  // packaged build loads the same manifest-verified files through its own app
+  // protocol so CSP never has to trust JavaScript from an arbitrary local port.
+  const assetBase = geogebraAssetBaseUrl(options.backendBaseUrl);
   const codebase = `${assetBase}/HTML5/5.0/web3d/`;
   // The shared stylesheet lives beside the selected GWT codebase, not inside
   // the web3d module directory. The old URL returned 404 in both dev and the
@@ -383,6 +382,17 @@ export async function mountGeoGebra(options: {
       options.container.replaceChildren();
     },
   };
+}
+
+export function geogebraAssetBaseUrl(
+  backendBaseUrl: string,
+  rendererUrl = globalThis.location?.href,
+  development = import.meta.env.DEV
+) {
+  if (development || !rendererUrl) {
+    return `${backendBaseUrl.replace(/\/$/, "")}/tools/geogebra-assets-v2`;
+  }
+  return new URL("../vendor/geogebra/", rendererUrl).href.replace(/\/$/, "");
 }
 
 function throwIfMountCancelled(signal: AbortSignal | undefined, isActiveMount: () => boolean) {

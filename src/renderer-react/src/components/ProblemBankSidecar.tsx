@@ -923,8 +923,9 @@ function ProblemMedia({ src, alt }: { src: string; alt: string }) {
       alt={alt}
       loading="lazy"
       decoding="async"
+      referrerPolicy="no-referrer"
       onError={() => {
-        console.error(`[ERROR] Failed to load problem media from ${src}`);
+        console.error("[ERROR] Failed to load problem media from the configured source.");
         setFailed(true);
       }}
     />

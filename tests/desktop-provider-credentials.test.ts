@@ -2,67 +2,97 @@ import { describe, expect, test } from "bun:test";
 import {
   DEFAULT_MODEL_CONFIG,
   DEFAULT_VISION_MODEL_CONFIG,
+  DesktopCredentialMigrationRequiredError,
   normalizeCustomProviderConfig,
   normalizeDesktopConfig,
+  normalizeDesktopConfigJson,
   updateProviderCredentials,
 } from "../src/shared/desktop/desktop-config";
+import {
+  isAgentModelConfig,
+  normalizeAgentModelConfig,
+} from "@geochat-ai/app/model-registry";
 
-describe("desktop provider credentials", () => {
-  test("keeps explicit provider credentials instead of restoring a stale model mirror", () => {
+describe("desktop provider credential references", () => {
+  test("freezes normalized model DTOs and rejects legacy secret-bearing DTOs", () => {
+    const normalized = normalizeAgentModelConfig({
+      provider: "openai",
+      model: "gpt-5.6-sol",
+      credentialRef: "credential-ref",
+      protocol: "openai-compatible",
+    });
+
+    expect(Object.isFrozen(normalized)).toBe(true);
+    expect(isAgentModelConfig(normalized)).toBe(true);
+    expect(isAgentModelConfig({
+      ...normalized,
+      apiKey: "secret",
+    })).toBe(false);
+    expect(isAgentModelConfig({
+      ...normalized,
+      customBaseUrl: "https://untrusted.invalid",
+    })).toBe(false);
+  });
+
+  test("refuses to normalize raw plaintext configuration before migration", () => {
+    expect(() => normalizeDesktopConfigJson(JSON.stringify({
+      locale: "en-US",
+      model: { provider: "openai", model: "gpt", apiKey: "legacy-secret" },
+    }), "en-US")).toThrow(DesktopCredentialMigrationRequiredError);
+  });
+
+  test("keeps only opaque references and display-safe transport metadata", () => {
     const config = normalizeDesktopConfig({
-      model: { ...DEFAULT_MODEL_CONFIG, apiKey: "old-key" },
+      model: { ...DEFAULT_MODEL_CONFIG, credentialRef: "model-ref" },
       visionModel: DEFAULT_VISION_MODEL_CONFIG,
       providerCredentials: {
-        deepseek: { apiKey: "new-key", customBaseUrl: "" },
+        deepseek: {
+          credentialRef: "provider-ref",
+          baseUrl: "https://api.deepseek.com",
+          protocol: "openai-compatible",
+        },
       },
     }, "zh-CN");
 
-    expect(config.providerCredentials.deepseek?.apiKey).toBe("new-key");
-    expect(config.model.apiKey).toBe("new-key");
+    expect(config.providerCredentials.deepseek).toEqual({
+      credentialRef: "provider-ref",
+      baseUrl: "https://api.deepseek.com",
+      protocol: "openai-compatible",
+    });
+    expect(config.model.credentialRef).toBe("model-ref");
+    expect(config.model).not.toHaveProperty("apiKey");
+    expect(config.model).not.toHaveProperty("customBaseUrl");
   });
 
-  test("still migrates legacy model credentials when no provider entry exists", () => {
-    const config = normalizeDesktopConfig({
-      model: { ...DEFAULT_MODEL_CONFIG, apiKey: "legacy-key" },
-      visionModel: DEFAULT_VISION_MODEL_CONFIG,
-      providerCredentials: {},
-    }, "zh-CN");
-
-    expect(config.providerCredentials.deepseek?.apiKey).toBe("legacy-key");
-    expect(config.model.apiKey).toBe("legacy-key");
-  });
-
-  test("updates provider credentials and every matching compatibility mirror", () => {
+  test("updates provider references and matching model references", () => {
     const initial = normalizeDesktopConfig({}, "zh-CN");
     const updated = updateProviderCredentials(initial, "deepseek", {
-      apiKey: "saved-key",
-      customBaseUrl: "https://api.deepseek.com",
+      credentialRef: "saved-ref",
+      baseUrl: "https://api.deepseek.com",
+      protocol: "openai-compatible",
     });
     const reloaded = normalizeDesktopConfig(updated, "zh-CN");
 
-    expect(reloaded.providerCredentials.deepseek).toEqual({
-      apiKey: "saved-key",
-      customBaseUrl: "https://api.deepseek.com",
-    });
-    expect(reloaded.model.apiKey).toBe("saved-key");
-    expect(reloaded.model.customBaseUrl).toBe("https://api.deepseek.com");
+    expect(reloaded.providerCredentials.deepseek?.credentialRef).toBe("saved-ref");
+    expect(reloaded.model.credentialRef).toBe("saved-ref");
   });
 
-  test("starts with an empty custom provider configuration", () => {
+  test("starts with an empty custom provider credential reference", () => {
     expect(normalizeDesktopConfig({}, "zh-CN").customProvider).toEqual({
       name: "",
       baseUrl: "",
-      apiKey: "",
+      credentialRef: "",
       protocol: "openai-compatible",
       models: [],
     });
   });
 
-  test("normalizes custom provider models and removes duplicate call names", () => {
+  test("normalizes custom provider models without accepting plaintext keys", () => {
     expect(normalizeCustomProviderConfig({
       name: " Local AI ",
       baseUrl: "http://127.0.0.1:11434/v1",
-      apiKey: "local-key",
+      apiKey: "must-not-survive",
+      credentialRef: "local-ref",
       protocol: "anthropic",
       models: [
         { name: "Primary", callName: "local-main", supportsImages: true },
@@ -72,7 +102,7 @@ describe("desktop provider credentials", () => {
     })).toEqual({
       name: " Local AI ",
       baseUrl: "http://127.0.0.1:11434/v1",
-      apiKey: "local-key",
+      credentialRef: "local-ref",
       protocol: "anthropic",
       models: [{ name: "Primary", callName: "local-main", supportsImages: true }],
     });

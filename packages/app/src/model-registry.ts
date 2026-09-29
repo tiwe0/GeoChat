@@ -6,15 +6,18 @@ export type AgentModelProtocol = "openai-compatible" | "anthropic" | "google";
 export type AgentModelCapability = "text" | "imageInput" | "toolCalling";
 export type AgentToolCallingMode = "native" | "assumed" | "unsupported";
 
-export type AgentModelConfig = {
+/**
+ * Renderer/backend model-selection DTO. Provider secrets and trusted endpoints
+ * are resolved from `credentialRef`; they must never be copied into this DTO.
+ */
+export type AgentModelConfig = Readonly<{
   provider: string;
   model: string;
-  apiKey: string;
-  customBaseUrl: string;
+  credentialRef: string;
   protocol?: AgentModelProtocol;
   supportsImages?: boolean;
   maxToolSteps?: number | null;
-};
+}>;
 
 export type AgentProviderDefinition = {
   id: string;
@@ -644,25 +647,25 @@ export function normalizeAgentModelConfig(value: Partial<AgentModelConfig> | und
   const requestedModel = value?.model?.trim();
   const model = (hasKnownProvider || hasCustomProvider) && requestedModel ? requestedModel : defaultModel.value;
 
-  return {
+  return Object.freeze({
     provider,
     model,
-    apiKey: value?.apiKey ?? "",
-    customBaseUrl: value?.customBaseUrl ?? "",
+    credentialRef: typeof value?.credentialRef === "string" ? value.credentialRef : "",
     ...(isAgentModelProtocol(value?.protocol) ? { protocol: value.protocol } : {}),
     ...(typeof value?.supportsImages === "boolean" ? { supportsImages: value.supportsImages } : {}),
     maxToolSteps: normalizeAgentMaxToolSteps(value?.maxToolSteps)
-  };
+  });
 }
 
 export function isAgentModelConfig(value: unknown): value is AgentModelConfig {
   if (!value || typeof value !== "object") return false;
   const payload = value as Record<string, unknown>;
   return (
+    !("apiKey" in payload) &&
+    !("customBaseUrl" in payload) &&
     typeof payload.provider === "string" &&
     typeof payload.model === "string" &&
-    typeof payload.apiKey === "string" &&
-    typeof payload.customBaseUrl === "string" &&
+    typeof payload.credentialRef === "string" &&
     (payload.protocol === undefined || isAgentModelProtocol(payload.protocol)) &&
     (payload.supportsImages === undefined || typeof payload.supportsImages === "boolean") &&
     isOptionalAgentMaxToolSteps(payload.maxToolSteps)

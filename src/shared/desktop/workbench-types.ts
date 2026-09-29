@@ -88,8 +88,9 @@ export type DebugConfig = {
 };
 
 export type ProviderCredentialConfig = {
-  apiKey: string;
-  customBaseUrl: string;
+  credentialRef: string;
+  baseUrl: string;
+  protocol: AgentModelProtocol;
 };
 
 export type CustomModelDefinition = {
@@ -101,7 +102,7 @@ export type CustomModelDefinition = {
 export type CustomProviderConfig = {
   name: string;
   baseUrl: string;
-  apiKey: string;
+  credentialRef: string;
   protocol: AgentModelProtocol;
   models: CustomModelDefinition[];
 };

@@ -20,6 +20,10 @@ import type {
   InteractionConfig,
   VisualProfileName
 } from "./workbench-types";
+import {
+  hasLegacyPlaintextCredentials,
+  parseRawDesktopConfig
+} from "./desktop-credentials";
 import { detectPreferredLocale, type Locale } from "./locale";
 
 export const CONFIG_STORAGE_KEY = "geochat-desktop-ui-config";
@@ -28,7 +32,7 @@ export const DESKTOP_CONFIG_CHANGED_EVENT = "geochat:desktop-config-changed";
 export const DEFAULT_CUSTOM_PROVIDER_CONFIG: CustomProviderConfig = {
   name: "",
   baseUrl: "",
-  apiKey: "",
+  credentialRef: "",
   protocol: "openai-compatible",
   models: []
 };
@@ -36,15 +40,13 @@ export const DEFAULT_CUSTOM_PROVIDER_CONFIG: CustomProviderConfig = {
 export const DEFAULT_MODEL_CONFIG: ModelConfig = {
   provider: "deepseek",
   model: "deepseek-flash",
-  apiKey: "",
-  customBaseUrl: ""
+  credentialRef: ""
 };
 
 export const DEFAULT_VISION_MODEL_CONFIG: ModelConfig = {
   provider: "openrouter",
   model: "google/gemini-3.8-flash",
-  apiKey: "",
-  customBaseUrl: ""
+  credentialRef: ""
 };
 
 export const BUILTIN_AGENT_SKILL_NAMES = [
@@ -231,12 +233,14 @@ export function createDefaultDesktopConfig(locale: Locale = detectPreferredLocal
     visionModel: DEFAULT_VISION_MODEL_CONFIG,
     providerCredentials: {
       [DEFAULT_MODEL_CONFIG.provider]: {
-        apiKey: DEFAULT_MODEL_CONFIG.apiKey,
-        customBaseUrl: DEFAULT_MODEL_CONFIG.customBaseUrl
+        credentialRef: DEFAULT_MODEL_CONFIG.credentialRef,
+        baseUrl: "https://api.deepseek.com",
+        protocol: "openai-compatible"
       },
       [DEFAULT_VISION_MODEL_CONFIG.provider]: {
-        apiKey: DEFAULT_VISION_MODEL_CONFIG.apiKey,
-        customBaseUrl: DEFAULT_VISION_MODEL_CONFIG.customBaseUrl
+        credentialRef: DEFAULT_VISION_MODEL_CONFIG.credentialRef,
+        baseUrl: "https://openrouter.ai/api/v1",
+        protocol: "openai-compatible"
       }
     },
     customProvider: { ...DEFAULT_CUSTOM_PROVIDER_CONFIG, models: [] },
@@ -249,6 +253,13 @@ export function createDefaultDesktopConfig(locale: Locale = detectPreferredLocal
 
 export const DEFAULT_DESKTOP_CONFIG: DesktopConfig = createDefaultDesktopConfig();
 
+export class DesktopCredentialMigrationRequiredError extends Error {
+  constructor() {
+    super("Desktop config contains legacy plaintext credentials and must be migrated before normalization");
+    this.name = "DesktopCredentialMigrationRequiredError";
+  }
+}
+
 export function normalizeProviderCredentials(value: unknown, ...models: ModelConfig[]): Record<string, ProviderCredentialConfig> {
   const credentials: Record<string, ProviderCredentialConfig> = {};
   if (value && typeof value === "object") {
@@ -256,21 +267,18 @@ export function normalizeProviderCredentials(value: unknown, ...models: ModelCon
       if (!entry || typeof entry !== "object") continue;
       const payload = entry as Record<string, unknown>;
       credentials[provider] = {
-        apiKey: typeof payload.apiKey === "string" ? payload.apiKey : "",
-        customBaseUrl: typeof payload.customBaseUrl === "string" ? payload.customBaseUrl : ""
+        credentialRef: typeof payload.credentialRef === "string" ? payload.credentialRef : "",
+        baseUrl: typeof payload.baseUrl === "string" ? payload.baseUrl : "",
+        protocol: payload.protocol === "anthropic" || payload.protocol === "google" ? payload.protocol : "openai-compatible"
       };
     }
   }
   for (const model of models) {
-    // `model.apiKey` and `model.customBaseUrl` are legacy mirrors retained for
-    // compatibility. They may seed a missing provider entry, but an explicit
-    // providerCredentials entry is the current source of truth. Overwriting it
-    // here made an edited key snap back to the previously saved value on the
-    // next read.
     if (!credentials[model.provider]) {
       credentials[model.provider] = {
-        apiKey: model.apiKey,
-        customBaseUrl: model.customBaseUrl
+        credentialRef: model.credentialRef,
+        baseUrl: "",
+        protocol: model.protocol ?? "openai-compatible"
       };
     }
   }
@@ -287,7 +295,7 @@ export function normalizeCustomProviderConfig(value: unknown): CustomProviderCon
   return {
     name: typeof payload.name === "string" ? payload.name : "",
     baseUrl: typeof payload.baseUrl === "string" ? payload.baseUrl : "",
-    apiKey: typeof payload.apiKey === "string" ? payload.apiKey : "",
+    credentialRef: typeof payload.credentialRef === "string" ? payload.credentialRef : "",
     protocol,
     models: models.flatMap((entry) => {
       if (!entry || typeof entry !== "object") return [];
@@ -306,7 +314,7 @@ export function normalizeCustomProviderConfig(value: unknown): CustomProviderCon
 }
 
 export function credentialsForProvider(credentials: Record<string, ProviderCredentialConfig>, provider: string): ProviderCredentialConfig {
-  return credentials[provider] ?? { apiKey: "", customBaseUrl: "" };
+  return credentials[provider] ?? { credentialRef: "", baseUrl: "", protocol: "openai-compatible" };
 }
 
 export function updateProviderCredentials(
@@ -317,10 +325,10 @@ export function updateProviderCredentials(
   return {
     ...config,
     model: config.model.provider === provider
-      ? { ...config.model, ...credentials }
+      ? { ...config.model, credentialRef: credentials.credentialRef, protocol: credentials.protocol }
       : config.model,
     visionModel: config.visionModel.provider === provider
-      ? { ...config.visionModel, ...credentials }
+      ? { ...config.visionModel, credentialRef: credentials.credentialRef, protocol: credentials.protocol }
       : config.visionModel,
     providerCredentials: {
       ...config.providerCredentials,
@@ -391,6 +399,7 @@ export function normalizeInteractionConfig(value: unknown): InteractionConfig {
 }
 
 export function normalizeDesktopConfig(value: Partial<DesktopConfig> | undefined, fallbackLocale: Locale = detectPreferredLocale()): DesktopConfig {
+  if (hasLegacyPlaintextCredentials(value)) throw new DesktopCredentialMigrationRequiredError();
   const model = normalizeAgentModelConfig(value?.model ?? DEFAULT_MODEL_CONFIG);
   const visionModel = normalizeAgentModelConfig(value?.visionModel ?? DEFAULT_VISION_MODEL_CONFIG);
   const providerCredentials = normalizeProviderCredentials(value?.providerCredentials, model, visionModel);
@@ -399,13 +408,13 @@ export function normalizeDesktopConfig(value: Partial<DesktopConfig> | undefined
   return {
     model: {
       ...model,
-      apiKey: activeCredentials.apiKey,
-      customBaseUrl: activeCredentials.customBaseUrl
+      credentialRef: model.credentialRef || activeCredentials.credentialRef,
+      protocol: model.protocol ?? activeCredentials.protocol
     },
     visionModel: {
       ...visionModel,
-      apiKey: visionCredentials.apiKey,
-      customBaseUrl: visionCredentials.customBaseUrl
+      credentialRef: visionModel.credentialRef || visionCredentials.credentialRef,
+      protocol: visionModel.protocol ?? visionCredentials.protocol
     },
     providerCredentials,
     customProvider: normalizeCustomProviderConfig(value?.customProvider),
@@ -416,29 +425,41 @@ export function normalizeDesktopConfig(value: Partial<DesktopConfig> | undefined
   };
 }
 
+/** Parse the original JSON first so normalization cannot erase migration evidence. */
+export function normalizeDesktopConfigJson(rawJson: string, fallbackLocale: Locale = detectPreferredLocale()): DesktopConfig {
+  const rawConfig = parseRawDesktopConfig(rawJson);
+  if (hasLegacyPlaintextCredentials(rawConfig)) throw new DesktopCredentialMigrationRequiredError();
+  return normalizeDesktopConfig(rawConfig as Partial<DesktopConfig>, fallbackLocale);
+}
+
 export function readDesktopConfig(): DesktopConfig {
   if (!globalThis.localStorage) return createDefaultDesktopConfig();
   try {
-    return normalizeDesktopConfig(JSON.parse(globalThis.localStorage.getItem(CONFIG_STORAGE_KEY) ?? "{}") as Partial<DesktopConfig>);
+    return normalizeDesktopConfigJson(globalThis.localStorage.getItem(CONFIG_STORAGE_KEY) ?? "{}");
   } catch (caughtError) {
+    if (caughtError instanceof DesktopCredentialMigrationRequiredError) throw caughtError;
     console.error("[ERROR] Caught exception at src/shared/desktop/desktop-config.ts:331", caughtError);
     return createDefaultDesktopConfig();
   }
 }
 
 export function persistDesktopConfig(config: DesktopConfig) {
+  if (hasLegacyPlaintextCredentials(config)) throw new DesktopCredentialMigrationRequiredError();
   globalThis.localStorage?.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
   if (typeof globalThis.dispatchEvent === "function" && typeof Event !== "undefined") {
     globalThis.dispatchEvent(new Event(DESKTOP_CONFIG_CHANGED_EVENT));
   }
 }
 
-export function hasConfiguredApiKey(config: AgentModelConfig) {
-  return Boolean(config.apiKey.trim());
+export function hasConfiguredCredential(config: AgentModelConfig) {
+  return Boolean(config.credentialRef.trim());
 }
 
+/** @deprecated Use hasConfiguredCredential. */
+export const hasConfiguredApiKey = hasConfiguredCredential;
+
 export function modelCanRunImageAttachments(config: AgentModelConfig, schema?: AgentModelRegistrySchema) {
-  return hasConfiguredApiKey(config) && agentModelSupportsImagesForSchema(config.provider, config.model, schema);
+  return hasConfiguredCredential(config) && agentModelSupportsImagesForSchema(config.provider, config.model, schema);
 }
 
 export function modelCapabilityOverviewFor(input: {
@@ -450,7 +471,7 @@ export function modelCapabilityOverviewFor(input: {
   const agentCanRunImages = modelCanRunImageAttachments(input.model, input.schema);
   const visionCanRunImages = modelCanRunImageAttachments(input.visionModel, input.schema);
   return {
-    solving: hasConfiguredApiKey(input.model) && agentPolicy.supportsTools,
+    solving: hasConfiguredCredential(input.model) && agentPolicy.supportsTools,
     vision: agentCanRunImages || visionCanRunImages,
     fileParsing: agentCanRunImages
   };

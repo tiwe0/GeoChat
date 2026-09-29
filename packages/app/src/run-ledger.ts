@@ -172,7 +172,10 @@ export function createAgentRunLedger(input: {
     modelProvider: input.model.provider,
     modelId: input.model.model,
     modelProtocol: input.model.protocol ?? null,
-    modelBaseUrl: input.model.customBaseUrl.trim() || null,
+    // Provider endpoints are credential-vault metadata and are no longer
+    // renderer-authoritative. The backend binds the trusted endpoint after
+    // resolving credentialRef; the public run ledger must not infer one here.
+    modelBaseUrl: null,
     requestFingerprint: null,
     maxToolSteps: normalizeAgentMaxToolSteps(input.model.maxToolSteps),
     modelStepCount: 0,

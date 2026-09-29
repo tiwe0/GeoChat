@@ -4,6 +4,7 @@ import {
 } from "@geochat-ai/app/geogebra-style-policy";
 import type { Locale } from "../../../../shared/desktop/locale";
 import { getFrontendGeoGebraController } from "../../geogebra/runtime";
+import { runRendererCanvasTransaction } from "../agent-run/toolWorker";
 
 /**
  * Draw one multiple-choice option onto the canvas, and be able to take it back.
@@ -46,14 +47,6 @@ export async function previewChoiceScenario(
   if (!controller?.ready) return { ok: false, error: null };
 
   const commands = input.commands.map((command) => command.trim()).filter(Boolean);
-  const baseXml = baseXmlByCard.get(input.cardKey) ?? controller.getCanvasXml();
-  if (baseXml && !baseXmlByCard.has(input.cardKey)) baseXmlByCard.set(input.cardKey, baseXml);
-  // "All" has no commands: it is a restore, not an empty batch. Routing it
-  // through the command tool would be rejected for having nothing to run.
-  if (!commands.length) {
-    if (!baseXml) return { ok: true };
-    return { ok: controller.restoreCanvasXml(baseXml), error: null };
-  }
 
   // The same style policy the agent is held to. These commands came from the
   // model, so they are checked here too rather than trusted for having
@@ -64,13 +57,31 @@ export async function previewChoiceScenario(
   }
 
   try {
-    const result = await controller.executeTool("executeGeoGebraCommands", {
-      commands,
-      restoreBeforeXml: baseXml,
-      restoreOnError: true,
-      normalizeFreeParameters: true
-    }) as { ok?: boolean; error?: string | null };
-    return { ok: result.ok !== false, error: result.error ?? null };
+    return await runRendererCanvasTransaction({
+      label: `choice-preview:${input.cardKey}:${input.label}`,
+      supersedeKey: "choice-preview",
+    }, async (execute) => {
+      const baseXml = baseXmlByCard.get(input.cardKey) ?? controller.getCanvasXml();
+      if (baseXml && !baseXmlByCard.has(input.cardKey)) baseXmlByCard.set(input.cardKey, baseXml);
+      if (!baseXml) return { ok: commands.length === 0, error: null };
+
+      // "All" has no commands: it is a restore, not an empty batch. Routing
+      // it through the public command tool would reject an empty batch.
+      if (!commands.length) {
+        const restored = await execute("__restoreCanvasXml", { xml: baseXml });
+        if (!restored.ok) throw new Error(restored.error ?? "GeoGebra baseline restore failed.");
+        return { ok: true, error: null };
+      }
+
+      const result = await execute("executeGeoGebraCommands", {
+        commands,
+        restoreBeforeXml: baseXml,
+        restoreOnError: false,
+        normalizeFreeParameters: true
+      });
+      if (!result.ok) throw new Error(result.error ?? "GeoGebra choice preview failed.");
+      return { ok: true, error: null };
+    });
   } catch (error) {
     console.error("[ERROR] Caught exception at src/renderer-react/src/features/geogebra/choiceScenario.ts:74", error);
     return { ok: false, error: error instanceof Error ? error.message : String(error) };

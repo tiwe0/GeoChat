@@ -1,16 +1,21 @@
-import { describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import type { UIMessage } from "ai";
 import type { ToolExecutionResult } from "@geochat-ai/app/geogebra-protocol";
 import {
   extractCanvasReplayActions,
   replayConversationCanvas,
 } from "../src/renderer-react/src/features/conversations/replay";
+import { GeoGebraController } from "../src/renderer-react/src/geogebra/controller";
+import { setFrontendGeoGebraController } from "../src/renderer-react/src/geogebra/runtime";
+import type { GeoGebraApi } from "../src/renderer-react/src/geogebra/ggbdeploy-wrapper";
 
 function assistant(parts: UIMessage["parts"]): UIMessage {
   return { id: crypto.randomUUID(), role: "assistant", parts };
 }
 
 describe("conversation canvas replay", () => {
+  beforeEach(() => setFrontendGeoGebraController(null));
+
   test("extracts completed canvas mutations in transcript order", () => {
     const messages: UIMessage[] = [assistant([
       {
@@ -68,6 +73,39 @@ describe("conversation canvas replay", () => {
       return { ok: true } as ToolExecutionResult;
     });
     expect(calls).toEqual([]);
+  });
+
+  test("does not even snapshot the applet for a text-only conversation", async () => {
+    let snapshots = 0;
+    const controller = new GeoGebraController();
+    controller.setApi({ getXML: () => { snapshots += 1; return "initial"; } } as GeoGebraApi);
+    setFrontendGeoGebraController(controller);
+    await replayConversationCanvas([]);
+    expect(snapshots).toBe(0);
+  });
+
+  test("restores the XML from before replay when a later command batch fails", async () => {
+    let xml = "<xml>initial</xml>";
+    const controller = new GeoGebraController();
+    controller.setApi({
+      getXML: () => xml,
+      setXML: (snapshot: string) => { xml = snapshot; },
+      reset: () => { xml = "<xml>reset</xml>"; },
+      asyncEvalCommandResult: (command: string) => {
+        if (command === "Bad(") return JSON.stringify({ ok: false, error: "syntax" });
+        xml = `<xml>${command}</xml>`;
+        return JSON.stringify({ ok: true, labels: ["A"] });
+      },
+    } as unknown as GeoGebraApi);
+    setFrontendGeoGebraController(controller);
+
+    await expect(replayConversationCanvas([
+      { type: "reset", input: {} },
+      { type: "execute", input: {}, commands: ["A=(0,0)"] },
+      { type: "execute", input: {}, commands: ["Bad("] },
+    ])).rejects.toThrow("Command 1 failed");
+
+    expect(xml).toBe("<xml>initial</xml>");
   });
 
   test("replays intermediate resets instead of flattening all commands", async () => {

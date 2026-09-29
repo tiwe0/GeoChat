@@ -1,6 +1,7 @@
 import type { FunctionCallToolName } from "@geochat-ai/app/functioncalls";
 import type { ToolExecutionResult } from "@geochat-ai/app/geogebra-protocol";
 import { getFrontendGeoGebraController } from "../../geogebra/runtime";
+import type { CanvasTransactionOptions } from "../../geogebra/canvas-transactions";
 
 function redactValue(value: unknown, key = ""): unknown {
   if (typeof value === "string") {
@@ -20,6 +21,22 @@ export async function executeRendererTool(toolName: FunctionCallToolName, args: 
   const controller = getFrontendGeoGebraController();
   if (!controller) throw new Error("GeoGebra 画板尚未加载完成。");
   const value = await controller.executeTool(toolName, args);
+  return normalizeToolExecutionResult(controller.ready, toolName, value);
+}
+
+export async function runRendererCanvasTransaction<T>(
+  options: CanvasTransactionOptions,
+  work: (execute: (toolName: FunctionCallToolName | "__restoreCanvasXml", args: unknown) => Promise<ToolExecutionResult>) => T | PromiseLike<T>,
+) {
+  const controller = getFrontendGeoGebraController();
+  if (!controller) throw new Error("GeoGebra 画板尚未加载完成。");
+  return controller.runCanvasTransaction(options, (execute) => work(async (toolName, args) => {
+    const value = await execute(toolName, args);
+    return normalizeToolExecutionResult(controller.ready, toolName, value);
+  }));
+}
+
+function normalizeToolExecutionResult(ready: boolean, toolName: string, value: unknown): ToolExecutionResult {
   const payload = asRecord(value);
   const ok = payload.ok !== false && payload.success !== false;
   const error = typeof payload.error === "string" && payload.error.trim() ? payload.error : undefined;
@@ -30,7 +47,7 @@ export async function executeRendererTool(toolName: FunctionCallToolName, args: 
     canvasContext: payload.canvasContext ?? (toolName === "getCanvasContext" ? payload : undefined),
     canvasBefore: payload.canvasBefore,
     canvasAfter: payload.canvasAfter ?? payload.canvasContext,
-    clientMeta: optionalRecord(payload.clientMeta) ?? { source: "geogebra-applet", ready: controller.ready },
+    clientMeta: optionalRecord(payload.clientMeta) ?? { source: "geogebra-applet", ready },
     error,
   });
 }

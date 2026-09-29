@@ -3,22 +3,62 @@ import { canvasLabels, getAppletXml, readCanvasContext, tryReadCanvasContext, ty
 import { normalizeGeoGebraCommandSyntax, normalizeGeoGebraFreeParameterCommands } from "@geochat-ai/app/functioncalls";
 import { evaluateCommand, type CommandResult } from "./command-executor";
 import { GeoGebraAnimationRuntime, type AnimationScheduler, type GeoGebraAnimationEasing, type GeoGebraAnimationMode } from "./animation-runtime";
+import {
+  CanvasTransactionCoordinator,
+  type CanvasRecoveryState,
+  type CanvasTransactionContext,
+  type CanvasTransactionOptions,
+} from "./canvas-transactions";
 
 const COMMAND_DELAY_MS = 0;
 
 export class GeoGebraController {
   private api: GeoGebraApi | null = null;
+  private appletEpoch = 0;
   private readonly animations: GeoGebraAnimationRuntime;
+  private readonly transactions = new CanvasTransactionCoordinator({
+    epoch: () => this.appletEpoch,
+    capture: () => this.api ? getAppletXml(this.api) : undefined,
+    restore: async (snapshot) => {
+      if (!this.api || typeof this.api.setXML !== "function") return false;
+      const raw = await Promise.resolve(this.call("setXML", snapshot));
+      return raw !== false;
+    },
+  });
 
   constructor(animationScheduler?: AnimationScheduler) {
     this.animations = new GeoGebraAnimationRuntime((object, value) => this.call("setValue", object, value), animationScheduler);
   }
 
   setApi(api: GeoGebraApi | null) {
-    if (api !== this.api) this.animations.dispose();
+    if (api !== this.api) {
+      this.animations.dispose();
+      this.appletEpoch += 1;
+      this.api = api;
+      if (api) this.transactions.clearRecoveryForAppletReplacement();
+      return;
+    }
     this.api = api;
   }
   get ready() { return Boolean(this.api); }
+  get canvasRecoveryState(): CanvasRecoveryState | null { return this.transactions.recoveryState; }
+
+  subscribeCanvasRecovery(listener: () => void) {
+    return this.transactions.subscribeRecovery(listener);
+  }
+
+  retryCanvasRecovery() {
+    return this.transactions.retryRecovery();
+  }
+
+  runCanvasTransaction<T>(
+    options: CanvasTransactionOptions,
+    work: (execute: (toolName: string, args: unknown) => Promise<unknown>) => T | PromiseLike<T>,
+  ) {
+    return this.transactions.run(options, (transaction) => work(
+      (toolName, args) => transaction.wait(() => this.executeToolWithinTransaction(toolName, args, transaction)),
+    ));
+  }
 
   setToolbarVisible(visible: boolean) {
     if (!this.api) throw new Error("GeoGebra 画板尚未加载完成。");
@@ -38,11 +78,27 @@ export class GeoGebraController {
   }
 
   async executeTool(toolName: string, args: unknown) {
+    if (isCanvasMutationTool(toolName)) {
+      try {
+        return await this.runCanvasTransaction({ label: `tool:${toolName}` }, async (execute) => {
+          const result = await execute(toolName, args);
+          if (mutationResultFailed(result)) throw new CanvasToolResultError(result);
+          return result;
+        });
+      } catch (error) {
+        if (error instanceof CanvasToolResultError) return error.result;
+        throw error;
+      }
+    }
+    return this.executeToolWithinTransaction(toolName, args);
+  }
+
+  private async executeToolWithinTransaction(toolName: string, args: unknown, transaction?: CanvasTransactionContext) {
     const input = record(args);
     if (!this.api) throw new Error("GeoGebra 画板尚未加载完成。");
     switch (toolName) {
       case "executeGeoGebraCommands":
-        return this.executeCommands(input);
+        return this.executeCommands(input, transaction);
       case "configureGeoGebraAnimation":
         return this.configureAnimation(input);
       case "controlGeoGebraAnimation":
@@ -50,13 +106,13 @@ export class GeoGebraController {
       case "inspectGeoGebraObjects":
         return this.inspectObjects(input);
       case "resetCanvas":
-        return this.resetCanvas(input);
+        return this.resetCanvas(input, transaction);
       case "getCanvasContext":
         return { ok: true, ...readCanvasContext(this.api, input.includeXml === true) };
       case "getPNGBase64":
         return this.getPngBase64(input);
       case "setPerspective":
-        return this.setPerspective(requiredString(input.mode ?? input.perspective, "mode"));
+        return this.setPerspective(requiredString(input.mode ?? input.perspective, "mode"), transaction);
       case "getValue": {
         const name = requiredString(input.name, "name");
         const value = Number(this.call("getValue", name));
@@ -70,9 +126,19 @@ export class GeoGebraController {
       case "setValue": {
         const name = requiredString(input.name, "name");
         const value = requiredNumber(input.value, "value");
+        this.animations.dispose();
         this.call("setValue", name, value);
         this.refreshVisuals();
         return { ok: true, name, value };
+      }
+      case "__restoreCanvasXml": {
+        const xml = requiredString(input.xml, "xml");
+        if (typeof this.api.setXML !== "function") throw new Error("当前 GeoGebra applet 不提供 XML 恢复 API。");
+        this.animations.dispose();
+        const raw = await waitForTransaction(transaction, () => Promise.resolve(this.call("setXML", xml)));
+        return raw === false
+          ? { ok: false, error: "GeoGebra rejected the XML snapshot." }
+          : { ok: true };
       }
       case "exists": {
         const name = requiredString(input.name, "name");
@@ -91,14 +157,11 @@ export class GeoGebraController {
     return this.api ? getAppletXml(this.api) : undefined;
   }
 
-  /** Put a previously captured construction back. Returns false if the applet cannot. */
-  restoreCanvasXml(xml: string) {
-    if (!this.api || typeof this.api.setXML !== "function") return false;
-    this.call("setXML", xml);
-    return true;
-  }
-
-  private async executeCommands(input: Record<string, unknown>) {
+  private async executeCommands(input: Record<string, unknown>, transaction?: CanvasTransactionContext) {
+    // Command batches and business-animation frames must never write the same
+    // construction concurrently. A command transaction takes ownership of the
+    // canvas and stops controller-owned timelines before its first mutation.
+    this.animations.dispose();
     let commands = requiredCommands(input.commands);
     // Rewind to a known construction before running anything. The choice
     // preview uses this to replay one option from the same starting point
@@ -109,7 +172,9 @@ export class GeoGebraController {
     const canvasBefore = tryReadCanvasContext(this.api!, false);
     const savedXml = getAppletXml(this.api!);
     let resetMeta: Record<string, unknown> | null = null;
-    if (input.resetBefore === true) resetMeta = await this.resetConstruction(canvasBefore);
+    if (input.resetBefore === true) {
+      resetMeta = await waitForTransaction(transaction, () => this.resetConstruction(canvasBefore, transaction));
+    }
     if (input.normalizeFreeParameters === true) {
       // Replayed option commands redeclare names the construction already
       // holds; without this each replay collides with the objects it just
@@ -129,15 +194,18 @@ export class GeoGebraController {
 
     let perspectiveResult: PerspectiveResult | null = null;
     if (typeof input.perspective === "string" && input.perspective.trim()) {
-      perspectiveResult = await this.setPerspective(input.perspective.trim());
+      const perspective = input.perspective.trim();
+      perspectiveResult = await waitForTransaction(transaction, () => this.setPerspective(perspective, transaction));
     }
 
     const results: CommandResult[] = [];
     for (let index = 0; index < commands.length; index += 1) {
-      const result = await evaluateCommand(this.api!, commands[index]!);
+      const result = await waitForTransaction(transaction, () => evaluateCommand(this.api!, commands[index]!));
       results.push(result);
       if (!result.success) break;
-      if (COMMAND_DELAY_MS > 0 && index < commands.length - 1) await wait(COMMAND_DELAY_MS);
+      if (COMMAND_DELAY_MS > 0 && index < commands.length - 1) {
+        await waitForTransaction(transaction, () => wait(COMMAND_DELAY_MS));
+      }
     }
 
     const failedIndex = results.findIndex((result) => !result.success);
@@ -228,12 +296,13 @@ export class GeoGebraController {
     return { ok: true, objects, clientMeta: { source: "geogebra-applet", xmlUsed: false } };
   }
 
-  private async resetCanvas(input: Record<string, unknown>) {
+  private async resetCanvas(input: Record<string, unknown>, transaction?: CanvasTransactionContext) {
     const canvasBefore = tryReadCanvasContext(this.api!, false);
-    const resetMeta = await this.resetConstruction(canvasBefore);
+    const resetMeta = await waitForTransaction(transaction, () => this.resetConstruction(canvasBefore, transaction));
     let perspectiveResult: PerspectiveResult | null = null;
     if (typeof input.perspective === "string" && input.perspective.trim()) {
-      perspectiveResult = await this.setPerspective(input.perspective.trim());
+      const perspective = input.perspective.trim();
+      perspectiveResult = await waitForTransaction(transaction, () => this.setPerspective(perspective, transaction));
     }
     const canvasAfter = tryReadCanvasContext(this.api!, false);
     this.refreshVisuals();
@@ -254,7 +323,7 @@ export class GeoGebraController {
     };
   }
 
-  private async resetConstruction(canvasBefore: CanvasContext | undefined) {
+  private async resetConstruction(canvasBefore: CanvasContext | undefined, transaction?: CanvasTransactionContext) {
     this.animations.dispose();
     const labels = canvasBefore ? canvasLabels(canvasBefore) : [];
     let deleted = 0;
@@ -265,11 +334,11 @@ export class GeoGebraController {
     }
     if (typeof this.api!.reset === "function") {
       this.call("reset");
-      await wait(50);
+      await waitForTransaction(transaction, () => wait(50));
       return { method: labels.length ? "delete-objects-reset" : "reset", deleted, failed };
     }
     if (labels.length && failed === 0) {
-      await wait(50);
+      await waitForTransaction(transaction, () => wait(50));
       return { method: "delete-objects", deleted, failed };
     }
     throw new Error("当前 GeoGebra applet 不支持安全重置画布。");
@@ -299,12 +368,12 @@ export class GeoGebraController {
     };
   }
 
-  private async setPerspective(mode: string): Promise<PerspectiveResult> {
+  private async setPerspective(mode: string, transaction?: CanvasTransactionContext): Promise<PerspectiveResult> {
     if (typeof this.api!.setPerspective !== "function") {
       return { ok: false, success: false, requestedMode: mode, mode, method: "setPerspective", error: "当前 GeoGebra applet 不提供视图切换 API。" };
     }
     try {
-      const raw = await Promise.resolve(this.call("setPerspective", mode));
+      const raw = await waitForTransaction(transaction, () => Promise.resolve(this.call("setPerspective", mode)));
       if (raw === false) return { ok: false, success: false, requestedMode: mode, mode, method: "setPerspective", error: "GeoGebra 拒绝了视图切换。" };
       return { ok: true, success: true, requestedMode: mode, mode, method: "setPerspective" };
     } catch (error) {
@@ -363,3 +432,33 @@ function animationAction(value: unknown) {
 function finiteNumber(value: unknown) { const number = Number(value); return Number.isFinite(number) ? number : undefined; }
 function compactRecord(value: Record<string, unknown>) { return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)); }
 function wait(ms: number) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
+const CANVAS_MUTATION_TOOLS = new Set([
+  "executeGeoGebraCommands",
+  "configureGeoGebraAnimation",
+  "controlGeoGebraAnimation",
+  "resetCanvas",
+  "setPerspective",
+  "setValue",
+  "__restoreCanvasXml",
+]);
+
+function isCanvasMutationTool(toolName: string) {
+  return CANVAS_MUTATION_TOOLS.has(toolName);
+}
+
+function mutationResultFailed(value: unknown) {
+  const payload = record(value);
+  return payload.ok === false || payload.success === false;
+}
+
+class CanvasToolResultError extends Error {
+  constructor(readonly result: unknown) {
+    super("Canvas mutation returned a failed result.");
+    this.name = "CanvasToolResultError";
+  }
+}
+
+function waitForTransaction<T>(transaction: CanvasTransactionContext | undefined, operation: () => T | PromiseLike<T>) {
+  return transaction ? transaction.wait(operation) : Promise.resolve(operation());
+}

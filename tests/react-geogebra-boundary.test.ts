@@ -20,7 +20,11 @@ import {
  * path below still exercises correctly, but the XML summary itself is
  * currently only exercised in the browser.
  */
-const api = (overrides: Partial<GeoGebraApi>): GeoGebraApi => overrides as GeoGebraApi;
+const api = (overrides: Partial<GeoGebraApi>): GeoGebraApi => ({
+  getXML: () => "<xml>headless-snapshot</xml>",
+  setXML: () => undefined,
+  ...overrides,
+}) as GeoGebraApi;
 
 describe("command result normalization", () => {
   test("reads a JSON envelope from the async API", () => {
@@ -206,6 +210,50 @@ describe("controller tool boundary", () => {
     const controller = new GeoGebraController();
     controller.setApi(api({ evalCommand: () => true }));
     await expect(controller.executeTool("notATool", {})).rejects.toThrow();
+  });
+
+  test("freezes on setXML false and notifies again after an explicit recovery retry", async () => {
+    let restoreWorks = false;
+    const states: Array<unknown> = [];
+    const controller = new GeoGebraController();
+    controller.setApi(api({
+      getXML: () => "<xml>initial</xml>",
+      setXML: () => restoreWorks,
+    }));
+    const unsubscribe = controller.subscribeCanvasRecovery(() => {
+      states.push(controller.canvasRecoveryState);
+    });
+
+    await expect(controller.executeTool("__restoreCanvasXml", { xml: "<xml>next</xml>" }))
+      .rejects.toMatchObject({ name: "CanvasRecoveryRequiredError" });
+    expect(controller.canvasRecoveryState).toMatchObject({ frozen: true, label: "tool:__restoreCanvasXml" });
+    expect(states).toHaveLength(1);
+
+    restoreWorks = true;
+    await controller.retryCanvasRecovery();
+    expect(controller.canvasRecoveryState).toBeNull();
+    expect(states).toEqual([expect.objectContaining({ frozen: true }), null]);
+    unsubscribe();
+  });
+
+  test("freezes on setXML throw and clears the subscribed state after applet replacement", async () => {
+    const states: Array<unknown> = [];
+    const controller = new GeoGebraController();
+    controller.setApi(api({
+      getXML: () => "<xml>initial</xml>",
+      setXML: () => { throw new Error("setXML bridge failed"); },
+    }));
+    controller.subscribeCanvasRecovery(() => {
+      states.push(controller.canvasRecoveryState);
+    });
+
+    await expect(controller.executeTool("__restoreCanvasXml", { xml: "<xml>next</xml>" }))
+      .rejects.toMatchObject({ name: "CanvasRecoveryRequiredError" });
+    expect(controller.canvasRecoveryState).toMatchObject({ frozen: true, error: "setXML bridge failed" });
+
+    controller.setApi(api({ getXML: () => "<xml>replacement</xml>" }));
+    expect(controller.canvasRecoveryState).toBeNull();
+    expect(states).toEqual([expect.objectContaining({ frozen: true }), null]);
   });
 
   test("configures business animation and inspects objects through public applet APIs", async () => {

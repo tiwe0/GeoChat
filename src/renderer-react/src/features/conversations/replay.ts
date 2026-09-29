@@ -1,6 +1,6 @@
 import { getToolName, isToolUIPart, type UIMessage } from "ai";
 import type { ToolExecutionResult } from "@geochat-ai/app/geogebra-protocol";
-import { executeRendererTool } from "../agent-run/toolWorker";
+import { runRendererCanvasTransaction } from "../agent-run/toolWorker";
 
 type ReplayToolName = "resetCanvas" | "executeGeoGebraCommands" | "setPerspective";
 type ReplayExecutor = (toolName: ReplayToolName, args: unknown) => Promise<ToolExecutionResult>;
@@ -42,12 +42,32 @@ function isSuccessfulReplayOutput(value: unknown) {
 
 export async function replayConversationCanvas(
   actions: readonly CanvasReplayAction[],
-  execute: ReplayExecutor = executeRendererTool,
+  execute?: ReplayExecutor,
   shouldContinue: () => boolean = () => true,
 ) {
   // Selecting a text-only conversation must not destroy the current canvas.
   if (!actions.length) return;
 
+  if (!execute) {
+    return runRendererCanvasTransaction({
+      label: "conversation-replay",
+      supersedeKey: "conversation-replay",
+      shouldContinue,
+    }, (transactionExecute) => replayActions(
+      actions,
+      (toolName, args) => transactionExecute(toolName, args),
+      shouldContinue,
+    ));
+  }
+
+  return replayActions(actions, execute, shouldContinue);
+}
+
+async function replayActions(
+  actions: readonly CanvasReplayAction[],
+  execute: ReplayExecutor,
+  shouldContinue: () => boolean,
+) {
   assertReplayCurrent(shouldContinue);
   if (actions[0]?.type !== "reset") await executeReset({}, execute);
   for (const action of actions) {

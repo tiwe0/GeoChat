@@ -1,0 +1,225 @@
+export type CanvasTransactionOptions = {
+  label: string;
+  shouldContinue?: () => boolean;
+  supersedeKey?: string;
+};
+
+export type CanvasTransactionContext = {
+  readonly label: string;
+  assertCurrent: () => void;
+  wait: <T>(operation: () => T | PromiseLike<T>) => Promise<T>;
+};
+
+export type CanvasRecoveryState = {
+  frozen: true;
+  label: string;
+  error: string;
+};
+
+type CanvasTransactionAdapter = {
+  epoch: () => number;
+  capture: () => string | undefined;
+  restore: (snapshot: string) => boolean | void | PromiseLike<boolean | void>;
+};
+
+type RecoveryRecord = CanvasRecoveryState & {
+  snapshot: string;
+  epoch: number;
+};
+
+type Lease = {
+  id: symbol;
+  epoch: number;
+  options: CanvasTransactionOptions;
+  supersedeVersion?: number;
+};
+
+export class CanvasRecoveryRequiredError extends Error {
+  constructor(message = "Canvas recovery is required before another mutation can run.", options?: ErrorOptions) {
+    super(message, options);
+    this.name = "CanvasRecoveryRequiredError";
+  }
+}
+
+/**
+ * The single serialization and recovery boundary for canvas mutations.
+ *
+ * A transaction owns one applet epoch and one complete XML snapshot. Work can
+ * only cross an async boundary through `wait`, which checks cancellation,
+ * supersession, lease ownership, and the applet epoch on both sides. A failed
+ * owner restores its snapshot before releasing the queue. If that restore is
+ * not trustworthy, the queue enters one explicit recovery state and rejects
+ * every later mutation until `retryRecovery` succeeds.
+ */
+export class CanvasTransactionCoordinator {
+  private tail: Promise<void> = Promise.resolve();
+  private activeLease: Lease | null = null;
+  private recovery: RecoveryRecord | null = null;
+  private readonly supersedeVersions = new Map<string, number>();
+  private readonly recoveryListeners = new Set<() => void>();
+
+  constructor(private readonly adapter: CanvasTransactionAdapter) {}
+
+  get recoveryState(): CanvasRecoveryState | null {
+    if (!this.recovery) return null;
+    return {
+      frozen: true,
+      label: this.recovery.label,
+      error: this.recovery.error,
+    };
+  }
+
+  subscribeRecovery(listener: () => void) {
+    this.recoveryListeners.add(listener);
+    return () => this.recoveryListeners.delete(listener);
+  }
+
+  clearRecoveryForAppletReplacement() {
+    if (!this.recovery) return;
+    this.recovery = null;
+    this.notifyRecoveryChanged();
+  }
+
+  run<T>(options: CanvasTransactionOptions, work: (transaction: CanvasTransactionContext) => T | PromiseLike<T>): Promise<T> {
+    const supersedeVersion = options.supersedeKey
+      ? this.advanceSupersedeVersion(options.supersedeKey)
+      : undefined;
+    return this.enqueue(async () => {
+      if (this.recovery) throw this.recoveryError();
+      const lease: Lease = {
+        id: Symbol(options.label),
+        epoch: this.adapter.epoch(),
+        options,
+        supersedeVersion,
+      };
+      this.activeLease = lease;
+      let snapshot: string | undefined;
+      try {
+        this.assertLease(lease);
+        snapshot = this.adapter.capture();
+        if (!snapshot) throw new Error("GeoGebra did not provide a complete XML snapshot.");
+        this.assertLease(lease);
+        const transaction = this.contextFor(lease);
+        const result = await work(transaction);
+        this.assertLease(lease);
+        return result;
+      } catch (error) {
+        if (snapshot !== undefined && this.activeLease?.id === lease.id) {
+          try {
+            await this.rollback(lease, snapshot);
+          } catch (rollbackError) {
+            this.freeze(lease, snapshot, rollbackError);
+            throw this.recoveryError(error);
+          }
+        }
+        throw error;
+      } finally {
+        if (this.activeLease?.id === lease.id) this.activeLease = null;
+      }
+    });
+  }
+
+  retryRecovery(): Promise<void> {
+    return this.enqueue(async () => {
+      const recovery = this.recovery;
+      if (!recovery) return;
+      if (this.adapter.epoch() !== recovery.epoch) {
+        // A remounted applet cannot accept an XML snapshot owned by the old
+        // instance. Explicit retry still verifies that the replacement can
+        // produce a complete snapshot before releasing the freeze.
+        if (!this.adapter.capture()) {
+          throw new CanvasRecoveryRequiredError("The replacement canvas is not ready for recovery.");
+        }
+        this.recovery = null;
+        this.notifyRecoveryChanged();
+        return;
+      }
+      const restored = await Promise.resolve(this.adapter.restore(recovery.snapshot));
+      if (restored === false) throw new CanvasRecoveryRequiredError("Canvas recovery retry was rejected by GeoGebra.");
+      this.recovery = null;
+      this.notifyRecoveryChanged();
+    });
+  }
+
+  private contextFor(lease: Lease): CanvasTransactionContext {
+    return {
+      label: lease.options.label,
+      assertCurrent: () => this.assertLease(lease),
+      wait: async <T>(operation: () => T | PromiseLike<T>) => {
+        this.assertLease(lease);
+        const value = await operation();
+        this.assertLease(lease);
+        return value;
+      },
+    };
+  }
+
+  private async rollback(lease: Lease, snapshot: string) {
+    if (this.activeLease?.id !== lease.id) throw new Error("Canvas transaction lost its rollback lease.");
+    if (this.adapter.epoch() !== lease.epoch) throw new Error("Canvas applet changed before rollback.");
+    const restored = await Promise.resolve(this.adapter.restore(snapshot));
+    if (restored === false) throw new Error("GeoGebra rejected the rollback snapshot.");
+    if (this.activeLease?.id !== lease.id) throw new Error("Canvas transaction lost its lease during rollback.");
+    if (this.adapter.epoch() !== lease.epoch) throw new Error("Canvas applet changed during rollback.");
+  }
+
+  private assertLease(lease: Lease) {
+    if (this.activeLease?.id !== lease.id) throw abortError("Canvas transaction lost its lease.");
+    if (this.adapter.epoch() !== lease.epoch) throw abortError("Canvas applet changed during the transaction.");
+    if (lease.options.shouldContinue?.() === false) throw abortError("Canvas transaction was cancelled.");
+    const key = lease.options.supersedeKey;
+    if (key && this.supersedeVersions.get(key) !== lease.supersedeVersion) {
+      throw abortError("Canvas transaction was superseded.");
+    }
+  }
+
+  private advanceSupersedeVersion(key: string) {
+    const next = (this.supersedeVersions.get(key) ?? 0) + 1;
+    this.supersedeVersions.set(key, next);
+    return next;
+  }
+
+  private freeze(lease: Lease, snapshot: string, error: unknown) {
+    if (this.recovery) return;
+    this.recovery = {
+      frozen: true,
+      label: lease.options.label,
+      error: errorMessage(error),
+      snapshot,
+      epoch: lease.epoch,
+    };
+    this.notifyRecoveryChanged();
+  }
+
+  private notifyRecoveryChanged() {
+    for (const listener of this.recoveryListeners) {
+      try {
+        listener();
+      } catch (error) {
+        console.error("[ERROR] Canvas recovery subscriber failed", error);
+      }
+    }
+  }
+
+  private recoveryError(cause?: unknown) {
+    const detail = this.recovery?.error;
+    return new CanvasRecoveryRequiredError(
+      detail ? `Canvas recovery is required: ${detail}` : undefined,
+      cause === undefined ? undefined : { cause },
+    );
+  }
+
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.tail.then(operation, operation);
+    this.tail = result.then(() => undefined, () => undefined);
+    return result;
+  }
+}
+
+function abortError(message: string) {
+  return new DOMException(message, "AbortError");
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}

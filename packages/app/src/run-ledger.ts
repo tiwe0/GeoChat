@@ -101,6 +101,8 @@ export type AgentRunToolRecord = {
 export type AgentRunLedgerRecord = {
   runId: string;
   conversationId: string;
+  /** Stable renderer installation/session that owns recovery and control operations for this run. */
+  clientSessionId?: string | null;
   userMessageId?: string | null;
   assistantMessageId?: string | null;
   status: AgentRunStatus;
@@ -148,6 +150,7 @@ export type AgentRunFinishInput = {
 export function createAgentRunLedger(input: {
   runId: string;
   conversationId: string;
+  clientSessionId?: string | null;
   userMessageId?: string | null;
   assistantMessageId?: string | null;
   model: AgentModelConfig;
@@ -162,6 +165,7 @@ export function createAgentRunLedger(input: {
   return {
     runId: input.runId,
     conversationId: input.conversationId,
+    clientSessionId: input.clientSessionId ?? null,
     userMessageId: input.userMessageId ?? null,
     assistantMessageId: input.assistantMessageId ?? null,
     status: "running",
@@ -363,6 +367,7 @@ export function isAgentRunLedgerRecord(value: unknown): value is AgentRunLedgerR
   return (
     isAgentRunEntityId(payload.runId) &&
     isAgentRunEntityId(payload.conversationId) &&
+    isOptionalStringOrNull(payload.clientSessionId) &&
     isOptionalStringOrNull(payload.userMessageId) &&
     isOptionalStringOrNull(payload.assistantMessageId) &&
     isAgentRunStatus(payload.status) &&

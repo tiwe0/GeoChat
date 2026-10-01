@@ -69,14 +69,14 @@ describe("shared runtime contracts", () => {
     const documentInput = {
       id: "worksheet-1",
       title: "Worksheet",
-      mimeType: "application/xml",
-      contentKind: "text" as const,
-      content: "<xml/>"
+      mimeType: "application/vnd.geogebra.file",
+      contentKind: "binary" as const,
+      content: "UEsDBA=="
     };
     expect(decodeUpsertGeoGebraDocumentInput(documentInput).ok).toBe(true);
     expect(decodeGeoGebraDocumentResponse({ document: {
       ...documentInput,
-      sizeBytes: 6,
+      sizeBytes: 4,
       createdAt: timestamp,
       updatedAt: timestamp
     } }).ok).toBe(true);

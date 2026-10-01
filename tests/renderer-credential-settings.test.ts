@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { replaceProviderCredential } from "../src/renderer-react/src/features/desktop/settings/ModelSettings";
+import {
+  CredentialCleanupRequiredError,
+  replaceProviderCredential,
+} from "../src/renderer-react/src/features/desktop/settings/ModelSettings";
 import type { DesktopProviderCredentialMetadata } from "../src/shared/desktop-api";
 
 const METADATA: DesktopProviderCredentialMetadata = {
@@ -21,7 +24,7 @@ function request() {
 describe("renderer provider credential replacement", () => {
   test("clears the transient secret, validates by reference, commits, then deletes the old reference", async () => {
     const events: string[] = [];
-    await replaceProviderCredential({
+    const result = await replaceProviderCredential({
       desktopApi: {
         saveProviderCredential: async () => { events.push("save"); return METADATA; },
         deleteProviderCredential: async (credentialRef) => { events.push(`delete:${credentialRef}`); }
@@ -40,6 +43,7 @@ describe("renderer provider credential replacement", () => {
       "commit:new-ref",
       "delete:old-ref"
     ]);
+    expect(result).toEqual({ metadata: METADATA, cleanup: { status: "complete" } });
   });
 
   test("deletes an uncommitted new reference when validation fails and leaves the old reference intact", async () => {
@@ -78,7 +82,7 @@ describe("renderer provider credential replacement", () => {
     expect(deleted).toEqual(["new-ref"]);
   });
 
-  test("keeps a committed replacement when best-effort cleanup of the old reference fails", async () => {
+  test("returns the old reference as explicit retryable cleanup when committed replacement cleanup fails", async () => {
     let committed = false;
     await expect(replaceProviderCredential({
       desktopApi: {
@@ -90,8 +94,38 @@ describe("renderer provider credential replacement", () => {
       onCredentialStored: () => undefined,
       validate: async () => undefined,
       commit: async () => { committed = true; }
-    })).resolves.toEqual(METADATA);
+    })).resolves.toEqual({
+      metadata: METADATA,
+      cleanup: { status: "retry-required", credentialRef: "old-ref", phase: "replaced" }
+    });
 
     expect(committed).toBe(true);
+  });
+
+  test("throws a retryable cleanup error containing the uncommitted new reference when rollback deletion fails", async () => {
+    let caught: unknown;
+    try {
+      await replaceProviderCredential({
+        desktopApi: {
+          saveProviderCredential: async () => METADATA,
+          deleteProviderCredential: async () => { throw new Error("keychain temporarily unavailable"); }
+        },
+        request: request(),
+        previousCredentialRef: "old-ref",
+        onCredentialStored: () => undefined,
+        validate: async () => { throw new Error("invalid credential"); },
+        commit: async () => undefined
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(CredentialCleanupRequiredError);
+    expect(caught).toMatchObject({
+      credentialRef: "new-ref",
+      phase: "uncommitted",
+      message: "Credential cleanup must be retried before another credential can be saved."
+    });
+    expect(String(caught)).not.toContain("new-secret");
   });
 });

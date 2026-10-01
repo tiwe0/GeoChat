@@ -7,6 +7,45 @@ import { conversationBlackboardEntries } from "../backend/src/db/schema";
 import { createDatabaseForPath, createHttpHarness } from "./agent-harness-http-utils";
 
 describe("conversation history", () => {
+  test("returns an explicit stable decode failure for corrupt JSON while preserving neighboring messages", async () => {
+    const { databasePath, request } = await createHttpHarness();
+    const conversationId = `corrupt-payload-${crypto.randomUUID()}`;
+    const timestamp = "2026-10-01T00:00:00.000Z";
+    for (const id of ["valid-before", "corrupt-middle", "valid-after"]) {
+      const content = id;
+      const response = await request(`/v1/conversations/${conversationId}/messages`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          conversationId,
+          message: {
+            id,
+            role: "assistant",
+            content,
+            createdAt: timestamp,
+            payload: { schemaVersion: 1, id, role: "assistant", content, createdAt: timestamp },
+          },
+        }),
+      });
+      expect(response.status).toBe(201);
+    }
+    const database = createDatabaseForPath(databasePath);
+    database.$client.run("UPDATE conversation_messages SET payload = ? WHERE id = ?", ["{broken-json", "corrupt-middle"]);
+    database.close();
+
+    const detail = await request(`/v1/conversations/${conversationId}`);
+    expect(detail.status).toBe(200);
+    expect(detail.json.conversation.messages).toEqual([
+      expect.objectContaining({ id: "valid-before", payload: expect.objectContaining({ schemaVersion: 1 }) }),
+      expect.objectContaining({
+        id: "corrupt-middle",
+        payload: null,
+        decodeFailure: { code: "conversation_payload_json_invalid" },
+      }),
+      expect.objectContaining({ id: "valid-after", payload: expect.objectContaining({ schemaVersion: 1 }) }),
+    ]);
+  });
+
   test("creates isolated backend HTTP handlers from explicit contexts", async () => {
     const conversationId = `isolated-context-${crypto.randomUUID()}`;
     const harnessA = await createHttpHarness();

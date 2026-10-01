@@ -4,20 +4,25 @@ use serde::Deserialize;
 use serde_json::json;
 use std::{
     io::{BufRead, BufReader, Read, Write},
-    net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream},
+    net::{Ipv4Addr, Shutdown, SocketAddrV4, TcpListener, TcpStream},
     sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+        Arc, Mutex,
     },
     thread::{self, JoinHandle},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use uuid::Uuid;
 
 const MAX_HEADER_BYTES: usize = 8 * 1024;
 const MAX_BODY_BYTES: usize = 1024;
 const MAX_CORRELATION_ID_BYTES: usize = 160;
-const SOCKET_TIMEOUT: Duration = Duration::from_secs(5);
+const SOCKET_TIMEOUT: Duration = Duration::from_secs(2);
+const REJECT_DRAIN_TIMEOUT: Duration = Duration::from_millis(100);
+const MAX_REJECT_DRAIN_BYTES: usize = MAX_BODY_BYTES + 1024;
+const MAX_CONCURRENT_CONNECTIONS: usize = 16;
+const RATE_LIMIT: usize = 240;
+const RATE_WINDOW: Duration = Duration::from_secs(60);
 
 #[derive(Clone)]
 pub(crate) struct CredentialBrokerConnection {
@@ -31,10 +36,40 @@ pub(crate) struct CredentialBrokerRuntime {
     thread: Option<JoinHandle<()>>,
 }
 
+#[derive(Clone, Copy)]
+struct BrokerLimits {
+    max_concurrent: usize,
+    rate_limit: usize,
+    rate_window: Duration,
+}
+
+impl Default for BrokerLimits {
+    fn default() -> Self {
+        Self {
+            max_concurrent: MAX_CONCURRENT_CONNECTIONS,
+            rate_limit: RATE_LIMIT,
+            rate_window: RATE_WINDOW,
+        }
+    }
+}
+
 impl CredentialBrokerRuntime {
     pub(crate) fn start(vault: Arc<CredentialVault>) -> Result<Self, String> {
+        Self::start_with_limits(vault, BrokerLimits::default())
+    }
+
+    fn start_with_limits(
+        vault: Arc<CredentialVault>,
+        limits: BrokerLimits,
+    ) -> Result<Self, String> {
+        if limits.max_concurrent == 0 || limits.rate_limit == 0 {
+            return Err("Credential broker limits must be non-zero".to_owned());
+        }
         let listener = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
             .map_err(|error| format!("Failed to bind credential broker: {error}"))?;
+        listener
+            .set_nonblocking(true)
+            .map_err(|error| format!("Failed to configure credential broker: {error}"))?;
         let address = listener
             .local_addr()
             .map_err(|error| format!("Failed to read credential broker address: {error}"))?;
@@ -43,13 +78,12 @@ impl CredentialBrokerRuntime {
             token: format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple()),
         };
         let shutdown = Arc::new(AtomicBool::new(false));
-        let worker_shutdown = shutdown.clone();
-        let worker_token = connection.token.clone();
+        let thread_shutdown = shutdown.clone();
+        let thread_token = connection.token.clone();
         let thread = thread::Builder::new()
             .name("geochat-credential-broker".to_owned())
-            .spawn(move || run_broker(listener, vault, worker_token, worker_shutdown))
+            .spawn(move || run_broker(listener, vault, thread_token, thread_shutdown, limits))
             .map_err(|error| format!("Failed to start credential broker: {error}"))?;
-
         Ok(Self {
             connection,
             shutdown,
@@ -79,25 +113,111 @@ impl Drop for CredentialBrokerRuntime {
     }
 }
 
+struct RateWindow {
+    started_at: Instant,
+    accepted: usize,
+}
+
+impl RateWindow {
+    fn allow(&mut self, limit: usize, duration: Duration) -> bool {
+        if self.started_at.elapsed() >= duration {
+            self.started_at = Instant::now();
+            self.accepted = 0;
+        }
+        if self.accepted >= limit {
+            return false;
+        }
+        self.accepted += 1;
+        true
+    }
+}
+
+struct ActiveGuard(Arc<AtomicUsize>);
+
+impl Drop for ActiveGuard {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
 fn run_broker(
     listener: TcpListener,
     vault: Arc<CredentialVault>,
     token: String,
     shutdown: Arc<AtomicBool>,
+    limits: BrokerLimits,
 ) {
-    for incoming in listener.incoming() {
+    let active = Arc::new(AtomicUsize::new(0));
+    let rate = Arc::new(Mutex::new(RateWindow {
+        started_at: Instant::now(),
+        accepted: 0,
+    }));
+    let token = Arc::<[u8]>::from(token.into_bytes());
+    let mut workers = Vec::<JoinHandle<()>>::new();
+
+    while !shutdown.load(Ordering::Acquire) {
+        let mut running = Vec::with_capacity(workers.len());
+        for worker in workers.drain(..) {
+            if worker.is_finished() {
+                let _ = worker.join();
+            } else {
+                running.push(worker);
+            }
+        }
+        workers = running;
+
+        let (mut stream, _) = match listener.accept() {
+            Ok(connection) => connection,
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(10));
+                continue;
+            }
+            Err(_) => continue,
+        };
         if shutdown.load(Ordering::Acquire) {
             break;
         }
-        let Ok(stream) = incoming else {
+        if stream.set_nonblocking(false).is_err() {
             continue;
-        };
-        if let Err(error) = handle_connection(stream, &vault, token.as_bytes()) {
-            log::warn!(
-                target: "geochat::credential_broker",
-                "Credential broker rejected a request: {error}"
-            );
         }
+
+        let rate_allowed = rate
+            .lock()
+            .map(|mut window| window.allow(limits.rate_limit, limits.rate_window))
+            .unwrap_or(false);
+        if !rate_allowed {
+            let _ = write_early_rejection(&mut stream, 429, "rate_limited", None);
+            continue;
+        }
+        if active
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |value| {
+                (value < limits.max_concurrent).then_some(value + 1)
+            })
+            .is_err()
+        {
+            let _ = write_early_rejection(&mut stream, 429, "too_many_connections", None);
+            continue;
+        }
+
+        let worker_vault = vault.clone();
+        let worker_token = token.clone();
+        let worker_active = active.clone();
+        match thread::Builder::new()
+            .name("geochat-credential-broker-connection".to_owned())
+            .spawn(move || {
+                let _guard = ActiveGuard(worker_active);
+                if let Err(error) = handle_connection(stream, &worker_vault, &worker_token) {
+                    log::warn!(target: "geochat::credential_broker", "Credential broker rejected a request: {error}");
+                }
+            }) {
+            Ok(worker) => workers.push(worker),
+            Err(_) => {
+                active.fetch_sub(1, Ordering::AcqRel);
+            }
+        }
+    }
+    for worker in workers {
+        let _ = worker.join();
     }
 }
 
@@ -114,69 +234,106 @@ fn handle_connection(
 ) -> Result<(), &'static str> {
     let _ = stream.set_read_timeout(Some(SOCKET_TIMEOUT));
     let _ = stream.set_write_timeout(Some(SOCKET_TIMEOUT));
-    let cloned = stream.try_clone().map_err(|_| "stream_clone_failed")?;
-    let mut reader = BufReader::new(cloned);
-    let mut total_header_bytes = 0usize;
-    let request_line = read_header_line(&mut reader, &mut total_header_bytes)?;
-    if request_line != "POST /v1/credentials/resolve HTTP/1.1" {
-        write_error(&mut stream, 404, "not_found")?;
-        return Ok(());
-    }
-
-    let mut authorization: Option<String> = None;
-    let mut content_length: Option<usize> = None;
-    let mut content_type_valid = false;
+    let mut reader = BufReader::new(stream.try_clone().map_err(|_| "stream_clone_failed")?);
+    let mut header_bytes = 0;
+    let request_line = match read_header_line(&mut reader, &mut header_bytes) {
+        Ok(line) => line,
+        Err(code) => return write_early_rejection(&mut stream, 400, code, None),
+    };
+    let mut authorization = None;
+    let mut content_length = None;
+    let mut content_type = None;
     let mut origin_present = false;
-    let mut correlation_id: Option<String> = None;
+    let mut correlation_id = None;
+
     loop {
-        let line = read_header_line(&mut reader, &mut total_header_bytes)?;
+        let line = match read_header_line(&mut reader, &mut header_bytes) {
+            Ok(line) => line,
+            Err(code) => return write_early_rejection(&mut stream, 400, code, content_length),
+        };
         if line.is_empty() {
             break;
         }
-        let (name, value) = line.split_once(':').ok_or("malformed_header")?;
+        let Some((name, value)) = line.split_once(':') else {
+            return write_early_rejection(&mut stream, 400, "malformed_header", content_length);
+        };
         let name = name.trim().to_ascii_lowercase();
         let value = value.trim();
         match name.as_str() {
             "authorization" if authorization.is_none() => authorization = Some(value.to_owned()),
-            "authorization" => return write_rejected(&mut stream, 400, "duplicate_header"),
-            "content-length" if content_length.is_none() => {
-                content_length = value.parse::<usize>().ok();
-                if content_length.is_none() {
-                    return write_rejected(&mut stream, 400, "invalid_content_length");
-                }
+            "authorization" => {
+                return write_early_rejection(&mut stream, 400, "duplicate_header", content_length)
             }
-            "content-length" => return write_rejected(&mut stream, 400, "duplicate_header"),
+            "content-length" if content_length.is_none() => {
+                let Some(parsed) = value.parse::<usize>().ok() else {
+                    return write_early_rejection(&mut stream, 400, "invalid_content_length", None);
+                };
+                content_length = Some(parsed);
+            }
+            "content-length" => {
+                return write_early_rejection(&mut stream, 400, "duplicate_header", content_length)
+            }
+            "content-type" if content_type.is_none() => content_type = Some(value.to_owned()),
             "content-type" => {
-                content_type_valid = value
-                    .split(';')
-                    .next()
-                    .is_some_and(|mime| mime.trim().eq_ignore_ascii_case("application/json"));
+                return write_early_rejection(&mut stream, 400, "duplicate_header", content_length)
             }
             "x-correlation-id" if correlation_id.is_none() && valid_correlation_id(value) => {
                 correlation_id = Some(value.to_owned())
             }
             "x-correlation-id" if correlation_id.is_some() => {
-                return write_rejected(&mut stream, 400, "duplicate_header")
+                return write_early_rejection(&mut stream, 400, "duplicate_header", content_length)
             }
             "x-correlation-id" => {
-                return write_rejected(&mut stream, 400, "invalid_correlation_id")
+                return write_early_rejection(
+                    &mut stream,
+                    400,
+                    "invalid_correlation_id",
+                    content_length,
+                )
             }
             "origin" => origin_present = true,
             "transfer-encoding" => {
-                return write_rejected(&mut stream, 400, "transfer_encoding_unsupported")
+                return write_early_rejection(
+                    &mut stream,
+                    400,
+                    "transfer_encoding_unsupported",
+                    content_length,
+                )
             }
             _ => {}
         }
     }
 
-    let content_length = content_length.ok_or("content_length_required")?;
-    if content_length == 0 || content_length > MAX_BODY_BYTES {
-        return write_rejected(&mut stream, 413, "request_too_large");
+    let drain_hint = content_length.filter(|length| *length <= MAX_REJECT_DRAIN_BYTES);
+    if request_line != "POST /v1/credentials/resolve HTTP/1.1" {
+        return write_early_rejection(&mut stream, 404, "not_found", drain_hint);
     }
-    let mut body = vec![0u8; content_length];
-    reader
-        .read_exact(&mut body)
-        .map_err(|_| "request_body_incomplete")?;
+    if origin_present {
+        return write_early_rejection(&mut stream, 403, "origin_forbidden", drain_hint);
+    }
+    if !authorized(authorization.as_deref(), expected_token) {
+        return write_early_rejection(&mut stream, 401, "unauthorized", drain_hint);
+    }
+    let json_content_type = content_type.as_deref().is_some_and(|value: &str| {
+        value
+            .split(';')
+            .next()
+            .is_some_and(|mime| mime.trim().eq_ignore_ascii_case("application/json"))
+    });
+    if !json_content_type {
+        return write_early_rejection(&mut stream, 415, "unsupported_media_type", drain_hint);
+    }
+    let Some(content_length) = content_length else {
+        return write_early_rejection(&mut stream, 411, "content_length_required", None);
+    };
+    if content_length == 0 || content_length > MAX_BODY_BYTES {
+        return write_early_rejection(&mut stream, 413, "request_too_large", drain_hint);
+    }
+
+    let mut body = vec![0; content_length];
+    if reader.read_exact(&mut body).is_err() {
+        return write_rejected(&mut stream, 400, "request_body_incomplete");
+    }
     if reader
         .buffer()
         .iter()
@@ -184,27 +341,13 @@ fn handle_connection(
     {
         return write_rejected(&mut stream, 400, "request_pipelining_forbidden");
     }
-    if origin_present {
-        return write_rejected(&mut stream, 403, "origin_forbidden");
-    }
-    if !authorized(authorization.as_deref(), expected_token) {
-        return write_rejected(&mut stream, 401, "unauthorized");
-    }
-    if !content_type_valid {
-        return write_rejected(&mut stream, 415, "unsupported_media_type");
-    }
     let request: ResolveRequest = match serde_json::from_slice(&body) {
         Ok(request) => request,
         Err(_) => return write_rejected(&mut stream, 400, "invalid_request"),
     };
-
     match vault.resolve(&request.credential_ref) {
         Ok(resolved) => {
-            log::info!(
-                target: "geochat::credential_broker",
-                "Credential broker request completed: correlation_id={} status=200",
-                correlation_id.as_deref().unwrap_or("unavailable")
-            );
+            log::info!(target: "geochat::credential_broker", "Credential broker request completed: correlation_id={} status=200", correlation_id.as_deref().unwrap_or("unavailable"));
             let body = serde_json::to_vec(&json!({
                 "schemaVersion": 1,
                 "secret": resolved.secret(),
@@ -217,11 +360,7 @@ fn handle_connection(
         }
         Err(error) => {
             let (status, code) = broker_error(error);
-            log::warn!(
-                target: "geochat::credential_broker",
-                "Credential broker request failed: correlation_id={} status={status} error_code={code}",
-                correlation_id.as_deref().unwrap_or("unavailable")
-            );
+            log::warn!(target: "geochat::credential_broker", "Credential broker request failed: correlation_id={} status={status} error_code={code}", correlation_id.as_deref().unwrap_or("unavailable"));
             write_error(&mut stream, status, code)
         }
     }
@@ -237,32 +376,43 @@ fn valid_correlation_id(value: &str) -> bool {
 
 fn read_header_line(
     reader: &mut BufReader<TcpStream>,
-    total_header_bytes: &mut usize,
+    total: &mut usize,
 ) -> Result<String, &'static str> {
-    let mut line = String::new();
+    let remaining = MAX_HEADER_BYTES.saturating_sub(*total);
+    if remaining == 0 {
+        return Err("request_headers_too_large");
+    }
+    let mut line = Vec::with_capacity(remaining.min(256));
     let bytes = reader
-        .read_line(&mut line)
+        .take((remaining + 1) as u64)
+        .read_until(b'\n', &mut line)
         .map_err(|_| "request_read_failed")?;
     if bytes == 0 {
         return Err("request_closed");
     }
-    *total_header_bytes += bytes;
-    if *total_header_bytes > MAX_HEADER_BYTES {
+    *total += bytes;
+    if *total > MAX_HEADER_BYTES {
         return Err("request_headers_too_large");
     }
-    let line = line.strip_suffix("\r\n").ok_or("invalid_line_ending")?;
-    Ok(line.to_owned())
+    let line = std::str::from_utf8(&line).map_err(|_| "invalid_header_encoding")?;
+    Ok(line
+        .strip_suffix("\r\n")
+        .ok_or("invalid_line_ending")?
+        .to_owned())
 }
 
 fn authorized(header: Option<&str>, expected_token: &[u8]) -> bool {
     let Some(token) = header.and_then(|value| value.strip_prefix("Bearer ")) else {
         return false;
     };
-    const PROOF_MESSAGE: &[u8] = b"geochat-credential-broker-token-proof";
-    let candidate_key = hmac::Key::new(hmac::HMAC_SHA256, token.as_bytes());
-    let candidate_tag = hmac::sign(&candidate_key, PROOF_MESSAGE);
-    let expected_key = hmac::Key::new(hmac::HMAC_SHA256, expected_token);
-    hmac::verify(&expected_key, PROOF_MESSAGE, candidate_tag.as_ref()).is_ok()
+    const PROOF: &[u8] = b"geochat-credential-broker-token-proof";
+    let candidate = hmac::sign(&hmac::Key::new(hmac::HMAC_SHA256, token.as_bytes()), PROOF);
+    hmac::verify(
+        &hmac::Key::new(hmac::HMAC_SHA256, expected_token),
+        PROOF,
+        candidate.as_ref(),
+    )
+    .is_ok()
 }
 
 fn broker_error(error: CredentialError) -> (u16, &'static str) {
@@ -276,13 +426,36 @@ fn broker_error(error: CredentialError) -> (u16, &'static str) {
     }
 }
 
+fn write_early_rejection(
+    stream: &mut TcpStream,
+    status: u16,
+    code: &'static str,
+    drain_hint: Option<usize>,
+) -> Result<(), &'static str> {
+    write_error(stream, status, code)?;
+    let _ = stream.shutdown(Shutdown::Write);
+    let _ = stream.set_read_timeout(Some(REJECT_DRAIN_TIMEOUT));
+    let mut remaining = drain_hint
+        .unwrap_or(MAX_REJECT_DRAIN_BYTES)
+        .min(MAX_REJECT_DRAIN_BYTES);
+    let mut buffer = [0_u8; 512];
+    while remaining > 0 {
+        let read_limit = buffer.len().min(remaining);
+        match stream.read(&mut buffer[..read_limit]) {
+            Ok(0) | Err(_) => break,
+            Ok(read) => remaining -= read,
+        }
+    }
+    let _ = stream.shutdown(Shutdown::Both);
+    Ok(())
+}
+
 fn write_rejected(
     stream: &mut TcpStream,
     status: u16,
     code: &'static str,
 ) -> Result<(), &'static str> {
-    write_error(stream, status, code)?;
-    Ok(())
+    write_error(stream, status, code)
 }
 
 fn write_error(
@@ -302,176 +475,235 @@ fn write_response(stream: &mut TcpStream, status: u16, body: &[u8]) -> Result<()
         401 => "Unauthorized",
         403 => "Forbidden",
         404 => "Not Found",
+        411 => "Length Required",
         413 => "Content Too Large",
         415 => "Unsupported Media Type",
+        429 => "Too Many Requests",
         502 => "Bad Gateway",
         503 => "Service Unavailable",
         _ => "Error",
     };
-    write!(
-        stream,
-        "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nCache-Control: no-store\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        body.len()
-    )
-    .and_then(|_| stream.write_all(body))
-    .and_then(|_| stream.flush())
-    .map_err(|_| "response_write_failed")
+    write!(stream, "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nCache-Control: no-store\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len())
+        .and_then(|_| stream.write_all(body)).and_then(|_| stream.flush()).map_err(|_| "response_write_failed")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::credentials::{InMemoryCredentialStore, SaveCredentialRequest, SecretValue};
-    use std::sync::Arc;
 
-    fn test_runtime() -> (CredentialBrokerRuntime, Arc<CredentialVault>, String) {
+    fn runtime(limits: BrokerLimits) -> (CredentialBrokerRuntime, String) {
         let vault = Arc::new(CredentialVault::new(Arc::new(
             InMemoryCredentialStore::default(),
         )));
-        let metadata = vault
+        let credential_ref = vault
             .save(SaveCredentialRequest {
-                provider: "openai".to_owned(),
-                protocol: "openai-compatible".to_owned(),
-                base_url: "https://api.openai.com/v1".to_owned(),
-                secret: SecretValue::new("canary-provider-secret".to_owned()),
+                provider: "openai".into(),
+                protocol: "openai-compatible".into(),
+                base_url: "https://api.openai.com/v1".into(),
+                secret: SecretValue::new("canary-provider-secret".into()),
             })
-            .unwrap();
-        let runtime = CredentialBrokerRuntime::start(vault.clone()).unwrap();
-        (runtime, vault, metadata.credential_ref)
-    }
-
-    #[test]
-    fn broker_requires_its_private_token_and_never_allows_origin_requests() {
-        let (runtime, _vault, credential_ref) = test_runtime();
-        let connection = runtime.connection();
-        let unauthorized = send_chunked_request(connection, &credential_ref, "wrong", None);
-        assert!(unauthorized.starts_with("HTTP/1.1 401"));
-        assert!(!unauthorized.contains("canary-provider-secret"));
-
-        let forbidden = send_chunked_request(
-            connection,
-            &credential_ref,
-            &connection.token,
-            Some("Origin: http://evil.example\r\n"),
-        );
-        assert!(forbidden.starts_with("HTTP/1.1 403"));
-        assert!(!forbidden.contains("canary-provider-secret"));
-    }
-
-    #[test]
-    fn broker_resolves_then_observes_deletion_without_a_secret_cache() {
-        let (runtime, vault, credential_ref) = test_runtime();
-        let connection = runtime.connection();
-        let resolved = send_request(connection, &credential_ref, &connection.token, None);
-        assert!(resolved.starts_with("HTTP/1.1 200"));
-        assert!(resolved.contains("canary-provider-secret"));
-        assert!(resolved.contains("Cache-Control: no-store"));
-
-        vault.delete(&credential_ref).unwrap();
-        let deleted = send_request(connection, &credential_ref, &connection.token, None);
-        assert!(deleted.starts_with("HTTP/1.1 404"));
-        assert!(!deleted.contains("canary-provider-secret"));
-    }
-
-    #[test]
-    fn broker_accepts_only_bounded_opaque_correlation_ids() {
-        let (runtime, _vault, credential_ref) = test_runtime();
-        let connection = runtime.connection();
-        let correlated = send_request(
-            connection,
-            &credential_ref,
-            &connection.token,
-            Some("X-Correlation-Id: run_broker_1\r\n"),
-        );
-        assert!(correlated.starts_with("HTTP/1.1 200"));
-
-        let invalid = send_request(
-            connection,
-            &credential_ref,
-            &connection.token,
-            Some("X-Correlation-Id: user prompt\r\n"),
-        );
-        assert!(invalid.starts_with("HTTP/1.1 400"));
-        assert!(!invalid.contains("canary-provider-secret"));
-    }
-
-    fn send_request(
-        connection: &CredentialBrokerConnection,
-        credential_ref: &str,
-        token: &str,
-        extra_headers: Option<&str>,
-    ) -> String {
-        send_request_with_delay(connection, credential_ref, token, extra_headers, None)
-    }
-
-    fn send_chunked_request(
-        connection: &CredentialBrokerConnection,
-        credential_ref: &str,
-        token: &str,
-        extra_headers: Option<&str>,
-    ) -> String {
-        send_request_with_delay(
-            connection,
+            .unwrap()
+            .credential_ref;
+        (
+            CredentialBrokerRuntime::start_with_limits(vault, limits).unwrap(),
             credential_ref,
-            token,
-            extra_headers,
-            Some(Duration::from_millis(10)),
         )
     }
 
-    fn send_request_with_delay(
+    fn connect(connection: &CredentialBrokerConnection) -> TcpStream {
+        let port = url::Url::parse(&connection.base_url)
+            .unwrap()
+            .port()
+            .unwrap();
+        let stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        stream.set_read_timeout(Some(SOCKET_TIMEOUT)).unwrap();
+        stream
+    }
+
+    fn headers(token: &str, length: usize, extra: &str) -> String {
+        format!("POST /v1/credentials/resolve HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer {token}\r\nContent-Type: application/json\r\nContent-Length: {length}\r\n{extra}\r\n")
+    }
+
+    fn send(connection: &CredentialBrokerConnection, request: impl AsRef<[u8]>) -> String {
+        let mut stream = connect(connection);
+        stream.write_all(request.as_ref()).unwrap();
+        stream.shutdown(Shutdown::Write).unwrap();
+        read_response(&mut stream)
+    }
+
+    fn valid(
         connection: &CredentialBrokerConnection,
         credential_ref: &str,
         token: &str,
-        extra_headers: Option<&str>,
-        body_delay: Option<Duration>,
+        extra: &str,
     ) -> String {
-        let url = url::Url::parse(&connection.base_url).unwrap();
-        let body = serde_json::to_string(&json!({ "credentialRef": credential_ref })).unwrap();
-        let mut stream = TcpStream::connect(("127.0.0.1", url.port().unwrap())).unwrap();
-        stream.set_nodelay(true).unwrap();
-        let headers = format!(
-            "POST /v1/credentials/resolve HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer {token}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n{}\r\n",
-            body.len(),
-            extra_headers.unwrap_or("")
-        );
-        stream.write_all(headers.as_bytes()).unwrap();
-        stream.flush().unwrap();
-        if let Some(delay) = body_delay {
-            thread::sleep(delay);
-        }
-        stream.write_all(body.as_bytes()).unwrap();
-        stream.flush().unwrap();
-        let mut response = Vec::new();
-        let mut buffer = [0_u8; 1024];
-        while !http_response_is_complete(&response) {
-            let read = stream.read(&mut buffer).unwrap();
-            if read == 0 {
-                break;
-            }
-            response.extend_from_slice(&buffer[..read]);
-        }
-        assert!(http_response_is_complete(&response));
-        String::from_utf8(response).unwrap()
+        let body = serde_json::to_string(&json!({"credentialRef": credential_ref})).unwrap();
+        send(
+            connection,
+            format!("{}{body}", headers(token, body.len(), extra)),
+        )
     }
 
-    fn http_response_is_complete(response: &[u8]) -> bool {
-        let Some(header_end) = response
-            .windows(4)
-            .position(|window| window == b"\r\n\r\n")
-            .map(|index| index + 4)
-        else {
-            return false;
-        };
-        let Ok(headers) = std::str::from_utf8(&response[..header_end]) else {
-            return false;
-        };
-        let Some(content_length) = headers.lines().find_map(|line| {
-            line.strip_prefix("Content-Length: ")
-                .and_then(|value| value.parse::<usize>().ok())
-        }) else {
-            return false;
-        };
-        response.len() >= header_end + content_length
+    fn read_response(stream: &mut TcpStream) -> String {
+        let mut response = Vec::new();
+        stream.read_to_end(&mut response).unwrap();
+        let response = String::from_utf8(response).unwrap();
+        let (head, body) = response.split_once("\r\n\r\n").unwrap();
+        let length = head
+            .lines()
+            .find_map(|line| line.strip_prefix("Content-Length: "))
+            .unwrap()
+            .parse::<usize>()
+            .unwrap();
+        assert_eq!(body.len(), length, "incomplete response: {response}");
+        response
+    }
+
+    fn assert_safe(response: &str, status: u16) {
+        assert!(
+            response.starts_with(&format!("HTTP/1.1 {status}")),
+            "{response}"
+        );
+        assert!(response.contains("Content-Type: application/json\r\n"));
+        assert!(response.contains("Cache-Control: no-store\r\n"));
+        assert!(response.contains("Connection: close\r\n"));
+        assert!(response.contains("Content-Length: "));
+    }
+
+    #[test]
+    fn credential_broker_success_is_complete_and_no_store() {
+        let (runtime, credential_ref) = runtime(BrokerLimits::default());
+        let connection = runtime.connection();
+        let response = valid(connection, &credential_ref, &connection.token, "");
+        assert_safe(&response, 200);
+        assert!(response.contains("canary-provider-secret"));
+        assert!(response.contains("\"schemaVersion\":1"));
+    }
+
+    #[test]
+    fn credential_broker_rejects_early_without_waiting_for_body() {
+        let (runtime, credential_ref) = runtime(BrokerLimits::default());
+        let connection = runtime.connection();
+        for (token, extra, status) in [
+            ("wrong", "", 401),
+            (&connection.token, "Origin: http://evil\r\n", 403),
+        ] {
+            let response = valid(connection, &credential_ref, token, extra);
+            assert_safe(&response, status);
+            assert!(!response.contains("canary-provider-secret"));
+        }
+        let request = format!("POST /v1/credentials/resolve HTTP/1.1\r\nAuthorization: Bearer {}\r\nContent-Type: text/plain\r\nContent-Length: 100\r\n\r\n", connection.token);
+        let started = Instant::now();
+        assert_safe(&send(connection, request), 415);
+        assert!(started.elapsed() < Duration::from_secs(1));
+    }
+
+    #[test]
+    fn credential_broker_rejects_smuggling_and_invalid_protocol_shapes() {
+        let (runtime, credential_ref) = runtime(BrokerLimits::default());
+        let c = runtime.connection();
+        let body = serde_json::to_string(&json!({"credentialRef": credential_ref})).unwrap();
+        let cases = [
+            ("GET /v1/credentials/resolve HTTP/1.1\r\nContent-Length: 0\r\n\r\n".into(), 404),
+            ("POST /wrong HTTP/1.1\r\nContent-Length: 0\r\n\r\n".into(), 404),
+            (format!("{}{body}", headers(&c.token, body.len(), &format!("Authorization: Bearer {}\r\n", c.token))), 400),
+            (format!("{}{body}", headers(&c.token, body.len(), &format!("Content-Length: {}\r\n", body.len()))), 400),
+            (format!("POST /v1/credentials/resolve HTTP/1.1\r\nAuthorization: Bearer {}\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n", c.token), 400),
+        ];
+        for (request, status) in cases {
+            let response = send(c, request);
+            assert_safe(&response, status);
+            assert!(!response.contains("canary-provider-secret"));
+        }
+    }
+
+    #[test]
+    fn credential_broker_enforces_framing_bounds_and_rejects_pipeline() {
+        let (runtime, credential_ref) = runtime(BrokerLimits::default());
+        let c = runtime.connection();
+        assert_safe(
+            &send(
+                c,
+                format!(
+                    "POST /v1/credentials/resolve HTTP/1.1\r\nX: {}\r\n\r\n",
+                    "a".repeat(MAX_HEADER_BYTES)
+                ),
+            ),
+            400,
+        );
+        assert_safe(&send(c, headers(&c.token, MAX_BODY_BYTES + 1, "")), 413);
+        let body = serde_json::to_string(&json!({"credentialRef": credential_ref})).unwrap();
+        assert_safe(
+            &send(c, format!("{}{{", headers(&c.token, body.len(), ""))),
+            400,
+        );
+        assert_safe(
+            &send(
+                c,
+                format!(
+                    "{}{body}GET / HTTP/1.1\r\n\r\n",
+                    headers(&c.token, body.len(), "")
+                ),
+            ),
+            400,
+        );
+        assert_safe(&send(c, format!("POST /v1/credentials/resolve HTTP/1.1\r\nAuthorization: Bearer {}\r\nContent-Type: application/json\r\n\r\n", c.token)), 411);
+    }
+
+    #[test]
+    fn credential_broker_slow_rejection_does_not_block_valid_request() {
+        let (runtime, credential_ref) = runtime(BrokerLimits::default());
+        let c = runtime.connection().clone();
+        let mut slow = connect(&c);
+        slow.write_all(headers("wrong", 100, "").as_bytes())
+            .unwrap();
+        thread::sleep(Duration::from_millis(30));
+        let started = Instant::now();
+        assert_safe(&valid(&c, &credential_ref, &c.token, ""), 200);
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert_safe(&read_response(&mut slow), 401);
+    }
+
+    #[test]
+    fn credential_broker_returns_429_for_concurrency_and_rate_limits() {
+        let (concurrency_runtime, credential_ref) = runtime(BrokerLimits {
+            max_concurrent: 1,
+            rate_limit: 10,
+            rate_window: Duration::from_secs(30),
+        });
+        let c = concurrency_runtime.connection().clone();
+        let mut held = connect(&c);
+        held.write_all(headers(&c.token, 100, "").as_bytes())
+            .unwrap();
+        thread::sleep(Duration::from_millis(300));
+        let concurrency_response = valid(&c, &credential_ref, &c.token, "");
+        assert!(
+            concurrency_response.starts_with("HTTP/1.1 429"),
+            "concurrency limit failed: {concurrency_response}"
+        );
+        drop(held);
+        drop(concurrency_runtime);
+
+        let (rate_runtime, credential_ref) = runtime(BrokerLimits {
+            max_concurrent: 2,
+            rate_limit: 1,
+            rate_window: Duration::from_secs(30),
+        });
+        let c = rate_runtime.connection();
+        assert_safe(&valid(c, &credential_ref, &c.token, ""), 200);
+        assert_safe(&valid(c, &credential_ref, &c.token, ""), 429);
+    }
+
+    #[test]
+    fn credential_broker_shutdown_is_bounded_with_slow_connection() {
+        let (runtime, _) = runtime(BrokerLimits::default());
+        let mut slow = connect(runtime.connection());
+        slow.write_all(b"POST /v1/credentials/resolve HTTP/1.1\r\n")
+            .unwrap();
+        thread::sleep(Duration::from_millis(30));
+        let started = Instant::now();
+        drop(runtime);
+        assert!(started.elapsed() < SOCKET_TIMEOUT + Duration::from_secs(1));
     }
 }

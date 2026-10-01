@@ -79,6 +79,7 @@ describe("native agent run request boundary", () => {
     )).toEqual({
       Authorization: "Bearer desktop-token",
       "x-client-channel": "desktop-workbench",
+      "x-client-installation-id": "installation-unused",
       "x-correlation-id": "run-1",
     });
 
@@ -88,6 +89,7 @@ describe("native agent run request boundary", () => {
       "run-2",
     )).toEqual({
       "x-client-channel": "web-workbench",
+      "x-client-installation-id": "installation-1",
       "x-correlation-id": "run-2",
       "x-guest-session-id": "frontend_guest_installation-1",
     });

@@ -86,6 +86,7 @@ export async function createNativeChatResponse(
     abortSignal?: AbortSignal;
     dataScope?: ConversationDataScope;
     correlationId?: string;
+    clientSessionId?: string;
   } = {},
 ) {
   const correlationId = options.correlationId ?? input.runId;
@@ -107,6 +108,7 @@ export async function createNativeChatResponse(
   if (!latestUser) return jsonError("A user message is required.", 400);
   const latestProviderUser = [...providerMessages].reverse().find((message) => message.role === "user");
   if (!latestProviderUser) return jsonError("A provider user message is required.", 400);
+  const clientSessionId = options.clientSessionId ?? "internal-native-chat";
 
   let model = options.model;
   if (!model) {
@@ -127,8 +129,9 @@ export async function createNativeChatResponse(
     latestUser,
     dependencies.runs,
     (run) => seedNativeRunBlackboard(dependencies.blackboard, run),
+    clientSessionId,
   );
-  const continuityError = validateNativeRunContinuation(loaded.run, input, latestUser);
+  const continuityError = validateNativeRunContinuation(loaded.run, input, latestUser, clientSessionId);
   if (continuityError) return jsonError(continuityError, 409);
   let prepared = bindNativeRunAssistantMessage(loaded.run, messages);
   prepared = mergeCompletedNativeUITools(prepared, messages);

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createDatabase } from "../backend/src/db/client";
@@ -17,6 +18,74 @@ function temporaryDatabasePath(label: string): string {
 
 function normalizeSql(value: string): string {
   return value.replaceAll(/\s+/g, " ").trim().toLowerCase();
+}
+
+const LEGACY_V7_HISTORY = [
+  [1, "initial_conversations_and_agent_runs"],
+  [2, "conversation_ownership_and_legacy_imports"],
+  [3, "native_agent_runtime"],
+  [4, "problem_bank"],
+  [5, "benchmarks"],
+  [6, "unified_problem_bank"],
+  [7, "drizzle_schema_parity"],
+] as const;
+
+function createLegacyV7Fixture(databasePath: string): void {
+  const sqlite = new Database(databasePath);
+  sqlite.run("PRAGMA journal_mode = WAL");
+  sqlite.run(`CREATE TABLE _geochat_schema_migrations (
+    version INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    applied_at INTEGER NOT NULL
+  )`);
+  const recordMigration = sqlite.query(
+    "INSERT INTO _geochat_schema_migrations (version, name, applied_at) VALUES (?, ?, ?)",
+  );
+  for (const [version, name] of LEGACY_V7_HISTORY) recordMigration.run(version, name, version);
+  sqlite.run(`CREATE TABLE conversations (
+    id TEXT PRIMARY KEY NOT NULL,
+    title TEXT NOT NULL,
+    source_title TEXT,
+    summary TEXT NOT NULL,
+    model TEXT,
+    owner_user_id TEXT,
+    message_count INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  )`);
+  sqlite.run(`CREATE TABLE conversation_messages (
+    id TEXT PRIMARY KEY NOT NULL,
+    conversation_id TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+    content TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    payload TEXT NOT NULL
+  )`);
+  sqlite.query(`INSERT INTO conversations (
+    id, title, source_title, summary, model, owner_user_id, message_count, created_at, updated_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    "legacy-conversation",
+    "Legacy title",
+    "Legacy source",
+    "Legacy summary",
+    "legacy-model",
+    "legacy-owner",
+    1,
+    100,
+    200,
+  );
+  sqlite.query(`INSERT INTO conversation_messages (
+    id, conversation_id, role, content, created_at, payload
+  ) VALUES (?, ?, ?, ?, ?, ?)`).run(
+    "legacy-message",
+    "legacy-conversation",
+    "assistant",
+    "legacy answer",
+    150,
+    JSON.stringify({ id: "legacy-message", role: "assistant", content: "legacy answer" }),
+  );
+  sqlite.run("PRAGMA wal_checkpoint(TRUNCATE)");
+  sqlite.close();
 }
 
 describe("SQLite schema baseline", () => {
@@ -106,5 +175,41 @@ describe("SQLite schema baseline", () => {
     rewritten.run("INSERT INTO _geochat_schema_migrations VALUES (1, 'old_initial_schema', 1)");
     expect(() => runSqliteMigrations(rewritten)).toThrow("Unsupported SQLite migration history");
     rewritten.close();
+  });
+
+  test("rejects a complete legacy v7 history without modifying its database or user data", () => {
+    const databasePath = temporaryDatabasePath("legacy-v7-preservation");
+    createLegacyV7Fixture(databasePath);
+    const bytesBefore = readFileSync(databasePath);
+    const walExistedBefore = existsSync(`${databasePath}-wal`);
+    const shmExistedBefore = existsSync(`${databasePath}-shm`);
+
+    expect(() => createDatabase({ databasePath })).toThrow(
+      "Unsupported SQLite migration history at version 1 (initial_conversations_and_agent_runs)",
+    );
+
+    expect(readFileSync(databasePath)).toEqual(bytesBefore);
+    expect(existsSync(`${databasePath}-wal`)).toBe(walExistedBefore);
+    expect(existsSync(`${databasePath}-shm`)).toBe(shmExistedBefore);
+    const reopened = new Database(databasePath, { readonly: true });
+    expect(reopened.query("SELECT version, name, applied_at FROM _geochat_schema_migrations ORDER BY version").all())
+      .toEqual(LEGACY_V7_HISTORY.map(([version, name]) => ({ version, name, applied_at: version })));
+    expect(reopened.query("SELECT * FROM conversations").get()).toEqual({
+      id: "legacy-conversation",
+      title: "Legacy title",
+      source_title: "Legacy source",
+      summary: "Legacy summary",
+      model: "legacy-model",
+      owner_user_id: "legacy-owner",
+      message_count: 1,
+      created_at: 100,
+      updated_at: 200,
+    });
+    expect(reopened.query("SELECT id, content, payload FROM conversation_messages").get()).toEqual({
+      id: "legacy-message",
+      content: "legacy answer",
+      payload: JSON.stringify({ id: "legacy-message", role: "assistant", content: "legacy answer" }),
+    });
+    reopened.close();
   });
 });

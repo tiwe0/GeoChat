@@ -22,17 +22,17 @@ describe("GeoGebra document storage client", () => {
     let resolveResponse!: (response: Response) => void;
     const request = () => new Promise<Response>((resolve) => { resolveResponse = resolve; });
     const pending = saveGeoGebraDocument("http://backend", "token", {
-      id: "doc-1", title: "Doc", mimeType: "text/plain", contentKind: "text", content: "saved",
+      id: "doc-1", title: "Doc", mimeType: "application/vnd.geogebra.file", contentKind: "binary", content: "c2F2ZWQ=",
     }, request as typeof fetch);
     let settled = false;
     void pending.then(() => { settled = true; });
     await Promise.resolve();
     expect(settled).toBe(false);
     resolveResponse(Response.json({ document: {
-      id: "doc-1", title: "Doc", mimeType: "text/plain", contentKind: "text", content: "saved",
+      id: "doc-1", title: "Doc", mimeType: "application/vnd.geogebra.file", contentKind: "binary", content: "c2F2ZWQ=",
       sizeBytes: 5, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z",
     } }, { status: 201 }));
-    expect((await pending).content).toBe("saved");
+    expect((await pending).content).toBe("c2F2ZWQ=");
   });
 
   test("uses authenticated document endpoints", async () => {
@@ -42,7 +42,7 @@ describe("GeoGebra document storage client", () => {
       if (init?.method === "DELETE") return new Response(null, { status: 204 });
       if (String(url).endsWith("/v1/geogebra-documents")) return Response.json({ documents: [] });
       return Response.json({ document: {
-        id: "doc/a", title: "Doc", mimeType: "text/plain", contentKind: "text", content: "x",
+        id: "doc/a", title: "Doc", mimeType: "application/vnd.geogebra.file", contentKind: "binary", content: "eA==",
         sizeBytes: 1, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z",
       } });
     };
@@ -66,9 +66,10 @@ describe("GeoGebra document storage client", () => {
       if (init?.method === "POST") {
         const input = JSON.parse(String(init.body)) as Record<string, string>;
         const now = new Date(Date.UTC(2026, 0, 1, 0, 0, clock++)).toISOString();
+        const binaryBytes = Buffer.from(input.content, "base64");
         const document = {
           ...input,
-          sizeBytes: new TextEncoder().encode(input.content).byteLength,
+          sizeBytes: binaryBytes.byteLength,
           createdAt: now,
           updatedAt: now,
         };
@@ -85,33 +86,34 @@ describe("GeoGebra document storage client", () => {
       }
       return Response.json({ documents: [...persisted.values()].map(({ content: _content, ...metadata }) => metadata) });
     };
+    const completeGgb = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x89, 0x50, 0x4e, 0x47]).toString("base64");
     const first = new GeoGebraDocumentWorkspace("http://backend", "token", {
-      captureXml: () => "<geogebra><construction/></geogebra>",
-      restoreXml: async () => undefined,
+      captureDocumentBase64: async () => completeGgb,
+      restoreDocumentBase64: async () => undefined,
     }, request as typeof fetch);
     await first.save({ id: "proof", title: "Proof" });
 
     let restored = "";
     const reopened = new GeoGebraDocumentWorkspace("http://backend", "token", {
-      captureXml: () => undefined,
-      restoreXml: async (xml) => { restored = xml; },
+      captureDocumentBase64: async () => "",
+      restoreDocumentBase64: async (base64) => { restored = base64; },
     }, request as typeof fetch);
     expect(await reopened.list()).toEqual([expect.objectContaining({ id: "proof", title: "Proof" })]);
     expect((await reopened.open("proof")).id).toBe("proof");
-    expect(restored).toBe("<geogebra><construction/></geogebra>");
+    expect(restored).toBe(completeGgb);
     await reopened.delete("proof");
     expect(await reopened.list()).toEqual([]);
   });
 
   test("does not report an open until the canvas restore completes", async () => {
     const request = async () => Response.json({ document: {
-      id: "doc-1", title: "Doc", mimeType: "application/vnd.geogebra.xml", contentKind: "text",
-      content: "<geogebra/>", sizeBytes: 11,
+      id: "doc-1", title: "Doc", mimeType: "application/vnd.geogebra.file", contentKind: "binary",
+      content: "UEsDBA==", sizeBytes: 4,
       createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z",
     } });
     const workspace = new GeoGebraDocumentWorkspace("http://backend", null, {
-      captureXml: () => undefined,
-      restoreXml: async () => { throw new Error("restore failed"); },
+      captureDocumentBase64: async () => "",
+      restoreDocumentBase64: async () => { throw new Error("restore failed"); },
     }, request as typeof fetch);
     await expect(workspace.open("doc-1")).rejects.toThrow("restore failed");
   });

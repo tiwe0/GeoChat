@@ -68,13 +68,14 @@ describe("local backend HTTP security", () => {
       headers: {
         origin: "http://127.0.0.1:1421",
         "access-control-request-method": "GET",
-        "access-control-request-headers": "authorization, x-client-channel"
+        "access-control-request-headers": "authorization, x-client-channel, x-client-installation-id"
       }
     }));
     expect(allowed.status).toBe(204);
     expect(allowed.headers.get("access-control-allow-origin")).toBe("http://127.0.0.1:1421");
     expect(allowed.headers.get("access-control-allow-origin")).not.toBe("*");
     expect(allowed.headers.get("access-control-allow-headers")).toContain("authorization");
+    expect(allowed.headers.get("access-control-allow-headers")).toContain("x-client-installation-id");
 
     const badOrigin = await rawHandleRequest(new Request("http://127.0.0.1:17365/v1/skills", {
       method: "OPTIONS",

@@ -30,10 +30,19 @@ const ROOT_EXPORTS = [
   "structured-logger"
 ] as const;
 
+const RETIRED_EXPORTS = [
+  "./migration",
+  "./legacy-conversation-import",
+  "./credential-migration",
+] as const;
+
 describe("@geochat-ai/app export policy", () => {
   test("publishes the required stable domain subpaths", () => {
     for (const subpath of REQUIRED_DOMAIN_EXPORTS) {
       expect(packageJson.exports[subpath]).toBeDefined();
+    }
+    for (const subpath of RETIRED_EXPORTS) {
+      expect(packageJson.exports).not.toHaveProperty(subpath);
     }
   });
 
@@ -44,6 +53,7 @@ describe("@geochat-ai/app export policy", () => {
     expect(exports).toEqual(ROOT_EXPORTS);
     expect(index).not.toMatch(/agent-prompts|workflow-policy|geogebra-command-reference/);
     expect(index).not.toContain("advanced-drawing-tools");
+    expect(index).not.toMatch(/migration|legacy-conversation-import|credential-migration/);
   });
 
   test("keeps internal registry and grouped schema modules behind public facades", () => {

@@ -2,7 +2,7 @@ import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import type {
   DesktopConversationDetail,
   DesktopConversationMessage,
-  DesktopConversationMessagePayload,
+  DesktopConversationStoredMessage,
   DesktopConversationSummary,
   UpsertDesktopConversationMessageInput
 } from "@geochat-ai/app/desktop-contracts";
@@ -46,7 +46,7 @@ export type ConversationRepository = {
   listConversations(scope?: ConversationDataScope): Promise<DesktopConversationSummary[]>;
   getConversationDetail(conversationId: string, scope?: ConversationDataScope): Promise<DesktopConversationDetail | undefined>;
   getConversationOwnerUserId(conversationId: string): Promise<string | null | undefined>;
-  findMessageById(messageId: string, scope?: ConversationDataScope): Promise<DesktopConversationMessage | undefined>;
+  findMessageById(messageId: string, scope?: ConversationDataScope): Promise<DesktopConversationStoredMessage | undefined>;
   upsertConversationMessage(input: UpsertDesktopConversationMessageInput, scope?: ConversationDataScope): Promise<DesktopConversationDetail>;
   deleteConversation(conversationId: string, scope?: ConversationDataScope): Promise<void>;
 };
@@ -112,7 +112,7 @@ function createSqliteConversationRepository(db: SqliteDatabase): ConversationRep
           role: input.message.role,
           content: input.message.content,
           createdAt,
-          payload: input.message.payload
+          payload: JSON.stringify(input.message.payload)
         })
         .onConflictDoUpdate({
           target: sqliteConversationMessages.id,
@@ -120,7 +120,7 @@ function createSqliteConversationRepository(db: SqliteDatabase): ConversationRep
             role: input.message.role,
             content: input.message.content,
             createdAt,
-            payload: input.message.payload
+            payload: JSON.stringify(input.message.payload)
           }
         })
         .run();
@@ -226,29 +226,33 @@ function conversationSummaryFromRow(row: ConversationRow): DesktopConversationSu
   };
 }
 
-function conversationMessageFromRow(row: ConversationMessageRow): DesktopConversationMessage {
+function conversationMessageFromRow(row: ConversationMessageRow): DesktopConversationStoredMessage {
+  const payload = parseConversationJsonPayload(row);
   return {
     id: row.id,
     conversationId: row.conversationId,
     role: row.role,
     content: row.content,
     createdAt: row.createdAt.toISOString(),
-    payload: parseConversationJsonPayload(row.payload)
+    ...payload
   };
 }
 
-function parseConversationJsonPayload(value: unknown): DesktopConversationMessagePayload {
-  if (typeof value !== "string") return value as DesktopConversationMessagePayload;
+function parseConversationJsonPayload(row: ConversationMessageRow):
+  | { payload: DesktopConversationMessage["payload"] }
+  | { payload: null; decodeFailure: { code: "conversation_payload_json_invalid" } } {
+  if (typeof row.payload !== "string") return { payload: row.payload as DesktopConversationMessage["payload"] };
   try {
-    return JSON.parse(value) as DesktopConversationMessagePayload;
+    return { payload: JSON.parse(row.payload) as DesktopConversationMessage["payload"] };
   } catch (caughtError) {
-    logger.warn("message_payload_parse_failed", "CONVERSATION_PAYLOAD_INVALID", { error: caughtError });
+    logger.warn("message_payload_parse_failed", "CONVERSATION_PAYLOAD_JSON_INVALID", {
+      error: caughtError,
+      messageId: row.id,
+      conversationId: row.conversationId,
+    });
     return {
-      schemaVersion: 1,
-      id: "",
-      role: "assistant",
-      content: value,
-      createdAt: new Date(0).toISOString()
+      payload: null,
+      decodeFailure: { code: "conversation_payload_json_invalid" },
     };
   }
 }

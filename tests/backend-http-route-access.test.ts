@@ -35,6 +35,7 @@ const routeCases: ReadonlyArray<{
   { id: "benchmark-run-interrupt", path: "/v1/benchmark-runs/run-1/interrupt", access: "authenticated", methods: ["POST"] },
   { id: "benchmark-run-detail", path: "/v1/benchmark-runs/run-1", access: "authenticated", methods: ["GET"] },
   { id: "native-chat", path: "/v1/chat", access: "authenticated", methods: ["POST"] },
+  { id: "agent-runs-recoverable", path: "/v1/agent-runs/recoverable", access: "authenticated", methods: ["GET"] },
   { id: "agent-run-cancel", path: "/v1/agent-runs/run-1/cancel", access: "authenticated", methods: ["POST"] },
   { id: "agent-runs", path: "/v1/agent-runs", access: "authenticated", methods: ["GET"] },
   { id: "agent-command-usage", path: "/v1/agent-command-usage", access: "authenticated", methods: ["GET"] },

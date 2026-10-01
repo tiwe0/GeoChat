@@ -176,12 +176,14 @@ export async function nativeRunHeaders(
   correlationId?: string,
 ) {
   const token = input.getAuthToken();
+  const installationId = await getInstallationId(installationIdRef);
   const headers: Record<string, string> = {
     "x-client-channel": token ? "desktop-workbench" : "web-workbench",
+    "x-client-installation-id": installationId,
     [CORRELATION_ID_HEADER]: correlationId ?? createCorrelationId("renderer"),
   };
   if (token) headers.Authorization = `Bearer ${token}`;
-  else headers["x-guest-session-id"] = guestSessionId(await getInstallationId(installationIdRef));
+  else headers["x-guest-session-id"] = guestSessionId(installationId);
   return headers;
 }
 

@@ -10,6 +10,8 @@ import { agentRunCancelPath } from "../paths";
 import { json } from "../response";
 import type { DataScopeResolver } from "../scope";
 import { AgentRunLedgerConflictError } from "../../db/agent-run-repository";
+import { nativeRunLeaseIsActive } from "../../agent/agent-run-lifecycle";
+import { resolveClientSessionId } from "../security";
 
 export async function handleAgentRunObservabilityRoute(
   request: Request,
@@ -23,9 +25,20 @@ export async function handleAgentRunObservabilityRoute(
   if (request.method === "POST" && cancelRunId) {
     const dataScope = await authenticatedDataScope(request);
     if ("response" in dataScope) return dataScope.response;
+    const clientSessionId = resolveClientSessionId(request);
+    if (!clientSessionId) {
+      return json({ error: "invalid_client_session", message: "A valid client installation id is required." }, { status: 400 });
+    }
     const run = await agentRunRepository.getLedger(cancelRunId);
-    if (!run || !await agentRunConversationVisibleInScope(run, dataScope.scope, context)) {
+    if (
+      !run ||
+      run.clientSessionId !== clientSessionId ||
+      !await agentRunConversationVisibleInScope(run, dataScope.scope, context)
+    ) {
       return json({ error: "not_found", message: "Agent run was not found." }, { status: 404 });
+    }
+    if (url.searchParams.get("source") === "recovery" && nativeRunLeaseIsActive(run)) {
+      return json({ error: "agent_run_active", message: "Agent run has an active continuation lease." }, { status: 409 });
     }
     const hasFinished = run.tools.some((tool) => tool.toolName === "setFinished" && tool.status === "succeeded");
     const cancelled = run.status === "running"
@@ -42,6 +55,19 @@ export async function handleAgentRunObservabilityRoute(
       if (!current) return json({ error: "not_found", message: "Agent run was not found." }, { status: 404 });
       return json({ run: current });
     }
+  }
+
+  if (request.method === "GET" && url.pathname === "/v1/agent-runs/recoverable") {
+    const dataScope = await authenticatedDataScope(request);
+    if ("response" in dataScope) return dataScope.response;
+    const clientSessionId = resolveClientSessionId(request);
+    if (!clientSessionId) {
+      return json({ error: "invalid_client_session", message: "A valid client installation id is required." }, { status: 400 });
+    }
+    const now = new Date();
+    const ownedRuns = await agentRunRepository.listRunningLedgersForClient(clientSessionId);
+    const staleRuns = ownedRuns.filter((run) => !nativeRunLeaseIsActive(run, now));
+    return json({ runs: await filterAgentRunsForScope(staleRuns, dataScope.scope, context) });
   }
 
   if (request.method === "GET" && url.pathname === "/v1/agent-runs") {

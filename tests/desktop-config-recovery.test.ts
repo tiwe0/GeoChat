@@ -117,6 +117,22 @@ describe("desktop config recovery", () => {
     },
   );
 
+  test.each(["apiKey", "client_secret", "accessToken", "authorization", "password", "privateKey"])(
+    "rejects parsed nested %s fields without copying them to quarantine",
+    async (credentialMarker) => {
+      const raw = JSON.stringify({
+        ...createDefaultDesktopConfig(),
+        unrelated: [{ nested: { [credentialMarker]: "sensitive-value" } }],
+      });
+      const storage = memoryStorage({ [CONFIG_STORAGE_KEY]: raw });
+
+      await expect(recoverDesktopConfigBeforeLoad(storage, { createQuarantineId: () => "sensitive" }))
+        .rejects.toThrow("Desktop config must not contain plaintext credentials");
+      expect(storage.getItem(CONFIG_STORAGE_KEY)).toBe(raw);
+      expect(Array.from(storage.values.keys()).some((key) => key.includes(":quarantine:"))).toBe(false);
+    },
+  );
+
   test("repairs a non-string model id without losing unrelated valid fields", async () => {
     const raw = JSON.stringify({
       ...createDefaultDesktopConfig("en-US"),

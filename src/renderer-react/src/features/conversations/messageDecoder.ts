@@ -24,7 +24,8 @@ export function decodeStoredConversationMessages(value: unknown, apiOrigin?: str
   return value.flatMap((item) => {
     const decoded = decodePersistedConversationMessage(item);
     if (!decoded.ok) {
-      logger.warn("message_restore_skipped", decoded.errorCode);
+      const code = corruptMessageDecodeCode(item) ?? decoded.errorCode;
+      logger.warn("message_restore_skipped", code);
       return [];
     }
     return [
@@ -35,6 +36,14 @@ export function decodeStoredConversationMessages(value: unknown, apiOrigin?: str
       },
     ];
   });
+}
+
+function corruptMessageDecodeCode(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const failure = (value as Record<string, unknown>).decodeFailure;
+  if (!failure || typeof failure !== "object" || Array.isArray(failure)) return undefined;
+  const code = (failure as Record<string, unknown>).code;
+  return code === "conversation_payload_json_invalid" ? code : undefined;
 }
 
 export function decodeStoredConversationParts(value: unknown, apiOrigin?: string): StoredConversationPart[] {

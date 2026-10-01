@@ -355,6 +355,12 @@ fn is_loopback_host(url: &Url) -> bool {
 mod tests {
     use super::*;
 
+    #[derive(Deserialize)]
+    struct LoopbackPolicyCase {
+        url: String,
+        allowed: bool,
+    }
+
     fn vault() -> CredentialVault {
         CredentialVault::new(Arc::new(InMemoryCredentialStore::default()))
     }
@@ -365,6 +371,24 @@ mod tests {
             protocol: "openai-compatible".to_owned(),
             base_url: "https://API.DeepSeek.com:443/v1/".to_owned(),
             secret: SecretValue::new(secret.to_owned()),
+        }
+    }
+
+    #[test]
+    fn endpoint_policy_matches_shared_loopback_cases() {
+        let cases: Vec<LoopbackPolicyCase> = serde_json::from_str(include_str!(
+            "../../../tests/fixtures/credential-loopback-policy.json"
+        ))
+        .unwrap();
+        for case in cases {
+            let parsed = Url::parse(&case.url).unwrap();
+            assert_eq!(is_loopback_host(&parsed), case.allowed, "{}", case.url);
+            assert_eq!(
+                canonicalize_endpoint(&case.url).is_ok(),
+                case.allowed,
+                "{}",
+                case.url
+            );
         }
     }
 

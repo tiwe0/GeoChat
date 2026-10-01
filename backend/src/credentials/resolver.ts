@@ -136,7 +136,7 @@ function parseBrokerUrl(value: string | undefined) {
   if (!value?.trim()) return undefined;
   try {
     const parsed = new URL(value.trim());
-    if (parsed.protocol !== "http:" || parsed.hostname !== "127.0.0.1") return undefined;
+    if (parsed.protocol !== "http:" || !isLoopbackHostname(parsed.hostname)) return undefined;
     if (parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname !== "/") return undefined;
     return parsed;
   } catch {
@@ -171,7 +171,7 @@ function isCanonicalProviderUrl(value: unknown) {
   if (typeof value !== "string") return false;
   try {
     const parsed = new URL(value);
-    const loopback = parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost" || parsed.hostname === "[::1]";
+    const loopback = isLoopbackHostname(parsed.hostname);
     return (
       !parsed.username &&
       !parsed.password &&
@@ -182,6 +182,15 @@ function isCanonicalProviderUrl(value: unknown) {
   } catch {
     return false;
   }
+}
+
+export function isLoopbackHostname(hostname: string) {
+  const normalized = hostname.toLowerCase();
+  if (normalized === "localhost" || normalized === "[::1]") return true;
+  const segments = normalized.split(".");
+  return segments.length === 4
+    && segments[0] === "127"
+    && segments.every((segment) => /^\d{1,3}$/.test(segment) && Number(segment) <= 255);
 }
 
 function mapBrokerStatus(status: number) {

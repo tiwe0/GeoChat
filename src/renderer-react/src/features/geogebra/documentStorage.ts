@@ -1,6 +1,7 @@
 import {
   decodeGeoGebraDocumentListResponse,
   decodeGeoGebraDocumentResponse,
+  GEOGEBRA_FILE_MIME_TYPE,
   type GeoGebraDocument,
   type GeoGebraDocumentMetadata,
   type UpsertGeoGebraDocumentInput,
@@ -76,8 +77,8 @@ export async function deleteGeoGebraDocument(
 }
 
 export type GeoGebraDocumentCanvas = {
-  captureXml(): string | undefined;
-  restoreXml(xml: string): Promise<void>;
+  captureDocumentBase64(): Promise<string>;
+  restoreDocumentBase64(base64: string): Promise<void>;
 };
 
 /**
@@ -99,23 +100,23 @@ export class GeoGebraDocumentWorkspace {
   }
 
   async save(input: { id: string; title: string }) {
-    const content = this.canvas.captureXml();
+    const content = await this.canvas.captureDocumentBase64();
     if (!content) throw new Error("The GeoGebra canvas did not provide a document snapshot.");
     return saveGeoGebraDocument(this.apiOrigin, this.token, {
       id: input.id,
       title: input.title,
-      mimeType: "application/vnd.geogebra.xml",
-      contentKind: "text",
+      mimeType: GEOGEBRA_FILE_MIME_TYPE,
+      contentKind: "binary",
       content,
     }, this.request);
   }
 
   async open(id: string) {
     const document = await loadGeoGebraDocument(this.apiOrigin, this.token, id, this.request);
-    if (document.contentKind !== "text" || document.mimeType !== "application/vnd.geogebra.xml") {
-      throw new Error("The stored document is not a GeoGebra XML construction.");
+    if (document.contentKind !== "binary" || document.mimeType !== GEOGEBRA_FILE_MIME_TYPE) {
+      throw new Error("The stored document is not a complete GeoGebra file.");
     }
-    await this.canvas.restoreXml(document.content);
+    await this.canvas.restoreDocumentBase64(document.content);
     return document;
   }
 

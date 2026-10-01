@@ -44,7 +44,33 @@ import { SettingsHint } from "./SettingsHint";
 type CredentialSaveState =
   | { status: "idle" }
   | { status: "valid" }
-  | { status: "invalid"; message: string };
+  | { status: "invalid"; message: string }
+  | {
+    status: "cleanup-required";
+    credentialRef: string;
+    phase: CredentialCleanupPhase;
+  };
+
+export type CredentialCleanupPhase = "uncommitted" | "replaced";
+
+export class CredentialCleanupRequiredError extends Error {
+  readonly credentialRef: string;
+  readonly phase: CredentialCleanupPhase;
+
+  constructor(credentialRef: string, phase: CredentialCleanupPhase, options?: ErrorOptions) {
+    super("Credential cleanup must be retried before another credential can be saved.", options);
+    this.name = "CredentialCleanupRequiredError";
+    this.credentialRef = credentialRef;
+    this.phase = phase;
+  }
+}
+
+export type ReplaceProviderCredentialResult = Readonly<{
+  metadata: DesktopProviderCredentialMetadata;
+  cleanup:
+    | { status: "complete" }
+    | { status: "retry-required"; credentialRef: string; phase: "replaced" };
+}>;
 
 type CustomValidationError =
   | "nameRequired"
@@ -154,7 +180,7 @@ export function ModelSettings() {
       const baseUrl = isCustom
         ? customProvider.baseUrl
         : existing.baseUrl || getAgentProviderDefinition(provider)?.defaultBaseUrl || "";
-      const metadata = await replaceProviderCredential({
+      const replacement = await replaceProviderCredential({
         desktopApi,
         request: { provider, protocol, baseUrl, secret },
         previousCredentialRef: existing.credentialRef,
@@ -191,19 +217,60 @@ export function ModelSettings() {
           }
         },
       });
+      const metadata = replacement.metadata;
       setCredentialRef(metadata.credentialRef);
       if (isCustom) setCustomProvider(readDesktopConfig().customProvider);
-      setCredentialSave({ status: "valid" });
-      setSaved(true);
-      logger.info("provider_settings_saved", "MODEL_PROVIDER_SETTINGS_SAVED", { provider });
+      if (replacement.cleanup.status === "retry-required") {
+        setCredentialSave({
+          status: "cleanup-required",
+          credentialRef: replacement.cleanup.credentialRef,
+          phase: replacement.cleanup.phase,
+        });
+        logger.warn("provider_credential_cleanup_required", "MODEL_CREDENTIAL_CLEANUP_REQUIRED", { provider });
+      } else {
+        setCredentialSave({ status: "valid" });
+        setSaved(true);
+        logger.info("provider_settings_saved", "MODEL_PROVIDER_SETTINGS_SAVED", { provider });
+      }
     } catch (caughtError) {
+      if (caughtError instanceof CredentialCleanupRequiredError) {
+        setCredentialSave({
+          status: "cleanup-required",
+          credentialRef: caughtError.credentialRef,
+          phase: caughtError.phase,
+        });
+        logger.warn("provider_credential_cleanup_required", "MODEL_CREDENTIAL_CLEANUP_REQUIRED", { provider });
+        return;
+      }
       const message = caughtError instanceof Error ? caughtError.message : String(caughtError);
       setCredentialSave({ status: "invalid", message });
-      logger.warn("provider_credential_save_failed", "MODEL_PROVIDER_CREDENTIAL_SAVE_FAILED", { provider, message });
+      logger.warn("provider_credential_save_failed", "MODEL_PROVIDER_CREDENTIAL_SAVE_FAILED", { provider });
     } finally {
       setSaving(false);
     }
   }, [apiKey, customProvider, isCustom, provider, saving, t]);
+
+  const retryCredentialCleanup = useCallback(async () => {
+    if (saving || credentialSave.status !== "cleanup-required") return;
+    const desktopApi = installedDesktopApi();
+    if (!desktopApi) return;
+    const cleanup = credentialSave;
+    setSaving(true);
+    try {
+      await desktopApi.deleteProviderCredential(cleanup.credentialRef);
+      if (cleanup.phase === "replaced") {
+        setCredentialSave({ status: "valid" });
+        setSaved(true);
+      } else {
+        setCredentialSave({ status: "invalid", message: t("settings.credentialNotSaved") });
+      }
+      logger.info("provider_credential_cleanup_completed", "MODEL_CREDENTIAL_CLEANUP_COMPLETED", { provider });
+    } catch {
+      logger.warn("provider_credential_cleanup_retry_failed", "MODEL_CREDENTIAL_CLEANUP_RETRY_FAILED", { provider });
+    } finally {
+      setSaving(false);
+    }
+  }, [credentialSave, provider, saving, t]);
 
   const customValidationMessage = customValidationError
     ? t(`settings.customValidation.${customValidationError}`)
@@ -256,6 +323,7 @@ export function ModelSettings() {
           configured={Boolean(credentialRef)}
           credentialSave={credentialSave}
           disabled={saving}
+          onRetryCleanup={() => void retryCredentialCleanup()}
           onChange={(value) => {
             setApiKey(value);
             setSaved(false);
@@ -388,7 +456,13 @@ export function ModelSettings() {
           variant="contained"
           size="small"
           onClick={() => void save()}
-          disabled={saving || saved || (!apiKey.trim() && !credentialRef) || (isCustom && customValidationError !== null)}
+          disabled={
+            saving
+            || saved
+            || credentialSave.status === "cleanup-required"
+            || (!apiKey.trim() && !credentialRef)
+            || (isCustom && customValidationError !== null)
+          }
           sx={{ minWidth: 120 }}
         >
           {saved ? t("settings.saved") : t("settings.save")}
@@ -404,6 +478,7 @@ function ApiKeyField(props: {
   credentialSave: CredentialSaveState;
   disabled?: boolean;
   onChange: (value: string) => void;
+  onRetryCleanup: () => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -421,6 +496,8 @@ function ApiKeyField(props: {
               ? t("settings.keyValid")
               : props.credentialSave.status === "invalid"
                 ? t("settings.keyInvalid", { message: props.credentialSave.message })
+                : props.credentialSave.status === "cleanup-required"
+                  ? t("settings.credentialCleanupRequired")
                 : props.apiKey
                   ? t("settings.keyUnverified")
                   : props.configured
@@ -432,13 +509,18 @@ function ApiKeyField(props: {
             sx: {
               color: props.credentialSave.status === "valid" || (props.configured && !props.apiKey)
                 ? "success.main"
-                : props.credentialSave.status === "invalid"
+                : props.credentialSave.status === "invalid" || props.credentialSave.status === "cleanup-required"
                   ? "error.main"
                   : "text.secondary",
             },
           },
         }}
       />
+      {props.credentialSave.status === "cleanup-required" ? (
+        <Button disabled={props.disabled} size="small" variant="outlined" onClick={props.onRetryCleanup}>
+          {t("settings.retryCredentialCleanup")}
+        </Button>
+      ) : null}
     </Stack>
   );
 }
@@ -482,24 +564,33 @@ export async function replaceProviderCredential(input: {
   onCredentialStored: () => void;
   validate: (credentialRef: string) => Promise<void>;
   commit: (metadata: DesktopProviderCredentialMetadata) => Promise<void>;
-}) {
+}): Promise<ReplaceProviderCredentialResult> {
   const metadata = await input.desktopApi.saveProviderCredential(input.request);
   input.onCredentialStored();
   try {
     await input.validate(metadata.credentialRef);
     await input.commit(metadata);
   } catch (error) {
-    await input.desktopApi.deleteProviderCredential(metadata.credentialRef).catch((deleteError) => {
-      logger.warn("uncommitted_credential_delete_failed", "MODEL_CREDENTIAL_DELETE_FAILED", { error: deleteError });
-    });
+    try {
+      await input.desktopApi.deleteProviderCredential(metadata.credentialRef);
+    } catch (cleanupError) {
+      throw new CredentialCleanupRequiredError(metadata.credentialRef, "uncommitted", {
+        cause: new AggregateError([error, cleanupError], "Credential validation and cleanup both failed."),
+      });
+    }
     throw error;
   }
   if (input.previousCredentialRef && input.previousCredentialRef !== metadata.credentialRef) {
-    await input.desktopApi.deleteProviderCredential(input.previousCredentialRef).catch((error) => {
-      logger.warn("replaced_credential_delete_failed", "MODEL_CREDENTIAL_DELETE_FAILED", { error });
-    });
+    try {
+      await input.desktopApi.deleteProviderCredential(input.previousCredentialRef);
+    } catch {
+      return {
+        metadata,
+        cleanup: { status: "retry-required", credentialRef: input.previousCredentialRef, phase: "replaced" },
+      };
+    }
   }
-  return metadata;
+  return { metadata, cleanup: { status: "complete" } };
 }
 
 function isValidRequiredBaseUrl(value: string) {
@@ -508,8 +599,8 @@ function isValidRequiredBaseUrl(value: string) {
   try {
     const url = new URL(trimmed);
     return url.protocol === "http:" || url.protocol === "https:";
-  } catch (caughtError) {
-    logger.debug("provider_base_url_invalid", "MODEL_PROVIDER_BASE_URL_INVALID", { error: caughtError });
+  } catch {
+    logger.debug("provider_base_url_invalid", "MODEL_PROVIDER_BASE_URL_INVALID");
     return false;
   }
 }

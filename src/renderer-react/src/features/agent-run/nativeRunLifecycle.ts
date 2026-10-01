@@ -183,7 +183,7 @@ export async function recoverInterruptedNativeRun(
   request: typeof fetch = fetch,
   isCurrent: () => boolean = () => true,
 ) {
-  const response = await request(new URL("/v1/agent-runs", input.apiOrigin), {
+  const response = await request(new URL("/v1/agent-runs/recoverable", input.apiOrigin), {
     cache: "no-store",
     headers: await nativeRunHeaders(input, installationIdRef),
   });
@@ -192,9 +192,10 @@ export async function recoverInterruptedNativeRun(
     throw new Error(`Agent run recovery failed with HTTP ${response.status}.`);
   }
   const payload = (await response.json()) as { runs?: unknown };
-  const run = parseRecoverableAgentRun(payload.runs);
-  if (!run) return null;
+  const runs = parseRecoverableAgentRuns(payload.runs);
+  if (!runs.length) return null;
   if (!isCurrent()) return null;
+  const run = runs.at(-1)!;
   input.onRestore?.({
     conversationId: run.conversationId,
     modelProvider: run.modelProvider,
@@ -203,8 +204,15 @@ export async function recoverInterruptedNativeRun(
     thinking: run.thinking === true,
     thinkingEffort: run.thinkingEffort ?? null,
   });
-  if (run.status === "running") {
-    await cancelNativeRun({ runId: run.runId, conversationId: run.conversationId }, input, installationIdRef, request);
+  for (const staleRun of runs) {
+    if (!isCurrent()) return null;
+    await cancelNativeRun(
+      { runId: staleRun.runId, conversationId: staleRun.conversationId },
+      input,
+      installationIdRef,
+      request,
+      true,
+    );
   }
   if (!isCurrent()) return null;
   return run;
@@ -215,48 +223,49 @@ async function cancelNativeRun(
   input: NativeRunLifecycleInput,
   installationIdRef: { current: string | null },
   request: typeof fetch = fetch,
+  recoveryOnly = false,
 ) {
   const headers = await nativeRunHeaders(input, installationIdRef, active.runId);
   const response = await request(
-    new URL(`/v1/agent-runs/${encodeURIComponent(active.runId)}/cancel`, input.apiOrigin),
+    new URL(
+      `/v1/agent-runs/${encodeURIComponent(active.runId)}/cancel${recoveryOnly ? "?source=recovery" : ""}`,
+      input.apiOrigin,
+    ),
     {
       method: "POST",
       headers,
     },
   );
-  if (!response.ok && response.status !== 404)
+  if (!response.ok && response.status !== 404 && !(recoveryOnly && response.status === 409))
     throw new Error(`Agent run cancellation failed with HTTP ${response.status}.`);
 }
 
-function parseRecoverableAgentRun(value: unknown): RecoverableAgentRun | null {
-  if (!Array.isArray(value)) return null;
-  const candidate = value.find(
-    (item) =>
-      item &&
-      typeof item === "object" &&
-      !Array.isArray(item) &&
-      (item as Record<string, unknown>).status === "running",
-  );
-  if (!candidate) return null;
-  const run = candidate as Record<string, unknown>;
-  if (
-    typeof run.runId !== "string" ||
-    typeof run.conversationId !== "string" ||
-    typeof run.modelProvider !== "string" ||
-    typeof run.modelId !== "string" ||
-    typeof run.prompt !== "string" ||
-    (run.status !== "running" && run.status !== "succeeded" && run.status !== "failed" && run.status !== "cancelled")
-  )
-    return null;
-  const effort = run.thinkingEffort;
-  return {
-    runId: run.runId,
-    conversationId: run.conversationId,
-    status: run.status,
-    modelProvider: run.modelProvider,
-    modelId: run.modelId,
-    prompt: run.prompt,
-    thinking: typeof run.thinking === "boolean" ? run.thinking : null,
-    thinkingEffort: effort === "light" || effort === "standard" || effort === "extended" ? effort : null,
-  };
+function parseRecoverableAgentRuns(value: unknown): RecoverableAgentRun[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return [];
+    const run = candidate as Record<string, unknown>;
+    if (
+      typeof run.runId !== "string" ||
+      typeof run.conversationId !== "string" ||
+      typeof run.modelProvider !== "string" ||
+      typeof run.modelId !== "string" ||
+      typeof run.prompt !== "string" ||
+      (run.status !== "running" && run.status !== "succeeded" && run.status !== "failed" && run.status !== "cancelled")
+    )
+      return [];
+    const effort = run.thinkingEffort;
+    return [
+      {
+        runId: run.runId,
+        conversationId: run.conversationId,
+        status: run.status,
+        modelProvider: run.modelProvider,
+        modelId: run.modelId,
+        prompt: run.prompt,
+        thinking: typeof run.thinking === "boolean" ? run.thinking : null,
+        thinkingEffort: effort === "light" || effort === "standard" || effort === "extended" ? effort : null,
+      },
+    ];
+  });
 }

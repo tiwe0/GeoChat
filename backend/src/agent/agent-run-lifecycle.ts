@@ -25,12 +25,14 @@ export async function loadOrCreateNativeRun(
   latestUser: UIMessage,
   runs: NativeChatRunStore,
   seedBlackboard: (run: AgentRunLedgerRecord) => Promise<void>,
+  clientSessionId: string,
 ) {
   const existing = await runs.getLedger(input.runId);
   if (existing) return { run: existing, isNew: false } as const;
   const created = createAgentRunLedger({
     runId: input.runId,
     conversationId: input.conversationId,
+    clientSessionId,
     userMessageId: latestUser.id,
     assistantMessageId: null,
     model: input.model,
@@ -49,9 +51,11 @@ export function validateNativeRunContinuation(
   run: AgentRunLedgerRecord,
   input: NativeChatRequest,
   latestUser: UIMessage,
+  clientSessionId?: string,
 ) {
   if (run.status !== "running") return `Agent run is already terminal: ${run.runId} (${run.status}).`;
   if (run.conversationId !== input.conversationId) return "Agent run conversation does not match the continuation request.";
+  if (clientSessionId !== undefined && run.clientSessionId !== clientSessionId) return "Agent run client session does not match the continuation request.";
   if (run.userMessageId && run.userMessageId !== latestUser.id) return "Agent run user-message lineage does not match the continuation request.";
   if (run.modelProvider !== input.model.provider || run.modelId !== input.model.model) return "Agent run model does not match the continuation request.";
   if ((run.modelProtocol ?? null) !== (input.model.protocol ?? null)) return "Agent run model protocol does not match the continuation request.";

@@ -69,7 +69,7 @@ describe("active native run recovery", () => {
     const request = async (input: URL | RequestInfo, init?: RequestInit) => {
       const url = String(input);
       calls.push(`${init?.method ?? "GET"} ${url}`);
-      if (url.endsWith("/v1/agent-runs")) {
+      if (url.endsWith("/v1/agent-runs/recoverable")) {
         return Response.json({ runs: [{
           runId: "run-recover",
           conversationId: "conversation-recover",
@@ -105,9 +105,41 @@ describe("active native run recovery", () => {
     }]);
     expect(JSON.stringify(restored)).not.toContain("Agent Skill 策略");
     expect(calls).toEqual([
-      "GET http://127.0.0.1:17369/v1/agent-runs",
-      "POST http://127.0.0.1:17369/v1/agent-runs/run-recover/cancel",
+      "GET http://127.0.0.1:17369/v1/agent-runs/recoverable",
+      "POST http://127.0.0.1:17369/v1/agent-runs/run-recover/cancel?source=recovery",
     ]);
+  });
+
+  test("terminalizes every stale run returned for this installation, including more than one page of observability results", async () => {
+    await installTestPreferences({ geogebraCopilotInstallationId: JSON.stringify("installation-many") });
+    const cancelled: string[] = [];
+    const runs = Array.from({ length: 75 }, (_, index) => ({
+      runId: `run-${index}`,
+      conversationId: `conversation-${index}`,
+      status: "running",
+      modelProvider: "deepseek",
+      modelId: "deepseek-chat",
+      prompt: `prompt-${index}`,
+    }));
+    const request = async (input: URL | RequestInfo, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/v1/agent-runs/recoverable")) return Response.json({ runs });
+      if (init?.method === "POST") {
+        cancelled.push(decodeURIComponent(new URL(url).pathname.match(/\/agent-runs\/([^/]+)\/cancel$/)?.[1] ?? ""));
+        return Response.json({ run: { status: "cancelled" } });
+      }
+      return new Response(null, { status: 404 });
+    };
+
+    const latest = await recoverInterruptedNativeRun({
+      apiOrigin: "http://127.0.0.1:17369",
+      getAuthToken: () => "token",
+    }, { current: null }, request as typeof fetch);
+
+    expect(latest?.runId).toBe("run-74");
+    expect(cancelled).toHaveLength(75);
+    expect(cancelled[0]).toBe("run-0");
+    expect(cancelled.at(-1)).toBe("run-74");
   });
 
   test("activates a run entirely in memory", async () => {

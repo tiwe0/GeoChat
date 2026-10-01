@@ -109,7 +109,20 @@ describe("conversation transcript persistence", () => {
         messageCount: 3,
         createdAt: timestamp,
         updatedAt: timestamp,
-        messages: [message("valid-before", "before"), message("corrupt", 42), message("valid-after", "after")],
+        messages: [
+          message("valid-before", "before"),
+          {
+            id: "corrupt-json",
+            conversationId: "conversation-isolation",
+            role: "assistant",
+            content: "corrupt",
+            createdAt: timestamp,
+            payload: null,
+            decodeFailure: { code: "conversation_payload_json_invalid" },
+          },
+          message("corrupt", 42),
+          message("valid-after", "after"),
+        ],
       },
     })) as typeof fetch;
 

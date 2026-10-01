@@ -189,6 +189,13 @@ export const BACKEND_ROUTE_ACCESS_CATALOG = [
     handle: handleNativeChatRoute
   },
   {
+    id: "agent-runs-recoverable",
+    access: "authenticated",
+    methods: ["GET"],
+    matches: exactPath("/v1/agent-runs/recoverable"),
+    handle: handleAgentRunObservabilityRoute
+  },
+  {
     id: "agent-run-cancel",
     access: "authenticated",
     methods: ["POST"],

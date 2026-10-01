@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { AgentRunLedgerRecord } from "@geochat-ai/app/agent-run";
 import { compactAgentRunLedgerForStorage, isAgentRunLedgerRecord } from "@geochat-ai/app/agent-run";
 import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
@@ -50,6 +50,7 @@ export type AgentRunPersistenceDiagnostics = {
 export type AgentRunRepository = {
   listLedgers(limit: number): Promise<AgentRunLedgerRecord[]>;
   listAllLedgers(): Promise<AgentRunLedgerRecord[]>;
+  listRunningLedgersForClient(clientSessionId: string): Promise<AgentRunLedgerRecord[]>;
   getLedger(runId: string): Promise<AgentRunLedgerRecord | undefined>;
   createLedger(record: AgentRunLedgerRecord): Promise<AgentRunLedgerRecord>;
   compareAndSwapLedger(record: AgentRunLedgerRecord, expectedRevision: number): Promise<AgentRunLedgerRecord>;
@@ -73,6 +74,17 @@ function createSqliteAgentRunRepository(store: SqliteStore): AgentRunRepository 
     },
     async listAllLedgers() {
       return store.select().from(sqliteAgentRunLedgers).all()
+        .map(ledgerFromRow)
+        .filter(isAgentRunLedgerRecord);
+    },
+    async listRunningLedgersForClient(clientSessionId) {
+      return store.select().from(sqliteAgentRunLedgers)
+        .where(and(
+          eq(sqliteAgentRunLedgers.clientSessionId, clientSessionId),
+          eq(sqliteAgentRunLedgers.status, "running"),
+        ))
+        .orderBy(asc(sqliteAgentRunLedgers.startedAt))
+        .all()
         .map(ledgerFromRow)
         .filter(isAgentRunLedgerRecord);
     },
@@ -171,6 +183,7 @@ function ledgerRowValues(record: AgentRunLedgerRecord) {
   return {
     runId: record.runId,
     conversationId: record.conversationId,
+    clientSessionId: record.clientSessionId ?? null,
     status: record.status,
     revision: record.revision,
     modelProvider: record.modelProvider,
@@ -184,7 +197,7 @@ function ledgerRowValues(record: AgentRunLedgerRecord) {
 function ledgerFromRow(row: typeof sqliteAgentRunLedgers.$inferSelect) {
   const payload = parseStoredPayload(row.payload);
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return undefined;
-  return { ...payload, revision: row.revision } as AgentRunLedgerRecord;
+  return { ...payload, clientSessionId: row.clientSessionId, revision: row.revision } as AgentRunLedgerRecord;
 }
 
 function ledgerRowUpdateValues(record: AgentRunLedgerRecord) {

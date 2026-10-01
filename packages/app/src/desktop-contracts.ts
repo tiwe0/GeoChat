@@ -47,6 +47,15 @@ export type DesktopConversationMessage = {
   payload: DesktopConversationMessagePayload;
 };
 
+export type DesktopConversationCorruptMessage = Omit<DesktopConversationMessage, "payload"> & {
+  payload: null;
+  decodeFailure: {
+    code: "conversation_payload_json_invalid";
+  };
+};
+
+export type DesktopConversationStoredMessage = DesktopConversationMessage | DesktopConversationCorruptMessage;
+
 export type DesktopConversationSummary = {
   id: string;
   model: string | null;
@@ -58,7 +67,7 @@ export type DesktopConversationSummary = {
 };
 
 export type DesktopConversationDetail = DesktopConversationSummary & {
-  messages: DesktopConversationMessage[];
+  messages: DesktopConversationStoredMessage[];
   blackboardEntries?: BlackboardEntry[];
 };
 

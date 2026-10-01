@@ -8,9 +8,17 @@ export const CORS_ALLOWED_HEADERS = [
   "authorization",
   "content-type",
   "x-client-channel",
+  "x-client-installation-id",
   "x-correlation-id",
   "x-guest-session-id"
 ] as const;
+
+const CLIENT_SESSION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+
+export function resolveClientSessionId(request: Request): string | undefined {
+  const value = request.headers.get("x-client-installation-id") ?? request.headers.get("x-guest-session-id");
+  return value && CLIENT_SESSION_ID_PATTERN.test(value) ? value : undefined;
+}
 
 export type BackendAuthentication =
   | { mode: "required"; token: string }

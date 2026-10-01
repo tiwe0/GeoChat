@@ -161,6 +161,47 @@ export class GeoGebraController {
     }
   }
 
+  captureDocumentBase64(): Promise<string> {
+    if (!this.api || typeof this.api.getBase64 !== "function") {
+      throw new Error("当前 GeoGebra applet 不提供完整文档导出 API。");
+    }
+    return new Promise((resolve, reject) => {
+      try {
+        const returned = this.call("getBase64", (base64: unknown) => {
+          if (typeof base64 !== "string" || !base64) {
+            reject(new Error("GeoGebra 返回了空文档。"));
+            return;
+          }
+          resolve(base64);
+        });
+        if (typeof returned === "string" && returned) resolve(returned);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  restoreDocumentBase64(base64: string): Promise<void> {
+    if (!this.api || typeof this.api.setBase64 !== "function") {
+      throw new Error("当前 GeoGebra applet 不提供完整文档恢复 API。");
+    }
+    this.animations.dispose();
+    return new Promise((resolve, reject) => {
+      try {
+        const returned = this.call("setBase64", base64, (success: unknown) => {
+          if (success === false) {
+            reject(new Error("GeoGebra rejected the stored document file."));
+            return;
+          }
+          resolve();
+        });
+        if (returned === false) reject(new Error("GeoGebra rejected the stored document file."));
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
   private async executeCommands(input: Record<string, unknown>, transaction?: CanvasTransactionContext) {
     // Command batches and business-animation frames must never write the same
     // construction concurrently. A command transaction takes ownership of the

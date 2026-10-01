@@ -285,6 +285,7 @@ describe("desktop-only renderer and backend boundaries", () => {
     const run = createAgentRunLedger({
       runId: `cancel-route-${crypto.randomUUID()}`,
       conversationId: `cancel-conversation-${crypto.randomUUID()}`,
+      clientSessionId: "test-installation",
       model: { provider: "deepseek", model: "deepseek-chat", apiKey: "test", customBaseUrl: "" },
       prompt: "读取画板。",
       attachmentCount: 0,
@@ -298,5 +299,51 @@ describe("desktop-only renderer and backend boundaries", () => {
     const second = await request(`/v1/agent-runs/${encodeURIComponent(run.runId)}/cancel`, { method: "POST" });
     expect(second.status).toBe(200);
     expect(second.json.run).toEqual(first.json.run);
+  });
+
+  test("returns every stale run owned by the requesting installation without exposing active leases or other clients", async () => {
+    const { context, request } = await createHttpHarness();
+    const createOwnedRun = (runId: string, clientSessionId: string, leaseExpiresAt: string | null = null) => ({
+      ...createAgentRunLedger({
+        runId,
+        conversationId: `conversation-${runId}`,
+        clientSessionId,
+        model: { provider: "deepseek" as const, model: "deepseek-chat", apiKey: "test", customBaseUrl: "" },
+        prompt: runId,
+        attachmentCount: 0,
+      }),
+      continuationLeaseId: leaseExpiresAt ? `lease-${runId}` : null,
+      continuationLeaseExpiresAt: leaseExpiresAt,
+    });
+    for (let index = 0; index < 75; index += 1) {
+      await context.repositories.agentRuns.saveLedger(createOwnedRun(
+        `owned-stale-${index.toString().padStart(2, "0")}`,
+        "test-installation",
+        index % 2 ? "2000-01-01T00:00:00.000Z" : null,
+      ));
+    }
+    const active = createOwnedRun("owned-active", "test-installation", "2999-01-01T00:00:00.000Z");
+    const other = createOwnedRun("other-client", "other-installation");
+    await context.repositories.agentRuns.saveLedger(active);
+    await context.repositories.agentRuns.saveLedger(other);
+
+    const response = await request("/v1/agent-runs/recoverable");
+    expect(response.status).toBe(200);
+    expect(response.json.runs).toHaveLength(75);
+    expect(response.json.runs.map((run: { runId: string }) => run.runId)).not.toContain(active.runId);
+    expect(response.json.runs.map((run: { runId: string }) => run.runId)).not.toContain(other.runId);
+
+    const recoveryCancelWithActiveLease = await request(`/v1/agent-runs/${active.runId}/cancel?source=recovery`, {
+      method: "POST",
+    });
+    expect(recoveryCancelWithActiveLease.status).toBe(409);
+    expect((await context.repositories.agentRuns.getLedger(active.runId))?.status).toBe("running");
+
+    const foreignCancel = await request(`/v1/agent-runs/${other.runId}/cancel`, {
+      method: "POST",
+      headers: { "x-client-installation-id": "test-installation" },
+    });
+    expect(foreignCancel.status).toBe(404);
+    expect((await context.repositories.agentRuns.getLedger(other.runId))?.status).toBe("running");
   });
 });

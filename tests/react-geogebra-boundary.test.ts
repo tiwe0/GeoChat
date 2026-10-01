@@ -141,6 +141,32 @@ describe("controller tool boundary", () => {
     expect(restored).toBe("<geogebra><construction/></geogebra>");
   });
 
+  test("exports and restores complete GeoGebra files through the base64 APIs", async () => {
+    const documentBase64 = "UEsDBI01UE5H";
+    let restored = "";
+    const controller = new GeoGebraController();
+    controller.setApi(api({
+      getBase64: (callback: (value: string) => void) => callback(documentBase64),
+      setBase64: (value: string, callback: (success: boolean) => void) => {
+        restored = value;
+        callback(true);
+      },
+    }));
+    expect(await controller.captureDocumentBase64()).toBe(documentBase64);
+    await controller.restoreDocumentBase64(documentBase64);
+    expect(restored).toBe(documentBase64);
+  });
+
+  test("surfaces complete document export and restore failures", async () => {
+    const controller = new GeoGebraController();
+    controller.setApi(api({
+      getBase64: (callback: (value: string) => void) => callback(""),
+      setBase64: (_value: string, callback: (success: boolean) => void) => callback(false),
+    }));
+    await expect(controller.captureDocumentBase64()).rejects.toThrow(/空文档/);
+    await expect(controller.restoreDocumentBase64("UEsDBA==")).rejects.toThrow(/rejected/);
+  });
+
   test("clamps PNG export options rather than passing them through", async () => {
     const calls: unknown[][] = [];
     const controller = new GeoGebraController();

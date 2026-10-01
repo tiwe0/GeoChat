@@ -23,8 +23,8 @@ export function GeoGebraDocumentPanel({ controller, open, onClose }: Props) {
     backendOrigin(),
     backendAuthToken(),
     {
-      captureXml: () => controller.getCanvasXml(),
-      restoreXml: (xml) => controller.restoreCanvasXml(xml),
+      captureDocumentBase64: () => controller.captureDocumentBase64(),
+      restoreDocumentBase64: (base64) => controller.restoreDocumentBase64(base64),
     },
   ), [controller]);
 

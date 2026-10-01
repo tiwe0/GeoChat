@@ -5,16 +5,19 @@ import type {
   GeoGebraDocumentMetadata,
   UpsertGeoGebraDocumentInput,
 } from "@geochat-ai/app/geogebra-documents";
+import { DEFAULT_GEOGEBRA_DOCUMENT_LIST_LIMIT } from "@geochat-ai/app/geogebra-documents";
 import type { createDatabase } from "./client";
 import { geogebraDocuments } from "./schema";
 
 type SqliteDatabase = ReturnType<typeof createDatabase>;
 type DocumentRow = typeof geogebraDocuments.$inferSelect;
+type DocumentMetadataRow = Omit<DocumentRow, "content">;
 
 export type GeoGebraDocumentDataScope = { ownerUserId?: string | null };
+export type GeoGebraDocumentListOptions = { limit: number; offset: number };
 
 export type GeoGebraDocumentRepository = {
-  listDocuments(scope?: GeoGebraDocumentDataScope): Promise<GeoGebraDocumentMetadata[]>;
+  listDocuments(scope?: GeoGebraDocumentDataScope, options?: GeoGebraDocumentListOptions): Promise<GeoGebraDocumentMetadata[]>;
   getDocument(id: string, scope?: GeoGebraDocumentDataScope): Promise<GeoGebraDocument | undefined>;
   upsertDocument(input: UpsertGeoGebraDocumentInput, scope?: GeoGebraDocumentDataScope): Promise<GeoGebraDocument>;
   deleteDocument(id: string, scope?: GeoGebraDocumentDataScope): Promise<boolean>;
@@ -22,10 +25,22 @@ export type GeoGebraDocumentRepository = {
 
 export function createGeoGebraDocumentRepository(db: SqliteDatabase): GeoGebraDocumentRepository {
   return {
-    async listDocuments(scope) {
-      return db.select().from(geogebraDocuments)
+    async listDocuments(scope, options = { limit: DEFAULT_GEOGEBRA_DOCUMENT_LIST_LIMIT, offset: 0 }) {
+      return db.select({
+        ownerScopeKey: geogebraDocuments.ownerScopeKey,
+        ownerUserId: geogebraDocuments.ownerUserId,
+        id: geogebraDocuments.id,
+        title: geogebraDocuments.title,
+        mimeType: geogebraDocuments.mimeType,
+        contentKind: geogebraDocuments.contentKind,
+        sizeBytes: geogebraDocuments.sizeBytes,
+        createdAt: geogebraDocuments.createdAt,
+        updatedAt: geogebraDocuments.updatedAt,
+      }).from(geogebraDocuments)
         .where(eq(geogebraDocuments.ownerScopeKey, scopeKey(scope)))
         .orderBy(desc(geogebraDocuments.updatedAt))
+        .limit(options.limit)
+        .offset(options.offset)
         .all()
         .map(metadataFromRow);
     },
@@ -43,9 +58,7 @@ export function createGeoGebraDocumentRepository(db: SqliteDatabase): GeoGebraDo
         eq(geogebraDocuments.id, input.id),
       )).get();
       const now = new Date();
-      const content = input.contentKind === "text"
-        ? Buffer.from(input.content, "utf8")
-        : Buffer.from(input.content, "base64");
+      const content = Buffer.from(input.content, "base64");
       db.insert(geogebraDocuments).values({
         ownerScopeKey: key,
         ownerUserId: scope?.ownerUserId ?? null,
@@ -91,7 +104,8 @@ function scopeKey(scope?: GeoGebraDocumentDataScope) {
   return scope?.ownerUserId ? `user:${scope.ownerUserId}` : "offline";
 }
 
-function metadataFromRow(row: DocumentRow): GeoGebraDocumentMetadata {
+function metadataFromRow(row: DocumentMetadataRow): GeoGebraDocumentMetadata {
+  if (row.contentKind !== "binary") throw new Error("Stored GeoGebra document content kind is invalid.");
   return {
     id: row.id,
     title: row.title,
@@ -106,6 +120,6 @@ function metadataFromRow(row: DocumentRow): GeoGebraDocumentMetadata {
 function documentFromRow(row: DocumentRow): GeoGebraDocument {
   return {
     ...metadataFromRow(row),
-    content: row.contentKind === "text" ? row.content.toString("utf8") : row.content.toString("base64"),
+    content: row.content.toString("base64"),
   };
 }

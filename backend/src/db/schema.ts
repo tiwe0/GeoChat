@@ -28,7 +28,7 @@ export const geogebraDocuments = sqliteTable(
     id: text("id").notNull(),
     title: text("title").notNull(),
     mimeType: text("mime_type").notNull(),
-    contentKind: text("content_kind", { enum: ["text", "binary"] }).notNull(),
+    contentKind: text("content_kind", { enum: ["binary"] }).notNull(),
     content: blob("content", { mode: "buffer" }).notNull(),
     sizeBytes: integer("size_bytes").notNull(),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
@@ -37,7 +37,7 @@ export const geogebraDocuments = sqliteTable(
   (table) => [
     primaryKey({ columns: [table.ownerScopeKey, table.id] }),
     index("geogebra_documents_scope_updated_idx").on(table.ownerScopeKey, table.updatedAt),
-    check("geogebra_documents_content_kind_ck", sql`${table.contentKind} IN ('text', 'binary')`),
+    check("geogebra_documents_content_kind_ck", sql`${table.contentKind} = 'binary'`),
     check("geogebra_documents_size_ck", sql`${table.sizeBytes} >= 0 AND ${table.sizeBytes} <= 16777216`),
   ]
 );
@@ -50,7 +50,8 @@ export const conversationMessages = sqliteTable(
     role: text("role", { enum: ["user", "assistant"] }).notNull(),
     content: text("content").notNull(),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
-    payload: text("payload", { mode: "json" }).notNull()
+    // Keep raw text so one corrupt row cannot make Drizzle abort the whole restore query.
+    payload: text("payload").notNull()
   },
   (table) => [
     index("conversation_messages_conversation_idx").on(table.conversationId, table.createdAt)
@@ -100,6 +101,7 @@ export const agentRunLedgers = sqliteTable(
   {
     runId: text("run_id").primaryKey(),
     conversationId: text("conversation_id").notNull(),
+    clientSessionId: text("client_session_id"),
     status: text("status", { enum: ["running", "succeeded", "failed", "cancelled"] }).notNull(),
     revision: integer("revision").notNull().default(0),
     modelProvider: text("model_provider").notNull(),
@@ -113,7 +115,8 @@ export const agentRunLedgers = sqliteTable(
       (${table.status} = 'running' AND ${table.completedAt} IS NULL) OR
       (${table.status} IN ('succeeded', 'failed', 'cancelled') AND ${table.completedAt} IS NOT NULL)
     `),
-    check("agent_run_ledgers_timeline_ck", sql`${table.completedAt} IS NULL OR ${table.completedAt} >= ${table.startedAt}`)
+    check("agent_run_ledgers_timeline_ck", sql`${table.completedAt} IS NULL OR ${table.completedAt} >= ${table.startedAt}`),
+    index("agent_run_ledgers_recovery_idx").on(table.clientSessionId, table.status, table.startedAt)
   ]
 );
 
@@ -383,7 +386,7 @@ export const sqliteSchemaContract = {
   geogebra_documents: {
     columns: ["owner_scope_key", "owner_user_id", "id", "title", "mime_type", "content_kind", "content", "size_bytes", "created_at", "updated_at"],
     indexes: ["geogebra_documents_scope_updated_idx"],
-    checks: ["content_kind IN ('text', 'binary')", "size_bytes >= 0 AND size_bytes <= 16777216"],
+    checks: ["content_kind = 'binary'", "size_bytes >= 0 AND size_bytes <= 16777216"],
   },
   conversation_messages: {
     columns: ["id", "conversation_id", "role", "content", "created_at", "payload"],
@@ -396,8 +399,8 @@ export const sqliteSchemaContract = {
     checks: ["status IN ('active', 'archived')", "confidence >= 0 AND confidence <= 1000"],
   },
   agent_run_ledgers: {
-    columns: ["run_id", "conversation_id", "status", "revision", "model_provider", "model_id", "started_at", "completed_at", "payload"],
-    indexes: [],
+    columns: ["run_id", "conversation_id", "client_session_id", "status", "revision", "model_provider", "model_id", "started_at", "completed_at", "payload"],
+    indexes: ["agent_run_ledgers_recovery_idx"],
     checks: [
       "status IN ('running', 'succeeded', 'failed', 'cancelled')",
       "(status = 'running' AND completed_at IS NULL) OR (status IN ('succeeded', 'failed', 'cancelled') AND completed_at IS NOT NULL)",

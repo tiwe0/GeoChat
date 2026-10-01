@@ -231,11 +231,17 @@ describe("native AI SDK UI tool loop", () => {
   test("serializes backend-tool, step, and terminal ledger writes in one model turn", async () => {
     const { context, ledgers } = contextWithLedgerStore();
     const compareAndSwap = context.runs.compareAndSwapLedger.bind(context.runs);
+    let activeWrites = 0;
+    let maximumActiveWrites = 0;
     context.runs.compareAndSwapLedger = async (record, expectedRevision) => {
-      // SQLite writes complete asynchronously in the desktop runtime. This
-      // delay makes overlapping AI SDK callbacks deterministic in the test.
-      await Bun.sleep(5);
-      return compareAndSwap(record, expectedRevision);
+      activeWrites += 1;
+      maximumActiveWrites = Math.max(maximumActiveWrites, activeWrites);
+      try {
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        return await compareAndSwap(record, expectedRevision);
+      } finally {
+        activeWrites -= 1;
+      }
     };
     const user: UIMessage = {
       id: "user-mixed-tools",
@@ -274,6 +280,7 @@ describe("native AI SDK UI tool loop", () => {
     const stream = await response.text();
 
     expect(stream).not.toContain('"type":"error"');
+    expect(maximumActiveWrites).toBe(1);
     expect(stream).toContain('"toolName":"getCanvasContext"');
     expect(ledgers.get("run_native_tool_loop")?.status).toBe("running");
     expect(ledgers.get("run_native_tool_loop")?.tools).toContainEqual(expect.objectContaining({

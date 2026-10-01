@@ -6,6 +6,7 @@ import {
 import type { BackendHttpContext } from "../context";
 import { json, readJson, withCorrelationId } from "../response";
 import type { DataScopeResolver } from "../scope";
+import { resolveClientSessionId } from "../security";
 
 export async function handleNativeChatRoute(
   request: Request,
@@ -20,6 +21,10 @@ export async function handleNativeChatRoute(
   if (!isNativeChatRequest(payload)) {
     return json({ error: "invalid_request", message: "Invalid native AI SDK chat payload." }, { status: 400 });
   }
+  const clientSessionId = resolveClientSessionId(request);
+  if (!clientSessionId) {
+    return json({ error: "invalid_client_session", message: "A valid client installation id is required." }, { status: 400 });
+  }
   const correlationId = resolveCorrelationId(
     payload.runId,
     request.headers.get(CORRELATION_ID_HEADER)
@@ -33,6 +38,6 @@ export async function handleNativeChatRoute(
     runs: context.repositories.agentRuns,
     conversations: context.repositories.conversations,
     blackboard: context.repositories.blackboard,
-  }, { abortSignal: request.signal, dataScope: dataScope.scope, correlationId });
+  }, { abortSignal: request.signal, dataScope: dataScope.scope, correlationId, clientSessionId });
   return withCorrelationId(response, correlationId);
 }

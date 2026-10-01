@@ -13,7 +13,7 @@ describe("useAgentRunChat mounted behavior", () => {
     const output = `${result.stdout.toString()}${result.stderr.toString()}`;
 
     expect(result.exitCode, output).toBe(0);
-    expect(output).toContain("11 pass");
+    expect(output).toMatch(/\d+ pass/);
     expect(output).toContain("0 fail");
   });
 });

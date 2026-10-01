@@ -40,6 +40,7 @@ describe("request correlation", () => {
       headers: {
         authorization: `Bearer ${TEST_BACKEND_AUTH_TOKEN}`,
         "content-type": "application/json",
+        "x-client-installation-id": "correlation-installation",
         [CORRELATION_ID_HEADER]: "request_other",
       },
       body: JSON.stringify({
@@ -79,7 +80,7 @@ describe("request correlation", () => {
   test("renderer run requests reuse the run id", async () => {
     const headers = await nativeRunHeaders(
       { getAuthToken: () => "backend-token" },
-      { current: null },
+      { current: "correlation-installation" },
       "run_renderer_1",
     );
     expect(headers[CORRELATION_ID_HEADER]).toBe("run_renderer_1");
@@ -117,7 +118,7 @@ describe("request correlation", () => {
     let brokerRequest: Request | undefined;
     const rendererHeaders = await nativeRunHeaders(
       { getAuthToken: () => TEST_BACKEND_AUTH_TOKEN },
-      { current: null },
+      { current: "correlation-installation" },
       runId,
     );
     const { context, rawHandleRequest } = await createHttpHarness();

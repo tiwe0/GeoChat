@@ -1,12 +1,32 @@
 import { describe, expect, test } from "bun:test";
 import {
   CredentialResolutionError,
-  createCredentialResolverFromEnvironment
+  createCredentialResolverFromEnvironment,
+  isLoopbackHostname,
 } from "../backend/src/credentials/resolver";
+import loopbackPolicy from "./fixtures/credential-loopback-policy.json";
 
 const CREDENTIAL_REF = "9db97593-5568-40fa-b800-8d0febc67907";
 
 describe("backend credential resolver", () => {
+  test("uses the shared native/backend loopback policy", () => {
+    for (const { url, allowed } of loopbackPolicy) {
+      expect(isLoopbackHostname(new URL(url).hostname), url).toBe(allowed);
+    }
+  });
+
+  test.each(loopbackPolicy)("applies broker loopback policy to $url", async ({ url, allowed }) => {
+    let called = false;
+    const resolver = createCredentialResolverFromEnvironment(
+      { GEOCHAT_CREDENTIAL_BROKER_URL: url, GEOCHAT_CREDENTIAL_BROKER_TOKEN: "broker-token" },
+      (async () => {
+        called = true;
+        return Response.json({ error: "not_found" }, { status: 404 });
+      }) as typeof fetch,
+    );
+    await expect(resolver.resolve(CREDENTIAL_REF)).rejects.toBeInstanceOf(CredentialResolutionError);
+    expect(called).toBe(allowed);
+  });
   test("fails closed when the native broker is not configured", async () => {
     const resolver = createCredentialResolverFromEnvironment({});
     await expect(resolver.resolve(CREDENTIAL_REF)).rejects.toMatchObject({

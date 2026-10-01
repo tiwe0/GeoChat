@@ -1,6 +1,9 @@
 use crate::atomic_json_file::{AtomicJsonFile, AtomicJsonFileLock};
 use serde_json::{Map, Value};
-use std::path::Path;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 use uuid::Uuid;
 
 pub(crate) const RENDERER_STORAGE_FILE_NAME: &str = "renderer-state.json";
@@ -23,18 +26,24 @@ const MAX_CONFIG_QUARANTINE_VALUE_BYTES: usize = 256 * 1024;
 #[derive(Debug)]
 pub(crate) struct RendererStorage {
     file: AtomicJsonFile,
+    path: PathBuf,
     entries: Map<String, Value>,
 }
 
 impl RendererStorage {
     pub(crate) fn load(app_data_dir: &Path) -> Result<Self, String> {
         let path = app_data_dir.join(RENDERER_STORAGE_FILE_NAME);
-        let file = AtomicJsonFile::new(path, RENDERER_STORAGE_LOCK_NAME, "renderer storage");
+        let file =
+            AtomicJsonFile::new(path.clone(), RENDERER_STORAGE_LOCK_NAME, "renderer storage");
         let lock = file.lock()?;
-        let entries = file.read_or_recover(&lock)?.unwrap_or_default();
-        validate_candidate(&entries)?;
+        scrub_sensitive_storage_artifacts(app_data_dir, &path)?;
+        let entries = load_and_repair_entries(&file, &path, &lock)?;
         drop(lock);
-        Ok(Self { file, entries })
+        Ok(Self {
+            file,
+            path,
+            entries,
+        })
     }
 
     pub(crate) fn all(&self) -> Map<String, Value> {
@@ -43,8 +52,8 @@ impl RendererStorage {
 
     pub(crate) fn get(&mut self, keys: Option<Vec<String>>) -> Result<Map<String, Value>, String> {
         let lock = self.file.lock()?;
-        self.entries = self.file.read_or_recover(&lock)?.unwrap_or_default();
-        validate_candidate(&self.entries)?;
+        scrub_sensitive_storage_artifacts(storage_parent(&self.path)?, &self.path)?;
+        self.entries = load_and_repair_entries(&self.file, &self.path, &lock)?;
         let Some(keys) = keys else {
             return Ok(self.all());
         };
@@ -59,8 +68,8 @@ impl RendererStorage {
 
     pub(crate) fn set_batch(&mut self, values: Map<String, Value>) -> Result<(), String> {
         let lock = self.file.lock()?;
-        let mut candidate: Map<String, Value> =
-            self.file.read_or_recover(&lock)?.unwrap_or_default();
+        scrub_sensitive_storage_artifacts(storage_parent(&self.path)?, &self.path)?;
+        let mut candidate = load_and_repair_entries(&self.file, &self.path, &lock)?;
         candidate.extend(values);
         if let Err(error) = self.persist_candidate(&lock, &candidate) {
             return reconcile_after_persist_error(
@@ -77,8 +86,8 @@ impl RendererStorage {
 
     pub(crate) fn remove_batch(&mut self, keys: Vec<String>) -> Result<(), String> {
         let lock = self.file.lock()?;
-        let mut candidate: Map<String, Value> =
-            self.file.read_or_recover(&lock)?.unwrap_or_default();
+        scrub_sensitive_storage_artifacts(storage_parent(&self.path)?, &self.path)?;
+        let mut candidate = load_and_repair_entries(&self.file, &self.path, &lock)?;
         for key in keys {
             validate_preference_key(&key)?;
             candidate.remove(&key);
@@ -104,6 +113,146 @@ impl RendererStorage {
         validate_candidate(candidate)?;
         self.file.write(lock, candidate)
     }
+}
+
+fn storage_parent(path: &Path) -> Result<&Path, String> {
+    path.parent()
+        .ok_or_else(|| "Renderer storage path has no parent directory".to_string())
+}
+
+fn load_and_repair_entries(
+    file: &AtomicJsonFile,
+    path: &Path,
+    lock: &AtomicJsonFileLock,
+) -> Result<Map<String, Value>, String> {
+    let entries: Map<String, Value> = file.read_or_recover(lock)?.unwrap_or_default();
+    let repaired = repair_disk_candidate(entries);
+    validate_candidate(&repaired.entries)?;
+    if repaired.changed {
+        if let Err(error) = replace_repaired_file(file, path, lock, &repaired.entries) {
+            log::error!(
+                target: "geochat::storage",
+                "Could not persist repaired renderer storage; continuing with the safe in-memory state: {error}"
+            );
+        }
+    }
+    Ok(repaired.entries)
+}
+
+struct RepairedCandidate {
+    entries: Map<String, Value>,
+    changed: bool,
+}
+
+fn repair_disk_candidate(candidate: Map<String, Value>) -> RepairedCandidate {
+    let mut entries = Map::new();
+    let mut changed = false;
+    for (key, value) in candidate {
+        if validate_preference_value(&key, &value).is_ok() {
+            entries.insert(key, value);
+            continue;
+        }
+        changed = true;
+        if key == DESKTOP_CONFIG_KEY && !value_may_contain_sensitive_data(&value) {
+            if let Some(raw) = value.as_str().filter(|raw| {
+                !raw.is_empty()
+                    && raw.len() <= MAX_CONFIG_QUARANTINE_VALUE_BYTES
+                    && !raw_may_contain_sensitive_key(raw)
+            }) {
+                entries.insert(new_config_quarantine_key(), Value::String(raw.to_string()));
+            }
+        }
+        log::warn!(
+            target: "geochat::storage",
+            "Removed invalid renderer preference {key} while loading native storage"
+        );
+    }
+    RepairedCandidate { entries, changed }
+}
+
+fn replace_repaired_file(
+    file: &AtomicJsonFile,
+    path: &Path,
+    lock: &AtomicJsonFileLock,
+    entries: &Map<String, Value>,
+) -> Result<(), String> {
+    remove_if_exists(path)?;
+    remove_if_exists(&path.with_extension("previous"))?;
+    file.write(lock, entries)
+}
+
+fn remove_if_exists(path: &Path) -> Result<(), String> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!(
+            "Failed to remove unsafe renderer storage artifact {}: {error}",
+            path.display()
+        )),
+    }
+}
+
+fn scrub_sensitive_storage_artifacts(app_data_dir: &Path, path: &Path) -> Result<(), String> {
+    let mut candidates = vec![path.to_path_buf(), path.with_extension("previous")];
+    match fs::read_dir(app_data_dir) {
+        Ok(entries) => {
+            for entry in entries {
+                let entry = entry.map_err(|error| {
+                    format!("Failed to inspect renderer storage artifacts: {error}")
+                })?;
+                let name = entry.file_name();
+                if name
+                    .to_string_lossy()
+                    .starts_with(&format!("{RENDERER_STORAGE_FILE_NAME}.corrupt-"))
+                {
+                    candidates.push(entry.path());
+                }
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(format!(
+                "Failed to inspect renderer storage directory {}: {error}",
+                app_data_dir.display()
+            ));
+        }
+    }
+    for candidate in candidates {
+        let bytes = match fs::read(&candidate) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => {
+                return Err(format!(
+                    "Failed to inspect renderer storage artifact {}: {error}",
+                    candidate.display()
+                ));
+            }
+        };
+        if raw_may_contain_sensitive_key(&String::from_utf8_lossy(&bytes)) {
+            remove_if_exists(&candidate)?;
+            log::warn!(
+                target: "geochat::storage",
+                "Deleted secret-bearing renderer storage artifact {}",
+                candidate.display()
+            );
+        }
+    }
+    Ok(())
+}
+
+fn new_config_quarantine_key() -> String {
+    format!(
+        "{CONFIG_QUARANTINE_KEY_PREFIX}{}-{}",
+        current_unix_millis(),
+        Uuid::new_v4()
+    )
+}
+
+fn current_unix_millis() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
 }
 
 fn reconcile_after_persist_error(
@@ -190,11 +339,20 @@ fn validate_preference_value(key: &str, value: &Value) -> Result<(), String> {
     if valid_config_quarantine_key(key) {
         return value
             .as_str()
-            .filter(|raw| !raw.is_empty() && raw.len() <= MAX_CONFIG_QUARANTINE_VALUE_BYTES)
+            .filter(|raw| {
+                !raw.is_empty()
+                    && raw.len() <= MAX_CONFIG_QUARANTINE_VALUE_BYTES
+                    && !raw_may_contain_sensitive_key(raw)
+            })
             .map(|_| ())
             .ok_or_else(|| format!("Renderer preference {key} has an invalid value"));
     }
     let decoded = decode_preference_value(key, value)?;
+    if value_may_contain_sensitive_data(&decoded) {
+        return Err(format!(
+            "Renderer preference {key} contains a forbidden sensitive field"
+        ));
+    }
     let valid = match key {
         LANGUAGE_KEY => matches!(decoded.as_str(), Some("zh-CN" | "en")),
         SELECTED_MODEL_KEY => decoded
@@ -215,6 +373,87 @@ fn validate_preference_value(key: &str, value: &Value) -> Result<(), String> {
     valid
         .then_some(())
         .ok_or_else(|| format!("Renderer preference {key} has an invalid value"))
+}
+
+fn value_may_contain_sensitive_data(value: &Value) -> bool {
+    match value {
+        Value::Object(object) => object
+            .iter()
+            .any(|(key, value)| is_sensitive_key(key) || value_may_contain_sensitive_data(value)),
+        Value::Array(values) => values.iter().any(value_may_contain_sensitive_data),
+        Value::String(raw) => serde_json::from_str::<Value>(raw)
+            .ok()
+            .is_some_and(|decoded| value_may_contain_sensitive_data(&decoded)),
+        _ => false,
+    }
+}
+
+fn is_sensitive_key(key: &str) -> bool {
+    let normalized: String = key
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect();
+    [
+        "apikey",
+        "secret",
+        "token",
+        "authorization",
+        "password",
+        "privatekey",
+        "accesskey",
+        "cookie",
+    ]
+    .into_iter()
+    .any(|marker| normalized.contains(marker))
+}
+
+fn raw_may_contain_sensitive_key(raw: &str) -> bool {
+    if let Ok(value) = serde_json::from_str::<Value>(raw) {
+        return value_may_contain_sensitive_data(&value);
+    }
+    let bytes = raw.as_bytes();
+    let mut cursor = 0usize;
+    while cursor < bytes.len() {
+        if bytes[cursor] != b'"' {
+            cursor += 1;
+            continue;
+        }
+        let start = cursor;
+        cursor += 1;
+        let mut escaped = false;
+        while cursor < bytes.len() {
+            let byte = bytes[cursor];
+            cursor += 1;
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                break;
+            }
+        }
+        if cursor > bytes.len() || bytes.get(cursor.saturating_sub(1)) != Some(&b'"') {
+            break;
+        }
+        let Ok(decoded) = serde_json::from_str::<String>(&raw[start..cursor]) else {
+            continue;
+        };
+        let mut after = cursor;
+        while bytes.get(after).is_some_and(u8::is_ascii_whitespace) {
+            after += 1;
+        }
+        if bytes.get(after) == Some(&b':') && is_sensitive_key(&decoded) {
+            return true;
+        }
+        let nested = decoded.trim_start();
+        if (nested.starts_with('{') || nested.starts_with('['))
+            && raw_may_contain_sensitive_key(nested)
+        {
+            return true;
+        }
+    }
+    false
 }
 
 fn validate_panel_window(value: &Value) -> bool {
@@ -369,6 +608,72 @@ mod tests {
         );
         assert!(path.exists());
         assert!(path.with_extension("previous").exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn load_quarantines_invalid_inner_config_and_keeps_valid_preferences() {
+        let root = temporary_directory("renderer-storage-inner-config-recovery");
+        fs::create_dir_all(&root).expect("create test directory");
+        let path = root.join(RENDERER_STORAGE_FILE_NAME);
+        let damaged_config = r#"{"schemaVersion":1,"locale":"zh-CN""#;
+        fs::write(
+            &path,
+            serde_json::to_vec(&Map::from_iter([
+                (LANGUAGE_KEY.to_string(), json!("\"en\"")),
+                (DESKTOP_CONFIG_KEY.to_string(), json!(damaged_config)),
+            ]))
+            .expect("serialize damaged renderer state"),
+        )
+        .expect("write damaged renderer state");
+
+        let storage = RendererStorage::load(&root).expect("repair renderer storage");
+        assert_eq!(storage.all().get(LANGUAGE_KEY), Some(&json!("\"en\"")));
+        assert!(!storage.all().contains_key(DESKTOP_CONFIG_KEY));
+        let quarantined = storage
+            .all()
+            .into_iter()
+            .find(|(key, _)| valid_config_quarantine_key(key))
+            .expect("invalid config is quarantined by the native owner");
+        assert_eq!(quarantined.1, json!(damaged_config));
+
+        let reloaded = RendererStorage::load(&root).expect("reload repaired renderer storage");
+        assert_eq!(reloaded.all(), storage.all());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn load_deletes_secret_bearing_current_previous_and_corrupt_artifacts() {
+        let root = temporary_directory("renderer-storage-secret-scrub");
+        fs::create_dir_all(&root).expect("create test directory");
+        let path = root.join(RENDERER_STORAGE_FILE_NAME);
+        let secret = "must-not-survive-on-disk";
+        let secret_document = format!(
+            r#"{{"{DESKTOP_CONFIG_KEY}":"{{\"nested\":{{\"accessToken\":\"{secret}\"}}}}"}}"#
+        );
+        fs::write(&path, &secret_document).expect("write secret current state");
+        fs::write(path.with_extension("previous"), &secret_document)
+            .expect("write secret previous state");
+        fs::write(
+            root.join(format!("{RENDERER_STORAGE_FILE_NAME}.corrupt-test")),
+            &secret_document,
+        )
+        .expect("write secret corrupt state");
+
+        let storage = RendererStorage::load(&root).expect("scrub secret-bearing renderer state");
+        assert!(storage.all().is_empty());
+        for entry in fs::read_dir(&root).expect("list renderer storage artifacts") {
+            let entry = entry.expect("read renderer storage artifact");
+            if !entry.file_type().expect("read artifact type").is_file() {
+                continue;
+            }
+            let bytes = fs::read(entry.path()).expect("read renderer storage artifact");
+            assert!(
+                !String::from_utf8_lossy(&bytes).contains(secret),
+                "secret survived in {}",
+                entry.path().display()
+            );
+        }
         let _ = fs::remove_dir_all(root);
     }
 
@@ -534,7 +839,77 @@ mod tests {
         assert!(storage
             .set_batch(Map::from_iter([(oversized_key, json!(oversized))]))
             .is_err());
+        let sensitive_key = format!(
+            "{CONFIG_QUARANTINE_KEY_PREFIX}1700000000002-{}",
+            Uuid::new_v4()
+        );
+        assert!(storage
+            .set_batch(Map::from_iter([(
+                sensitive_key,
+                json!(r#"{"authorization":"Bearer must-not-persist"}"#)
+            )]))
+            .is_err());
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rejects_nested_sensitive_fields_before_current_previous_or_corrupt_are_written() {
+        let root = temporary_directory("renderer-storage-secret-write-policy");
+        let mut storage = RendererStorage::load(&root).expect("load empty storage");
+        storage
+            .set_batch(Map::from_iter([(
+                LANGUAGE_KEY.to_string(),
+                json!("\"en\""),
+            )]))
+            .expect("persist stable value");
+        let secret = "must-not-reach-any-artifact";
+        let config = format!(
+            r#"{{"schemaVersion":1,"model":{{}},"visionModel":{{}},"providerCredentials":{{"nested":{{"password":"{secret}"}}}},"customProvider":{{}},"skills":{{}},"interaction":{{}},"debug":{{}},"locale":"en-US"}}"#
+        );
+
+        let error = storage
+            .set_batch(Map::from_iter([(
+                DESKTOP_CONFIG_KEY.to_string(),
+                json!(config),
+            )]))
+            .expect_err("secret-bearing config must be rejected");
+        assert!(error.contains("forbidden sensitive field"));
+
+        for entry in fs::read_dir(&root).expect("list renderer storage artifacts") {
+            let entry = entry.expect("read renderer storage artifact");
+            if !entry.file_type().expect("read artifact type").is_file() {
+                continue;
+            }
+            let bytes = fs::read(entry.path()).expect("read renderer storage artifact");
+            assert!(
+                !String::from_utf8_lossy(&bytes).contains(secret),
+                "rejected secret reached {}",
+                entry.path().display()
+            );
+        }
+        assert_eq!(
+            RendererStorage::load(&root)
+                .expect("reload stable storage")
+                .all(),
+            Map::from_iter([(LANGUAGE_KEY.to_string(), json!("\"en\""))])
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn sensitive_key_detection_is_recursive_without_matching_plain_values() {
+        assert!(raw_may_contain_sensitive_key(
+            r#"{"nested":{"accessToken":"sensitive"}}"#
+        ));
+        assert!(raw_may_contain_sensitive_key(
+            r#"{"nested":{"\u0061piKey":"sensitive"}}"#
+        ));
+        assert!(raw_may_contain_sensitive_key(
+            r#"{"config":"{\"authorization\":\"sensitive\"}""#
+        ));
+        assert!(!raw_may_contain_sensitive_key(
+            r#"{"endpoint":"https://token.example/v1","description":"secret recipes"}"#
+        ));
     }
 
     #[test]

@@ -15,6 +15,8 @@ export interface GeoGebraRuntimePort {
     work: (execute: GeoGebraTransactionExecute) => T | PromiseLike<T>,
   ): Promise<T>;
   getCanvasXml(): string | undefined;
+  captureDocumentBase64(): Promise<string>;
+  restoreDocumentBase64(base64: string): Promise<void>;
 }
 
 const GeoGebraRuntimeContext = createContext<GeoGebraRuntimePort | null>(null);

@@ -5,7 +5,7 @@ use super::{
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeSet,
-    fs::{self, File, OpenOptions},
+    fs::{self, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
 };
@@ -14,6 +14,8 @@ use uuid::Uuid;
 const JOURNAL_SCHEMA_VERSION: u32 = 1;
 const JOURNAL_FILE_NAME: &str = "credential-lifecycle.json";
 const MAX_JOURNAL_BYTES: u64 = 512 * 1024;
+#[cfg(windows)]
+const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields, tag = "kind")]
@@ -231,8 +233,14 @@ impl CredentialLifecycleJournal {
         if !metadata.file_type().is_file() || metadata.len() > MAX_JOURNAL_BYTES {
             return Err(CredentialError::CorruptEntry);
         }
-        let file = OpenOptions::new()
-            .read(true)
+        let mut options = OpenOptions::new();
+        options.read(true);
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            options.custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+        }
+        let file = options
             .open(&self.path)
             .map_err(|_| CredentialError::StoreFailure)?;
         let opened = file.metadata().map_err(|_| CredentialError::StoreFailure)?;
@@ -281,26 +289,18 @@ impl CredentialLifecycleJournal {
         if bytes.len() as u64 > MAX_JOURNAL_BYTES {
             return Err(CredentialError::InvalidInput);
         }
-        // The journal is a fail-closed intent marker. Creating the final path
-        // exclusively is safer than renaming over a path that could appear
-        // after the preflight check. A crash during the write leaves a corrupt
-        // marker, which strict loading intentionally blocks for inspection.
-        write_synced_new(&self.path, &bytes)?;
-        sync_directory(parent)
+        create_journal_durable(&self.path, &bytes, parent)
     }
 
     pub(crate) fn clear(&self) -> Result<(), CredentialError> {
-        match fs::remove_file(&self.path) {
-            Ok(()) => sync_directory(self.path.parent().ok_or(CredentialError::StoreFailure)?),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                if self.has_recovery_artifact()? {
-                    Err(CredentialError::CorruptEntry)
-                } else {
-                    Ok(())
-                }
-            }
-            Err(_) => Err(CredentialError::StoreFailure),
+        if !self.path.exists() {
+            return if self.has_recovery_artifact()? {
+                Err(CredentialError::CorruptEntry)
+            } else {
+                Ok(())
+            };
         }
+        clear_journal_durable(&self.path)
     }
 
     fn has_recovery_artifact(&self) -> Result<bool, CredentialError> {
@@ -321,6 +321,70 @@ impl CredentialLifecycleJournal {
     }
 }
 
+#[cfg(not(windows))]
+fn create_journal_durable(path: &Path, bytes: &[u8], parent: &Path) -> Result<(), CredentialError> {
+    // The journal is a fail-closed intent marker. Creating the final path
+    // exclusively is safer than renaming over a path that could appear after
+    // the preflight check. A crash during the write leaves a corrupt marker,
+    // which strict loading intentionally blocks for inspection.
+    write_synced_new(path, bytes)?;
+    sync_directory(parent)
+}
+
+#[cfg(windows)]
+fn create_journal_durable(
+    path: &Path,
+    bytes: &[u8],
+    _parent: &Path,
+) -> Result<(), CredentialError> {
+    let temporary = path.with_file_name(format!(
+        ".{JOURNAL_FILE_NAME}-create-{}.tmp",
+        Uuid::new_v4()
+    ));
+    write_synced_new(&temporary, bytes)?;
+    let result = crate::atomic_json_file::move_file_write_through(
+        &temporary,
+        path,
+        false,
+        "credential lifecycle journal",
+    )
+    .map_err(|_| CredentialError::StoreFailure);
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
+}
+
+#[cfg(not(windows))]
+fn clear_journal_durable(path: &Path) -> Result<(), CredentialError> {
+    match fs::remove_file(path) {
+        Ok(()) => sync_directory(path.parent().ok_or(CredentialError::StoreFailure)?),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(_) => Err(CredentialError::StoreFailure),
+    }
+}
+
+#[cfg(windows)]
+fn clear_journal_durable(path: &Path) -> Result<(), CredentialError> {
+    let cleared = path.with_extension("cleared");
+    match crate::atomic_json_file::move_file_write_through(
+        path,
+        &cleared,
+        true,
+        "cleared credential lifecycle journal",
+    ) {
+        Ok(()) => {
+            // The write-through rename is the durable commit point. Removing
+            // the tombstone is only hygiene; a crash may leave it behind, and
+            // strict loading intentionally ignores that completed marker.
+            let _ = fs::remove_file(cleared);
+            Ok(())
+        }
+        Err(_) if !path.exists() => Ok(()),
+        Err(_) => Err(CredentialError::StoreFailure),
+    }
+}
+
 fn write_synced_new(path: &Path, bytes: &[u8]) -> Result<(), CredentialError> {
     let mut options = OpenOptions::new();
     options.create_new(true).write(true);
@@ -337,8 +401,11 @@ fn write_synced_new(path: &Path, bytes: &[u8]) -> Result<(), CredentialError> {
         .map_err(|_| CredentialError::StoreFailure)
 }
 
+#[cfg(not(windows))]
 fn sync_directory(path: &Path) -> Result<(), CredentialError> {
-    File::open(path)
+    OpenOptions::new()
+        .read(true)
+        .open(path)
         .and_then(|directory| directory.sync_all())
         .map_err(|_| CredentialError::StoreFailure)
 }
@@ -389,6 +456,20 @@ mod tests {
             ));
             fs::remove_dir_all(root).unwrap();
         }
+    }
+
+    #[test]
+    fn completed_clear_tombstone_is_not_treated_as_recovery_work() {
+        let root = root("cleared");
+        fs::write(root.join("credential-lifecycle.cleared"), b"completed").unwrap();
+        let journal = CredentialLifecycleJournal::new(&root);
+
+        assert!(journal.load_strict().unwrap().is_none());
+        journal
+            .clear()
+            .expect("already-cleared journal is complete");
+
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

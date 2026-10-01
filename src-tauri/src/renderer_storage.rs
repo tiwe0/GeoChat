@@ -206,12 +206,12 @@ impl RendererStorage {
     }
 
     #[cfg(test)]
-    fn fail_strict_write_on_call(&self, call: usize) {
+    pub(crate) fn fail_strict_write_on_call(&self, call: usize) {
         self.file.fail_strict_write_on_call(call);
     }
 
     #[cfg(test)]
-    fn clear_strict_write_failure(&self) {
+    pub(crate) fn clear_strict_write_failure(&self) {
         self.file.clear_strict_write_failure();
     }
 
@@ -293,9 +293,8 @@ pub(crate) fn target_credential_refs_from_raw_config(
         let credential = config
             .get("providerCredentials")
             .and_then(Value::as_object)
-            .and_then(|credentials| credentials.get(target_provider))
-            .ok_or_else(|| "The target provider is not configured".to_string())?;
-        collect(credential.get("credentialRef"));
+            .and_then(|credentials| credentials.get(target_provider));
+        collect(credential.and_then(|credential| credential.get("credentialRef")));
     }
     for model_key in ["model", "visionModel"] {
         let model = config.get(model_key).and_then(Value::as_object);

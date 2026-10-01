@@ -5,6 +5,7 @@ import {
   normalizeCustomProviderConfig,
   normalizeDesktopConfig,
   normalizeDesktopConfigJson,
+  updateCustomProviderCredential,
   updateProviderCredentials,
 } from "../src/shared/desktop/desktop-config";
 import {
@@ -127,5 +128,30 @@ describe("desktop provider credential references", () => {
       protocol: "anthropic",
       models: [{ name: "Primary", callName: "local-main", supportsImages: true }],
     });
+  });
+
+  test("updates active custom model references together with the custom credential", () => {
+    const initial = normalizeDesktopConfig({
+      model: { provider: "custom", model: "local", credentialRef: "old-ref", protocol: "anthropic" },
+      visionModel: { provider: "custom", model: "local-vision", credentialRef: "old-ref", protocol: "anthropic" },
+      customProvider: {
+        name: "Local",
+        baseUrl: "http://127.0.0.1:11434/v1",
+        credentialRef: "old-ref",
+        protocol: "anthropic",
+        models: [],
+      },
+    }, "zh-CN");
+
+    const updated = updateCustomProviderCredential(initial, {
+      ...initial.customProvider,
+      credentialRef: "new-ref",
+      protocol: "openai-compatible",
+    });
+
+    expect(updated.customProvider.credentialRef).toBe("new-ref");
+    expect(updated.model).toMatchObject({ credentialRef: "new-ref", protocol: "openai-compatible" });
+    expect(updated.visionModel).toMatchObject({ credentialRef: "new-ref", protocol: "openai-compatible" });
+    expect(updated.providerCredentials).not.toHaveProperty("custom");
   });
 });

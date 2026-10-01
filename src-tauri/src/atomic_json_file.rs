@@ -250,7 +250,7 @@ fn quarantine(path: &Path, description: &str) -> Result<PathBuf, String> {
         .ok_or_else(|| format!("{description} path has no parent directory"))?;
     let file_name = path.file_name().unwrap_or_default().to_string_lossy();
     let quarantined = parent.join(format!("{file_name}.corrupt-{}", Uuid::new_v4()));
-    fs::rename(path, &quarantined).map_err(|error| {
+    rename_durable(path, &quarantined, false, description).map_err(|error| {
         format!(
             "Failed to quarantine invalid {description} {}: {error}",
             path.display()
@@ -368,31 +368,25 @@ fn replace_with_backup(
     description: &str,
 ) -> Result<(), String> {
     let backup = backup_path(destination);
-    if backup.exists() {
-        fs::remove_file(&backup).map_err(|error| {
-            format!(
-                "Failed to remove stale {description} backup {}: {error}",
-                backup.display()
-            )
-        })?;
-    }
     let had_destination = destination.exists();
     if had_destination {
-        fs::rename(destination, &backup).map_err(|error| {
+        move_file_write_through(destination, &backup, true, description).map_err(|error| {
             format!(
                 "Failed to stage previous {description} {}: {error}",
                 destination.display()
             )
         })?;
     }
-    if let Err(error) = fs::rename(temporary, destination) {
+    if let Err(error) = move_file_write_through(temporary, destination, false, description) {
         if had_destination {
-            fs::rename(&backup, destination).map_err(|restore_error| {
-                format!(
-                    "Failed to replace {description} {}: {error}; failed to restore its previous version: {restore_error}",
-                    destination.display()
-                )
-            })?;
+            move_file_write_through(&backup, destination, false, description).map_err(
+                |restore_error| {
+                    format!(
+                        "Failed to replace {description} {}: {error}; failed to restore its previous version: {restore_error}",
+                        destination.display()
+                    )
+                },
+            )?;
         }
         return Err(format!(
             "Failed to replace {description} {}: {error}",
@@ -422,20 +416,101 @@ fn replace_without_backup(
     destination: &Path,
     description: &str,
 ) -> Result<(), String> {
-    if destination.exists() {
-        fs::remove_file(destination).map_err(|error| {
-            format!(
-                "Failed to remove invalid {description} {} during recovery: {error}",
-                destination.display()
-            )
-        })?;
-    }
-    fs::rename(temporary, destination).map_err(|error| {
+    move_file_write_through(temporary, destination, true, description).map_err(|error| {
         format!(
             "Failed to restore {description} {}: {error}",
             destination.display()
         )
     })
+}
+
+#[cfg(not(windows))]
+fn rename_durable(
+    source: &Path,
+    destination: &Path,
+    _replace: bool,
+    _description: &str,
+) -> Result<(), String> {
+    fs::rename(source, destination).map_err(|error| error.to_string())
+}
+
+#[cfg(windows)]
+fn rename_durable(
+    source: &Path,
+    destination: &Path,
+    replace: bool,
+    description: &str,
+) -> Result<(), String> {
+    move_file_write_through(source, destination, replace, description)
+}
+
+#[cfg(windows)]
+const MOVEFILE_REPLACE_EXISTING: u32 = 0x0000_0001;
+#[cfg(windows)]
+const MOVEFILE_WRITE_THROUGH: u32 = 0x0000_0008;
+
+#[cfg(windows)]
+pub(crate) fn windows_move_flags(replace: bool) -> u32 {
+    MOVEFILE_WRITE_THROUGH
+        | if replace {
+            MOVEFILE_REPLACE_EXISTING
+        } else {
+            0
+        }
+}
+
+#[cfg(windows)]
+pub(crate) fn windows_path_wide(path: &Path) -> Result<Vec<u16>, String> {
+    use std::os::windows::ffi::OsStrExt;
+
+    let mut encoded: Vec<u16> = path.as_os_str().encode_wide().collect();
+    if encoded.contains(&0) {
+        return Err(format!(
+            "Windows path contains an interior NUL: {}",
+            path.display()
+        ));
+    }
+    encoded.push(0);
+    Ok(encoded)
+}
+
+#[cfg(windows)]
+pub(crate) fn move_file_write_through(
+    source: &Path,
+    destination: &Path,
+    replace: bool,
+    description: &str,
+) -> Result<(), String> {
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn MoveFileExW(
+            existing_file_name: *const u16,
+            new_file_name: *const u16,
+            flags: u32,
+        ) -> i32;
+    }
+
+    let source_wide = windows_path_wide(source)?;
+    let destination_wide = windows_path_wide(destination)?;
+    // SAFETY: both path buffers are NUL-terminated and remain alive for the
+    // duration of the call. MoveFileExW does not retain either pointer.
+    let result = unsafe {
+        MoveFileExW(
+            source_wide.as_ptr(),
+            destination_wide.as_ptr(),
+            windows_move_flags(replace),
+        )
+    };
+    if result == 0 {
+        Err(format!(
+            "Failed to durably move {description} {} to {}: {}",
+            source.display(),
+            destination.display(),
+            std::io::Error::last_os_error()
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 #[cfg(unix)]
@@ -450,7 +525,15 @@ fn sync_parent_directory(parent: &Path, description: &str) -> Result<(), String>
         })
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn sync_parent_directory(_parent: &Path, _description: &str) -> Result<(), String> {
+    // Windows directory handles are not valid FlushFileBuffers targets. Every
+    // Windows namespace transition in this module uses MoveFileExW with
+    // MOVEFILE_WRITE_THROUGH instead, so there is no separate directory flush.
+    Ok(())
+}
+
+#[cfg(not(any(unix, windows)))]
 fn sync_parent_directory(_parent: &Path, _description: &str) -> Result<(), String> {
     Ok(())
 }
@@ -565,5 +648,40 @@ mod tests {
             .expect("second lock should acquire");
         contender.join().expect("join contender");
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_move_flags_always_request_write_through() {
+        assert_eq!(windows_move_flags(false), MOVEFILE_WRITE_THROUGH);
+        assert_eq!(
+            windows_move_flags(true),
+            MOVEFILE_WRITE_THROUGH | MOVEFILE_REPLACE_EXISTING
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_path_encoding_is_terminated_and_rejects_interior_nul() {
+        use std::{ffi::OsString, os::windows::ffi::OsStringExt};
+
+        let encoded = windows_path_wide(Path::new(r"C:\GeoChat\state.json"))
+            .expect("encode ordinary Windows path");
+        assert_eq!(encoded.last(), Some(&0));
+        assert_eq!(
+            encoded[..encoded.len() - 1]
+                .iter()
+                .position(|unit| *unit == 0),
+            None
+        );
+
+        let invalid = PathBuf::from(OsString::from_wide(&[
+            b'C' as u16,
+            b':' as u16,
+            b'\\' as u16,
+            0,
+            b'x' as u16,
+        ]));
+        assert!(windows_path_wide(&invalid).is_err());
     }
 }

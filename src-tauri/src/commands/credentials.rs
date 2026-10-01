@@ -3,6 +3,7 @@ use crate::{
         CredentialError, CredentialLifecycleJournal, CredentialLifecycleOperation,
         CredentialMetadata, CredentialVault, SaveCredentialRequest,
     },
+    renderer_storage::RendererStorage,
     DesktopState,
 };
 use serde::{Deserialize, Serialize};
@@ -29,6 +30,25 @@ impl CredentialCommandState {
             operation_lock: Arc::new(Mutex::new(())),
         }
     }
+
+    /// Resolves any durable lifecycle intent before the credential broker or
+    /// backend can observe credentials. Pending cleanup is a startup blocker.
+    pub(crate) fn reconcile_startup(
+        &self,
+        renderer_storage: &mut RendererStorage,
+    ) -> Result<(), CredentialError> {
+        let _guard = self
+            .operation_lock
+            .lock()
+            .map_err(|_| CredentialError::StoreFailure)?;
+        let Some(operation) = self.journal.load_strict()? else {
+            return Ok(());
+        };
+        match reconcile_with_storage(self, renderer_storage, operation)? {
+            CredentialLifecycleStatus::Ready { .. } => Ok(()),
+            CredentialLifecycleStatus::Pending { .. } => Err(CredentialError::StoreFailure),
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -46,7 +66,11 @@ pub(crate) struct BeginCredentialResult {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase", tag = "status")]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "status"
+)]
 pub(crate) enum CredentialLifecycleStatus {
     Ready {
         config_json: String,
@@ -193,10 +217,19 @@ fn commit_config(
     expected: &str,
     next: &str,
 ) -> Result<BTreeSet<String>, CredentialError> {
-    desktop_state
+    let mut renderer_storage = desktop_state
         .renderer_storage
         .lock()
-        .map_err(|_| CredentialError::StoreFailure)?
+        .map_err(|_| CredentialError::StoreFailure)?;
+    commit_config_storage(&mut renderer_storage, expected, next)
+}
+
+fn commit_config_storage(
+    renderer_storage: &mut RendererStorage,
+    expected: &str,
+    next: &str,
+) -> Result<BTreeSet<String>, CredentialError> {
+    renderer_storage
         .commit_credential_config(expected, next)
         .map_err(|_| CredentialError::StoreFailure)
 }
@@ -243,10 +276,10 @@ fn validate_operation_transition(
                         && !binding_targets_provider(&previous_config, binding, target_provider)
                         && !binding_targets_provider(&next_config, binding, target_provider)
                 })
-            }) || next_bindings
-                .keys()
-                .any(|binding| !previous_bindings.contains_key(binding))
-            {
+            }) || next_bindings.keys().any(|binding| {
+                !previous_bindings.contains_key(binding)
+                    && !binding_targets_provider(&next_config, binding, target_provider)
+            }) {
                 return Err(CredentialError::InvalidInput);
             }
             let recorded_target_refs: BTreeSet<_> = previous_target_refs.iter().cloned().collect();
@@ -278,13 +311,30 @@ fn validate_operation_transition(
             }
             let mut expected_refs = previous_refs;
             expected_refs.remove(retiring_credential_ref);
-            let mut expected_bindings = previous_bindings;
-            for reference in expected_bindings.values_mut() {
-                if reference == retiring_credential_ref {
-                    reference.clear();
+            if previous_bindings.keys().collect::<BTreeSet<_>>()
+                != next_bindings.keys().collect::<BTreeSet<_>>()
+            {
+                return Err(CredentialError::InvalidInput);
+            }
+            let next_config = parse_config(next_config_json)?;
+            for (binding, previous) in &previous_bindings {
+                let next = &next_bindings[binding];
+                if previous != retiring_credential_ref {
+                    if next != previous {
+                        return Err(CredentialError::InvalidInput);
+                    }
+                    continue;
+                }
+                if next == retiring_credential_ref
+                    || (!next.is_empty() && !expected_refs.contains(next))
+                    || (!next.is_empty()
+                        && matches!(binding.as_str(), "model" | "visionModel")
+                        && !model_binding_matches_provider(&next_config, binding, next))
+                {
+                    return Err(CredentialError::InvalidInput);
                 }
             }
-            if next_refs != expected_refs || next_bindings != expected_bindings {
+            if next_refs != expected_refs {
                 return Err(CredentialError::InvalidInput);
             }
         }
@@ -341,11 +391,19 @@ fn credential_ref_bindings(raw: &str) -> Result<BTreeMap<String, String>, Creden
         .get("providerCredentials")
         .and_then(Value::as_object)
         .ok_or(CredentialError::InvalidInput)?;
-    for (provider, value) in providers {
-        let reference = value
-            .get("credentialRef")
+    for provider in [
+        "deepseek",
+        "openai",
+        "anthropic",
+        "google",
+        "openrouter",
+        "qwen",
+    ] {
+        let reference = providers
+            .get(provider)
+            .and_then(|value| value.get("credentialRef"))
             .and_then(Value::as_str)
-            .ok_or(CredentialError::InvalidInput)?;
+            .unwrap_or_default();
         bindings.insert(
             format!("providerCredentials.{provider}"),
             reference.to_string(),
@@ -366,6 +424,26 @@ fn binding_targets_provider(config: &Value, binding: &str, target_provider: &str
         }
         _ => binding == format!("providerCredentials.{target_provider}"),
     }
+}
+
+fn model_binding_matches_provider(config: &Value, model_key: &str, credential_ref: &str) -> bool {
+    let Some(provider) = config
+        .get(model_key)
+        .and_then(|model| model.get("provider"))
+        .and_then(Value::as_str)
+    else {
+        return false;
+    };
+    let provider_ref = if provider == "custom" {
+        config.pointer("/customProvider/credentialRef")
+    } else {
+        config
+            .get("providerCredentials")
+            .and_then(Value::as_object)
+            .and_then(|credentials| credentials.get(provider))
+            .and_then(|credential| credential.get("credentialRef"))
+    };
+    provider_ref.and_then(Value::as_str) == Some(credential_ref)
 }
 
 fn begin_locked(
@@ -402,9 +480,31 @@ fn reconcile_locked(
     desktop_state: &DesktopState,
     operation: CredentialLifecycleOperation,
 ) -> Result<CredentialLifecycleStatus, CredentialError> {
-    let (config_json, active_refs) = strict_config_snapshot(desktop_state)?;
+    let mut renderer_storage = desktop_state
+        .renderer_storage
+        .lock()
+        .map_err(|_| CredentialError::StoreFailure)?;
+    reconcile_with_storage(state, &mut renderer_storage, operation)
+}
+
+fn reconcile_with_storage(
+    state: &CredentialCommandState,
+    renderer_storage: &mut RendererStorage,
+    operation: CredentialLifecycleOperation,
+) -> Result<CredentialLifecycleStatus, CredentialError> {
+    let (config_json, active_refs) = renderer_storage
+        .credential_config_snapshot()
+        .map_err(|_| CredentialError::CorruptEntry)?;
     if config_json != operation.starting_config_json() {
-        validate_operation_transition(&operation, &config_json)?;
+        let starting_refs = crate::renderer_storage::active_credential_refs_from_raw_config(
+            operation.starting_config_json(),
+        )
+        .map_err(|_| CredentialError::CorruptEntry)?;
+        let bindings_unchanged = credential_ref_bindings(operation.starting_config_json())?
+            == credential_ref_bindings(&config_json)?;
+        if active_refs != starting_refs || !bindings_unchanged {
+            validate_operation_transition(&operation, &config_json)?;
+        }
     }
     let committed = match &operation {
         CredentialLifecycleOperation::Replacement { new_credential, .. } => {
@@ -416,10 +516,7 @@ fn reconcile_locked(
         } => !active_refs.contains(retiring_credential_ref),
     };
     if committed {
-        desktop_state
-            .renderer_storage
-            .lock()
-            .map_err(|_| CredentialError::StoreFailure)?
+        renderer_storage
             .synchronize_credential_config(&config_json)
             .map_err(|_| CredentialError::StoreFailure)?;
     }
@@ -478,16 +575,19 @@ pub(crate) async fn list_provider_credential_metadata(
 #[cfg(test)]
 mod tests {
     use super::{
-        begin_locked, reconcile_operation, validate_operation_transition, CredentialLifecycleStatus,
+        begin_locked, commit_config_storage, reconcile_operation, validate_operation_transition,
+        CredentialCommandState, CredentialLifecycleStatus,
     };
     use crate::credentials::{
         CredentialError, CredentialLifecycleJournal, CredentialLifecycleOperation,
         CredentialMetadata, CredentialStore, CredentialVault, SaveCredentialRequest, SecretValue,
     };
+    use crate::renderer_storage::{RendererStorage, DESKTOP_CONFIG_KEY};
+    use serde_json::{json, Map, Value};
     use std::{
         collections::{BTreeSet, HashMap},
         fs,
-        path::PathBuf,
+        path::{Path, PathBuf},
         sync::{Arc, Mutex},
     };
     use uuid::Uuid;
@@ -515,6 +615,17 @@ mod tests {
         config["providerCredentials"]["deepseek"]["credentialRef"] =
             serde_json::json!(credential_ref);
         serde_json::to_string(&config).unwrap()
+    }
+
+    fn renderer_storage(root: &Path, config_json: &str) -> RendererStorage {
+        let mut storage = RendererStorage::load(root).unwrap();
+        storage
+            .set_batch(Map::from_iter([(
+                DESKTOP_CONFIG_KEY.to_string(),
+                Value::String(config_json.to_string()),
+            )]))
+            .unwrap();
+        storage
     }
 
     #[derive(Default)]
@@ -817,5 +928,170 @@ mod tests {
         );
         assert!(!store.exists(&old_ref).unwrap());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn lifecycle_status_serializes_camel_case_contract() {
+        assert_eq!(
+            serde_json::to_value(CredentialLifecycleStatus::Ready {
+                config_json: "{}".into(),
+            })
+            .unwrap(),
+            json!({ "status": "ready", "configJson": "{}" })
+        );
+        assert_eq!(
+            serde_json::to_value(CredentialLifecycleStatus::Pending {
+                operation_id: "operation".into(),
+                config_json: "{}".into(),
+            })
+            .unwrap(),
+            json!({ "status": "pending", "operationId": "operation", "configJson": "{}" })
+        );
+    }
+
+    #[test]
+    fn replacement_can_add_a_missing_target_provider_binding() {
+        let starting = config_json();
+        let new_ref = Uuid::new_v4().to_string();
+        let operation = CredentialLifecycleOperation::replacement(
+            Uuid::new_v4().to_string(),
+            "openai".into(),
+            starting.clone(),
+            CredentialMetadata {
+                credential_ref: new_ref.clone(),
+                provider: "openai".into(),
+                protocol: "openai-compatible".into(),
+                canonical_base_url: "https://api.openai.com/v1".into(),
+            },
+            vec![],
+        );
+        let mut next: Value = serde_json::from_str(&starting).unwrap();
+        next["providerCredentials"]["openai"] = json!({
+            "credentialRef": new_ref,
+            "baseUrl": "https://api.openai.com/v1",
+            "protocol": "openai-compatible"
+        });
+        assert!(
+            validate_operation_transition(&operation, &serde_json::to_string(&next).unwrap())
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn startup_reconcile_aborts_uncommitted_credential_after_non_ref_config_drift() {
+        let root = root("startup-non-ref-drift");
+        let store = Arc::new(RecordingStore::default());
+        let vault = CredentialVault::new(store.clone());
+        let journal = CredentialLifecycleJournal::new(&root);
+        let starting = config_json();
+        let begun = begin_locked(&vault, &journal, starting.clone(), request()).unwrap();
+        let mut drifted: Value = serde_json::from_str(&starting).unwrap();
+        drifted["locale"] = json!("en-US");
+        let drifted = serde_json::to_string(&drifted).unwrap();
+        let mut storage = renderer_storage(&root, &drifted);
+        let state = CredentialCommandState::new(Arc::new(vault), &root);
+
+        state.reconcile_startup(&mut storage).unwrap();
+
+        assert!(!store.exists(&begun.metadata.credential_ref).unwrap());
+        assert!(CredentialLifecycleJournal::new(&root)
+            .load_strict()
+            .unwrap()
+            .is_none());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn startup_reconcile_blocks_when_cleanup_remains_pending() {
+        let root = root("startup-pending");
+        let store = Arc::new(RecordingStore::default());
+        let vault = CredentialVault::new(store.clone());
+        let journal = CredentialLifecycleJournal::new(&root);
+        let starting = config_json();
+        let begun = begin_locked(&vault, &journal, starting.clone(), request()).unwrap();
+        *store.fail_deletes.lock().unwrap() = 1;
+        let mut storage = renderer_storage(&root, &starting);
+        let state = CredentialCommandState::new(Arc::new(vault), &root);
+
+        assert_eq!(
+            state.reconcile_startup(&mut storage),
+            Err(CredentialError::StoreFailure)
+        );
+        assert!(store.exists(&begun.metadata.credential_ref).unwrap());
+        assert!(CredentialLifecycleJournal::new(&root)
+            .load_strict()
+            .unwrap()
+            .is_some());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn strict_second_config_write_failure_never_reaches_vault_cleanup() {
+        let root = root("strict-write-no-cleanup");
+        let store = Arc::new(RecordingStore::default());
+        let vault = CredentialVault::new(store.clone());
+        let old_ref = Uuid::new_v4().to_string();
+        let starting = config_with_deepseek_ref(&old_ref);
+        let journal = CredentialLifecycleJournal::new(&root);
+        let begun = begin_locked(&vault, &journal, starting.clone(), request()).unwrap();
+        let mut next: Value = serde_json::from_str(&starting).unwrap();
+        next["model"]["credentialRef"] = json!(begun.metadata.credential_ref);
+        next["providerCredentials"]["deepseek"] = json!({
+            "credentialRef": begun.metadata.credential_ref,
+            "baseUrl": begun.metadata.canonical_base_url,
+            "protocol": begun.metadata.protocol
+        });
+        let next = serde_json::to_string(&next).unwrap();
+        let base = config_json();
+        let mut storage = renderer_storage(&root, &base);
+        storage
+            .commit_credential_config(&base, &starting)
+            .expect("seed credential-bearing config through lifecycle CAS");
+        storage.fail_strict_write_on_call(2);
+
+        assert_eq!(
+            commit_config_storage(&mut storage, &starting, &next),
+            Err(CredentialError::StoreFailure)
+        );
+        assert!(store.deletes.lock().unwrap().is_empty());
+        assert!(journal.load_strict().unwrap().is_some());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn retirement_allows_debug_restore_to_an_existing_provider_reference() {
+        let retiring_ref = Uuid::new_v4().to_string();
+        let restored_ref = Uuid::new_v4().to_string();
+        let mut starting: Value = serde_json::from_str(&config_json()).unwrap();
+        starting["model"] = json!({
+            "provider": "custom", "model": "debug", "credentialRef": retiring_ref,
+            "protocol": "openai-compatible"
+        });
+        starting["customProvider"] = json!({
+            "name": "debug", "baseUrl": "http://127.0.0.1:8787/v1",
+            "credentialRef": retiring_ref, "protocol": "openai-compatible",
+            "models": [{ "name": "debug", "callName": "debug", "supportsImages": false }]
+        });
+        starting["visionModel"]["credentialRef"] = json!(restored_ref);
+        starting["providerCredentials"]["openrouter"]["credentialRef"] = json!(restored_ref);
+        let starting = serde_json::to_string(&starting).unwrap();
+        let operation = CredentialLifecycleOperation::retirement(
+            Uuid::new_v4().to_string(),
+            starting.clone(),
+            retiring_ref,
+        );
+        let mut next: Value = serde_json::from_str(&starting).unwrap();
+        next["model"] = json!({
+            "provider": "openrouter", "model": "vision", "credentialRef": restored_ref,
+            "protocol": "openai-compatible"
+        });
+        next["customProvider"] = json!({
+            "name": "", "baseUrl": "", "credentialRef": "",
+            "protocol": "openai-compatible", "models": []
+        });
+        assert!(
+            validate_operation_transition(&operation, &serde_json::to_string(&next).unwrap())
+                .is_ok()
+        );
     }
 }

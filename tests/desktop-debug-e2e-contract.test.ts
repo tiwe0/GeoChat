@@ -5,9 +5,22 @@ import {
   createTestProviderCleanupState,
   redactDesktopE2eEvidenceText,
 } from "../tools/desktop-debug-e2e/evidence";
-import { clearDeterministicDebugProviderWithPorts } from "../src/renderer-react/src/features/desktop/deterministicDebugProvider";
+import {
+  clearDeterministicDebugProviderWithPorts,
+  configureDeterministicDebugProviderWithPorts,
+} from "../src/renderer-react/src/features/desktop/deterministicDebugProvider";
+import { createDefaultDesktopConfig } from "../src/shared/desktop/desktop-config";
+import type { DesktopConfig } from "../src/shared/desktop/workbench-types";
 
 describe("deterministic desktop E2E evidence", () => {
+  const nonce = "12345678-1234-4123-8123-123456789abc";
+  const debugCredentialRef = "11111111-1111-4111-8111-111111111111";
+  const metadata = {
+    credentialRef: debugCredentialRef,
+    provider: "custom",
+    protocol: "openai-compatible" as const,
+    canonicalBaseUrl: "http://127.0.0.1:8787/v1",
+  };
   test("isolates WebKit localStorage from the ordinary dev renderer origin", async () => {
     const source = await readFile("tools/run-deterministic-desktop-e2e.ts", "utf8");
     const capability = JSON.parse(await readFile("src-tauri/capabilities/dev-server.json", "utf8")) as {
@@ -58,8 +71,87 @@ describe("deterministic desktop E2E evidence", () => {
     expect(cleanup.needsCleanup()).toBe(false);
   });
 
+  test("recovers debug provider creation after the native commit response is lost", async () => {
+    const original = createDefaultDesktopConfig("en-US");
+    let committedConfigJson = "";
+    const accepted: string[] = [];
+    const result = await configureDeterministicDebugProviderWithPorts(
+      "http://127.0.0.1:8787/v1",
+      "debug-model",
+      nonce,
+      {
+        readConfig: () => original,
+        normalizeConfigJson: (raw) => JSON.parse(raw) as DesktopConfig,
+        begin: async () => ({ operationId: "operation", metadata, configJson: JSON.stringify(original) }),
+        commit: async (_operationId, nextConfigJson) => {
+          committedConfigJson = nextConfigJson;
+          throw new Error("IPC response lost");
+        },
+        abort: async () => { throw new Error("must not abort an unknown commit"); },
+        reconcile: async () => ({ status: "ready", configJson: committedConfigJson }),
+        acceptCommittedConfig: (raw) => accepted.push(raw),
+      },
+    );
+
+    expect(result).toMatchObject({ credentialRef: debugCredentialRef, cleanupPending: false });
+    expect(result.cleanup.restoreConfigJson).toBe(JSON.stringify(original));
+    expect(accepted).toEqual([committedConfigJson]);
+  });
+
+  test("aborts debug creation when the authoritative config already owns a custom credential", async () => {
+    const original = createDefaultDesktopConfig("en-US");
+    const authoritative = {
+      ...original,
+      customProvider: { ...original.customProvider, credentialRef: "existing-custom-ref" },
+    };
+    let aborted = false;
+
+    await expect(configureDeterministicDebugProviderWithPorts(
+      "http://localhost:8787/v1",
+      "debug-model",
+      nonce,
+      {
+        readConfig: () => original,
+        normalizeConfigJson: (raw) => JSON.parse(raw) as DesktopConfig,
+        begin: async () => ({ operationId: "operation", metadata, configJson: JSON.stringify(authoritative) }),
+        commit: async () => { throw new Error("must not commit"); },
+        abort: async () => {
+          aborted = true;
+          return { status: "ready", configJson: JSON.stringify(original) };
+        },
+        reconcile: async () => ({ status: "ready", configJson: JSON.stringify(original) }),
+        acceptCommittedConfig: () => undefined,
+      },
+    )).rejects.toThrow("without a configured custom provider");
+    expect(aborted).toBe(true);
+  });
+
+  test("returns a cleanup handle when debug creation commits with pending cleanup", async () => {
+    const original = createDefaultDesktopConfig("en-US");
+    const result = await configureDeterministicDebugProviderWithPorts(
+      "http://127.0.0.1:8787/v1",
+      "debug-model",
+      nonce,
+      {
+        readConfig: () => original,
+        normalizeConfigJson: (raw) => JSON.parse(raw) as DesktopConfig,
+        begin: async () => ({ operationId: "operation", metadata, configJson: JSON.stringify(original) }),
+        commit: async (_operationId, nextConfigJson) => ({
+          status: "pending",
+          operationId: "operation",
+          configJson: nextConfigJson,
+        }),
+        abort: async () => { throw new Error("must not abort"); },
+        reconcile: async () => { throw new Error("must not reconcile a successful response"); },
+        acceptCommittedConfig: () => undefined,
+      },
+    );
+
+    expect(result.cleanupPending).toBe(true);
+    expect(result.cleanup.credentialRef).toBe(debugCredentialRef);
+  });
+
   test("retires the debug credential and restores config in one native lifecycle", async () => {
-    const nonce = "12345678-1234-4123-8123-123456789abc";
     const credentialRef = "credential-e2e";
     const ownedConfig = { customProvider: { name: `GeoChat deterministic E2E:${nonce}`, credentialRef } };
     const restoredConfig = { customProvider: { name: "Restored provider", credentialRef: "restored-ref" } };
@@ -90,5 +182,33 @@ describe("deterministic desktop E2E evidence", () => {
     expect(currentConfig).toEqual(restoredConfig);
     expect(attempts).toBe(2);
     expect(accepted).toHaveLength(1);
+  });
+
+  test("recovers debug retirement after the native response is lost", async () => {
+    const ownedConfig = {
+      customProvider: { name: `GeoChat deterministic E2E:${nonce}`, credentialRef: debugCredentialRef },
+    };
+    const restoredConfig = { customProvider: { name: "", credentialRef: "" } };
+    let currentConfig = ownedConfig;
+    const accepted: string[] = [];
+
+    const result = await clearDeterministicDebugProviderWithPorts(
+      nonce,
+      debugCredentialRef,
+      JSON.stringify(restoredConfig),
+      {
+        readConfig: () => currentConfig,
+        normalizeConfigJson: (raw) => JSON.parse(raw) as typeof ownedConfig,
+        commitRetirement: async (_ref, next) => {
+          currentConfig = JSON.parse(next);
+          throw new Error("IPC response lost");
+        },
+        reconcile: async () => ({ status: "ready", configJson: JSON.stringify(currentConfig) }),
+        acceptCommittedConfig: (raw) => accepted.push(raw),
+      },
+    );
+
+    expect(result).toMatchObject({ cleared: true, configRestored: true, credentialDeleted: true });
+    expect(accepted).toEqual([JSON.stringify(restoredConfig)]);
   });
 });

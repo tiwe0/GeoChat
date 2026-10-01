@@ -358,6 +358,25 @@ export function updateProviderCredentials(
   };
 }
 
+export function updateCustomProviderCredential(
+  config: DesktopConfig,
+  customProvider: CustomProviderConfig,
+): DesktopConfig {
+  const updateModel = (model: ModelConfig): ModelConfig => model.provider === "custom"
+    ? {
+      ...model,
+      credentialRef: customProvider.credentialRef,
+      protocol: customProvider.protocol,
+    }
+    : model;
+  return {
+    ...config,
+    model: updateModel(config.model),
+    visionModel: updateModel(config.visionModel),
+    customProvider,
+  };
+}
+
 function normalizeLocale(value: Partial<DesktopConfig> | undefined, fallbackLocale: Locale): Locale {
   if (value?.locale === "zh-CN" || value?.locale === "en-US") return value.locale;
   return fallbackLocale;

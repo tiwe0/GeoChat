@@ -3,6 +3,11 @@ import {
   readDesktopConfig,
   normalizeDesktopConfigJson,
 } from "../../../../shared/desktop/desktop-config";
+import type { DesktopConfig } from "../../../../shared/desktop/workbench-types";
+import type {
+  DesktopBeginProviderCredentialResult,
+  DesktopCredentialLifecycleStatus,
+} from "../../../../shared/desktop-api";
 import { installedDesktopApi } from "../../../../shared/desktop/tauri-bridge";
 
 const TEST_PROVIDER_NAME = "GeoChat deterministic E2E";
@@ -23,27 +28,52 @@ function assertNonce(nonce: string) {
 
 export async function configureDeterministicDebugProvider(baseUrl: string, model: string, nonce: string) {
   assertDebugBuild();
+  const desktopApi = installedDesktopApi();
+  if (!desktopApi) throw new Error("Native credential storage is unavailable.");
+  return configureDeterministicDebugProviderWithPorts(baseUrl, model, nonce, {
+    readConfig: readDesktopConfig,
+    normalizeConfigJson: normalizeDesktopConfigJson,
+    begin: (request) => desktopApi.beginProviderCredential(request),
+    commit: (operationId, nextConfigJson) => desktopApi.commitProviderCredential(operationId, nextConfigJson),
+    abort: (operationId) => desktopApi.abortProviderCredential(operationId),
+    reconcile: () => desktopApi.reconcileProviderCredentials(),
+    acceptCommittedConfig: acceptNativeDesktopConfigCommit,
+  });
+}
+
+export async function configureDeterministicDebugProviderWithPorts(
+  baseUrl: string,
+  model: string,
+  nonce: string,
+  ports: {
+    readConfig(): DesktopConfig;
+    normalizeConfigJson(rawJson: string): DesktopConfig;
+    begin(request: { provider: string; protocol: "openai-compatible"; baseUrl: string; secret: string }): Promise<DesktopBeginProviderCredentialResult>;
+    commit(operationId: string, nextConfigJson: string): Promise<DesktopCredentialLifecycleStatus>;
+    abort(operationId: string): Promise<DesktopCredentialLifecycleStatus>;
+    reconcile(): Promise<DesktopCredentialLifecycleStatus>;
+    acceptCommittedConfig(rawJson: string): void;
+  },
+) {
   assertNonce(nonce);
   const parsed = new URL(baseUrl);
   if (parsed.protocol !== "http:" || (parsed.hostname !== "127.0.0.1" && parsed.hostname !== "localhost")) {
     throw new Error("The deterministic provider must use a loopback HTTP URL.");
   }
-  const desktopApi = installedDesktopApi();
-  if (!desktopApi) throw new Error("Native credential storage is unavailable.");
-  if (readDesktopConfig().customProvider.credentialRef) {
+  if (ports.readConfig().customProvider.credentialRef) {
     throw new Error("The deterministic provider requires a profile without a configured custom provider.");
   }
-  const begun = await desktopApi.beginProviderCredential({
+  const begun = await ports.begin({
     provider: "custom",
     protocol: "openai-compatible",
     baseUrl: parsed.toString(),
     secret: TEST_CREDENTIAL_SECRET,
   });
   const metadata = begun.metadata;
-  const originalConfig = normalizeDesktopConfigJson(begun.configJson);
+  const originalConfig = ports.normalizeConfigJson(begun.configJson);
   if (originalConfig.customProvider.credentialRef) {
-    const aborted = await desktopApi.abortProviderCredential(begun.operationId);
-    acceptNativeDesktopConfigCommit(aborted.configJson);
+    const aborted = await ports.abort(begun.operationId);
+    ports.acceptCommittedConfig(aborted.configJson);
     throw new Error("The deterministic provider requires a profile without a configured custom provider.");
   }
   const nextConfig = {
@@ -65,16 +95,16 @@ export async function configureDeterministicDebugProvider(baseUrl: string, model
   const nextConfigJson = JSON.stringify(nextConfig);
   let lifecycle;
   try {
-    lifecycle = await desktopApi.commitProviderCredential(begun.operationId, nextConfigJson);
-    acceptNativeDesktopConfigCommit(lifecycle.configJson);
+    lifecycle = await ports.commit(begun.operationId, nextConfigJson);
+    ports.acceptCommittedConfig(lifecycle.configJson);
   } catch (commitError) {
     try {
-      lifecycle = await desktopApi.reconcileProviderCredentials();
-      acceptNativeDesktopConfigCommit(lifecycle.configJson);
+      lifecycle = await ports.reconcile();
+      ports.acceptCommittedConfig(lifecycle.configJson);
     } catch (reconcileError) {
       throw new AggregateError([commitError, reconcileError], "The E2E credential commit outcome could not be reconciled.");
     }
-    if (normalizeDesktopConfigJson(lifecycle.configJson).customProvider.credentialRef !== metadata.credentialRef) {
+    if (ports.normalizeConfigJson(lifecycle.configJson).customProvider.credentialRef !== metadata.credentialRef) {
       throw commitError;
     }
   }

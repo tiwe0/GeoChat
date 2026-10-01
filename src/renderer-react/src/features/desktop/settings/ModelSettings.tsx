@@ -29,6 +29,7 @@ import {
   normalizeCustomProviderConfig,
   normalizeDesktopConfigJson,
   readDesktopConfig,
+  updateCustomProviderCredential,
   updateProviderCredentials,
   updateDesktopConfig,
 } from "../../../../../shared/desktop/desktop-config";
@@ -39,6 +40,7 @@ import type {
   GeoChatDesktopApi,
 } from "../../../../../shared/desktop-api";
 import { installedDesktopApi } from "../../../../../shared/desktop/tauri-bridge";
+import { isValidProviderEndpoint } from "../../../../../shared/desktop/provider-endpoint";
 import { discoverProviderModels } from "../../models/modelDiscovery";
 import { backendAuthToken, backendOrigin } from "../runtime";
 import { SettingsHint } from "./SettingsHint";
@@ -244,15 +246,15 @@ export function ModelSettings() {
         },
         buildNextConfig: (metadata, authoritativeConfig) => {
           if (isCustom) {
-            return {
-              ...authoritativeConfig,
-              customProvider: normalizeCustomProviderConfig({
+            return updateCustomProviderCredential(
+              authoritativeConfig,
+              normalizeCustomProviderConfig({
                 ...customProvider,
                 baseUrl: metadata.canonicalBaseUrl,
                 protocol: metadata.protocol,
                 credentialRef: metadata.credentialRef,
               }),
-            };
+            );
           }
           return updateProviderCredentials(authoritativeConfig, provider, {
             credentialRef: metadata.credentialRef,
@@ -639,7 +641,7 @@ function validateCustomProvider(
   persisted: CustomProviderConfig,
 ): CustomValidationError {
   if (!value.name.trim()) return "nameRequired";
-  if (!isValidRequiredBaseUrl(value.baseUrl)) return "baseUrlInvalid";
+  if (!isValidProviderEndpoint(value.baseUrl)) return "baseUrlInvalid";
   const bindingChanged = value.credentialRef.trim() !== "" && (
     value.baseUrl.trim() !== persisted.baseUrl.trim()
     || value.protocol !== persisted.protocol
@@ -726,23 +728,6 @@ export function desktopConfigReferencesCredential(config: DesktopConfig, credent
     || config.visionModel.credentialRef === credentialRef
     || config.customProvider.credentialRef === credentialRef
     || Object.values(config.providerCredentials).some((entry) => entry.credentialRef === credentialRef);
-}
-
-function isValidRequiredBaseUrl(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return false;
-  try {
-    const url = new URL(trimmed);
-    if (url.username || url.password) return false;
-    if (url.protocol === "https:") return true;
-    if (url.protocol !== "http:") return false;
-    return url.hostname === "localhost"
-      || url.hostname === "127.0.0.1"
-      || url.hostname === "[::1]";
-  } catch {
-    logger.debug("provider_base_url_invalid", "MODEL_PROVIDER_BASE_URL_INVALID");
-    return false;
-  }
 }
 
 function protocolLabel(protocol: AgentModelProtocol, t: ReturnType<typeof useTranslation>["t"]) {

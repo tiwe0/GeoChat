@@ -321,8 +321,6 @@ fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
         initial_graphics_state(&settings);
     logging::configure_logging(&settings.logging_preferences);
     log::info!(target: "geochat::lifecycle", "GeoChat desktop shell is starting");
-    let local_backend_auth_token = local_runtime_auth_token();
-    let runtime_authorized = access_allows_runtime_use();
     let credential_profile = if cfg!(debug_assertions) {
         CredentialProfile::Development
     } else {
@@ -331,6 +329,13 @@ fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
     let credential_store =
         PlatformCredentialStore::new(credential_profile).map_err(|error| error.to_string())?;
     let credential_vault = Arc::new(CredentialVault::new(Arc::new(credential_store)));
+    let mut renderer_storage = RendererStorage::load(&app_data_dir)?;
+    let credential_state = CredentialCommandState::new(credential_vault.clone(), &app_data_dir);
+    credential_state
+        .reconcile_startup(&mut renderer_storage)
+        .map_err(|error| error.to_string())?;
+    let local_backend_auth_token = local_runtime_auth_token();
+    let runtime_authorized = access_allows_runtime_use();
     let credential_broker = CredentialBrokerRuntime::start(credential_vault.clone())?;
     let backend = start_backend(
         &app_data_dir,
@@ -338,7 +343,7 @@ fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
         &local_backend_auth_token,
         credential_broker,
     )?;
-    app.manage(CredentialCommandState::new(credential_vault, &app_data_dir));
+    app.manage(credential_state);
     let shell_update_state = initial_shell_update_state(settings.update_preferences.clone());
     // Resolving verifies every asset in the manifest by hash, so it happens
     // exactly once here and everything downstream reads the cached result.
@@ -351,7 +356,6 @@ fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
             .map(|bundle| bundle.manifest.bundle_version.clone()),
     );
     let problem_bank_cache = ProblemBankCacheRuntime::new(app_data_dir.join("problem-bank-cache"))?;
-    let renderer_storage = RendererStorage::load(&app_data_dir)?;
     app.manage(DesktopState {
         _instance_lock: instance_lock,
         backend: Mutex::new(backend),

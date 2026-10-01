@@ -29,32 +29,38 @@ export async function handleAgentRunObservabilityRoute(
     if (!clientSessionId) {
       return json({ error: "invalid_client_session", message: "A valid client installation id is required." }, { status: 400 });
     }
-    const run = await agentRunRepository.getLedger(cancelRunId);
-    if (
-      !run ||
-      run.clientSessionId !== clientSessionId ||
-      !await agentRunConversationVisibleInScope(run, dataScope.scope, context)
-    ) {
-      return json({ error: "not_found", message: "Agent run was not found." }, { status: 404 });
+    const recoveryCancellation = url.searchParams.get("source") === "recovery";
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const run = await agentRunRepository.getLedger(cancelRunId);
+      if (
+        !run ||
+        run.clientSessionId !== clientSessionId ||
+        !await agentRunConversationVisibleInScope(run, dataScope.scope, context)
+      ) {
+        return json({ error: "not_found", message: "Agent run was not found." }, { status: 404 });
+      }
+      if (recoveryCancellation && nativeRunLeaseIsActive(run)) {
+        return json({ error: "agent_run_active", message: "Agent run has an active continuation lease." }, { status: 409 });
+      }
+      if (run.status !== "running") return json({ run });
+
+      const hasFinished = run.tools.some((tool) => tool.toolName === "setFinished" && tool.status === "succeeded");
+      const cancelled = finishAgentRunLedger(
+        { ...run, continuationLeaseId: null, continuationLeaseExpiresAt: null },
+        hasFinished
+          ? { status: "succeeded", ...(run.usage ? { usage: run.usage } : {}) }
+          : { status: "cancelled", error: "Stopped by user." },
+      );
+      try {
+        return json({ run: await agentRunRepository.compareAndSwapLedger(cancelled, run.revision) });
+      } catch (error) {
+        if (!(error instanceof AgentRunLedgerConflictError)) throw error;
+      }
     }
-    if (url.searchParams.get("source") === "recovery" && nativeRunLeaseIsActive(run)) {
-      return json({ error: "agent_run_active", message: "Agent run has an active continuation lease." }, { status: 409 });
-    }
-    const hasFinished = run.tools.some((tool) => tool.toolName === "setFinished" && tool.status === "succeeded");
-    const cancelled = run.status === "running"
-      ? finishAgentRunLedger({ ...run, continuationLeaseId: null, continuationLeaseExpiresAt: null }, hasFinished
-        ? { status: "succeeded", ...(run.usage ? { usage: run.usage } : {}) }
-        : { status: "cancelled", error: "Stopped by user." })
-      : run;
-    if (cancelled === run) return json({ run });
-    try {
-      return json({ run: await agentRunRepository.compareAndSwapLedger(cancelled, run.revision) });
-    } catch (error) {
-      if (!(error instanceof AgentRunLedgerConflictError)) throw error;
-      const current = await agentRunRepository.getLedger(cancelRunId);
-      if (!current) return json({ error: "not_found", message: "Agent run was not found." }, { status: 404 });
-      return json({ run: current });
-    }
+    return json(
+      { error: "agent_run_conflict", message: "Agent run changed while cancellation was being applied." },
+      { status: 409 },
+    );
   }
 
   if (request.method === "GET" && url.pathname === "/v1/agent-runs/recoverable") {

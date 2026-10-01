@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createDatabase } from "../backend/src/db/client";
+import { currentSchemaBaselineName } from "../backend/src/db/migrations/0001_initial";
 import {
   latestSqliteSchemaVersion,
   runSqliteMigrations,
@@ -88,6 +89,52 @@ function createLegacyV7Fixture(databasePath: string): void {
   sqlite.close();
 }
 
+function createBaselineFromCommit626112a(databasePath: string): void {
+  const sqlite = new Database(databasePath);
+  sqlite.run("PRAGMA journal_mode = WAL");
+  sqlite.run(`CREATE TABLE _geochat_schema_migrations (
+    version INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    applied_at INTEGER NOT NULL
+  )`);
+  sqlite.run("INSERT INTO _geochat_schema_migrations VALUES (1, 'current_schema_baseline', 1)");
+  sqlite.run(`CREATE TABLE geogebra_documents (
+    owner_scope_key TEXT NOT NULL,
+    owner_user_id TEXT,
+    id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    content_kind TEXT NOT NULL CHECK (content_kind IN ('text', 'binary')),
+    content BLOB NOT NULL,
+    size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0 AND size_bytes <= 16777216),
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (owner_scope_key, id)
+  )`);
+  sqlite.run(`CREATE TABLE agent_run_ledgers (
+    run_id TEXT PRIMARY KEY NOT NULL,
+    conversation_id TEXT NOT NULL,
+    status TEXT NOT NULL CONSTRAINT agent_run_ledgers_status_ck
+      CHECK (status IN ('running', 'succeeded', 'failed', 'cancelled')),
+    revision INTEGER NOT NULL DEFAULT 0,
+    model_provider TEXT NOT NULL,
+    model_id TEXT NOT NULL,
+    started_at INTEGER NOT NULL,
+    completed_at INTEGER,
+    payload TEXT NOT NULL,
+    CONSTRAINT agent_run_ledgers_lifecycle_ck CHECK (
+      (status = 'running' AND completed_at IS NULL)
+      OR (status IN ('succeeded', 'failed', 'cancelled') AND completed_at IS NOT NULL)
+    ),
+    CONSTRAINT agent_run_ledgers_timeline_ck CHECK (
+      completed_at IS NULL OR completed_at >= started_at
+    )
+  )`);
+  sqlite.run("CREATE INDEX geogebra_documents_scope_updated_idx ON geogebra_documents (owner_scope_key, updated_at)");
+  sqlite.run("PRAGMA wal_checkpoint(TRUNCATE)");
+  sqlite.close();
+}
+
 describe("SQLite schema baseline", () => {
   test("creates the current Drizzle-compatible schema from an empty database", () => {
     const databasePath = temporaryDatabasePath("schema-baseline");
@@ -97,7 +144,7 @@ describe("SQLite schema baseline", () => {
     expect(sqliteMigrations).toHaveLength(1);
     expect(latestSqliteSchemaVersion).toBe(1);
     expect(sqlite.query("SELECT version, name FROM _geochat_schema_migrations").all()).toEqual([
-      { version: 1, name: "current_schema_baseline" }
+      { version: 1, name: currentSchemaBaselineName }
     ]);
 
     for (const [table, expected] of Object.entries(sqliteSchemaContract)) {
@@ -210,6 +257,34 @@ describe("SQLite schema baseline", () => {
       content: "legacy answer",
       payload: JSON.stringify({ id: "legacy-message", role: "assistant", content: "legacy answer" }),
     });
+    reopened.close();
+  });
+
+  test("rejects the 626112a baseline without modifying its database", () => {
+    const databasePath = temporaryDatabasePath("626112a-baseline-preservation");
+    createBaselineFromCommit626112a(databasePath);
+    const bytesBefore = readFileSync(databasePath);
+    const walExistedBefore = existsSync(`${databasePath}-wal`);
+    const shmExistedBefore = existsSync(`${databasePath}-shm`);
+
+    expect(() => createDatabase({ databasePath })).toThrow(
+      "Unsupported SQLite migration history at version 1 (current_schema_baseline)",
+    );
+
+    expect(readFileSync(databasePath)).toEqual(bytesBefore);
+    expect(existsSync(`${databasePath}-wal`)).toBe(walExistedBefore);
+    expect(existsSync(`${databasePath}-shm`)).toBe(shmExistedBefore);
+    const reopened = new Database(databasePath, { readonly: true });
+    expect(reopened.query("SELECT version, name, applied_at FROM _geochat_schema_migrations").get()).toEqual({
+      version: 1,
+      name: "current_schema_baseline",
+      applied_at: 1,
+    });
+    expect(reopened.query("SELECT sql FROM sqlite_schema WHERE name = 'geogebra_documents'").get()).toEqual({
+      sql: expect.stringContaining("content_kind IN ('text', 'binary')"),
+    });
+    expect(reopened.query("PRAGMA table_info(agent_run_ledgers)").all())
+      .not.toContainEqual(expect.objectContaining({ name: "client_session_id" }));
     reopened.close();
   });
 });

@@ -17,10 +17,13 @@ use uuid::Uuid;
 const MAX_HEADER_BYTES: usize = 8 * 1024;
 const MAX_BODY_BYTES: usize = 1024;
 const MAX_CORRELATION_ID_BYTES: usize = 160;
+const PRE_AUTH_TIMEOUT: Duration = Duration::from_millis(250);
 const SOCKET_TIMEOUT: Duration = Duration::from_secs(2);
 const REJECT_DRAIN_TIMEOUT: Duration = Duration::from_millis(100);
 const MAX_REJECT_DRAIN_BYTES: usize = MAX_BODY_BYTES + 1024;
 const MAX_CONCURRENT_CONNECTIONS: usize = 16;
+const MAX_PRE_AUTH_CONNECTIONS: usize = 8;
+const MAX_OVERLOAD_DRAIN_CONNECTIONS: usize = 4;
 const RATE_LIMIT: usize = 240;
 const RATE_WINDOW: Duration = Duration::from_secs(60);
 
@@ -132,11 +135,19 @@ impl RateWindow {
     }
 }
 
-struct ActiveGuard(Arc<AtomicUsize>);
+struct CounterGuard(Option<Arc<AtomicUsize>>);
 
-impl Drop for ActiveGuard {
+impl CounterGuard {
+    fn release(&mut self) {
+        if let Some(counter) = self.0.take() {
+            counter.fetch_sub(1, Ordering::AcqRel);
+        }
+    }
+}
+
+impl Drop for CounterGuard {
     fn drop(&mut self) {
-        self.0.fetch_sub(1, Ordering::AcqRel);
+        self.release();
     }
 }
 
@@ -148,7 +159,9 @@ fn run_broker(
     limits: BrokerLimits,
 ) {
     let active = Arc::new(AtomicUsize::new(0));
-    let rate = Arc::new(Mutex::new(RateWindow {
+    let pre_auth = Arc::new(AtomicUsize::new(0));
+    let overload_drains = Arc::new(AtomicUsize::new(0));
+    let business_rate = Arc::new(Mutex::new(RateWindow {
         started_at: Instant::now(),
         accepted: 0,
     }));
@@ -166,7 +179,7 @@ fn run_broker(
         }
         workers = running;
 
-        let (mut stream, _) = match listener.accept() {
+        let (stream, _) = match listener.accept() {
             Ok(connection) => connection,
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                 thread::sleep(Duration::from_millis(10));
@@ -177,47 +190,102 @@ fn run_broker(
         if shutdown.load(Ordering::Acquire) {
             break;
         }
-        if stream.set_nonblocking(false).is_err() {
-            continue;
-        }
-
-        let rate_allowed = rate
-            .lock()
-            .map(|mut window| window.allow(limits.rate_limit, limits.rate_window))
-            .unwrap_or(false);
-        if !rate_allowed {
-            let _ = write_early_rejection(&mut stream, 429, "rate_limited", None);
-            continue;
-        }
         if active
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |value| {
                 (value < limits.max_concurrent).then_some(value + 1)
             })
             .is_err()
         {
-            let _ = write_early_rejection(&mut stream, 429, "too_many_connections", None);
+            if let Some(worker) =
+                spawn_overload_rejection(stream, "too_many_connections", overload_drains.clone())
+            {
+                workers.push(worker);
+            }
+            continue;
+        }
+        if pre_auth
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |value| {
+                (value < limits.max_concurrent.min(MAX_PRE_AUTH_CONNECTIONS)).then_some(value + 1)
+            })
+            .is_err()
+        {
+            active.fetch_sub(1, Ordering::AcqRel);
+            if let Some(worker) = spawn_overload_rejection(
+                stream,
+                "too_many_unauthenticated_connections",
+                overload_drains.clone(),
+            ) {
+                workers.push(worker);
+            }
+            continue;
+        }
+        if stream.set_nonblocking(false).is_err() {
+            active.fetch_sub(1, Ordering::AcqRel);
+            pre_auth.fetch_sub(1, Ordering::AcqRel);
             continue;
         }
 
         let worker_vault = vault.clone();
         let worker_token = token.clone();
         let worker_active = active.clone();
+        let worker_pre_auth = pre_auth.clone();
+        let worker_business_rate = business_rate.clone();
         match thread::Builder::new()
             .name("geochat-credential-broker-connection".to_owned())
             .spawn(move || {
-                let _guard = ActiveGuard(worker_active);
-                if let Err(error) = handle_connection(stream, &worker_vault, &worker_token) {
+                let _active_guard = CounterGuard(Some(worker_active));
+                let pre_auth_guard = CounterGuard(Some(worker_pre_auth));
+                if let Err(error) = handle_connection(
+                    stream,
+                    &worker_vault,
+                    &worker_token,
+                    pre_auth_guard,
+                    &worker_business_rate,
+                    limits,
+                ) {
                     log::warn!(target: "geochat::credential_broker", "Credential broker rejected a request: {error}");
                 }
             }) {
             Ok(worker) => workers.push(worker),
             Err(_) => {
                 active.fetch_sub(1, Ordering::AcqRel);
+                pre_auth.fetch_sub(1, Ordering::AcqRel);
             }
         }
     }
     for worker in workers {
         let _ = worker.join();
+    }
+}
+
+fn spawn_overload_rejection(
+    mut stream: TcpStream,
+    code: &'static str,
+    active: Arc<AtomicUsize>,
+) -> Option<JoinHandle<()>> {
+    if active
+        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |value| {
+            (value < MAX_OVERLOAD_DRAIN_CONNECTIONS).then_some(value + 1)
+        })
+        .is_err()
+    {
+        let _ = write_overload_rejection(&mut stream, code);
+        return None;
+    }
+    let worker_active = active.clone();
+    match thread::Builder::new()
+        .name("geochat-credential-broker-overload".to_owned())
+        .spawn(move || {
+            let _guard = CounterGuard(Some(worker_active));
+            if stream.set_nonblocking(false).is_ok() {
+                let _ = write_early_rejection(&mut stream, 429, code, None);
+            }
+        }) {
+        Ok(worker) => Some(worker),
+        Err(_) => {
+            active.fetch_sub(1, Ordering::AcqRel);
+            None
+        }
     }
 }
 
@@ -231,8 +299,11 @@ fn handle_connection(
     mut stream: TcpStream,
     vault: &CredentialVault,
     expected_token: &[u8],
+    mut pre_auth_guard: CounterGuard,
+    business_rate: &Mutex<RateWindow>,
+    limits: BrokerLimits,
 ) -> Result<(), &'static str> {
-    let _ = stream.set_read_timeout(Some(SOCKET_TIMEOUT));
+    let _ = stream.set_read_timeout(Some(PRE_AUTH_TIMEOUT));
     let _ = stream.set_write_timeout(Some(SOCKET_TIMEOUT));
     let mut reader = BufReader::new(stream.try_clone().map_err(|_| "stream_clone_failed")?);
     let mut header_bytes = 0;
@@ -314,6 +385,7 @@ fn handle_connection(
     if !authorized(authorization.as_deref(), expected_token) {
         return write_early_rejection(&mut stream, 401, "unauthorized", drain_hint);
     }
+    pre_auth_guard.release();
     let json_content_type = content_type.as_deref().is_some_and(|value: &str| {
         value
             .split(';')
@@ -329,6 +401,14 @@ fn handle_connection(
     if content_length == 0 || content_length > MAX_BODY_BYTES {
         return write_early_rejection(&mut stream, 413, "request_too_large", drain_hint);
     }
+    let rate_allowed = business_rate
+        .lock()
+        .map(|mut window| window.allow(limits.rate_limit, limits.rate_window))
+        .unwrap_or(false);
+    if !rate_allowed {
+        return write_early_rejection(&mut stream, 429, "rate_limited", drain_hint);
+    }
+    let _ = stream.set_read_timeout(Some(SOCKET_TIMEOUT));
 
     let mut body = vec![0; content_length];
     if reader.read_exact(&mut body).is_err() {
@@ -424,6 +504,26 @@ fn broker_error(error: CredentialError) -> (u16, &'static str) {
         CredentialError::StoreUnavailable => (503, "credential_store_unavailable"),
         _ => (502, "credential_resolution_failed"),
     }
+}
+
+fn write_overload_rejection(
+    stream: &mut TcpStream,
+    code: &'static str,
+) -> Result<(), &'static str> {
+    let body = serde_json::to_vec(&json!({ "error": code }))
+        .map_err(|_| "response_serialization_failed")?;
+    let head = format!(
+        "HTTP/1.1 429 Too Many Requests\r\nContent-Type: application/json\r\nCache-Control: no-store\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    let _ = stream.set_nonblocking(true);
+    stream
+        .write_all(head.as_bytes())
+        .and_then(|_| stream.write_all(&body))
+        .and_then(|_| stream.flush())
+        .map_err(|_| "response_write_failed")?;
+    let _ = stream.shutdown(Shutdown::Both);
+    Ok(())
 }
 
 fn write_early_rejection(
@@ -693,6 +793,52 @@ mod tests {
         let c = rate_runtime.connection();
         assert_safe(&valid(c, &credential_ref, &c.token, ""), 200);
         assert_safe(&valid(c, &credential_ref, &c.token, ""), 429);
+    }
+
+    #[test]
+    fn credential_broker_invalid_auth_flood_does_not_consume_business_rate_limit() {
+        let (runtime, credential_ref) = runtime(BrokerLimits {
+            max_concurrent: 4,
+            rate_limit: 1,
+            rate_window: Duration::from_secs(30),
+        });
+        let c = runtime.connection();
+        for _ in 0..20 {
+            assert_safe(&valid(c, &credential_ref, "invalid-token", ""), 401);
+        }
+        assert_safe(&valid(c, &credential_ref, &c.token, ""), 200);
+        assert_safe(&valid(c, &credential_ref, &c.token, ""), 429);
+    }
+
+    #[test]
+    fn credential_broker_accept_loop_does_not_drain_overload_bodies() {
+        let (runtime, _) = runtime(BrokerLimits {
+            max_concurrent: 1,
+            rate_limit: 10,
+            rate_window: Duration::from_secs(30),
+        });
+        let c = runtime.connection().clone();
+        let mut held = connect(&c);
+        held.write_all(headers(&c.token, 100, "").as_bytes())
+            .unwrap();
+        thread::sleep(Duration::from_millis(50));
+
+        let started = Instant::now();
+        let mut overloaded_connections = Vec::new();
+        for _ in 0..2 {
+            let mut overloaded = connect(&c);
+            overloaded
+                .write_all(headers(&c.token, 100, "").as_bytes())
+                .unwrap();
+            overloaded_connections.push(overloaded);
+        }
+        for mut overloaded in overloaded_connections {
+            assert_safe(&read_response(&mut overloaded), 429);
+        }
+        assert!(
+            started.elapsed() < REJECT_DRAIN_TIMEOUT + Duration::from_millis(50),
+            "accept loop waited for overload request bodies"
+        );
     }
 
     #[test]

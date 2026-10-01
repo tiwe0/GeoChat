@@ -5,6 +5,7 @@ import {
   GeoGebraDocumentWorkspace,
   listGeoGebraDocuments,
   loadGeoGebraDocument,
+  mergeGeoGebraDocumentPages,
   saveGeoGebraDocument,
 } from "../src/renderer-react/src/features/geogebra/documentStorage";
 
@@ -40,17 +41,17 @@ describe("GeoGebra document storage client", () => {
     const request = async (url: string | URL | Request, init?: RequestInit) => {
       calls.push({ url: String(url), init });
       if (init?.method === "DELETE") return new Response(null, { status: 204 });
-      if (String(url).endsWith("/v1/geogebra-documents")) return Response.json({ documents: [] });
+      if (new URL(String(url)).pathname === "/v1/geogebra-documents") return Response.json({ documents: [] });
       return Response.json({ document: {
         id: "doc/a", title: "Doc", mimeType: "application/vnd.geogebra.file", contentKind: "binary", content: "eA==",
         sizeBytes: 1, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z",
       } });
     };
-    await listGeoGebraDocuments("http://backend/", "secret", request as typeof fetch);
+    await listGeoGebraDocuments("http://backend/", "secret", { limit: 100, offset: 0 }, request as typeof fetch);
     await loadGeoGebraDocument("http://backend/", "secret", "doc/a", request as typeof fetch);
     await deleteGeoGebraDocument("http://backend/", "secret", "doc/a", request as typeof fetch);
     expect(calls.map(({ url }) => url)).toEqual([
-      "http://backend/v1/geogebra-documents",
+      "http://backend/v1/geogebra-documents?limit=100&offset=0",
       "http://backend/v1/geogebra-documents/doc%2Fa",
       "http://backend/v1/geogebra-documents/doc%2Fa",
     ]);
@@ -98,11 +99,51 @@ describe("GeoGebra document storage client", () => {
       captureDocumentBase64: async () => "",
       restoreDocumentBase64: async (base64) => { restored = base64; },
     }, request as typeof fetch);
-    expect(await reopened.list()).toEqual([expect.objectContaining({ id: "proof", title: "Proof" })]);
+    expect(await reopened.list({ limit: 100, offset: 0 })).toEqual([expect.objectContaining({ id: "proof", title: "Proof" })]);
     expect((await reopened.open("proof")).id).toBe("proof");
     expect(restored).toBe(completeGgb);
     await reopened.delete("proof");
-    expect(await reopened.list()).toEqual([]);
+    expect(await reopened.list({ limit: 100, offset: 0 })).toEqual([]);
+  });
+
+  test("reaches document 101 through stable paged listing", async () => {
+    const updatedAt = "2026-01-01T00:00:00.000Z";
+    const documents = Array.from({ length: 101 }, (_, index) => ({
+      id: `doc-${String(index).padStart(3, "0")}`,
+      title: `Document ${index}`,
+      mimeType: "application/vnd.geogebra.file",
+      contentKind: "binary" as const,
+      sizeBytes: index,
+      createdAt: updatedAt,
+      updatedAt,
+    }));
+    const requestedOffsets: number[] = [];
+    const request = async (urlValue: string | URL | Request) => {
+      const url = new URL(String(urlValue));
+      const limit = Number(url.searchParams.get("limit"));
+      const offset = Number(url.searchParams.get("offset"));
+      requestedOffsets.push(offset);
+      return Response.json({ documents: documents.slice(offset, offset + limit) });
+    };
+
+    const first = await listGeoGebraDocuments(
+      "http://backend",
+      null,
+      { limit: 100, offset: 0 },
+      request as typeof fetch,
+    );
+    const second = await listGeoGebraDocuments(
+      "http://backend",
+      null,
+      { limit: 100, offset: first.length },
+      request as typeof fetch,
+    );
+    const merged = mergeGeoGebraDocumentPages(first, second);
+
+    expect(requestedOffsets).toEqual([0, 100]);
+    expect(merged).toHaveLength(101);
+    expect(merged.map(({ id }) => id)).toEqual(documents.map(({ id }) => id));
+    expect(merged.at(-1)?.id).toBe("doc-100");
   });
 
   test("does not report an open until the canvas restore completes", async () => {

@@ -37,6 +37,7 @@ const APP_COMMANDS: &[&str] = &[
     "load_problem_detail",
     "save_provider_credential",
     "delete_provider_credential",
+    "list_pending_credential_cleanup",
     "list_provider_credential_metadata",
     "mark_renderer_ready",
     "install_update",

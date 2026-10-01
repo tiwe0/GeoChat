@@ -6,6 +6,8 @@ export type CanvasTransactionOptions = {
   label: string;
   shouldContinue?: () => boolean;
   supersedeKey?: string;
+  captureSnapshot?: () => string | undefined | PromiseLike<string | undefined>;
+  restoreSnapshot?: (snapshot: string) => boolean | void | PromiseLike<boolean | void>;
 };
 
 export type CanvasTransactionContext = {
@@ -29,6 +31,7 @@ type CanvasTransactionAdapter = {
 type RecoveryRecord = CanvasRecoveryState & {
   snapshot: string;
   epoch: number;
+  restore: (snapshot: string) => boolean | void | PromiseLike<boolean | void>;
 };
 
 type Lease = {
@@ -102,7 +105,9 @@ export class CanvasTransactionCoordinator {
       let snapshot: string | undefined;
       try {
         this.assertLease(lease);
-        snapshot = this.adapter.capture();
+        snapshot = lease.options.captureSnapshot
+          ? await Promise.resolve(lease.options.captureSnapshot())
+          : this.adapter.capture();
         if (!snapshot) throw new Error("GeoGebra did not provide a complete XML snapshot.");
         this.assertLease(lease);
         const transaction = this.contextFor(lease);
@@ -140,7 +145,7 @@ export class CanvasTransactionCoordinator {
         this.notifyRecoveryChanged();
         return;
       }
-      const restored = await Promise.resolve(this.adapter.restore(recovery.snapshot));
+      const restored = await Promise.resolve(recovery.restore(recovery.snapshot));
       if (restored === false) throw new CanvasRecoveryRequiredError("Canvas recovery retry was rejected by GeoGebra.");
       this.recovery = null;
       this.notifyRecoveryChanged();
@@ -163,7 +168,9 @@ export class CanvasTransactionCoordinator {
   private async rollback(lease: Lease, snapshot: string) {
     if (this.activeLease?.id !== lease.id) throw new Error("Canvas transaction lost its rollback lease.");
     if (this.adapter.epoch() !== lease.epoch) throw new Error("Canvas applet changed before rollback.");
-    const restored = await Promise.resolve(this.adapter.restore(snapshot));
+    const restored = await Promise.resolve(
+      (lease.options.restoreSnapshot ?? this.adapter.restore)(snapshot),
+    );
     if (restored === false) throw new Error("GeoGebra rejected the rollback snapshot.");
     if (this.activeLease?.id !== lease.id) throw new Error("Canvas transaction lost its lease during rollback.");
     if (this.adapter.epoch() !== lease.epoch) throw new Error("Canvas applet changed during rollback.");
@@ -193,6 +200,7 @@ export class CanvasTransactionCoordinator {
       error: errorMessage(error),
       snapshot,
       epoch: lease.epoch,
+      restore: lease.options.restoreSnapshot ?? this.adapter.restore,
     };
     this.notifyRecoveryChanged();
   }

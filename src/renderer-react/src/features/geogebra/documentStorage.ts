@@ -12,6 +12,11 @@ function endpoint(apiOrigin: string, id?: string) {
   return id === undefined ? collection : `${collection}/${encodeURIComponent(id)}`;
 }
 
+export type GeoGebraDocumentListOptions = {
+  limit: number;
+  offset: number;
+};
+
 function headers(token: string | null, json = false) {
   const result: Record<string, string> = { "x-client-channel": "desktop-workbench" };
   if (token) result.Authorization = `Bearer ${token}`;
@@ -54,9 +59,13 @@ export async function loadGeoGebraDocument(
 export async function listGeoGebraDocuments(
   apiOrigin: string,
   token: string | null,
+  options: GeoGebraDocumentListOptions,
   request: typeof fetch = fetch,
 ): Promise<GeoGebraDocumentMetadata[]> {
-  const response = await request(endpoint(apiOrigin), { headers: headers(token), cache: "no-store" });
+  const url = new URL(endpoint(apiOrigin));
+  url.searchParams.set("limit", String(options.limit));
+  url.searchParams.set("offset", String(options.offset));
+  const response = await request(url, { headers: headers(token), cache: "no-store" });
   const data = await readJson(response, "GeoGebra document list returned invalid JSON.");
   if (!response.ok) throw new Error(responseMessage(data, `Unable to list GeoGebra documents (${response.status}).`));
   const decoded = decodeGeoGebraDocumentListResponse(data);
@@ -95,8 +104,8 @@ export class GeoGebraDocumentWorkspace {
     private readonly request: typeof fetch = fetch,
   ) {}
 
-  list() {
-    return listGeoGebraDocuments(this.apiOrigin, this.token, this.request);
+  list(options: GeoGebraDocumentListOptions) {
+    return listGeoGebraDocuments(this.apiOrigin, this.token, options, this.request);
   }
 
   async save(input: { id: string; title: string }) {
@@ -123,6 +132,18 @@ export class GeoGebraDocumentWorkspace {
   delete(id: string) {
     return deleteGeoGebraDocument(this.apiOrigin, this.token, id, this.request);
   }
+}
+
+export function mergeGeoGebraDocumentPages(
+  current: GeoGebraDocumentMetadata[],
+  next: GeoGebraDocumentMetadata[],
+) {
+  const byId = new Map(current.map((document) => [document.id, document]));
+  for (const document of next) byId.set(document.id, document);
+  return [...byId.values()].sort((left, right) => {
+    const byUpdatedAt = right.updatedAt.localeCompare(left.updatedAt);
+    return byUpdatedAt || left.id.localeCompare(right.id);
+  });
 }
 
 async function readJson(response: Response, message: string): Promise<unknown> {

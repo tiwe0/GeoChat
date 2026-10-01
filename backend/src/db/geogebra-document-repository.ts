@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { Buffer } from "node:buffer";
 import type {
   GeoGebraDocument,
@@ -38,7 +38,7 @@ export function createGeoGebraDocumentRepository(db: SqliteDatabase): GeoGebraDo
         updatedAt: geogebraDocuments.updatedAt,
       }).from(geogebraDocuments)
         .where(eq(geogebraDocuments.ownerScopeKey, scopeKey(scope)))
-        .orderBy(desc(geogebraDocuments.updatedAt))
+        .orderBy(desc(geogebraDocuments.updatedAt), asc(geogebraDocuments.id))
         .limit(options.limit)
         .offset(options.offset)
         .all()

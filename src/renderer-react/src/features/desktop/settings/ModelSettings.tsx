@@ -104,6 +104,17 @@ export function ModelSettings() {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [credentialSave, setCredentialSave] = useState<CredentialSaveState>({ status: "idle" });
+  const [pendingCleanupRefs, setPendingCleanupRefs] = useState<string[]>([]);
+
+  const refreshPendingCredentialCleanup = useCallback(async () => {
+    const desktopApi = installedDesktopApi();
+    if (!desktopApi) return;
+    try {
+      setPendingCleanupRefs(await desktopApi.listPendingCredentialCleanup());
+    } catch {
+      logger.warn("provider_credential_cleanup_list_failed", "MODEL_CREDENTIAL_CLEANUP_LIST_FAILED");
+    }
+  }, []);
 
   const resetCredentialSave = useCallback(() => {
     setCredentialSave({ status: "idle" });
@@ -116,13 +127,14 @@ export function ModelSettings() {
       : config.model.provider;
     setProvider(activeProvider);
     setCustomProvider(config.customProvider);
+    void refreshPendingCredentialCleanup();
     if (activeProvider === CUSTOM_AGENT_PROVIDER_ID) {
       setCredentialRef(config.customProvider.credentialRef);
       return;
     }
     const credentials = credentialsForProvider(config.providerCredentials, activeProvider);
     setCredentialRef(credentials.credentialRef);
-  }, []);
+  }, [refreshPendingCredentialCleanup]);
 
   const selectProvider = useCallback((nextProvider: string) => {
     const config = readDesktopConfig();
@@ -221,6 +233,7 @@ export function ModelSettings() {
       setCredentialRef(metadata.credentialRef);
       if (isCustom) setCustomProvider(readDesktopConfig().customProvider);
       if (replacement.cleanup.status === "retry-required") {
+        await refreshPendingCredentialCleanup();
         setCredentialSave({
           status: "cleanup-required",
           credentialRef: replacement.cleanup.credentialRef,
@@ -234,6 +247,7 @@ export function ModelSettings() {
       }
     } catch (caughtError) {
       if (caughtError instanceof CredentialCleanupRequiredError) {
+        await refreshPendingCredentialCleanup();
         setCredentialSave({
           status: "cleanup-required",
           credentialRef: caughtError.credentialRef,
@@ -248,29 +262,32 @@ export function ModelSettings() {
     } finally {
       setSaving(false);
     }
-  }, [apiKey, customProvider, isCustom, provider, saving, t]);
+  }, [apiKey, customProvider, isCustom, provider, refreshPendingCredentialCleanup, saving, t]);
 
-  const retryCredentialCleanup = useCallback(async () => {
-    if (saving || credentialSave.status !== "cleanup-required") return;
+  const retryCredentialCleanup = useCallback(async (credentialRefToDelete: string) => {
+    if (saving) return;
     const desktopApi = installedDesktopApi();
     if (!desktopApi) return;
-    const cleanup = credentialSave;
     setSaving(true);
     try {
-      await desktopApi.deleteProviderCredential(cleanup.credentialRef);
-      if (cleanup.phase === "replaced") {
-        setCredentialSave({ status: "valid" });
-        setSaved(true);
-      } else {
-        setCredentialSave({ status: "invalid", message: t("settings.credentialNotSaved") });
+      await desktopApi.deleteProviderCredential(credentialRefToDelete);
+      setPendingCleanupRefs((current) => current.filter((value) => value !== credentialRefToDelete));
+      if (credentialSave.status === "cleanup-required" && credentialSave.credentialRef === credentialRefToDelete) {
+        if (credentialSave.phase === "replaced") {
+          setCredentialSave({ status: "valid" });
+          setSaved(true);
+        } else {
+          setCredentialSave({ status: "invalid", message: t("settings.credentialNotSaved") });
+        }
       }
       logger.info("provider_credential_cleanup_completed", "MODEL_CREDENTIAL_CLEANUP_COMPLETED", { provider });
     } catch {
+      await refreshPendingCredentialCleanup();
       logger.warn("provider_credential_cleanup_retry_failed", "MODEL_CREDENTIAL_CLEANUP_RETRY_FAILED", { provider });
     } finally {
       setSaving(false);
     }
-  }, [credentialSave, provider, saving, t]);
+  }, [credentialSave, provider, refreshPendingCredentialCleanup, saving, t]);
 
   const customValidationMessage = customValidationError
     ? t(`settings.customValidation.${customValidationError}`)
@@ -323,13 +340,40 @@ export function ModelSettings() {
           configured={Boolean(credentialRef)}
           credentialSave={credentialSave}
           disabled={saving}
-          onRetryCleanup={() => void retryCredentialCleanup()}
+          onRetryCleanup={() => {
+            if (credentialSave.status === "cleanup-required") {
+              void retryCredentialCleanup(credentialSave.credentialRef);
+            }
+          }}
           onChange={(value) => {
             setApiKey(value);
             setSaved(false);
             resetCredentialSave();
           }}
         />
+
+        {pendingCleanupRefs.length > 0 ? (
+          <Stack spacing={1} sx={{ p: 1.5, border: 1, borderColor: "error.main", borderRadius: 1.5 }}>
+            <Typography variant="body2" color="error.main">
+              {t("settings.pendingCredentialCleanup")}
+            </Typography>
+            {pendingCleanupRefs.map((pendingRef) => (
+              <Stack key={pendingRef} direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                <Typography variant="caption" sx={{ flex: 1, fontFamily: "monospace", overflowWrap: "anywhere" }}>
+                  {pendingRef}
+                </Typography>
+                <Button
+                  disabled={saving}
+                  size="small"
+                  variant="outlined"
+                  onClick={() => void retryCredentialCleanup(pendingRef)}
+                >
+                  {t("settings.retryCredentialCleanup")}
+                </Button>
+              </Stack>
+            ))}
+          </Stack>
+        ) : null}
 
         {isCustom ? (
           <>
@@ -460,6 +504,7 @@ export function ModelSettings() {
             saving
             || saved
             || credentialSave.status === "cleanup-required"
+            || pendingCleanupRefs.length > 0
             || (!apiKey.trim() && !credentialRef)
             || (isCustom && customValidationError !== null)
           }

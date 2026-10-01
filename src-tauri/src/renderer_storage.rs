@@ -37,7 +37,7 @@ impl RendererStorage {
             AtomicJsonFile::new(path.clone(), RENDERER_STORAGE_LOCK_NAME, "renderer storage");
         let lock = file.lock()?;
         scrub_sensitive_storage_artifacts(app_data_dir, &path)?;
-        let entries = load_and_repair_entries(&file, &path, &lock)?;
+        let entries = load_and_repair_entries(&file, &lock)?;
         drop(lock);
         Ok(Self {
             file,
@@ -53,7 +53,7 @@ impl RendererStorage {
     pub(crate) fn get(&mut self, keys: Option<Vec<String>>) -> Result<Map<String, Value>, String> {
         let lock = self.file.lock()?;
         scrub_sensitive_storage_artifacts(storage_parent(&self.path)?, &self.path)?;
-        self.entries = load_and_repair_entries(&self.file, &self.path, &lock)?;
+        self.entries = load_and_repair_entries(&self.file, &lock)?;
         let Some(keys) = keys else {
             return Ok(self.all());
         };
@@ -69,7 +69,7 @@ impl RendererStorage {
     pub(crate) fn set_batch(&mut self, values: Map<String, Value>) -> Result<(), String> {
         let lock = self.file.lock()?;
         scrub_sensitive_storage_artifacts(storage_parent(&self.path)?, &self.path)?;
-        let mut candidate = load_and_repair_entries(&self.file, &self.path, &lock)?;
+        let mut candidate = load_and_repair_entries(&self.file, &lock)?;
         candidate.extend(values);
         if let Err(error) = self.persist_candidate(&lock, &candidate) {
             return reconcile_after_persist_error(
@@ -87,7 +87,7 @@ impl RendererStorage {
     pub(crate) fn remove_batch(&mut self, keys: Vec<String>) -> Result<(), String> {
         let lock = self.file.lock()?;
         scrub_sensitive_storage_artifacts(storage_parent(&self.path)?, &self.path)?;
-        let mut candidate = load_and_repair_entries(&self.file, &self.path, &lock)?;
+        let mut candidate = load_and_repair_entries(&self.file, &lock)?;
         for key in keys {
             validate_preference_key(&key)?;
             candidate.remove(&key);
@@ -122,14 +122,13 @@ fn storage_parent(path: &Path) -> Result<&Path, String> {
 
 fn load_and_repair_entries(
     file: &AtomicJsonFile,
-    path: &Path,
     lock: &AtomicJsonFileLock,
 ) -> Result<Map<String, Value>, String> {
     let entries: Map<String, Value> = file.read_or_recover(lock)?.unwrap_or_default();
     let repaired = repair_disk_candidate(entries);
     validate_candidate(&repaired.entries)?;
     if repaired.changed {
-        if let Err(error) = replace_repaired_file(file, path, lock, &repaired.entries) {
+        if let Err(error) = replace_repaired_file(file, lock, &repaired.entries) {
             log::error!(
                 target: "geochat::storage",
                 "Could not persist repaired renderer storage; continuing with the safe in-memory state: {error}"
@@ -172,12 +171,9 @@ fn repair_disk_candidate(candidate: Map<String, Value>) -> RepairedCandidate {
 
 fn replace_repaired_file(
     file: &AtomicJsonFile,
-    path: &Path,
     lock: &AtomicJsonFileLock,
     entries: &Map<String, Value>,
 ) -> Result<(), String> {
-    remove_if_exists(path)?;
-    remove_if_exists(&path.with_extension("previous"))?;
     file.write(lock, entries)
 }
 
@@ -639,6 +635,64 @@ mod tests {
 
         let reloaded = RendererStorage::load(&root).expect("reload repaired renderer storage");
         assert_eq!(reloaded.all(), storage.all());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn failed_repair_replace_preserves_the_current_preferences_for_a_later_reload() {
+        let root = temporary_directory("renderer-storage-repair-write-failure");
+        fs::create_dir_all(&root).expect("create test directory");
+        let path = root.join(RENDERER_STORAGE_FILE_NAME);
+        let installation_id = Uuid::new_v4();
+        let damaged_config = r#"{"schemaVersion":1,"locale":"zh-CN""#;
+        let original = serde_json::to_vec(&Map::from_iter([
+            (LANGUAGE_KEY.to_string(), json!("\"en\"")),
+            (
+                INSTALLATION_ID_KEY.to_string(),
+                json!(format!("\"{installation_id}\"")),
+            ),
+            (DESKTOP_CONFIG_KEY.to_string(), json!(damaged_config)),
+        ]))
+        .expect("serialize damaged renderer state");
+        fs::write(&path, &original).expect("write damaged renderer state");
+
+        let blocking_backup = path.with_extension("previous");
+        fs::create_dir(&blocking_backup).expect("create blocking backup directory");
+        fs::write(blocking_backup.join("keep"), b"block replacement")
+            .expect("make blocking backup directory non-empty");
+
+        let file =
+            AtomicJsonFile::new(path.clone(), RENDERER_STORAGE_LOCK_NAME, "renderer storage");
+        let lock = file.lock().expect("lock renderer storage");
+        let entries: Map<String, Value> = file
+            .read_or_recover(&lock)
+            .expect("read damaged renderer state")
+            .expect("renderer state exists");
+        let repaired = repair_disk_candidate(entries);
+        assert!(repaired.changed);
+        replace_repaired_file(&file, &lock, &repaired.entries)
+            .expect_err("blocking backup must fail the atomic replacement");
+        assert_eq!(
+            fs::read(&path).expect("read preserved current state"),
+            original,
+            "a failed repair must not delete or partially replace the current state"
+        );
+        drop(lock);
+
+        fs::remove_dir_all(&blocking_backup).expect("remove blocking backup directory");
+        let repaired_storage = RendererStorage::load(&root).expect("retry repair on reload");
+        assert_eq!(
+            repaired_storage.all().get(LANGUAGE_KEY),
+            Some(&json!("\"en\""))
+        );
+        assert_eq!(
+            repaired_storage.all().get(INSTALLATION_ID_KEY),
+            Some(&json!(format!("\"{installation_id}\"")))
+        );
+        assert!(!repaired_storage.all().contains_key(DESKTOP_CONFIG_KEY));
+
+        let reloaded = RendererStorage::load(&root).expect("reload repaired renderer storage");
+        assert_eq!(reloaded.all(), repaired_storage.all());
         let _ = fs::remove_dir_all(root);
     }
 

@@ -10,6 +10,7 @@ import {
 const expectedCommandByMethod = {
   saveProviderCredential: "save_provider_credential",
   deleteProviderCredential: "delete_provider_credential",
+  listPendingCredentialCleanup: "list_pending_credential_cleanup",
   listProviderCredentialMetadata: "list_provider_credential_metadata",
   getRendererStorage: "get_renderer_storage",
   setRendererStorage: "set_renderer_storage",
@@ -57,6 +58,7 @@ describe("Tauri desktop bridge contract", () => {
       credentials: {
         saveProviderCredential: "save_provider_credential",
         deleteProviderCredential: "delete_provider_credential",
+        listPendingCredentialCleanup: "list_pending_credential_cleanup",
         listProviderCredentialMetadata: "list_provider_credential_metadata",
       },
       runtime: {
@@ -135,7 +137,7 @@ describe("Tauri desktop bridge contract", () => {
     const calls: Array<{ command: string; args?: Record<string, unknown> }> = [];
     const api = createTauriDesktopApi(async (command, args) => {
       calls.push({ command, args });
-      if (command === "list_provider_credential_metadata") return [] as never;
+      if (command === "list_provider_credential_metadata" || command === "list_pending_credential_cleanup") return [] as never;
       return (command === "get_runtime_info" ? {
         platform: "darwin",
         appVersion: "0.6.1",
@@ -151,6 +153,7 @@ describe("Tauri desktop bridge contract", () => {
       secret: "test-secret"
     });
     await api.deleteProviderCredential("old-ref");
+    await api.listPendingCredentialCleanup();
     await api.getProviderCredentialStatus("status-ref");
     await api.listProviderCredentialMetadata(["listed-ref"]);
     await api.getRendererStorage(["theme", "zoom"]);
@@ -195,9 +198,10 @@ describe("Tauri desktop bridge contract", () => {
     expect(calls.map((call) => call.command)).toEqual([
       "save_provider_credential",
       "delete_provider_credential",
+      "list_pending_credential_cleanup",
       "list_provider_credential_metadata",
       "list_provider_credential_metadata",
-      ...Object.values(expectedCommandByMethod).slice(3)
+      ...Object.values(expectedCommandByMethod).slice(4)
     ]);
     expect(calls.find((call) => call.command === "save_provider_credential")?.args).toEqual({
       request: {

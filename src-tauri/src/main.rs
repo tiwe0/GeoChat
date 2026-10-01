@@ -33,8 +33,8 @@ use commands::app_bundle_update::{
     rollback_app_bundle_update,
 };
 use commands::credentials::{
-    delete_provider_credential, list_provider_credential_metadata, save_provider_credential,
-    CredentialCommandState,
+    delete_provider_credential, list_pending_credential_cleanup, list_provider_credential_metadata,
+    save_provider_credential, CredentialCommandState,
 };
 use commands::graphics::{get_graphics_preferences, set_graphics_preferences, DesktopGraphicsMode};
 use commands::improvement::{
@@ -216,6 +216,7 @@ fn main() {
             remove_renderer_storage,
             save_provider_credential,
             delete_provider_credential,
+            list_pending_credential_cleanup,
             list_provider_credential_metadata,
             mark_renderer_ready,
             install_update
@@ -334,7 +335,7 @@ fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
         &local_backend_auth_token,
         credential_broker,
     )?;
-    app.manage(CredentialCommandState::new(credential_vault));
+    app.manage(CredentialCommandState::new(credential_vault, &app_data_dir));
     let shell_update_state = initial_shell_update_state(settings.update_preferences.clone());
     // Resolving verifies every asset in the manifest by hash, so it happens
     // exactly once here and everything downstream reads the cached result.

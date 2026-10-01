@@ -248,6 +248,7 @@ export type DesktopUnifiedUpdateState = {
 export type GeoChatDesktopApi = {
   saveProviderCredential: (request: DesktopSaveProviderCredentialRequest) => Promise<DesktopProviderCredentialMetadata>;
   deleteProviderCredential: (credentialRef: string) => Promise<void>;
+  listPendingCredentialCleanup: () => Promise<string[]>;
   getProviderCredentialStatus: (credentialRef: string) => Promise<DesktopProviderCredentialStatus>;
   listProviderCredentialMetadata: (credentialRefs: string[]) => Promise<DesktopProviderCredentialMetadata[]>;
   getRendererStorage: (keys?: string[]) => Promise<DesktopRendererStorage>;

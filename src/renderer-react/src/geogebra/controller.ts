@@ -14,6 +14,7 @@ import {
 const logger = createStructuredLogger("geogebra.controller");
 
 const COMMAND_DELAY_MS = 0;
+const DOCUMENT_IO_TIMEOUT_MS = 15_000;
 
 export class GeoGebraController {
   private api: GeoGebraApi | null = null;
@@ -29,7 +30,10 @@ export class GeoGebraController {
     },
   });
 
-  constructor(animationScheduler?: AnimationScheduler) {
+  constructor(
+    animationScheduler?: AnimationScheduler,
+    private readonly documentIoTimeoutMs = DOCUMENT_IO_TIMEOUT_MS,
+  ) {
     this.animations = new GeoGebraAnimationRuntime((object, value) => this.call("setValue", object, value), animationScheduler);
   }
 
@@ -166,38 +170,64 @@ export class GeoGebraController {
       throw new Error("当前 GeoGebra applet 不提供完整文档导出 API。");
     }
     return new Promise((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => finish(() => reject(new Error("GeoGebra document export timed out."))), this.documentIoTimeoutMs);
+      const finish = (complete: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        complete();
+      };
       try {
         const returned = this.call("getBase64", (base64: unknown) => {
           if (typeof base64 !== "string" || !base64) {
-            reject(new Error("GeoGebra 返回了空文档。"));
+            finish(() => reject(new Error("GeoGebra 返回了空文档。")));
             return;
           }
-          resolve(base64);
+          finish(() => resolve(base64));
         });
-        if (typeof returned === "string" && returned) resolve(returned);
+        if (typeof returned === "string" && returned) finish(() => resolve(returned));
       } catch (error) {
-        reject(error);
+        finish(() => reject(error));
       }
     });
   }
 
   restoreDocumentBase64(base64: string): Promise<void> {
+    return this.transactions.run(
+      {
+        label: "document:restore",
+        supersedeKey: "document:restore",
+        captureSnapshot: () => this.captureDocumentBase64(),
+        restoreSnapshot: (snapshot) => this.applyDocumentBase64(snapshot),
+      },
+      async (transaction) => {
+        this.animations.dispose();
+        await transaction.wait(() => this.applyDocumentBase64(base64));
+      },
+    );
+  }
+
+  private applyDocumentBase64(base64: string): Promise<void> {
     if (!this.api || typeof this.api.setBase64 !== "function") {
       throw new Error("当前 GeoGebra applet 不提供完整文档恢复 API。");
     }
-    this.animations.dispose();
     return new Promise((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => finish(() => reject(new Error("GeoGebra document restore timed out."))), this.documentIoTimeoutMs);
+      const finish = (complete: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        complete();
+      };
       try {
-        const returned = this.call("setBase64", base64, (success: unknown) => {
-          if (success === false) {
-            reject(new Error("GeoGebra rejected the stored document file."));
-            return;
-          }
-          resolve();
-        });
-        if (returned === false) reject(new Error("GeoGebra rejected the stored document file."));
+        const returned = this.call("setBase64", base64, () => finish(resolve));
+        if (returned === false) {
+          finish(() => reject(new Error("GeoGebra rejected the stored document file.")));
+        }
       } catch (error) {
-        reject(error);
+        finish(() => reject(error));
       }
     });
   }

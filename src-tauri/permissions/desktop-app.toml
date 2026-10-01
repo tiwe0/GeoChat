@@ -40,6 +40,7 @@ permissions = [
   "allow-load-problem-detail",
   "allow-save-provider-credential",
   "allow-delete-provider-credential",
+  "allow-list-pending-credential-cleanup",
   "allow-list-provider-credential-metadata",
   "allow-mark-renderer-ready",
   "allow-install-update",

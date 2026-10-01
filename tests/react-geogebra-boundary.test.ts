@@ -147,9 +147,9 @@ describe("controller tool boundary", () => {
     const controller = new GeoGebraController();
     controller.setApi(api({
       getBase64: (callback: (value: string) => void) => callback(documentBase64),
-      setBase64: (value: string, callback: (success: boolean) => void) => {
+      setBase64: (value: string, callback: () => void) => {
         restored = value;
-        callback(true);
+        callback();
       },
     }));
     expect(await controller.captureDocumentBase64()).toBe(documentBase64);
@@ -157,14 +157,131 @@ describe("controller tool boundary", () => {
     expect(restored).toBe(documentBase64);
   });
 
-  test("surfaces complete document export and restore failures", async () => {
+  test("serializes complete document restore after a failing in-flight canvas transaction", async () => {
+    let finishCommand!: (value: string) => void;
+    let commandStarted!: () => void;
+    const commandStart = new Promise<void>((resolve) => { commandStarted = resolve; });
+    const commandResult = new Promise<string>((resolve) => { finishCommand = resolve; });
+    const events: string[] = [];
+    let canvasState = "<xml>before-command</xml>";
     const controller = new GeoGebraController();
     controller.setApi(api({
-      getBase64: (callback: (value: string) => void) => callback(""),
-      setBase64: (_value: string, callback: (success: boolean) => void) => callback(false),
+      getXML: () => canvasState,
+      asyncEvalCommandResult: () => {
+        commandStarted();
+        return commandResult;
+      },
+      setXML: (xml: string) => {
+        events.push(`rollback:${xml}`);
+        canvasState = xml;
+      },
+      getBase64: (callback: (value: string) => void) => callback(`base64:${canvasState}`),
+      setBase64: (base64: string, callback: () => void) => {
+        events.push(`document:${base64}`);
+        canvasState = `document:${base64}`;
+        callback();
+      },
     }));
-    await expect(controller.captureDocumentBase64()).rejects.toThrow(/空文档/);
+
+    const pendingCommand = controller.executeTool("executeGeoGebraCommands", { commands: ["Bad("] });
+    await commandStart;
+    const pendingOpen = controller.restoreDocumentBase64("UEsDBA==");
+    await Promise.resolve();
+    expect(events).toEqual([]);
+
+    finishCommand(JSON.stringify({ ok: false, error: "command rejected" }));
+    await pendingCommand;
+    await pendingOpen;
+
+    expect(events).toEqual([
+      "rollback:<xml>before-command</xml>",
+      "document:UEsDBA==",
+    ]);
+    expect(canvasState).toBe("document:UEsDBA==");
+  });
+
+  test("supersedes an older pending complete-document restore before committing the newer document", async () => {
+    const callbacks: Array<{ base64: string; complete: () => void }> = [];
+    let firstRestoreStarted!: () => void;
+    let rollbackStarted!: () => void;
+    let secondRestoreStarted!: () => void;
+    const firstStart = new Promise<void>((resolve) => { firstRestoreStarted = resolve; });
+    const rollbackStart = new Promise<void>((resolve) => { rollbackStarted = resolve; });
+    const secondStart = new Promise<void>((resolve) => { secondRestoreStarted = resolve; });
+    const events: string[] = [];
+    let canvasState = "<xml>initial</xml>";
+    const controller = new GeoGebraController();
+    controller.setApi(api({
+      getXML: () => canvasState,
+      setXML: (xml: string) => {
+        events.push(`rollback:${xml}`);
+        canvasState = xml;
+      },
+      getBase64: (callback: (value: string) => void) => callback(`base64:${canvasState}`),
+      setBase64: (base64: string, callback: () => void) => {
+        events.push(`document:${base64}`);
+        canvasState = `document:${base64}`;
+        callbacks.push({ base64, complete: callback });
+        if (base64 === "b2xk") firstRestoreStarted();
+        else if (base64 === "bmV3") secondRestoreStarted();
+        else rollbackStarted();
+      },
+    }));
+
+    const older = controller.restoreDocumentBase64("b2xk");
+    await firstStart;
+    const newer = controller.restoreDocumentBase64("bmV3");
+    callbacks[0]!.complete();
+    await rollbackStart;
+    expect(callbacks[1]?.base64).toBe("base64:<xml>initial</xml>");
+    callbacks[1]!.complete();
+    await expect(older).rejects.toMatchObject({ name: "AbortError" });
+    await secondStart;
+    callbacks[2]!.complete();
+    await newer;
+
+    expect(events).toEqual([
+      "document:b2xk",
+      "document:base64:<xml>initial</xml>",
+      "document:bmV3",
+    ]);
+    expect(canvasState).toBe("document:bmV3");
+  });
+
+  test("surfaces complete document export and restore failures", async () => {
+    const exportController = new GeoGebraController();
+    exportController.setApi(api({
+      getBase64: (callback: (value: string) => void) => callback(""),
+    }));
+    await expect(exportController.captureDocumentBase64()).rejects.toThrow(/空文档/);
+
+    const controller = new GeoGebraController(undefined, 5);
+    controller.setApi(api({
+      getBase64: (callback: (value: string) => void) => callback("rollback-base64"),
+      setBase64: (base64: string, callback: () => void) => {
+        if (base64 === "rollback-base64") {
+          callback();
+          return;
+        }
+        return false;
+      },
+    }));
     await expect(controller.restoreDocumentBase64("UEsDBA==")).rejects.toThrow(/rejected/);
+  });
+
+  test("restores the complete prior document when loading partially mutates and then times out", async () => {
+    const applied: string[] = [];
+    const controller = new GeoGebraController(undefined, 5);
+    controller.setApi(api({
+      getBase64: (callback: (value: string) => void) => callback("complete-before"),
+      setBase64: (base64: string, callback: () => void) => {
+        applied.push(base64);
+        if (base64 === "complete-before") callback();
+      },
+    }));
+
+    await expect(controller.restoreDocumentBase64("partial-new-document")).rejects.toThrow(/timed out/);
+    expect(applied).toEqual(["partial-new-document", "complete-before"]);
   });
 
   test("clamps PNG export options rather than passing them through", async () => {

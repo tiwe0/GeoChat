@@ -4,7 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { backendAuthToken, backendOrigin } from "../desktop/runtime";
 import type { GeoGebraController } from "../../geogebra/controller";
-import { GeoGebraDocumentWorkspace } from "./documentStorage";
+import { GeoGebraDocumentWorkspace, mergeGeoGebraDocumentPages } from "./documentStorage";
+
+const DOCUMENT_PAGE_SIZE = 100;
+const DOCUMENT_FETCH_SIZE = DOCUMENT_PAGE_SIZE + 1;
 
 type Props = {
   controller: GeoGebraController;
@@ -18,6 +21,7 @@ export function GeoGebraDocumentPanel({ controller, open, onClose }: Props) {
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const workspace = useMemo(() => new GeoGebraDocumentWorkspace(
     backendOrigin(),
@@ -31,11 +35,21 @@ export function GeoGebraDocumentPanel({ controller, open, onClose }: Props) {
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      setDocuments(await workspace.list());
+      const page = await workspace.list({ limit: DOCUMENT_FETCH_SIZE, offset: 0 });
+      setDocuments(mergeGeoGebraDocumentPages([], page.slice(0, DOCUMENT_PAGE_SIZE)));
+      setHasMore(page.length > DOCUMENT_PAGE_SIZE);
     } catch (caughtError) {
       setError(message(caughtError));
     }
   }, [workspace]);
+
+  function loadMore() {
+    void run(async () => {
+      const page = await workspace.list({ limit: DOCUMENT_FETCH_SIZE, offset: documents.length });
+      setDocuments((current) => mergeGeoGebraDocumentPages(current, page.slice(0, DOCUMENT_PAGE_SIZE)));
+      setHasMore(page.length > DOCUMENT_PAGE_SIZE);
+    });
+  }
 
   useEffect(() => {
     if (open) void refresh();
@@ -143,6 +157,11 @@ export function GeoGebraDocumentPanel({ controller, open, onClose }: Props) {
           </li>
         ))}
       </ul>
+      {hasMore && (
+        <button type="button" className="geogebra-document-load-more" onClick={loadMore} disabled={busy}>
+          {t("documents.loadMore")}
+        </button>
+      )}
     </aside>
   );
 }

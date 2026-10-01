@@ -10,6 +10,7 @@ type TauriInvoke = <T>(command: string, args?: Record<string, unknown>) => Promi
 export const TAURI_CREDENTIAL_COMMANDS = {
   saveProviderCredential: "save_provider_credential",
   deleteProviderCredential: "delete_provider_credential",
+  listPendingCredentialCleanup: "list_pending_credential_cleanup",
   listProviderCredentialMetadata: "list_provider_credential_metadata",
 } as const;
 
@@ -17,6 +18,7 @@ type CredentialBridge = Pick<
   GeoChatDesktopApi,
   | "saveProviderCredential"
   | "deleteProviderCredential"
+  | "listPendingCredentialCleanup"
   | "getProviderCredentialStatus"
   | "listProviderCredentialMetadata"
 >;
@@ -33,6 +35,8 @@ export function createTauriCredentialBridge(invoke: TauriInvoke): CredentialBrid
       invoke(TAURI_CREDENTIAL_COMMANDS.saveProviderCredential, { request }),
     deleteProviderCredential: (credentialRef: string) =>
       invoke(TAURI_CREDENTIAL_COMMANDS.deleteProviderCredential, { credentialRef }),
+    listPendingCredentialCleanup: () =>
+      invoke<string[]>(TAURI_CREDENTIAL_COMMANDS.listPendingCredentialCleanup),
     getProviderCredentialStatus: async (credentialRef: string): Promise<DesktopProviderCredentialStatus> => {
       const metadata = (await listProviderCredentialMetadata([credentialRef]))[0] ?? null;
       return { credentialRef, configured: metadata !== null, metadata };

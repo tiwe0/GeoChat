@@ -301,6 +301,64 @@ describe("desktop-only renderer and backend boundaries", () => {
     expect(second.json.run).toEqual(first.json.run);
   });
 
+  test("retries cancellation after a concurrent running ledger write and never returns a running success", async () => {
+    const { context, request } = await createHttpHarness();
+    const repository = context.repositories.agentRuns;
+    const run = createAgentRunLedger({
+      runId: `cancel-conflict-${crypto.randomUUID()}`,
+      conversationId: `cancel-conflict-conversation-${crypto.randomUUID()}`,
+      clientSessionId: "test-installation",
+      model: { provider: "deepseek", model: "deepseek-chat", apiKey: "test", customBaseUrl: "" },
+      prompt: "读取画板。",
+      attachmentCount: 0,
+    });
+    await repository.saveLedger(run);
+
+    const compareAndSwapLedger = repository.compareAndSwapLedger.bind(repository);
+    let injectedConflict = false;
+    repository.compareAndSwapLedger = async (candidate, expectedRevision) => {
+      if (!injectedConflict) {
+        injectedConflict = true;
+        const current = await repository.getLedger(candidate.runId);
+        if (!current) throw new Error("missing concurrent cancellation fixture");
+        await compareAndSwapLedger({ ...current, prompt: "concurrent writer won" }, expectedRevision);
+      }
+      return compareAndSwapLedger(candidate, expectedRevision);
+    };
+
+    const response = await request(`/v1/agent-runs/${encodeURIComponent(run.runId)}/cancel`, { method: "POST" });
+    expect(response.status).toBe(200);
+    expect(response.json.run).toMatchObject({ status: "cancelled", error: "Stopped by user." });
+    expect(response.json.run.status).not.toBe("running");
+  });
+
+  test("returns a conflict instead of a running success when cancellation keeps losing the CAS race", async () => {
+    const { context, request } = await createHttpHarness();
+    const repository = context.repositories.agentRuns;
+    const run = createAgentRunLedger({
+      runId: `cancel-conflict-limit-${crypto.randomUUID()}`,
+      conversationId: `cancel-conflict-limit-conversation-${crypto.randomUUID()}`,
+      clientSessionId: "test-installation",
+      model: { provider: "deepseek", model: "deepseek-chat", apiKey: "test", customBaseUrl: "" },
+      prompt: "读取画板。",
+      attachmentCount: 0,
+    });
+    await repository.saveLedger(run);
+
+    const compareAndSwapLedger = repository.compareAndSwapLedger.bind(repository);
+    repository.compareAndSwapLedger = async (candidate, expectedRevision) => {
+      const current = await repository.getLedger(candidate.runId);
+      if (!current) throw new Error("missing repeated cancellation conflict fixture");
+      await compareAndSwapLedger({ ...current, prompt: `concurrent writer ${expectedRevision}` }, expectedRevision);
+      return compareAndSwapLedger(candidate, expectedRevision);
+    };
+
+    const response = await request(`/v1/agent-runs/${encodeURIComponent(run.runId)}/cancel`, { method: "POST" });
+    expect(response.status).toBe(409);
+    expect(response.json).toMatchObject({ error: "agent_run_conflict" });
+    expect((await repository.getLedger(run.runId))?.status).toBe("running");
+  });
+
   test("returns every stale run owned by the requesting installation without exposing active leases or other clients", async () => {
     const { context, request } = await createHttpHarness();
     const createOwnedRun = (runId: string, clientSessionId: string, leaseExpiresAt: string | null = null) => ({

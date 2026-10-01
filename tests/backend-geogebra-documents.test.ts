@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Buffer } from "node:buffer";
+import { geogebraDocuments } from "../backend/src/db/schema";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -117,6 +118,35 @@ describe("GeoGebra document HTTP persistence", () => {
     expect(secondPage.json.documents).toHaveLength(1);
     expect((await request("/v1/geogebra-documents?limit=201")).status).toBe(400);
     expect((await request("/v1/geogebra-documents?offset=-1")).status).toBe(400);
+  });
+
+  test("uses a stable id tiebreaker across 101 documents with the same update timestamp", async () => {
+    const { request, context } = await createHttpHarness();
+    const timestamp = new Date("2026-01-01T00:00:00.000Z");
+    context.database.insert(geogebraDocuments).values(Array.from({ length: 101 }, (_, index) => {
+      const id = `doc-${String(index).padStart(3, "0")}`;
+      return {
+        ownerScopeKey: "offline",
+        ownerUserId: null,
+        id,
+        title: id,
+        mimeType: "application/vnd.geogebra.file",
+        contentKind: "binary" as const,
+        content: Buffer.from(id),
+        sizeBytes: Buffer.byteLength(id),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+    })).run();
+
+    const firstPage = await request("/v1/geogebra-documents?limit=100&offset=0");
+    const secondPage = await request("/v1/geogebra-documents?limit=100&offset=100");
+    const ids = [...firstPage.json.documents, ...secondPage.json.documents]
+      .map((document: { id: string }) => document.id);
+
+    expect(ids).toHaveLength(101);
+    expect(new Set(ids).size).toBe(101);
+    expect(ids).toEqual(Array.from({ length: 101 }, (_, index) => `doc-${String(index).padStart(3, "0")}`));
   });
 
   test("rejects oversized bodies before parsing JSON", async () => {

@@ -1,12 +1,5 @@
+import { createHash } from "node:crypto";
 import type { SqliteMigration } from "./types";
-
-export const initialMigration: SqliteMigration = {
-  version: 1,
-  name: "current_schema_baseline",
-  up(sqlite) {
-    for (const statement of CURRENT_SCHEMA_STATEMENTS) sqlite.run(statement);
-  }
-};
 
 const CURRENT_SCHEMA_STATEMENTS = [
   `CREATE TABLE conversations (id TEXT PRIMARY KEY NOT NULL, title TEXT NOT NULL, source_title TEXT, summary TEXT NOT NULL, model TEXT, owner_user_id TEXT, message_count INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
@@ -59,3 +52,15 @@ const CURRENT_SCHEMA_STATEMENTS = [
   `CREATE INDEX unified_problem_records_shape_idx ON unified_problem_records (construction, modality)`,
   `CREATE INDEX unified_problem_records_taxonomy_idx ON unified_problem_records (subject, grade)`
 ] as const;
+
+export const currentSchemaBaselineName = `clean_slate_${createHash("sha256")
+  .update(CURRENT_SCHEMA_STATEMENTS.join("\n"))
+  .digest("hex")}`;
+
+export const initialMigration: SqliteMigration = {
+  version: 1,
+  name: currentSchemaBaselineName,
+  up(sqlite) {
+    for (const statement of CURRENT_SCHEMA_STATEMENTS) sqlite.run(statement);
+  }
+};

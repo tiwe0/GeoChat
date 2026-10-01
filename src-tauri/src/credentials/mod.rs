@@ -1,9 +1,11 @@
+mod cleanup_queue;
 mod error;
 #[cfg(test)]
 mod memory;
 mod platform;
 mod store;
 
+pub(crate) use cleanup_queue::CredentialCleanupQueue;
 pub(crate) use error::CredentialError;
 #[cfg(test)]
 pub(crate) use memory::InMemoryCredentialStore;

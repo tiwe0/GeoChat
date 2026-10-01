@@ -17,7 +17,6 @@ pub(crate) enum CredentialError {
     UnsupportedVersion,
     StoreUnavailable,
     StoreFailure,
-    TaskFailure,
 }
 
 impl CredentialError {
@@ -32,7 +31,6 @@ impl CredentialError {
             Self::UnsupportedVersion => "credential_unsupported_version",
             Self::StoreUnavailable => "credential_store_unavailable",
             Self::StoreFailure => "credential_store_failure",
-            Self::TaskFailure => "credential_task_failure",
         }
     }
 }

@@ -1,9 +1,11 @@
 use crate::atomic_json_file::{AtomicJsonFile, AtomicJsonFileLock};
 use serde_json::{Map, Value};
 use std::{
+    collections::BTreeSet,
     fs,
     path::{Path, PathBuf},
 };
+use url::Url;
 use uuid::Uuid;
 
 pub(crate) const RENDERER_STORAGE_FILE_NAME: &str = "renderer-state.json";
@@ -12,7 +14,7 @@ const MAX_RENDERER_STORAGE_ENTRIES: usize = 16;
 const MAX_RENDERER_STORAGE_KEY_BYTES: usize = 512;
 const MAX_RENDERER_STORAGE_VALUE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_RENDERER_STORAGE_TOTAL_BYTES: usize = 32 * 1024 * 1024;
-const DESKTOP_CONFIG_KEY: &str = "geochat-desktop-ui-config";
+pub(crate) const DESKTOP_CONFIG_KEY: &str = "geochat-desktop-ui-config";
 const LANGUAGE_KEY: &str = "geogebraCopilotLanguage";
 const SELECTED_MODEL_KEY: &str = "geochatSelectedModel";
 const THINKING_ENABLED_KEY: &str = "geogebraCopilotThinkingEnabled";
@@ -22,6 +24,12 @@ const PANEL_WINDOW_KEY: &str = "geogebraCopilotPanelWindow";
 const INSTALLATION_ID_KEY: &str = "geogebraCopilotInstallationId";
 const CONFIG_QUARANTINE_KEY_PREFIX: &str = "geochat-desktop-ui-config:quarantine:v1:";
 const MAX_CONFIG_QUARANTINE_VALUE_BYTES: usize = 256 * 1024;
+const MAX_CONFIG_IDENTIFIER_BYTES: usize = 128;
+const MAX_CONFIG_LABEL_BYTES: usize = 256;
+const MAX_CONFIG_URL_BYTES: usize = 2 * 1024;
+const MAX_CONFIG_PROVIDER_CREDENTIALS: usize = 16;
+const MAX_CONFIG_CUSTOM_MODELS: usize = 50;
+const MAX_CONFIG_ENABLED_SKILLS: usize = 128;
 
 #[derive(Debug)]
 pub(crate) struct RendererStorage {
@@ -70,7 +78,15 @@ impl RendererStorage {
         let lock = self.file.lock()?;
         scrub_sensitive_storage_artifacts(storage_parent(&self.path)?, &self.path)?;
         let mut candidate = load_and_repair_entries(&self.file, &lock)?;
+        let previous_credential_refs = active_credential_refs_from_entries(&candidate)?;
         candidate.extend(values);
+        validate_candidate(&candidate)?;
+        if active_credential_refs_from_entries(&candidate)? != previous_credential_refs {
+            return Err(
+                "Credential references can only be changed through the native credential lifecycle"
+                    .to_string(),
+            );
+        }
         if let Err(error) = self.persist_candidate(&lock, &candidate) {
             return reconcile_after_persist_error(
                 &self.file,
@@ -88,9 +104,17 @@ impl RendererStorage {
         let lock = self.file.lock()?;
         scrub_sensitive_storage_artifacts(storage_parent(&self.path)?, &self.path)?;
         let mut candidate = load_and_repair_entries(&self.file, &lock)?;
+        let previous_credential_refs = active_credential_refs_from_entries(&candidate)?;
         for key in keys {
             validate_preference_key(&key)?;
             candidate.remove(&key);
+        }
+        validate_candidate(&candidate)?;
+        if active_credential_refs_from_entries(&candidate)? != previous_credential_refs {
+            return Err(
+                "Credential references can only be changed through the native credential lifecycle"
+                    .to_string(),
+            );
         }
         if let Err(error) = self.persist_candidate(&lock, &candidate) {
             return reconcile_after_persist_error(
@@ -105,6 +129,70 @@ impl RendererStorage {
         Ok(())
     }
 
+    /// Reads the durable current configuration without backup recovery. This
+    /// is the authority used for credential deletion decisions.
+    pub(crate) fn credential_config_snapshot(
+        &mut self,
+    ) -> Result<(String, BTreeSet<String>), String> {
+        let lock = self.file.lock()?;
+        let entries = self.read_current_entries_strict(&lock)?;
+        let raw = entries
+            .get(DESKTOP_CONFIG_KEY)
+            .and_then(Value::as_str)
+            .ok_or_else(|| "The durable desktop configuration is missing".to_string())?
+            .to_string();
+        let refs = active_credential_refs_from_raw_config(&raw)?;
+        self.entries = entries;
+        Ok((raw, refs))
+    }
+
+    /// Credential-only CAS. The second identical write synchronizes the
+    /// `.previous` snapshot before any now-inactive Keychain entry is deleted.
+    pub(crate) fn commit_credential_config(
+        &mut self,
+        expected_config_json: &str,
+        next_config_json: &str,
+    ) -> Result<BTreeSet<String>, String> {
+        let lock = self.file.lock()?;
+        let mut candidate = self.read_current_entries_strict(&lock)?;
+        let current = candidate
+            .get(DESKTOP_CONFIG_KEY)
+            .and_then(Value::as_str)
+            .ok_or_else(|| "The durable desktop configuration is missing".to_string())?;
+        if current != expected_config_json {
+            return Err(
+                "The durable desktop configuration changed before credential commit".to_string(),
+            );
+        }
+        let next_value = Value::String(next_config_json.to_string());
+        validate_preference_value(DESKTOP_CONFIG_KEY, &next_value)?;
+        let active_refs = active_credential_refs_from_raw_config(next_config_json)?;
+        candidate.insert(DESKTOP_CONFIG_KEY.to_string(), next_value);
+        validate_candidate(&candidate)?;
+        self.file.write(&lock, &candidate)?;
+        // AtomicJsonFile keeps a previous snapshot. Write the same candidate a
+        // second time so both current and previous carry the committed refs.
+        self.file.write(&lock, &candidate)?;
+        self.entries = candidate;
+        Ok(active_refs)
+    }
+
+    fn read_current_entries_strict(
+        &self,
+        _lock: &AtomicJsonFileLock,
+    ) -> Result<Map<String, Value>, String> {
+        let bytes = fs::read(&self.path).map_err(|error| {
+            format!(
+                "Failed to read the current renderer storage {}: {error}",
+                self.path.display()
+            )
+        })?;
+        let entries: Map<String, Value> = serde_json::from_slice(&bytes)
+            .map_err(|error| format!("The current renderer storage is corrupt: {error}"))?;
+        validate_candidate(&entries)?;
+        Ok(entries)
+    }
+
     fn persist_candidate(
         &self,
         lock: &AtomicJsonFileLock,
@@ -112,6 +200,44 @@ impl RendererStorage {
     ) -> Result<(), String> {
         validate_candidate(candidate)?;
         self.file.write(lock, candidate)
+    }
+}
+
+pub(crate) fn active_credential_refs_from_raw_config(
+    raw: &str,
+) -> Result<BTreeSet<String>, String> {
+    let config: Value = serde_json::from_str(raw)
+        .map_err(|error| format!("Desktop configuration is not valid JSON: {error}"))?;
+    if !validate_desktop_config(&config) {
+        return Err("Desktop configuration has an invalid schema".to_string());
+    }
+    let mut refs = BTreeSet::new();
+    let mut collect = |value: Option<&Value>| {
+        if let Some(reference) = value
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+        {
+            refs.insert(reference.to_string());
+        }
+    };
+    collect(config.pointer("/model/credentialRef"));
+    collect(config.pointer("/visionModel/credentialRef"));
+    collect(config.pointer("/customProvider/credentialRef"));
+    if let Some(credentials) = config.get("providerCredentials").and_then(Value::as_object) {
+        for credential in credentials.values() {
+            collect(credential.get("credentialRef"));
+        }
+    }
+    Ok(refs)
+}
+
+fn active_credential_refs_from_entries(
+    entries: &Map<String, Value>,
+) -> Result<BTreeSet<String>, String> {
+    match entries.get(DESKTOP_CONFIG_KEY) {
+        Some(Value::String(raw)) => active_credential_refs_from_raw_config(raw),
+        Some(_) => Err("Desktop configuration must use the string transport".to_string()),
+        None => Ok(BTreeSet::new()),
     }
 }
 
@@ -491,26 +617,254 @@ fn validate_desktop_config(value: &Value) -> bool {
     let Some(config) = value.as_object() else {
         return false;
     };
-    config.len() == REQUIRED_FIELDS.len()
+    has_exact_fields(config, &REQUIRED_FIELDS)
         && config.get("schemaVersion").and_then(Value::as_u64) == Some(1)
-        && REQUIRED_FIELDS
-            .iter()
-            .all(|field| config.contains_key(*field))
-        && [
-            "model",
-            "visionModel",
-            "providerCredentials",
-            "customProvider",
-            "skills",
-            "interaction",
-            "debug",
-        ]
-        .into_iter()
-        .all(|field| config.get(field).is_some_and(Value::is_object))
+        && config.get("model").is_some_and(validate_model_config)
+        && config.get("visionModel").is_some_and(validate_model_config)
+        && config
+            .get("providerCredentials")
+            .is_some_and(validate_provider_credentials)
+        && config
+            .get("customProvider")
+            .is_some_and(validate_custom_provider)
+        && config.get("skills").is_some_and(validate_skill_config)
+        && config
+            .get("interaction")
+            .is_some_and(validate_interaction_config)
+        && config.get("debug").is_some_and(validate_debug_config)
         && matches!(
             config.get("locale").and_then(Value::as_str),
             Some("zh-CN" | "en-US")
         )
+}
+
+fn has_exact_fields<const N: usize>(object: &Map<String, Value>, fields: &[&str; N]) -> bool {
+    object.len() == fields.len() && fields.iter().all(|field| object.contains_key(*field))
+}
+
+fn has_only_fields(object: &Map<String, Value>, fields: &[&str]) -> bool {
+    object.keys().all(|key| fields.contains(&key.as_str()))
+}
+
+fn bounded_nonempty_string(value: Option<&Value>, max_bytes: usize) -> bool {
+    value
+        .and_then(Value::as_str)
+        .is_some_and(|value| !value.trim().is_empty() && value.len() <= max_bytes)
+}
+
+fn valid_identifier(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= MAX_CONFIG_IDENTIFIER_BYTES
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'/'))
+}
+
+fn valid_protocol(value: Option<&Value>) -> bool {
+    matches!(
+        value.and_then(Value::as_str),
+        Some("openai-compatible" | "anthropic" | "google")
+    )
+}
+
+fn valid_credential_ref(value: Option<&Value>) -> bool {
+    let Some(reference) = value.and_then(Value::as_str) else {
+        return false;
+    };
+    if reference.is_empty() {
+        return true;
+    }
+    let Ok(id) = Uuid::parse_str(reference) else {
+        return false;
+    };
+    id.get_version_num() == 4 && id.hyphenated().to_string() == reference
+}
+
+fn valid_optional_bounded_integer(value: Option<&Value>, minimum: u64, maximum: u64) -> bool {
+    value.is_none_or(|value| {
+        value.is_null()
+            || value
+                .as_u64()
+                .is_some_and(|value| (minimum..=maximum).contains(&value))
+    })
+}
+
+fn validate_model_config(value: &Value) -> bool {
+    const REQUIRED_FIELDS: [&str; 3] = ["provider", "model", "credentialRef"];
+    const ALLOWED_FIELDS: [&str; 7] = [
+        "provider",
+        "model",
+        "credentialRef",
+        "protocol",
+        "supportsImages",
+        "maxToolSteps",
+        "modelStepTimeoutMs",
+    ];
+    let Some(model) = value.as_object() else {
+        return false;
+    };
+    REQUIRED_FIELDS
+        .iter()
+        .all(|field| model.contains_key(*field))
+        && has_only_fields(model, &ALLOWED_FIELDS)
+        && model
+            .get("provider")
+            .and_then(Value::as_str)
+            .is_some_and(valid_model_provider)
+        && model
+            .get("model")
+            .is_some_and(|value| bounded_nonempty_string(Some(value), MAX_CONFIG_IDENTIFIER_BYTES))
+        && valid_credential_ref(model.get("credentialRef"))
+        && model
+            .get("protocol")
+            .is_none_or(|_| valid_protocol(model.get("protocol")))
+        && model.get("supportsImages").is_none_or(Value::is_boolean)
+        && valid_optional_bounded_integer(model.get("maxToolSteps"), 1, 64)
+        && valid_optional_bounded_integer(model.get("modelStepTimeoutMs"), 30_000, 300_000)
+}
+
+fn valid_model_provider(provider: &str) -> bool {
+    matches!(
+        provider,
+        "deepseek" | "openai" | "anthropic" | "google" | "openrouter" | "qwen" | "custom"
+    )
+}
+
+fn validate_provider_credentials(value: &Value) -> bool {
+    let Some(credentials) = value.as_object() else {
+        return false;
+    };
+    credentials.len() <= MAX_CONFIG_PROVIDER_CREDENTIALS
+        && credentials.iter().all(|(provider, value)| {
+            valid_model_provider(provider)
+                && provider != "custom"
+                && validate_provider_credential(value)
+        })
+}
+
+fn validate_provider_credential(value: &Value) -> bool {
+    const FIELDS: [&str; 3] = ["credentialRef", "baseUrl", "protocol"];
+    let Some(credential) = value.as_object() else {
+        return false;
+    };
+    has_exact_fields(credential, &FIELDS)
+        && valid_credential_ref(credential.get("credentialRef"))
+        && valid_base_url(credential.get("baseUrl"), true)
+        && valid_protocol(credential.get("protocol"))
+}
+
+fn valid_base_url(value: Option<&Value>, allow_empty: bool) -> bool {
+    let Some(raw) = value.and_then(Value::as_str) else {
+        return false;
+    };
+    if raw.is_empty() {
+        return allow_empty;
+    }
+    if raw.len() > MAX_CONFIG_URL_BYTES {
+        return false;
+    }
+    let Ok(url) = Url::parse(raw) else {
+        return false;
+    };
+    matches!(url.scheme(), "http" | "https")
+        && url.host_str().is_some()
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.fragment().is_none()
+        && url.query().is_none()
+}
+
+fn validate_custom_provider(value: &Value) -> bool {
+    const FIELDS: [&str; 5] = ["name", "baseUrl", "credentialRef", "protocol", "models"];
+    let Some(provider) = value.as_object() else {
+        return false;
+    };
+    has_exact_fields(provider, &FIELDS)
+        && provider
+            .get("name")
+            .and_then(Value::as_str)
+            .is_some_and(|name| name.len() <= MAX_CONFIG_LABEL_BYTES)
+        && valid_base_url(provider.get("baseUrl"), true)
+        && valid_credential_ref(provider.get("credentialRef"))
+        && valid_protocol(provider.get("protocol"))
+        && provider
+            .get("models")
+            .and_then(Value::as_array)
+            .is_some_and(|models| {
+                models.len() <= MAX_CONFIG_CUSTOM_MODELS && models.iter().all(validate_custom_model)
+            })
+}
+
+fn validate_custom_model(value: &Value) -> bool {
+    const FIELDS: [&str; 3] = ["name", "callName", "supportsImages"];
+    let Some(model) = value.as_object() else {
+        return false;
+    };
+    has_exact_fields(model, &FIELDS)
+        && bounded_nonempty_string(model.get("name"), MAX_CONFIG_LABEL_BYTES)
+        && model
+            .get("callName")
+            .is_some_and(|value| bounded_nonempty_string(Some(value), MAX_CONFIG_IDENTIFIER_BYTES))
+        && model.get("supportsImages").is_some_and(Value::is_boolean)
+}
+
+fn validate_skill_config(value: &Value) -> bool {
+    const FIELDS: [&str; 4] = [
+        "enabled",
+        "autoActivate",
+        "enabledSkillNames",
+        "visualProfile",
+    ];
+    let Some(skills) = value.as_object() else {
+        return false;
+    };
+    has_exact_fields(skills, &FIELDS)
+        && skills.get("enabled").is_some_and(Value::is_boolean)
+        && skills.get("autoActivate").is_some_and(Value::is_boolean)
+        && skills
+            .get("enabledSkillNames")
+            .and_then(Value::as_array)
+            .is_some_and(|names| {
+                names.len() <= MAX_CONFIG_ENABLED_SKILLS
+                    && names
+                        .iter()
+                        .all(|name| name.as_str().is_some_and(valid_identifier))
+            })
+        && matches!(
+            skills.get("visualProfile").and_then(Value::as_str),
+            Some(
+                "exam-clean"
+                    | "teaching-demo"
+                    | "choice-comparison"
+                    | "dynamic-exploration"
+                    | "proof-highlight"
+                    | "spatial-3d"
+            )
+        )
+}
+
+fn validate_interaction_config(value: &Value) -> bool {
+    const FIELDS: [&str; 1] = ["mode"];
+    let Some(interaction) = value.as_object() else {
+        return false;
+    };
+    has_exact_fields(interaction, &FIELDS)
+        && matches!(
+            interaction.get("mode").and_then(Value::as_str),
+            Some("window" | "fusion")
+        )
+}
+
+fn validate_debug_config(value: &Value) -> bool {
+    const FIELDS: [&str; 1] = ["modelStepTimeoutMs"];
+    let Some(debug) = value.as_object() else {
+        return false;
+    };
+    has_exact_fields(debug, &FIELDS)
+        && debug
+            .get("modelStepTimeoutMs")
+            .and_then(Value::as_u64)
+            .is_some_and(|timeout| (30_000..=300_000).contains(&timeout))
 }
 
 #[cfg(test)]
@@ -522,6 +876,57 @@ mod tests {
 
     fn temporary_directory(label: &str) -> PathBuf {
         std::env::temp_dir().join(format!("geochat-{label}-{}", Uuid::new_v4()))
+    }
+
+    fn valid_desktop_config() -> Value {
+        json!({
+            "schemaVersion": 1,
+            "model": {
+                "provider": "deepseek",
+                "model": "deepseek-flash",
+                "credentialRef": ""
+            },
+            "visionModel": {
+                "provider": "openrouter",
+                "model": "google/gemini-3.8-flash",
+                "credentialRef": "",
+                "protocol": "openai-compatible",
+                "supportsImages": true,
+                "maxToolSteps": null
+            },
+            "providerCredentials": {
+                "deepseek": {
+                    "credentialRef": "",
+                    "baseUrl": "https://api.deepseek.com",
+                    "protocol": "openai-compatible"
+                },
+                "openrouter": {
+                    "credentialRef": "",
+                    "baseUrl": "https://openrouter.ai/api/v1",
+                    "protocol": "openai-compatible"
+                }
+            },
+            "customProvider": {
+                "name": "",
+                "baseUrl": "",
+                "credentialRef": "",
+                "protocol": "openai-compatible",
+                "models": []
+            },
+            "skills": {
+                "enabled": true,
+                "autoActivate": true,
+                "enabledSkillNames": ["function-graph"],
+                "visualProfile": "choice-comparison"
+            },
+            "interaction": { "mode": "fusion" },
+            "debug": { "modelStepTimeoutMs": 120000 },
+            "locale": "zh-CN"
+        })
+    }
+
+    fn encoded_desktop_config(config: &Value) -> Value {
+        json!(serde_json::to_string(config).expect("serialize desktop config"))
     }
 
     #[test]
@@ -973,11 +1378,11 @@ mod tests {
 
         storage
             .set_batch(Map::from_iter([
+                ("geogebraCopilotLanguage".to_string(), json!("\"zh-CN\"")),
                 (
-                    "geogebraCopilotLanguage".to_string(),
-                    json!("\"zh-CN\""),
+                    "geochatSelectedModel".to_string(),
+                    json!("\"deepseek-flash\""),
                 ),
-                ("geochatSelectedModel".to_string(), json!("\"deepseek-flash\"")),
                 ("geogebraCopilotThinkingEnabled".to_string(), json!("true")),
                 (
                     "geogebraCopilotThinkingEffort".to_string(),
@@ -997,7 +1402,7 @@ mod tests {
                 ),
                 (
                     "geochat-desktop-ui-config".to_string(),
-                    json!(r#"{"schemaVersion":1,"model":{},"visionModel":{},"providerCredentials":{},"customProvider":{},"skills":{},"interaction":{},"debug":{},"locale":"zh-CN"}"#),
+                    encoded_desktop_config(&valid_desktop_config()),
                 ),
             ]))
             .expect("persist typed renderer preferences");
@@ -1023,6 +1428,181 @@ mod tests {
                 .is_err());
         }
 
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rejects_nested_desktop_config_smuggling_without_mutating_memory_or_disk() {
+        let root = temporary_directory("renderer-storage-config-schema");
+        let mut storage = RendererStorage::load(&root).expect("load empty storage");
+        storage
+            .set_batch(Map::from_iter([(
+                DESKTOP_CONFIG_KEY.to_string(),
+                encoded_desktop_config(&valid_desktop_config()),
+            )]))
+            .expect("persist stable desktop config");
+        let stable_entries = storage.all();
+        let stable_disk =
+            fs::read(root.join(RENDERER_STORAGE_FILE_NAME)).expect("read stable renderer storage");
+
+        let mut attacks = Vec::new();
+
+        let mut invalid_reference = valid_desktop_config();
+        invalid_reference["model"]["credentialRef"] = json!("sk-canary");
+        attacks.push(invalid_reference);
+
+        let mut provider_secret = valid_desktop_config();
+        provider_secret["providerCredentials"]["deepseek"]["key"] = json!("must-not-persist");
+        attacks.push(provider_secret);
+
+        let mut debug_note = valid_desktop_config();
+        debug_note["debug"]["note"] = json!("must-not-persist");
+        attacks.push(debug_note);
+
+        let mut url_secret = valid_desktop_config();
+        url_secret["customProvider"]["baseUrl"] =
+            json!("https://api.example.test/v1?api_key=must-not-persist");
+        attacks.push(url_secret);
+
+        let mut url_userinfo = valid_desktop_config();
+        url_userinfo["customProvider"]["baseUrl"] =
+            json!("https://user:must-not-persist@api.example.test/v1");
+        attacks.push(url_userinfo);
+
+        let mut url_fragment = valid_desktop_config();
+        url_fragment["customProvider"]["baseUrl"] =
+            json!("https://api.example.test/v1#must-not-persist");
+        attacks.push(url_fragment);
+
+        for attack in attacks {
+            storage
+                .set_batch(Map::from_iter([(
+                    DESKTOP_CONFIG_KEY.to_string(),
+                    encoded_desktop_config(&attack),
+                )]))
+                .expect_err("invalid nested desktop config must be rejected");
+            assert_eq!(storage.all(), stable_entries);
+            assert_eq!(
+                fs::read(root.join(RENDERER_STORAGE_FILE_NAME))
+                    .expect("read unchanged renderer storage"),
+                stable_disk
+            );
+        }
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn accepts_configured_credentials_and_custom_provider_with_canonical_v4_references() {
+        let root = temporary_directory("renderer-storage-configured-schema");
+        let mut storage = RendererStorage::load(&root).expect("load empty storage");
+        let initial = valid_desktop_config();
+        let initial_raw = serde_json::to_string(&initial).unwrap();
+        storage
+            .set_batch(Map::from_iter([(
+                DESKTOP_CONFIG_KEY.to_string(),
+                json!(initial_raw.clone()),
+            )]))
+            .unwrap();
+        let credential_ref = Uuid::new_v4().hyphenated().to_string();
+        let mut config = initial;
+        config["model"]["provider"] = json!("custom");
+        config["model"]["model"] = json!("local-main");
+        config["model"]["credentialRef"] = json!(credential_ref);
+        config["providerCredentials"]["deepseek"]["credentialRef"] = json!(credential_ref);
+        config["customProvider"] = json!({
+            "name": "本地模型",
+            "baseUrl": "http://127.0.0.1:11434/v1",
+            "credentialRef": credential_ref,
+            "protocol": "openai-compatible",
+            "models": [{
+                "name": "本地模型",
+                "callName": "local-main",
+                "supportsImages": false
+            }]
+        });
+
+        storage
+            .commit_credential_config(&initial_raw, &serde_json::to_string(&config).unwrap())
+            .expect("persist fully configured desktop config");
+        assert_eq!(
+            storage.all().get(DESKTOP_CONFIG_KEY),
+            Some(&encoded_desktop_config(&config))
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn generic_storage_write_cannot_change_active_credential_references() {
+        let root = temporary_directory("renderer-storage-credential-guard");
+        let mut storage = RendererStorage::load(&root).expect("load empty storage");
+        let initial = valid_desktop_config();
+        storage
+            .set_batch(Map::from_iter([(
+                DESKTOP_CONFIG_KEY.to_string(),
+                encoded_desktop_config(&initial),
+            )]))
+            .unwrap();
+        let mut changed = initial;
+        changed["model"]["credentialRef"] = json!(Uuid::new_v4().to_string());
+        assert!(storage
+            .set_batch(Map::from_iter([(
+                DESKTOP_CONFIG_KEY.to_string(),
+                encoded_desktop_config(&changed),
+            )]))
+            .unwrap_err()
+            .contains("native credential lifecycle"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn credential_cas_synchronizes_current_and_previous_before_cleanup() {
+        let root = temporary_directory("renderer-storage-credential-cas");
+        let mut storage = RendererStorage::load(&root).expect("load empty storage");
+        let initial = valid_desktop_config();
+        let initial_raw = serde_json::to_string(&initial).unwrap();
+        storage
+            .set_batch(Map::from_iter([(
+                DESKTOP_CONFIG_KEY.to_string(),
+                json!(initial_raw),
+            )]))
+            .unwrap();
+        let mut next = initial;
+        let new_ref = Uuid::new_v4().to_string();
+        next["model"]["credentialRef"] = json!(new_ref.clone());
+        next["providerCredentials"]["deepseek"]["credentialRef"] = json!(new_ref.clone());
+        let next_raw = serde_json::to_string(&next).unwrap();
+        let refs = storage
+            .commit_credential_config(&initial_raw, &next_raw)
+            .unwrap();
+        assert!(refs.contains(&new_ref));
+        for path in [
+            root.join(RENDERER_STORAGE_FILE_NAME),
+            root.join("renderer-state.previous"),
+        ] {
+            let persisted: Map<String, Value> =
+                serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+            assert_eq!(persisted.get(DESKTOP_CONFIG_KEY), Some(&json!(next_raw)));
+        }
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn strict_credential_snapshot_rejects_corrupt_current_without_recovery() {
+        let root = temporary_directory("renderer-storage-strict-corrupt");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join(RENDERER_STORAGE_FILE_NAME), b"not-json").unwrap();
+        let mut storage = RendererStorage {
+            file: AtomicJsonFile::new(
+                root.join(RENDERER_STORAGE_FILE_NAME),
+                RENDERER_STORAGE_LOCK_NAME,
+                "renderer storage",
+            ),
+            path: root.join(RENDERER_STORAGE_FILE_NAME),
+            entries: Map::new(),
+        };
+        assert!(storage.credential_config_snapshot().is_err());
         let _ = fs::remove_dir_all(root);
     }
 }

@@ -198,7 +198,7 @@ export default function App() {
             type="button"
             className="frontend-canvas-control frontend-canvas-menu"
             onClick={() => setDocumentPanelOpen((current) => !current)}
-            disabled={canvasState !== "ready"}
+            disabled={canvasState !== "ready" || Boolean(canvasRecovery)}
             aria-label={t("canvasControls.openMenu")}
             title={t("canvasControls.openMenu")}
             aria-expanded={documentPanelOpen}
@@ -230,6 +230,7 @@ export default function App() {
         <GeoGebraDocumentPanel
           controller={controllerRef.current}
           open={documentPanelOpen}
+          blocked={Boolean(canvasRecovery)}
           onClose={() => setDocumentPanelOpen(false)}
         />
         {canvasState !== "ready" && (
@@ -241,7 +242,7 @@ export default function App() {
           </div>
         )}
         {canvasRecovery && (
-          <div className="frontend-canvas-overlay" role="alert" aria-live="assertive">
+          <div className="frontend-canvas-overlay frontend-canvas-recovery-overlay" role="alert" aria-live="assertive">
             <div className="frontend-canvas-error" />
             <strong>{t("canvasRecovery.title")}</strong>
             <span>{t("canvasRecovery.description")}</span>

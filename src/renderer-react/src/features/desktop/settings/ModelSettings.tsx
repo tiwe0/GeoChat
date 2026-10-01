@@ -24,6 +24,7 @@ import {
 
 const logger = createStructuredLogger("desktop.model-settings");
 import {
+  acceptNativeDesktopConfigCommit,
   credentialsForProvider,
   normalizeCustomProviderConfig,
   readDesktopConfig,
@@ -47,29 +48,34 @@ type CredentialSaveState =
   | { status: "invalid"; message: string }
   | {
     status: "cleanup-required";
-    credentialRef: string;
+    operationId: string;
     phase: CredentialCleanupPhase;
   };
 
 export type PendingCredentialCleanupState =
   | { status: "loading" }
-  | { status: "ready"; credentialRefs: string[] }
+  | { status: "ready" }
+  | { status: "pending"; operationId: string }
   | { status: "error" };
 
 export function credentialCleanupBlocksSave(state: PendingCredentialCleanupState): boolean {
-  return state.status !== "ready" || state.credentialRefs.length > 0;
+  return state.status !== "ready";
+}
+
+export function credentialCleanupCanRetry(state: PendingCredentialCleanupState): boolean {
+  return state.status === "pending" || state.status === "error";
 }
 
 export type CredentialCleanupPhase = "uncommitted" | "replaced";
 
 export class CredentialCleanupRequiredError extends Error {
-  readonly credentialRef: string;
+  readonly operationId: string;
   readonly phase: CredentialCleanupPhase;
 
-  constructor(credentialRef: string, phase: CredentialCleanupPhase, options?: ErrorOptions) {
+  constructor(operationId: string, phase: CredentialCleanupPhase, options?: ErrorOptions) {
     super("Credential cleanup must be retried before another credential can be saved.", options);
     this.name = "CredentialCleanupRequiredError";
-    this.credentialRef = credentialRef;
+    this.operationId = operationId;
     this.phase = phase;
   }
 }
@@ -78,7 +84,7 @@ export type ReplaceProviderCredentialResult = Readonly<{
   metadata: DesktopProviderCredentialMetadata;
   cleanup:
     | { status: "complete" }
-    | { status: "retry-required"; credentialRef: string; phase: "replaced" };
+    | { status: "retry-required"; operationId: string; phase: "replaced" };
 }>;
 
 type CustomValidationError =
@@ -115,21 +121,23 @@ export function ModelSettings() {
   const [credentialSave, setCredentialSave] = useState<CredentialSaveState>({ status: "idle" });
   const [pendingCleanup, setPendingCleanup] = useState<PendingCredentialCleanupState>({ status: "loading" });
 
-  const refreshPendingCredentialCleanup = useCallback(async () => {
+  const refreshPendingCredentialCleanup = useCallback(async (): Promise<PendingCredentialCleanupState> => {
     setPendingCleanup({ status: "loading" });
     const desktopApi = installedDesktopApi();
     if (!desktopApi) {
-      setPendingCleanup({ status: "error" });
-      return;
+      const nextState: PendingCredentialCleanupState = { status: "error" };
+      setPendingCleanup(nextState);
+      return nextState;
     }
     try {
-      setPendingCleanup({
-        status: "ready",
-        credentialRefs: await desktopApi.listPendingCredentialCleanup(),
-      });
+      const nextState = await desktopApi.reconcileProviderCredentials();
+      setPendingCleanup(nextState);
+      return nextState;
     } catch {
-      setPendingCleanup({ status: "error" });
+      const nextState: PendingCredentialCleanupState = { status: "error" };
+      setPendingCleanup(nextState);
       logger.warn("provider_credential_cleanup_list_failed", "MODEL_CREDENTIAL_CLEANUP_LIST_FAILED");
+      return nextState;
     }
   }, []);
 
@@ -216,7 +224,6 @@ export function ModelSettings() {
       const replacement = await replaceProviderCredential({
         desktopApi,
         request: { provider, protocol, baseUrl, secret },
-        previousCredentialRef: existing.credentialRef,
         onCredentialStored: () => setApiKey(""),
         validate: async (nextCredentialRef) => {
           const outcome = await discoverProviderModels({
@@ -230,24 +237,23 @@ export function ModelSettings() {
             ? t("settings.keyProbeUnsupported")
             : outcome.message);
         },
-        commit: async (metadata) => {
+        buildNextConfig: (metadata) => {
           if (isCustom) {
-            await updateDesktopConfig((current) => ({
-              ...current,
+            return {
+              ...config,
               customProvider: normalizeCustomProviderConfig({
                 ...customProvider,
                 baseUrl: metadata.canonicalBaseUrl,
                 protocol: metadata.protocol,
                 credentialRef: metadata.credentialRef,
               }),
-            }));
-          } else {
-            await updateDesktopConfig((current) => updateProviderCredentials(current, provider, {
-              credentialRef: metadata.credentialRef,
-              baseUrl: metadata.canonicalBaseUrl,
-              protocol: metadata.protocol,
-            }));
+            };
           }
+          return updateProviderCredentials(config, provider, {
+            credentialRef: metadata.credentialRef,
+            baseUrl: metadata.canonicalBaseUrl,
+            protocol: metadata.protocol,
+          });
         },
       });
       const metadata = replacement.metadata;
@@ -257,7 +263,7 @@ export function ModelSettings() {
         await refreshPendingCredentialCleanup();
         setCredentialSave({
           status: "cleanup-required",
-          credentialRef: replacement.cleanup.credentialRef,
+          operationId: replacement.cleanup.operationId,
           phase: replacement.cleanup.phase,
         });
         logger.warn("provider_credential_cleanup_required", "MODEL_CREDENTIAL_CLEANUP_REQUIRED", { provider });
@@ -271,7 +277,7 @@ export function ModelSettings() {
         await refreshPendingCredentialCleanup();
         setCredentialSave({
           status: "cleanup-required",
-          credentialRef: caughtError.credentialRef,
+          operationId: caughtError.operationId,
           phase: caughtError.phase,
         });
         logger.warn("provider_credential_cleanup_required", "MODEL_CREDENTIAL_CLEANUP_REQUIRED", { provider });
@@ -285,15 +291,18 @@ export function ModelSettings() {
     }
   }, [apiKey, customProvider, isCustom, pendingCleanup, provider, refreshPendingCredentialCleanup, saving, t]);
 
-  const retryCredentialCleanup = useCallback(async (credentialRefToDelete: string) => {
+  const retryCredentialCleanup = useCallback(async () => {
     if (saving) return;
     const desktopApi = installedDesktopApi();
     if (!desktopApi) return;
     setSaving(true);
     try {
-      await desktopApi.deleteProviderCredential(credentialRefToDelete);
-      await refreshPendingCredentialCleanup();
-      if (credentialSave.status === "cleanup-required" && credentialSave.credentialRef === credentialRefToDelete) {
+      const lifecycle = await refreshPendingCredentialCleanup();
+      if (lifecycle.status !== "ready") {
+        logger.warn("provider_credential_cleanup_retry_failed", "MODEL_CREDENTIAL_CLEANUP_RETRY_FAILED", { provider });
+        return;
+      }
+      if (credentialSave.status === "cleanup-required") {
         if (credentialSave.phase === "replaced") {
           setCredentialSave({ status: "valid" });
           setSaved(true);
@@ -363,7 +372,7 @@ export function ModelSettings() {
           disabled={saving}
           onRetryCleanup={() => {
             if (credentialSave.status === "cleanup-required") {
-              void retryCredentialCleanup(credentialSave.credentialRef);
+              void retryCredentialCleanup();
             }
           }}
           onChange={(value) => {
@@ -374,33 +383,41 @@ export function ModelSettings() {
         />
 
         {pendingCleanup.status === "error" ? (
-          <Typography variant="body2" color="error.main">
-            {t("settings.credentialCleanupRequired")}
-          </Typography>
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+            <Typography variant="body2" color="error.main" sx={{ flex: 1 }}>
+              {t("settings.credentialCleanupRequired")}
+            </Typography>
+            <Button
+              disabled={saving}
+              size="small"
+              variant="outlined"
+              onClick={() => void retryCredentialCleanup()}
+            >
+              {t("settings.retryCredentialCleanup")}
+            </Button>
+          </Stack>
         ) : pendingCleanup.status === "loading" ? (
           <Typography variant="body2" color="text.secondary">
             {t("settings.pendingCredentialCleanup")}
           </Typography>
-        ) : pendingCleanup.credentialRefs.length > 0 ? (
+        ) : pendingCleanup.status === "pending" ? (
           <Stack spacing={1} sx={{ p: 1.5, border: 1, borderColor: "error.main", borderRadius: 1.5 }}>
             <Typography variant="body2" color="error.main">
               {t("settings.pendingCredentialCleanup")}
             </Typography>
-            {pendingCleanup.credentialRefs.map((pendingRef) => (
-              <Stack key={pendingRef} direction="row" spacing={1} sx={{ alignItems: "center" }}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
                 <Typography variant="caption" sx={{ flex: 1, fontFamily: "monospace", overflowWrap: "anywhere" }}>
-                  {pendingRef}
+                  {pendingCleanup.operationId}
                 </Typography>
                 <Button
                   disabled={saving}
                   size="small"
                   variant="outlined"
-                  onClick={() => void retryCredentialCleanup(pendingRef)}
+                  onClick={() => void retryCredentialCleanup()}
                 >
                   {t("settings.retryCredentialCleanup")}
                 </Button>
               </Stack>
-            ))}
           </Stack>
         ) : null}
 
@@ -632,39 +649,43 @@ function validateCustomProvider(
 }
 
 export async function replaceProviderCredential(input: {
-  desktopApi: Pick<GeoChatDesktopApi, "saveProviderCredential" | "deleteProviderCredential">;
+  desktopApi: Pick<GeoChatDesktopApi, "beginProviderCredential" | "commitProviderCredential" | "abortProviderCredential">;
   request: DesktopSaveProviderCredentialRequest;
-  previousCredentialRef: string;
   onCredentialStored: () => void;
   validate: (credentialRef: string) => Promise<void>;
-  commit: (metadata: DesktopProviderCredentialMetadata) => Promise<void>;
+  buildNextConfig: (metadata: DesktopProviderCredentialMetadata) => ReturnType<typeof readDesktopConfig>;
+  acceptCommittedConfig?: (rawJson: string) => void;
 }): Promise<ReplaceProviderCredentialResult> {
-  const metadata = await input.desktopApi.saveProviderCredential(input.request);
+  const expectedConfigJson = JSON.stringify(readDesktopConfig());
+  const begun = await input.desktopApi.beginProviderCredential(input.request);
+  const metadata = begun.metadata;
   input.onCredentialStored();
   try {
     await input.validate(metadata.credentialRef);
-    await input.commit(metadata);
+    const nextConfigJson = JSON.stringify(input.buildNextConfig(metadata));
+    const lifecycle = await input.desktopApi.commitProviderCredential(
+      begun.operationId,
+      expectedConfigJson,
+      nextConfigJson,
+    );
+    (input.acceptCommittedConfig ?? acceptNativeDesktopConfigCommit)(nextConfigJson);
+    return lifecycle.status === "ready"
+      ? { metadata, cleanup: { status: "complete" } }
+      : { metadata, cleanup: { status: "retry-required", operationId: lifecycle.operationId, phase: "replaced" } };
   } catch (error) {
     try {
-      await input.desktopApi.deleteProviderCredential(metadata.credentialRef);
+      const lifecycle = await input.desktopApi.abortProviderCredential(begun.operationId);
+      if (lifecycle.status === "pending") {
+        throw new CredentialCleanupRequiredError(lifecycle.operationId, "uncommitted", { cause: error });
+      }
     } catch (cleanupError) {
-      throw new CredentialCleanupRequiredError(metadata.credentialRef, "uncommitted", {
+      if (cleanupError instanceof CredentialCleanupRequiredError) throw cleanupError;
+      throw new CredentialCleanupRequiredError(begun.operationId, "uncommitted", {
         cause: new AggregateError([error, cleanupError], "Credential validation and cleanup both failed."),
       });
     }
     throw error;
   }
-  if (input.previousCredentialRef && input.previousCredentialRef !== metadata.credentialRef) {
-    try {
-      await input.desktopApi.deleteProviderCredential(input.previousCredentialRef);
-    } catch {
-      return {
-        metadata,
-        cleanup: { status: "retry-required", credentialRef: input.previousCredentialRef, phase: "replaced" },
-      };
-    }
-  }
-  return { metadata, cleanup: { status: "complete" } };
 }
 
 function isValidRequiredBaseUrl(value: string) {

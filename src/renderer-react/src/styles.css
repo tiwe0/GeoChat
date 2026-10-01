@@ -194,6 +194,7 @@ html.interaction-mode-view-transition::view-transition-new(root) {
 .geogebra-document-open small { color: #7e8d85; }
 .geogebra-document-delete { margin-right: 6px; padding: 5px 8px; color: #a53d35; background: #fff7f6; border-color: #edd0cd; }
 .frontend-canvas-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #607168; background: #fff; font-size: 13px; }
+.frontend-canvas-recovery-overlay { z-index: 30; }
 .frontend-canvas-overlay span { max-width: min(560px, calc(100vw - 40px)); color: #a64d44; font-size: 11px; text-align: center; overflow-wrap: anywhere; }
 .frontend-canvas-recovery-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .frontend-canvas-recovery-actions button { min-height: 32px; padding: 5px 10px; border: 1px solid #d7e0db; border-radius: 8px; color: #30483d; background: #fff; cursor: pointer; }

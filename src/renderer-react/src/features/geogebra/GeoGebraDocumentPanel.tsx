@@ -12,10 +12,11 @@ const DOCUMENT_FETCH_SIZE = DOCUMENT_PAGE_SIZE + 1;
 type Props = {
   controller: GeoGebraController;
   open: boolean;
+  blocked: boolean;
   onClose(): void;
 };
 
-export function GeoGebraDocumentPanel({ controller, open, onClose }: Props) {
+export function GeoGebraDocumentPanel({ controller, open, blocked, onClose }: Props) {
   const { t } = useTranslation();
   const [documents, setDocuments] = useState<GeoGebraDocumentMetadata[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
@@ -118,7 +119,7 @@ export function GeoGebraDocumentPanel({ controller, open, onClose }: Props) {
               setTitle("");
               setError(null);
             }}
-            disabled={busy}
+            disabled={busy || blocked}
           >
             {t("documents.new")}
           </button>
@@ -131,9 +132,9 @@ export function GeoGebraDocumentPanel({ controller, open, onClose }: Props) {
           onChange={(event) => setTitle(event.target.value)}
           placeholder={t("documents.name")}
           aria-label={t("documents.name")}
-          disabled={busy}
+          disabled={busy || blocked}
         />
-        <button type="button" onClick={save} disabled={busy || !controller.ready}>{t("documents.save")}</button>
+        <button type="button" onClick={save} disabled={busy || blocked || !controller.ready}>{t("documents.save")}</button>
       </div>
       <p className="geogebra-document-storage-note">{t("documents.storageNote")}</p>
       {error && <p className="geogebra-document-error" role="alert">{error}</p>}
@@ -142,7 +143,7 @@ export function GeoGebraDocumentPanel({ controller, open, onClose }: Props) {
       <ul>
         {documents.map((document) => (
           <li key={document.id} className={document.id === currentId ? "is-current" : undefined}>
-            <button type="button" className="geogebra-document-open" onClick={() => openDocument(document)}>
+            <button type="button" className="geogebra-document-open" onClick={() => openDocument(document)} disabled={busy || blocked}>
               <span>{document.title}</span>
               <small>{new Date(document.updatedAt).toLocaleString()}</small>
             </button>
@@ -150,6 +151,7 @@ export function GeoGebraDocumentPanel({ controller, open, onClose }: Props) {
               type="button"
               className="geogebra-document-delete"
               onClick={() => deleteDocument(document)}
+              disabled={busy || blocked}
               aria-label={t("documents.deleteLabel", { title: document.title })}
             >
               {t("documents.delete")}
@@ -158,7 +160,7 @@ export function GeoGebraDocumentPanel({ controller, open, onClose }: Props) {
         ))}
       </ul>
       {hasMore && (
-        <button type="button" className="geogebra-document-load-more" onClick={loadMore} disabled={busy}>
+        <button type="button" className="geogebra-document-load-more" onClick={loadMore} disabled={busy || blocked}>
           {t("documents.loadMore")}
         </button>
       )}

@@ -167,6 +167,13 @@ export class GeoGebraController {
   }
 
   captureDocumentBase64(): Promise<string> {
+    return this.transactions.run(
+      { label: "document:capture", readOnly: true },
+      (transaction) => transaction.wait(() => this.captureDocumentBase64Raw()),
+    );
+  }
+
+  private captureDocumentBase64Raw(): Promise<string> {
     if (!this.api || typeof this.api.getBase64 !== "function") {
       throw new Error("当前 GeoGebra applet 不提供完整文档导出 API。");
     }
@@ -199,7 +206,7 @@ export class GeoGebraController {
       {
         label: "document:restore",
         supersedeKey: "document:restore",
-        captureSnapshot: () => this.captureDocumentBase64(),
+        captureSnapshot: () => this.captureDocumentBase64Raw(),
         restoreSnapshot: (snapshot) => this.applyDocumentBase64(snapshot),
       },
       async (transaction) => {

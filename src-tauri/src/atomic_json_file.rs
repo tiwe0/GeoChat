@@ -31,54 +31,6 @@ impl AtomicJsonFile {
         &self.path
     }
 
-    /// Reports whether a current, previous, or quarantined document exists.
-    /// Callers can use this while holding the file lock to distinguish a truly
-    /// new document from persisted state that recovery had to quarantine.
-    pub(crate) fn has_persisted_version(&self) -> Result<bool, String> {
-        let backup = backup_path(&self.path);
-        if self.path.exists() || backup.exists() {
-            return Ok(true);
-        }
-        let parent = self
-            .path
-            .parent()
-            .ok_or_else(|| format!("{} path has no parent directory", self.description))?;
-        let current_prefix = format!(
-            "{}.corrupt-",
-            self.path.file_name().unwrap_or_default().to_string_lossy()
-        );
-        let backup_prefix = format!(
-            "{}.corrupt-",
-            backup.file_name().unwrap_or_default().to_string_lossy()
-        );
-        let entries = match fs::read_dir(parent) {
-            Ok(entries) => entries,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-            Err(error) => {
-                return Err(format!(
-                    "Failed to inspect {} directory {}: {error}",
-                    self.description,
-                    parent.display()
-                ));
-            }
-        };
-        for entry in entries {
-            let entry = entry.map_err(|error| {
-                format!(
-                    "Failed to inspect {} directory {}: {error}",
-                    self.description,
-                    parent.display()
-                )
-            })?;
-            let file_name = entry.file_name();
-            let file_name = file_name.to_string_lossy();
-            if file_name.starts_with(&current_prefix) || file_name.starts_with(&backup_prefix) {
-                return Ok(true);
-            }
-        }
-        Ok(false)
-    }
-
     pub(crate) fn lock(&self) -> Result<AtomicJsonFileLock, String> {
         let parent = self
             .lock_path

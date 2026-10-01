@@ -32,6 +32,7 @@ export const DESKTOP_CONFIG_CHANGED_EVENT = "geochat:desktop-config-changed";
 
 export type DesktopConfigStorage = Pick<Storage, "getItem" | "setItem"> & {
   setItemDurable?(key: string, value: string): Promise<void>;
+  acceptNativeValue?(key: string, value: string): void;
 };
 
 let installedConfigStorage: DesktopConfigStorage | null = null;
@@ -59,6 +60,18 @@ export function flushDesktopConfigWrites() {
 /** Returns the hydrated native-backed storage facade after desktop bootstrap. */
 export function installedDesktopConfigStorage() {
   return installedConfigStorage;
+}
+
+/** Updates only the hydrated renderer mirror after a native credential CAS. */
+export function acceptNativeDesktopConfigCommit(rawJson: string) {
+  if (!installedConfigStorage?.acceptNativeValue) {
+    throw new Error("Desktop config storage does not support native credential commits");
+  }
+  normalizeDesktopConfigJson(rawJson);
+  installedConfigStorage.acceptNativeValue(CONFIG_STORAGE_KEY, rawJson);
+  if (typeof globalThis.dispatchEvent === "function" && typeof Event !== "undefined") {
+    globalThis.dispatchEvent(new Event(DESKTOP_CONFIG_CHANGED_EVENT));
+  }
 }
 
 export const DEFAULT_CUSTOM_PROVIDER_CONFIG: CustomProviderConfig = {

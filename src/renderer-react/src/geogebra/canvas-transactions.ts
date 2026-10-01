@@ -4,6 +4,7 @@ const logger = createStructuredLogger("geogebra.canvas-transactions");
 
 export type CanvasTransactionOptions = {
   label: string;
+  readOnly?: boolean;
   shouldContinue?: () => boolean;
   supersedeKey?: string;
   captureSnapshot?: () => string | undefined | PromiseLike<string | undefined>;
@@ -68,8 +69,8 @@ export class CanvasMutationStateUnknownError extends Error {
 /**
  * The single serialization and recovery boundary for canvas mutations.
  *
- * A transaction owns one applet epoch and one complete XML snapshot. Work can
- * only cross an async boundary through `wait`, which checks cancellation,
+ * A transaction owns one applet epoch; writes also own one complete snapshot.
+ * Work can only cross an async boundary through `wait`, which checks cancellation,
  * supersession, lease ownership, and the applet epoch on both sides. A failed
  * owner restores its snapshot before releasing the queue. If that restore is
  * not trustworthy, the queue enters one explicit recovery state and rejects
@@ -122,10 +123,12 @@ export class CanvasTransactionCoordinator {
       let snapshot: string | undefined;
       try {
         this.assertLease(lease);
-        snapshot = lease.options.captureSnapshot
-          ? await Promise.resolve(lease.options.captureSnapshot())
-          : this.adapter.capture();
-        if (!snapshot) throw new Error("GeoGebra did not provide a complete XML snapshot.");
+        if (!lease.options.readOnly) {
+          snapshot = lease.options.captureSnapshot
+            ? await Promise.resolve(lease.options.captureSnapshot())
+            : this.adapter.capture();
+          if (!snapshot) throw new Error("GeoGebra did not provide a complete XML snapshot.");
+        }
         this.assertLease(lease);
         const transaction = this.contextFor(lease);
         const result = await work(transaction);

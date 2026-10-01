@@ -47,8 +47,9 @@ export async function loadGeoGebraDocument(
   token: string | null,
   id: string,
   request: typeof fetch = fetch,
+  signal?: AbortSignal,
 ): Promise<GeoGebraDocument> {
-  const response = await request(endpoint(apiOrigin, id), { headers: headers(token), cache: "no-store" });
+  const response = await request(endpoint(apiOrigin, id), { headers: headers(token), cache: "no-store", signal });
   const data = await readJson(response, "GeoGebra document load returned invalid JSON.");
   if (!response.ok) throw new Error(responseMessage(data, `Unable to load GeoGebra document (${response.status}).`));
   const decoded = decodeGeoGebraDocumentResponse(data);
@@ -97,6 +98,9 @@ export type GeoGebraDocumentCanvas = {
  * authenticated backend boundary and are stored by the SQLite repository.
  */
 export class GeoGebraDocumentWorkspace {
+  private openGeneration = 0;
+  private openAbort: AbortController | null = null;
+
   constructor(
     private readonly apiOrigin: string,
     private readonly token: string | null,
@@ -121,11 +125,22 @@ export class GeoGebraDocumentWorkspace {
   }
 
   async open(id: string) {
-    const document = await loadGeoGebraDocument(this.apiOrigin, this.token, id, this.request);
+    const generation = ++this.openGeneration;
+    this.openAbort?.abort();
+    const abort = new AbortController();
+    this.openAbort = abort;
+    const assertCurrent = () => {
+      if (abort.signal.aborted || generation !== this.openGeneration) {
+        throw new DOMException("GeoGebra document open was superseded.", "AbortError");
+      }
+    };
+    const document = await loadGeoGebraDocument(this.apiOrigin, this.token, id, this.request, abort.signal);
+    assertCurrent();
     if (document.contentKind !== "binary" || document.mimeType !== GEOGEBRA_FILE_MIME_TYPE) {
       throw new Error("The stored document is not a complete GeoGebra file.");
     }
     await this.canvas.restoreDocumentBase64(document.content);
+    assertCurrent();
     return document;
   }
 

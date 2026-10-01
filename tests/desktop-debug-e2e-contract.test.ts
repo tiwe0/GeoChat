@@ -58,45 +58,35 @@ describe("deterministic desktop E2E evidence", () => {
     expect(cleanup.needsCleanup()).toBe(false);
   });
 
-  test("retries credential deletion and config restoration without losing cleanup ownership", async () => {
+  test("retires the debug credential and restores config in one native lifecycle", async () => {
     const nonce = "12345678-1234-4123-8123-123456789abc";
     const credentialRef = "credential-e2e";
     const ownedConfig = { customProvider: { name: `GeoChat deterministic E2E:${nonce}`, credentialRef } };
     const restoredConfig = { customProvider: { name: "Restored provider", credentialRef: "restored-ref" } };
     let currentConfig = ownedConfig;
-    let credentialConfigured = true;
-    let deleteAttempts = 0;
-    let persistAttempts = 0;
+    let attempts = 0;
+    const accepted: string[] = [];
     const ports = {
       readConfig: () => currentConfig,
       normalizeConfigJson: () => restoredConfig,
-      persistConfig: (config: typeof currentConfig) => {
-        persistAttempts += 1;
-        if (persistAttempts === 1) throw new Error("simulated config write failure");
-        currentConfig = config;
+      commitRetirement: async (_ref: string, _expected: string, next: string) => {
+        attempts += 1;
+        if (attempts === 1) throw new Error("simulated native lifecycle failure");
+        currentConfig = JSON.parse(next);
+        return { status: "ready" as const };
       },
-      isCredentialConfigured: async () => credentialConfigured,
-      deleteCredential: async () => {
-        deleteAttempts += 1;
-        if (deleteAttempts === 1) throw new Error("simulated keychain failure");
-        credentialConfigured = false;
-      },
+      acceptCommittedConfig: (raw: string) => accepted.push(raw),
     };
 
-    await expect(clearDeterministicDebugProviderWithPorts(nonce, credentialRef, "{}", ports)).rejects.toThrow("config write failure");
+    await expect(clearDeterministicDebugProviderWithPorts(nonce, credentialRef, "{}", ports)).rejects.toThrow("native lifecycle failure");
     expect(currentConfig).toBe(ownedConfig);
-    expect(credentialConfigured).toBe(true);
-
-    await expect(clearDeterministicDebugProviderWithPorts(nonce, credentialRef, "{}", ports)).rejects.toThrow("keychain failure");
-    expect(currentConfig).toBe(ownedConfig);
-    expect(credentialConfigured).toBe(true);
 
     await expect(clearDeterministicDebugProviderWithPorts(nonce, credentialRef, "{}", ports)).resolves.toMatchObject({
       configRestored: true,
       credentialDeleted: true,
     });
-    expect(currentConfig).toBe(restoredConfig);
-    expect(deleteAttempts).toBe(2);
-    expect(persistAttempts).toBe(4);
+    expect(currentConfig).toEqual(restoredConfig);
+    expect(attempts).toBe(2);
+    expect(accepted).toHaveLength(1);
   });
 });

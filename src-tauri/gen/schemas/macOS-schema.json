@@ -345,10 +345,22 @@
       "description": "Permission identifier",
       "oneOf": [
         {
-          "description": "Allows the GeoChat renderer to call the desktop application's public commands.\n#### This permission set includes:\n\n- `allow-get-runtime-info`\n- `allow-get-renderer-storage`\n- `allow-set-renderer-storage`\n- `allow-remove-renderer-storage`\n- `allow-get-graphics-preferences`\n- `allow-set-graphics-preferences`\n- `allow-get-mcp-status`\n- `allow-set-mcp-enabled`\n- `allow-get-access-state`\n- `allow-check-access`\n- `allow-get-update-state`\n- `allow-check-for-updates`\n- `allow-check-all-updates`\n- `allow-download-update`\n- `allow-set-update-preferences`\n- `allow-get-improvement-plan-preferences`\n- `allow-set-improvement-plan-preferences`\n- `allow-upload-improvement-plan-samples`\n- `allow-get-logging-preferences`\n- `allow-set-logging-preferences`\n- `allow-open-log-directory`\n- `allow-write-app-log`\n- `allow-get-app-bundle-update-state`\n- `allow-check-app-bundle-update`\n- `allow-install-app-bundle-update`\n- `allow-rollback-app-bundle-update`\n- `allow-get-problem-bank-cache-state`\n- `allow-get-problem-bank-catalog`\n- `allow-get-problem-bank-download-states`\n- `allow-download-problem-bank`\n- `allow-open-problem-bank-cache-directory`\n- `allow-clear-problem-bank-cache`\n- `allow-check-problem-bank-update`\n- `allow-sync-problem-bank-metadata`\n- `allow-load-problem-bank-page`\n- `allow-load-problem-detail`\n- `allow-save-provider-credential`\n- `allow-delete-provider-credential`\n- `allow-list-pending-credential-cleanup`\n- `allow-list-provider-credential-metadata`\n- `allow-mark-renderer-ready`\n- `allow-install-update`",
+          "description": "Allows the GeoChat renderer to call the desktop application's public commands.\n#### This permission set includes:\n\n- `allow-get-runtime-info`\n- `allow-get-renderer-storage`\n- `allow-set-renderer-storage`\n- `allow-remove-renderer-storage`\n- `allow-get-graphics-preferences`\n- `allow-set-graphics-preferences`\n- `allow-get-mcp-status`\n- `allow-set-mcp-enabled`\n- `allow-get-access-state`\n- `allow-check-access`\n- `allow-get-update-state`\n- `allow-check-for-updates`\n- `allow-check-all-updates`\n- `allow-download-update`\n- `allow-set-update-preferences`\n- `allow-get-improvement-plan-preferences`\n- `allow-set-improvement-plan-preferences`\n- `allow-upload-improvement-plan-samples`\n- `allow-get-logging-preferences`\n- `allow-set-logging-preferences`\n- `allow-open-log-directory`\n- `allow-write-app-log`\n- `allow-get-app-bundle-update-state`\n- `allow-check-app-bundle-update`\n- `allow-install-app-bundle-update`\n- `allow-rollback-app-bundle-update`\n- `allow-get-problem-bank-cache-state`\n- `allow-get-problem-bank-catalog`\n- `allow-get-problem-bank-download-states`\n- `allow-download-problem-bank`\n- `allow-open-problem-bank-cache-directory`\n- `allow-clear-problem-bank-cache`\n- `allow-check-problem-bank-update`\n- `allow-sync-problem-bank-metadata`\n- `allow-load-problem-bank-page`\n- `allow-load-problem-detail`\n- `allow-begin-provider-credential`\n- `allow-commit-provider-credential`\n- `allow-abort-provider-credential`\n- `allow-reconcile-provider-credentials`\n- `allow-retire-provider-credential`\n- `allow-list-provider-credential-metadata`\n- `allow-mark-renderer-ready`\n- `allow-install-update`",
           "type": "string",
           "const": "desktop-app",
-          "markdownDescription": "Allows the GeoChat renderer to call the desktop application's public commands.\n#### This permission set includes:\n\n- `allow-get-runtime-info`\n- `allow-get-renderer-storage`\n- `allow-set-renderer-storage`\n- `allow-remove-renderer-storage`\n- `allow-get-graphics-preferences`\n- `allow-set-graphics-preferences`\n- `allow-get-mcp-status`\n- `allow-set-mcp-enabled`\n- `allow-get-access-state`\n- `allow-check-access`\n- `allow-get-update-state`\n- `allow-check-for-updates`\n- `allow-check-all-updates`\n- `allow-download-update`\n- `allow-set-update-preferences`\n- `allow-get-improvement-plan-preferences`\n- `allow-set-improvement-plan-preferences`\n- `allow-upload-improvement-plan-samples`\n- `allow-get-logging-preferences`\n- `allow-set-logging-preferences`\n- `allow-open-log-directory`\n- `allow-write-app-log`\n- `allow-get-app-bundle-update-state`\n- `allow-check-app-bundle-update`\n- `allow-install-app-bundle-update`\n- `allow-rollback-app-bundle-update`\n- `allow-get-problem-bank-cache-state`\n- `allow-get-problem-bank-catalog`\n- `allow-get-problem-bank-download-states`\n- `allow-download-problem-bank`\n- `allow-open-problem-bank-cache-directory`\n- `allow-clear-problem-bank-cache`\n- `allow-check-problem-bank-update`\n- `allow-sync-problem-bank-metadata`\n- `allow-load-problem-bank-page`\n- `allow-load-problem-detail`\n- `allow-save-provider-credential`\n- `allow-delete-provider-credential`\n- `allow-list-pending-credential-cleanup`\n- `allow-list-provider-credential-metadata`\n- `allow-mark-renderer-ready`\n- `allow-install-update`"
+          "markdownDescription": "Allows the GeoChat renderer to call the desktop application's public commands.\n#### This permission set includes:\n\n- `allow-get-runtime-info`\n- `allow-get-renderer-storage`\n- `allow-set-renderer-storage`\n- `allow-remove-renderer-storage`\n- `allow-get-graphics-preferences`\n- `allow-set-graphics-preferences`\n- `allow-get-mcp-status`\n- `allow-set-mcp-enabled`\n- `allow-get-access-state`\n- `allow-check-access`\n- `allow-get-update-state`\n- `allow-check-for-updates`\n- `allow-check-all-updates`\n- `allow-download-update`\n- `allow-set-update-preferences`\n- `allow-get-improvement-plan-preferences`\n- `allow-set-improvement-plan-preferences`\n- `allow-upload-improvement-plan-samples`\n- `allow-get-logging-preferences`\n- `allow-set-logging-preferences`\n- `allow-open-log-directory`\n- `allow-write-app-log`\n- `allow-get-app-bundle-update-state`\n- `allow-check-app-bundle-update`\n- `allow-install-app-bundle-update`\n- `allow-rollback-app-bundle-update`\n- `allow-get-problem-bank-cache-state`\n- `allow-get-problem-bank-catalog`\n- `allow-get-problem-bank-download-states`\n- `allow-download-problem-bank`\n- `allow-open-problem-bank-cache-directory`\n- `allow-clear-problem-bank-cache`\n- `allow-check-problem-bank-update`\n- `allow-sync-problem-bank-metadata`\n- `allow-load-problem-bank-page`\n- `allow-load-problem-detail`\n- `allow-begin-provider-credential`\n- `allow-commit-provider-credential`\n- `allow-abort-provider-credential`\n- `allow-reconcile-provider-credentials`\n- `allow-retire-provider-credential`\n- `allow-list-provider-credential-metadata`\n- `allow-mark-renderer-ready`\n- `allow-install-update`"
+        },
+        {
+          "description": "Enables the abort_provider_credential command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-abort-provider-credential",
+          "markdownDescription": "Enables the abort_provider_credential command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the begin_provider_credential command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-begin-provider-credential",
+          "markdownDescription": "Enables the begin_provider_credential command without any pre-configured scope."
         },
         {
           "description": "Enables the check_access command without any pre-configured scope.",
@@ -387,10 +399,10 @@
           "markdownDescription": "Enables the clear_problem_bank_cache command without any pre-configured scope."
         },
         {
-          "description": "Enables the delete_provider_credential command without any pre-configured scope.",
+          "description": "Enables the commit_provider_credential command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-delete-provider-credential",
-          "markdownDescription": "Enables the delete_provider_credential command without any pre-configured scope."
+          "const": "allow-commit-provider-credential",
+          "markdownDescription": "Enables the commit_provider_credential command without any pre-configured scope."
         },
         {
           "description": "Enables the download_problem_bank command without any pre-configured scope.",
@@ -489,12 +501,6 @@
           "markdownDescription": "Enables the install_update command without any pre-configured scope."
         },
         {
-          "description": "Enables the list_pending_credential_cleanup command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-list-pending-credential-cleanup",
-          "markdownDescription": "Enables the list_pending_credential_cleanup command without any pre-configured scope."
-        },
-        {
           "description": "Enables the list_provider_credential_metadata command without any pre-configured scope.",
           "type": "string",
           "const": "allow-list-provider-credential-metadata",
@@ -531,22 +537,28 @@
           "markdownDescription": "Enables the open_problem_bank_cache_directory command without any pre-configured scope."
         },
         {
+          "description": "Enables the reconcile_provider_credentials command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-reconcile-provider-credentials",
+          "markdownDescription": "Enables the reconcile_provider_credentials command without any pre-configured scope."
+        },
+        {
           "description": "Enables the remove_renderer_storage command without any pre-configured scope.",
           "type": "string",
           "const": "allow-remove-renderer-storage",
           "markdownDescription": "Enables the remove_renderer_storage command without any pre-configured scope."
         },
         {
+          "description": "Enables the retire_provider_credential command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-retire-provider-credential",
+          "markdownDescription": "Enables the retire_provider_credential command without any pre-configured scope."
+        },
+        {
           "description": "Enables the rollback_app_bundle_update command without any pre-configured scope.",
           "type": "string",
           "const": "allow-rollback-app-bundle-update",
           "markdownDescription": "Enables the rollback_app_bundle_update command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the save_provider_credential command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-save-provider-credential",
-          "markdownDescription": "Enables the save_provider_credential command without any pre-configured scope."
         },
         {
           "description": "Enables the set_graphics_preferences command without any pre-configured scope.",
@@ -603,6 +615,18 @@
           "markdownDescription": "Enables the write_app_log command without any pre-configured scope."
         },
         {
+          "description": "Denies the abort_provider_credential command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-abort-provider-credential",
+          "markdownDescription": "Denies the abort_provider_credential command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the begin_provider_credential command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-begin-provider-credential",
+          "markdownDescription": "Denies the begin_provider_credential command without any pre-configured scope."
+        },
+        {
           "description": "Denies the check_access command without any pre-configured scope.",
           "type": "string",
           "const": "deny-check-access",
@@ -639,10 +663,10 @@
           "markdownDescription": "Denies the clear_problem_bank_cache command without any pre-configured scope."
         },
         {
-          "description": "Denies the delete_provider_credential command without any pre-configured scope.",
+          "description": "Denies the commit_provider_credential command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-delete-provider-credential",
-          "markdownDescription": "Denies the delete_provider_credential command without any pre-configured scope."
+          "const": "deny-commit-provider-credential",
+          "markdownDescription": "Denies the commit_provider_credential command without any pre-configured scope."
         },
         {
           "description": "Denies the download_problem_bank command without any pre-configured scope.",
@@ -741,12 +765,6 @@
           "markdownDescription": "Denies the install_update command without any pre-configured scope."
         },
         {
-          "description": "Denies the list_pending_credential_cleanup command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-list-pending-credential-cleanup",
-          "markdownDescription": "Denies the list_pending_credential_cleanup command without any pre-configured scope."
-        },
-        {
           "description": "Denies the list_provider_credential_metadata command without any pre-configured scope.",
           "type": "string",
           "const": "deny-list-provider-credential-metadata",
@@ -783,22 +801,28 @@
           "markdownDescription": "Denies the open_problem_bank_cache_directory command without any pre-configured scope."
         },
         {
+          "description": "Denies the reconcile_provider_credentials command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-reconcile-provider-credentials",
+          "markdownDescription": "Denies the reconcile_provider_credentials command without any pre-configured scope."
+        },
+        {
           "description": "Denies the remove_renderer_storage command without any pre-configured scope.",
           "type": "string",
           "const": "deny-remove-renderer-storage",
           "markdownDescription": "Denies the remove_renderer_storage command without any pre-configured scope."
         },
         {
+          "description": "Denies the retire_provider_credential command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-retire-provider-credential",
+          "markdownDescription": "Denies the retire_provider_credential command without any pre-configured scope."
+        },
+        {
           "description": "Denies the rollback_app_bundle_update command without any pre-configured scope.",
           "type": "string",
           "const": "deny-rollback-app-bundle-update",
           "markdownDescription": "Denies the rollback_app_bundle_update command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the save_provider_credential command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-save-provider-credential",
-          "markdownDescription": "Denies the save_provider_credential command without any pre-configured scope."
         },
         {
           "description": "Denies the set_graphics_preferences command without any pre-configured scope.",

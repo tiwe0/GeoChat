@@ -855,6 +855,71 @@ mod tests {
     }
 
     #[test]
+    fn credential_broker_body_deadline_is_absolute_during_trickle_upload() {
+        let (runtime, _) = runtime(BrokerLimits::default());
+        let c = runtime.connection().clone();
+        let mut slow = connect(&c);
+        slow.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        slow.write_all(headers(&c.token, 64, "").as_bytes())
+            .unwrap();
+        slow.write_all(b"{").unwrap();
+
+        let stop = Arc::new(AtomicBool::new(false));
+        let writer_stop = stop.clone();
+        let mut writer = slow.try_clone().unwrap();
+        let trickle = thread::spawn(move || {
+            for _ in 0..10 {
+                thread::sleep(Duration::from_millis(350));
+                if writer_stop.load(Ordering::Acquire) || writer.write_all(b" ").is_err() {
+                    break;
+                }
+            }
+            let _ = writer.shutdown(Shutdown::Write);
+        });
+
+        let started = Instant::now();
+        assert_safe(&read_response(&mut slow), 400);
+        let elapsed = started.elapsed();
+        stop.store(true, Ordering::Release);
+        trickle.join().unwrap();
+        assert!(
+            elapsed < SOCKET_TIMEOUT + Duration::from_millis(600),
+            "body trickle extended the absolute socket deadline: {elapsed:?}"
+        );
+    }
+
+    #[test]
+    fn credential_broker_early_rejection_drain_releases_worker_after_absolute_deadline() {
+        let (runtime, credential_ref) = runtime(BrokerLimits {
+            max_concurrent: 1,
+            rate_limit: 10,
+            rate_window: Duration::from_secs(30),
+        });
+        let c = runtime.connection().clone();
+        let mut rejected = connect(&c);
+        rejected
+            .write_all(headers("wrong", 100, "").as_bytes())
+            .unwrap();
+
+        let mut writer = rejected.try_clone().unwrap();
+        assert_safe(&read_response(&mut rejected), 401);
+        let trickle = thread::spawn(move || {
+            for _ in 0..20 {
+                thread::sleep(Duration::from_millis(25));
+                if writer.write_all(b"x").is_err() {
+                    break;
+                }
+            }
+            let _ = writer.shutdown(Shutdown::Write);
+        });
+
+        thread::sleep(REJECT_DRAIN_TIMEOUT + Duration::from_millis(100));
+        let response = valid(&c, &credential_ref, &c.token, "");
+        assert_safe(&response, 200);
+        trickle.join().unwrap();
+    }
+
+    #[test]
     fn credential_broker_returns_429_for_concurrency_and_rate_limits() {
         let (concurrency_runtime, credential_ref) = runtime(BrokerLimits {
             max_concurrent: 1,

@@ -33,8 +33,9 @@ use commands::app_bundle_update::{
     rollback_app_bundle_update,
 };
 use commands::credentials::{
-    delete_provider_credential, list_pending_credential_cleanup, list_provider_credential_metadata,
-    save_provider_credential, CredentialCommandState,
+    abort_provider_credential, begin_provider_credential, commit_provider_credential,
+    list_provider_credential_metadata, reconcile_provider_credentials, retire_provider_credential,
+    CredentialCommandState,
 };
 use commands::graphics::{get_graphics_preferences, set_graphics_preferences, DesktopGraphicsMode};
 use commands::improvement::{
@@ -214,9 +215,11 @@ fn main() {
             get_renderer_storage,
             set_renderer_storage,
             remove_renderer_storage,
-            save_provider_credential,
-            delete_provider_credential,
-            list_pending_credential_cleanup,
+            begin_provider_credential,
+            commit_provider_credential,
+            abort_provider_credential,
+            reconcile_provider_credentials,
+            retire_provider_credential,
             list_provider_credential_metadata,
             mark_renderer_ready,
             install_update

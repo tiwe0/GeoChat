@@ -158,4 +158,41 @@ describe("GeoGebra document storage client", () => {
     }, request as typeof fetch);
     await expect(workspace.open("doc-1")).rejects.toThrow("restore failed");
   });
+
+  test("supersedes a slow older open from the start of its GET request", async () => {
+    let resolveOlder!: (response: Response) => void;
+    const requests: Array<{ id: string; signal?: AbortSignal }> = [];
+    const document = (id: string) => ({
+      id,
+      title: id,
+      mimeType: "application/vnd.geogebra.file",
+      contentKind: "binary",
+      content: Buffer.from(id).toString("base64"),
+      sizeBytes: id.length,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const request = (urlValue: string | URL | Request, init?: RequestInit) => {
+      const id = decodeURIComponent(String(urlValue).split("/").at(-1)!);
+      requests.push({ id, signal: init?.signal ?? undefined });
+      if (id === "older") {
+        return new Promise<Response>((resolve) => { resolveOlder = resolve; });
+      }
+      return Promise.resolve(Response.json({ document: document(id) }));
+    };
+    const restored: string[] = [];
+    const workspace = new GeoGebraDocumentWorkspace("http://backend", null, {
+      captureDocumentBase64: async () => "",
+      restoreDocumentBase64: async (base64) => { restored.push(Buffer.from(base64, "base64").toString()); },
+    }, request as typeof fetch);
+
+    const older = workspace.open("older");
+    const newer = workspace.open("newer");
+    expect((await newer).id).toBe("newer");
+    expect(requests[0]?.signal?.aborted).toBe(true);
+
+    resolveOlder(Response.json({ document: document("older") }));
+    await expect(older).rejects.toMatchObject({ name: "AbortError" });
+    expect(restored).toEqual(["newer"]);
+  });
 });

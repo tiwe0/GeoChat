@@ -157,6 +157,36 @@ describe("controller tool boundary", () => {
     expect(restored).toBe(documentBase64);
   });
 
+  test("exports a document only after the active canvas transaction reaches a stable state", async () => {
+    let finishCommand!: (value: string) => void;
+    let commandStarted!: () => void;
+    const commandStart = new Promise<void>((resolve) => { commandStarted = resolve; });
+    const commandResult = new Promise<string>((resolve) => { finishCommand = resolve; });
+    let exportCount = 0;
+    const controller = new GeoGebraController();
+    controller.setApi(api({
+      asyncEvalCommandResult: () => {
+        commandStarted();
+        return commandResult;
+      },
+      getBase64: (callback: (value: string) => void) => {
+        exportCount += 1;
+        callback("stable-document");
+      },
+    }));
+
+    const command = controller.executeTool("executeGeoGebraCommands", { commands: ["A=(1,2)"] });
+    await commandStart;
+    const capture = controller.captureDocumentBase64();
+    await Promise.resolve();
+    expect(exportCount).toBe(0);
+
+    finishCommand(JSON.stringify({ ok: true, labels: ["A"] }));
+    await command;
+    expect(await capture).toBe("stable-document");
+    expect(exportCount).toBe(1);
+  });
+
   test("serializes complete document restore after a failing in-flight canvas transaction", async () => {
     let finishCommand!: (value: string) => void;
     let commandStarted!: () => void;
@@ -301,6 +331,8 @@ describe("controller tool boundary", () => {
 
     await expect(controller.restoreDocumentBase64("newer-document"))
       .rejects.toMatchObject({ name: "CanvasRecoveryRequiredError" });
+    await expect(controller.captureDocumentBase64())
+      .rejects.toMatchObject({ name: "CanvasRecoveryRequiredError" });
     await expect(controller.retryCanvasRecovery())
       .rejects.toMatchObject({ name: "CanvasRecoveryRequiredError" });
     expect(applied).toEqual(["late-old-document"]);
@@ -322,6 +354,47 @@ describe("controller tool boundary", () => {
     pending[2]!.complete();
     await newer;
     expect(canvasState).toBe("newer-document");
+  });
+
+  test("keeps recovery frozen when the recovery write itself times out, then retries after its late callback", async () => {
+    const pending: Array<{ base64: string; complete: () => void }> = [];
+    let canvasState = "complete-before";
+    let finalRetryStarted!: () => void;
+    const finalRetryStart = new Promise<void>((resolve) => { finalRetryStarted = resolve; });
+    const controller = new GeoGebraController(undefined, 5);
+    controller.setApi(api({
+      getBase64: (callback: (value: string) => void) => callback("complete-before"),
+      setBase64: (base64: string, callback: () => void) => {
+        pending.push({
+          base64,
+          complete: () => {
+            canvasState = base64;
+            callback();
+          },
+        });
+        if (pending.length === 3) finalRetryStarted();
+      },
+    }));
+
+    await expect(controller.restoreDocumentBase64("late-document"))
+      .rejects.toMatchObject({ name: "CanvasRecoveryRequiredError" });
+    pending[0]!.complete();
+
+    await expect(controller.retryCanvasRecovery())
+      .rejects.toMatchObject({ name: "CanvasRecoveryRequiredError" });
+    expect(controller.canvasRecoveryState).toMatchObject({ frozen: true, label: "document:restore" });
+    expect(pending.map(({ base64 }) => base64)).toEqual(["late-document", "complete-before"]);
+
+    pending[1]!.complete();
+    expect(canvasState).toBe("complete-before");
+
+    const successfulRetry = controller.retryCanvasRecovery();
+    await finalRetryStart;
+    expect(pending[2]?.base64).toBe("complete-before");
+    pending[2]!.complete();
+    await successfulRetry;
+    expect(controller.canvasRecoveryState).toBeNull();
+    expect(canvasState).toBe("complete-before");
   });
 
   test("clamps PNG export options rather than passing them through", async () => {

@@ -12,6 +12,7 @@ export type RendererStorageWriteErrorDetail = Readonly<{
 
 export type NativeConfigStorage = Storage & {
   setItemDurable(key: string, value: string): Promise<void>;
+  acceptNativeValue(key: string, value: string): void;
 };
 
 export type NativePreferenceSchema = {
@@ -98,6 +99,9 @@ export async function installNativePreferences(api: RendererStorageApi): Promise
     },
     setItemDurable(key, value) {
       return setRaw(String(key), String(value), false);
+    },
+    acceptNativeValue(key, value) {
+      mirror.set(String(key), String(value));
     },
     removeItem(key) {
       const normalizedKey = String(key);

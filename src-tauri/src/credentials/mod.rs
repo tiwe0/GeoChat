@@ -1,12 +1,12 @@
-mod cleanup_queue;
 mod error;
+mod lifecycle_journal;
 #[cfg(test)]
 mod memory;
 mod platform;
 mod store;
 
-pub(crate) use cleanup_queue::CredentialCleanupQueue;
 pub(crate) use error::CredentialError;
+pub(crate) use lifecycle_journal::{CredentialLifecycleJournal, CredentialLifecycleOperation};
 #[cfg(test)]
 pub(crate) use memory::InMemoryCredentialStore;
 pub(crate) use platform::{CredentialProfile, PlatformCredentialStore};
@@ -70,7 +70,7 @@ pub(crate) struct SaveCredentialRequest {
     pub(crate) secret: SecretValue,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CredentialMetadata {
     pub(crate) credential_ref: String,
@@ -126,15 +126,20 @@ pub(crate) struct CredentialVault {
     store: Arc<dyn CredentialStore>,
 }
 
+pub(crate) struct PreparedCredential {
+    pub(crate) metadata: CredentialMetadata,
+    encoded: SecretValue,
+}
+
 impl CredentialVault {
     pub(crate) fn new(store: Arc<dyn CredentialStore>) -> Self {
         Self { store }
     }
 
-    pub(crate) fn save(
+    pub(crate) fn prepare(
         &self,
         request: SaveCredentialRequest,
-    ) -> Result<CredentialMetadata, CredentialError> {
+    ) -> Result<PreparedCredential, CredentialError> {
         let provider = validate_provider(&request.provider)?.to_owned();
         let protocol = validate_protocol(&request.protocol)?.to_owned();
         let canonical_base_url = canonicalize_endpoint(&request.base_url)?;
@@ -151,13 +156,33 @@ impl CredentialVault {
             &protocol,
             &canonical_base_url,
         )?;
-        self.store.put(&credential_ref, &encoded)?;
-        Ok(CredentialMetadata {
-            credential_ref,
-            provider,
-            protocol,
-            canonical_base_url,
+        Ok(PreparedCredential {
+            metadata: CredentialMetadata {
+                credential_ref,
+                provider,
+                protocol,
+                canonical_base_url,
+            },
+            encoded,
         })
+    }
+
+    pub(crate) fn put_prepared(
+        &self,
+        prepared: &PreparedCredential,
+    ) -> Result<(), CredentialError> {
+        self.store
+            .put(&prepared.metadata.credential_ref, &prepared.encoded)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn save(
+        &self,
+        request: SaveCredentialRequest,
+    ) -> Result<CredentialMetadata, CredentialError> {
+        let prepared = self.prepare(request)?;
+        self.put_prepared(&prepared)?;
+        Ok(prepared.metadata)
     }
 
     pub(crate) fn resolve(
@@ -247,7 +272,7 @@ fn decode_envelope(
     })
 }
 
-fn validate_credential_ref(credential_ref: &str) -> Result<(), CredentialError> {
+pub(crate) fn validate_credential_ref(credential_ref: &str) -> Result<(), CredentialError> {
     let parsed = Uuid::parse_str(credential_ref).map_err(|_| CredentialError::InvalidReference)?;
     if parsed.get_version_num() != 4 || parsed.to_string() != credential_ref {
         return Err(CredentialError::InvalidReference);

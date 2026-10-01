@@ -8,9 +8,11 @@ import {
 } from "../src/shared/desktop/tauri-bridge";
 
 const expectedCommandByMethod = {
-  saveProviderCredential: "save_provider_credential",
-  deleteProviderCredential: "delete_provider_credential",
-  listPendingCredentialCleanup: "list_pending_credential_cleanup",
+  beginProviderCredential: "begin_provider_credential",
+  commitProviderCredential: "commit_provider_credential",
+  abortProviderCredential: "abort_provider_credential",
+  reconcileProviderCredentials: "reconcile_provider_credentials",
+  retireProviderCredential: "retire_provider_credential",
   listProviderCredentialMetadata: "list_provider_credential_metadata",
   getRendererStorage: "get_renderer_storage",
   setRendererStorage: "set_renderer_storage",
@@ -56,9 +58,11 @@ describe("Tauri desktop bridge contract", () => {
   test("groups command names by capability without changing public API keys", () => {
     expect(TAURI_DESKTOP_COMMANDS).toEqual({
       credentials: {
-        saveProviderCredential: "save_provider_credential",
-        deleteProviderCredential: "delete_provider_credential",
-        listPendingCredentialCleanup: "list_pending_credential_cleanup",
+        beginProviderCredential: "begin_provider_credential",
+        commitProviderCredential: "commit_provider_credential",
+        abortProviderCredential: "abort_provider_credential",
+        reconcileProviderCredentials: "reconcile_provider_credentials",
+        retireProviderCredential: "retire_provider_credential",
         listProviderCredentialMetadata: "list_provider_credential_metadata",
       },
       runtime: {
@@ -137,7 +141,9 @@ describe("Tauri desktop bridge contract", () => {
     const calls: Array<{ command: string; args?: Record<string, unknown> }> = [];
     const api = createTauriDesktopApi(async (command, args) => {
       calls.push({ command, args });
-      if (command === "list_provider_credential_metadata" || command === "list_pending_credential_cleanup") return [] as never;
+      if (command === "list_provider_credential_metadata") return [] as never;
+      if (command === "begin_provider_credential") return { operationId: "operation", metadata: {} } as never;
+      if (["commit_provider_credential", "abort_provider_credential", "reconcile_provider_credentials", "retire_provider_credential"].includes(command)) return { status: "ready" } as never;
       return (command === "get_runtime_info" ? {
         platform: "darwin",
         appVersion: "0.6.1",
@@ -146,14 +152,16 @@ describe("Tauri desktop bridge contract", () => {
       } : undefined) as never;
     }, fakeListen());
 
-    await api.saveProviderCredential({
+    await api.beginProviderCredential({
       provider: "deepseek",
       protocol: "openai-compatible",
       baseUrl: "https://api.deepseek.com",
       secret: "test-secret"
     });
-    await api.deleteProviderCredential("old-ref");
-    await api.listPendingCredentialCleanup();
+    await api.commitProviderCredential("operation", "expected", "next");
+    await api.abortProviderCredential("operation");
+    await api.reconcileProviderCredentials();
+    await api.retireProviderCredential("old-ref", "expected", "next");
     await api.getProviderCredentialStatus("status-ref");
     await api.listProviderCredentialMetadata(["listed-ref"]);
     await api.getRendererStorage(["theme", "zoom"]);
@@ -196,14 +204,16 @@ describe("Tauri desktop bridge contract", () => {
     await api.loadProblemDetail("gaokao", "problem-1");
 
     expect(calls.map((call) => call.command)).toEqual([
-      "save_provider_credential",
-      "delete_provider_credential",
-      "list_pending_credential_cleanup",
+      "begin_provider_credential",
+      "commit_provider_credential",
+      "abort_provider_credential",
+      "reconcile_provider_credentials",
+      "retire_provider_credential",
       "list_provider_credential_metadata",
       "list_provider_credential_metadata",
-      ...Object.values(expectedCommandByMethod).slice(4)
+      ...Object.values(expectedCommandByMethod).slice(6)
     ]);
-    expect(calls.find((call) => call.command === "save_provider_credential")?.args).toEqual({
+    expect(calls.find((call) => call.command === "begin_provider_credential")?.args).toEqual({
       request: {
         provider: "deepseek",
         protocol: "openai-compatible",
@@ -211,8 +221,11 @@ describe("Tauri desktop bridge contract", () => {
         secret: "test-secret"
       }
     });
-    expect(calls.find((call) => call.command === "delete_provider_credential")?.args).toEqual({
-      credentialRef: "old-ref"
+    expect(calls.find((call) => call.command === "commit_provider_credential")?.args).toEqual({
+      operationId: "operation", expectedConfigJson: "expected", nextConfigJson: "next"
+    });
+    expect(calls.find((call) => call.command === "retire_provider_credential")?.args).toEqual({
+      credentialRef: "old-ref", expectedConfigJson: "expected", nextConfigJson: "next"
     });
     expect(calls.filter((call) => call.command === "list_provider_credential_metadata").map((call) => call.args)).toEqual([
       { request: { credentialRefs: ["status-ref"] } },

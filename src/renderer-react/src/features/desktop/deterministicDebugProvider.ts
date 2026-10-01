@@ -1,8 +1,7 @@
 import {
-  persistDesktopConfig,
+  acceptNativeDesktopConfigCommit,
   readDesktopConfig,
   normalizeDesktopConfigJson,
-  updateDesktopConfig,
 } from "../../../../shared/desktop/desktop-config";
 import { installedDesktopApi } from "../../../../shared/desktop/tauri-bridge";
 
@@ -32,15 +31,16 @@ export async function configureDeterministicDebugProvider(baseUrl: string, model
   const desktopApi = installedDesktopApi();
   if (!desktopApi) throw new Error("Native credential storage is unavailable.");
   const originalConfig = readDesktopConfig();
-  const metadata = await desktopApi.saveProviderCredential({
+  const expectedConfigJson = JSON.stringify(originalConfig);
+  const begun = await desktopApi.beginProviderCredential({
     provider: "custom",
     protocol: "openai-compatible",
     baseUrl: parsed.toString(),
     secret: TEST_CREDENTIAL_SECRET,
   });
-  try {
-    await updateDesktopConfig((current) => ({
-      ...current,
+  const metadata = begun.metadata;
+  const nextConfig = {
+      ...originalConfig,
       model: {
         provider: "custom",
         model,
@@ -54,10 +54,17 @@ export async function configureDeterministicDebugProvider(baseUrl: string, model
         protocol: "openai-compatible",
         models: [{ name: model, callName: model, supportsImages: false }],
       },
-    }));
+    };
+  const nextConfigJson = JSON.stringify(nextConfig);
+  try {
+    const lifecycle = await desktopApi.commitProviderCredential(
+      begun.operationId, expectedConfigJson, nextConfigJson,
+    );
+    acceptNativeDesktopConfigCommit(nextConfigJson);
+    if (lifecycle.status !== "ready") throw new Error("Deterministic credential cleanup is pending.");
   } catch (error) {
     try {
-      await desktopApi.deleteProviderCredential(metadata.credentialRef);
+      await desktopApi.abortProviderCredential(begun.operationId);
     } catch (rollbackError) {
       throw new AggregateError([error, rollbackError], "Failed to persist the E2E config and roll back its credential.");
     }
@@ -84,9 +91,8 @@ export async function clearDeterministicDebugProvider(nonce: string, credentialR
   return clearDeterministicDebugProviderWithPorts(nonce, credentialRef, restoreConfigJson, {
     readConfig: readDesktopConfig,
     normalizeConfigJson: normalizeDesktopConfigJson,
-    persistConfig: persistDesktopConfig,
-    isCredentialConfigured: async (ref) => (await desktopApi.getProviderCredentialStatus(ref)).configured,
-    deleteCredential: (ref) => desktopApi.deleteProviderCredential(ref),
+    commitRetirement: (ref, expected, next) => desktopApi.retireProviderCredential(ref, expected, next),
+    acceptCommittedConfig: acceptNativeDesktopConfigCommit,
   });
 }
 
@@ -104,9 +110,8 @@ export async function clearDeterministicDebugProviderWithPorts<Config extends De
   ports: {
     readConfig(): Config;
     normalizeConfigJson(rawJson: string): Config;
-    persistConfig(config: Config): Promise<void> | void;
-    isCredentialConfigured(ref: string): Promise<boolean>;
-    deleteCredential(ref: string): Promise<void>;
+    commitRetirement(ref: string, expectedConfigJson: string, nextConfigJson: string): Promise<{ status: "ready" } | { status: "pending"; operationId: string }>;
+    acceptCommittedConfig(rawJson: string): void;
   },
 ) {
   assertNonce(nonce);
@@ -116,20 +121,15 @@ export async function clearDeterministicDebugProviderWithPorts<Config extends De
     throw new Error("The current provider configuration is not owned by this deterministic E2E run.");
   }
   const restoreConfig = ports.normalizeConfigJson(restoreConfigJson);
-  await ports.persistConfig(restoreConfig);
-  try {
-    if (await ports.isCredentialConfigured(credentialRef)) {
-      await ports.deleteCredential(credentialRef);
-    }
-  } catch (error) {
-    try {
-      // Keep the ownership marker retryable when Keychain cleanup fails after
-      // the restored config was durably committed.
-      await ports.persistConfig(current);
-    } catch (rollbackError) {
-      throw new AggregateError([error, rollbackError], "Failed to delete the E2E credential and restore cleanup ownership.");
-    }
-    throw error;
-  }
-  return { cleared: true, configRestored: true, credentialDeleted: true, debugOnly: true };
+  const expectedConfigJson = JSON.stringify(current);
+  const nextConfigJson = JSON.stringify(restoreConfig);
+  const lifecycle = await ports.commitRetirement(credentialRef, expectedConfigJson, nextConfigJson);
+  ports.acceptCommittedConfig(nextConfigJson);
+  return {
+    cleared: lifecycle.status === "ready",
+    configRestored: true,
+    credentialDeleted: lifecycle.status === "ready",
+    cleanupPending: lifecycle.status === "pending",
+    debugOnly: true,
+  };
 }

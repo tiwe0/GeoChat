@@ -10,6 +10,7 @@ import { installNativePreferences } from "./lib/nativePreferences";
 import { installWebViewStorageFacades } from "./webview-storage-facades";
 
 export async function bootstrapRendererStorage(api: GeoChatDesktopApi) {
+  await api.reconcileProviderCredentials();
   const preferences = await installNativePreferences(api);
   installDesktopConfigStorage(preferences.configStorage, preferences.flushWrites);
   await recoverDesktopConfigBeforeLoad(preferences.configStorage, {

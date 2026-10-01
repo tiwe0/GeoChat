@@ -3,7 +3,10 @@ use crate::{
         CredentialError, CredentialLifecycleJournal, CredentialLifecycleOperation,
         CredentialMetadata, CredentialVault, SaveCredentialRequest,
     },
-    renderer_storage::{credential_ref_bindings_from_raw_config, RendererStorage},
+    renderer_storage::{
+        credential_binding_ownership_from_raw_config, credential_ref_bindings_from_raw_config,
+        RendererStorage,
+    },
     DesktopState,
 };
 use serde::{Deserialize, Serialize};
@@ -261,6 +264,11 @@ fn validate_operation_transition(
             .map_err(|_| CredentialError::InvalidInput)?;
     let previous_bindings = credential_ref_bindings(operation.starting_config_json())?;
     let next_bindings = credential_ref_bindings(next_config_json)?;
+    let previous_ownership =
+        credential_binding_ownership_from_raw_config(operation.starting_config_json())
+            .map_err(|_| CredentialError::CorruptEntry)?;
+    let next_ownership = credential_binding_ownership_from_raw_config(next_config_json)
+        .map_err(|_| CredentialError::InvalidInput)?;
     match operation {
         CredentialLifecycleOperation::Replacement {
             target_provider,
@@ -278,6 +286,18 @@ fn validate_operation_transition(
                 })
             }) || next_bindings.keys().any(|binding| {
                 !previous_bindings.contains_key(binding)
+                    && !binding_targets_provider(&next_config, binding, target_provider)
+            }) {
+                return Err(CredentialError::InvalidInput);
+            }
+            let ownership_slots: BTreeSet<_> = previous_ownership
+                .keys()
+                .chain(next_ownership.keys())
+                .cloned()
+                .collect();
+            if ownership_slots.iter().any(|binding| {
+                previous_ownership.get(binding) != next_ownership.get(binding)
+                    && !binding_targets_provider(&previous_config, binding, target_provider)
                     && !binding_targets_provider(&next_config, binding, target_provider)
             }) {
                 return Err(CredentialError::InvalidInput);
@@ -334,6 +354,13 @@ fn validate_operation_transition(
                     _ => next.is_empty(),
                 };
                 if next == retiring_credential_ref || !valid_replacement {
+                    return Err(CredentialError::InvalidInput);
+                }
+            }
+            for (binding, previous) in &previous_ownership {
+                if previous.credential_ref != *retiring_credential_ref
+                    && next_ownership.get(binding) != Some(previous)
+                {
                     return Err(CredentialError::InvalidInput);
                 }
             }
@@ -478,9 +505,12 @@ fn reconcile_with_storage(
             operation.starting_config_json(),
         )
         .map_err(|_| CredentialError::CorruptEntry)?;
-        let bindings_unchanged = credential_ref_bindings(operation.starting_config_json())?
-            == credential_ref_bindings(&config_json)?;
-        if active_refs != starting_refs || !bindings_unchanged {
+        let ownership_unchanged =
+            credential_binding_ownership_from_raw_config(operation.starting_config_json())
+                .map_err(|_| CredentialError::CorruptEntry)?
+                == credential_binding_ownership_from_raw_config(&config_json)
+                    .map_err(|_| CredentialError::CorruptEntry)?;
+        if active_refs != starting_refs || !ownership_unchanged {
             validate_operation_transition(&operation, &config_json)?;
         }
     }
@@ -902,6 +932,38 @@ mod tests {
     }
 
     #[test]
+    fn replacement_rejects_unrelated_active_binding_metadata_drift() {
+        let old_ref = Uuid::new_v4().to_string();
+        let unrelated_ref = Uuid::new_v4().to_string();
+        let new_ref = Uuid::new_v4().to_string();
+        let mut starting: Value =
+            serde_json::from_str(&config_with_deepseek_ref(&old_ref)).unwrap();
+        starting["visionModel"]["credentialRef"] = json!(unrelated_ref.clone());
+        starting["providerCredentials"]["openrouter"]["credentialRef"] = json!(unrelated_ref);
+        let starting = serde_json::to_string(&starting).unwrap();
+        let operation = CredentialLifecycleOperation::replacement(
+            Uuid::new_v4().to_string(),
+            "deepseek".into(),
+            starting.clone(),
+            metadata(new_ref.clone()),
+            vec![old_ref],
+        );
+        let mut next: Value = serde_json::from_str(&starting).unwrap();
+        next["model"]["credentialRef"] = json!(new_ref.clone());
+        next["providerCredentials"]["deepseek"] = json!({
+            "credentialRef": new_ref,
+            "baseUrl": "https://api.deepseek.com",
+            "protocol": "openai-compatible"
+        });
+        next["providerCredentials"]["openrouter"]["baseUrl"] = json!("https://example.com/v1");
+
+        assert_eq!(
+            validate_operation_transition(&operation, &serde_json::to_string(&next).unwrap()),
+            Err(CredentialError::InvalidInput)
+        );
+    }
+
+    #[test]
     fn retirement_removes_only_the_requested_reference_and_introduces_none() {
         let retiring_ref = Uuid::new_v4().to_string();
         let unrelated_ref = Uuid::new_v4().to_string();
@@ -925,6 +987,31 @@ mod tests {
         );
 
         next["providerCredentials"]["openrouter"]["credentialRef"] = serde_json::json!("");
+        assert_eq!(
+            validate_operation_transition(&operation, &serde_json::to_string(&next).unwrap()),
+            Err(CredentialError::InvalidInput)
+        );
+    }
+
+    #[test]
+    fn retirement_rejects_unrelated_active_binding_metadata_drift() {
+        let retiring_ref = Uuid::new_v4().to_string();
+        let unrelated_ref = Uuid::new_v4().to_string();
+        let mut starting: Value =
+            serde_json::from_str(&config_with_deepseek_ref(&retiring_ref)).unwrap();
+        starting["visionModel"]["credentialRef"] = json!(unrelated_ref.clone());
+        starting["providerCredentials"]["openrouter"]["credentialRef"] = json!(unrelated_ref);
+        let starting = serde_json::to_string(&starting).unwrap();
+        let operation = CredentialLifecycleOperation::retirement(
+            Uuid::new_v4().to_string(),
+            starting.clone(),
+            retiring_ref,
+        );
+        let mut next: Value = serde_json::from_str(&starting).unwrap();
+        next["model"]["credentialRef"] = json!("");
+        next["providerCredentials"]["deepseek"]["credentialRef"] = json!("");
+        next["providerCredentials"]["openrouter"]["baseUrl"] = json!("https://example.com/v1");
+
         assert_eq!(
             validate_operation_transition(&operation, &serde_json::to_string(&next).unwrap()),
             Err(CredentialError::InvalidInput)

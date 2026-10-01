@@ -13,6 +13,20 @@ import { installedDesktopApi } from "../../../../shared/desktop/tauri-bridge";
 const TEST_PROVIDER_NAME = "GeoChat deterministic E2E";
 const TEST_CREDENTIAL_SECRET = "geochat-local-debug-e2e";
 
+function pendingDebugProviderSetup(operationId?: string) {
+  return {
+    provider: "custom" as const,
+    setupPending: true as const,
+    cleanupPending: true as const,
+    operationId: operationId ?? null,
+    recovery: {
+      kind: "native-credential-journal" as const,
+      preserveUserDataDir: true as const,
+    },
+    debugOnly: true as const,
+  };
+}
+
 function assertDebugBuild() {
   const environment = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env;
   if (environment?.DEV !== true) {
@@ -63,17 +77,39 @@ export async function configureDeterministicDebugProviderWithPorts(
   if (ports.readConfig().customProvider.credentialRef) {
     throw new Error("The deterministic provider requires a profile without a configured custom provider.");
   }
-  const begun = await ports.begin({
-    provider: "custom",
-    protocol: "openai-compatible",
-    baseUrl: parsed.toString(),
-    secret: TEST_CREDENTIAL_SECRET,
-  });
+  let begun;
+  try {
+    begun = await ports.begin({
+      provider: "custom",
+      protocol: "openai-compatible",
+      baseUrl: parsed.toString(),
+      secret: TEST_CREDENTIAL_SECRET,
+    });
+  } catch (beginError) {
+    try {
+      const lifecycle = await ports.reconcile();
+      ports.acceptCommittedConfig(lifecycle.configJson);
+      if (lifecycle.status === "pending") return pendingDebugProviderSetup(lifecycle.operationId);
+    } catch {
+      return pendingDebugProviderSetup();
+    }
+    throw beginError;
+  }
   const metadata = begun.metadata;
   const originalConfig = ports.normalizeConfigJson(begun.configJson);
   if (originalConfig.customProvider.credentialRef) {
-    const aborted = await ports.abort(begun.operationId);
+    let aborted;
+    try {
+      aborted = await ports.abort(begun.operationId);
+    } catch {
+      try {
+        aborted = await ports.reconcile();
+      } catch {
+        return pendingDebugProviderSetup(begun.operationId);
+      }
+    }
     ports.acceptCommittedConfig(aborted.configJson);
+    if (aborted.status === "pending") return pendingDebugProviderSetup(aborted.operationId);
     throw new Error("The deterministic provider requires a profile without a configured custom provider.");
   }
   const nextConfig = {
@@ -101,10 +137,11 @@ export async function configureDeterministicDebugProviderWithPorts(
     try {
       lifecycle = await ports.reconcile();
       ports.acceptCommittedConfig(lifecycle.configJson);
-    } catch (reconcileError) {
-      throw new AggregateError([commitError, reconcileError], "The E2E credential commit outcome could not be reconciled.");
+    } catch {
+      return pendingDebugProviderSetup(begun.operationId);
     }
     if (ports.normalizeConfigJson(lifecycle.configJson).customProvider.credentialRef !== metadata.credentialRef) {
+      if (lifecycle.status === "pending") return pendingDebugProviderSetup(lifecycle.operationId);
       throw commitError;
     }
   }

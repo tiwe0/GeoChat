@@ -52,6 +52,7 @@ const processLogs: string[] = [];
 let desktop: ChildProcess | null = null;
 let nextRpcId = 1;
 const testProviderCleanup = createTestProviderCleanupState();
+let providerConfigurationAttempted = false;
 
 async function main() {
   const startedAt = new Date().toISOString();
@@ -63,11 +64,22 @@ async function main() {
     await waitForMcp();
     await waitForDesktopReady(false);
 
+    providerConfigurationAttempted = true;
     const configured = await queueAndWait("configure_deterministic_test_provider", {
       baseUrl: fakeProvider.baseUrl,
       model: fakeProvider.model,
       nonce: e2eNonce,
     });
+    if (configured.result?.setupPending === true) {
+      testProviderCleanup.markResult({
+        attempted: true,
+        completed: false,
+        recoveryPending: true,
+        operationId: configured.result.operationId ?? null,
+        recoveryPath: userDataDir,
+      });
+      throw new Error("Provider configuration requires native credential journal recovery.");
+    }
     const cleanupHandle = parseCleanupHandle(configured.result);
     testProviderCleanup.register(cleanupHandle);
     await waitForDesktopReady(true);
@@ -196,7 +208,19 @@ async function main() {
     }
     await stopDesktop(desktop);
     fakeProvider.stop();
-    rmSync(userDataDir, { recursive: true, force: true });
+    if (providerConfigurationAttempted
+      && testProviderCleanup.evidence().completed !== true
+      && !testProviderCleanup.needsCleanup()) {
+      testProviderCleanup.markResult({
+        attempted: true,
+        completed: false,
+        recoveryPending: true,
+        recoveryPath: userDataDir,
+      });
+    }
+    const preserveUserDataDir = providerConfigurationAttempted
+      && testProviderCleanup.evidence().completed !== true;
+    if (!preserveUserDataDir) rmSync(userDataDir, { recursive: true, force: true });
   }
   const cleanup = testProviderCleanup.evidence();
   const ok = failure === null && cleanup.completed === true;

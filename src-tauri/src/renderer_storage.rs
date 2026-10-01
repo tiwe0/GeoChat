@@ -32,6 +32,8 @@ const MAX_CONFIG_URL_BYTES: usize = 2 * 1024;
 const MAX_CONFIG_PROVIDER_CREDENTIALS: usize = 16;
 const MAX_CONFIG_CUSTOM_MODELS: usize = 50;
 const MAX_CONFIG_ENABLED_SKILLS: usize = 128;
+const CREDENTIAL_LIFECYCLE_WRITE_ERROR: &str =
+    "Credential bindings can only be changed through the native credential lifecycle";
 
 #[derive(Debug)]
 pub(crate) struct RendererStorage {
@@ -83,11 +85,10 @@ impl RendererStorage {
         let previous_credential_bindings = active_credential_bindings_from_entries(&candidate)?;
         candidate.extend(values);
         validate_candidate(&candidate)?;
-        if active_credential_bindings_from_entries(&candidate)? != previous_credential_bindings {
-            return Err(
-                "Credential references can only be changed through the native credential lifecycle"
-                    .to_string(),
-            );
+        let next_credential_bindings = active_credential_bindings_from_entries(&candidate)
+            .map_err(|_| CREDENTIAL_LIFECYCLE_WRITE_ERROR.to_string())?;
+        if next_credential_bindings != previous_credential_bindings {
+            return Err(CREDENTIAL_LIFECYCLE_WRITE_ERROR.to_string());
         }
         if let Err(error) = self.persist_candidate(&lock, &candidate) {
             return reconcile_after_persist_error(
@@ -112,11 +113,10 @@ impl RendererStorage {
             candidate.remove(&key);
         }
         validate_candidate(&candidate)?;
-        if active_credential_bindings_from_entries(&candidate)? != previous_credential_bindings {
-            return Err(
-                "Credential references can only be changed through the native credential lifecycle"
-                    .to_string(),
-            );
+        let next_credential_bindings = active_credential_bindings_from_entries(&candidate)
+            .map_err(|_| CREDENTIAL_LIFECYCLE_WRITE_ERROR.to_string())?;
+        if next_credential_bindings != previous_credential_bindings {
+            return Err(CREDENTIAL_LIFECYCLE_WRITE_ERROR.to_string());
         }
         if let Err(error) = self.persist_candidate(&lock, &candidate) {
             return reconcile_after_persist_error(
@@ -244,10 +244,146 @@ impl RendererStorage {
 pub(crate) fn active_credential_refs_from_raw_config(
     raw: &str,
 ) -> Result<BTreeSet<String>, String> {
-    Ok(credential_ref_bindings_from_raw_config(raw)?
+    Ok(credential_binding_ownership_from_raw_config(raw)?
         .into_values()
-        .filter(|reference| !reference.is_empty())
+        .map(|binding| binding.credential_ref)
         .collect())
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct CredentialBindingOwnership {
+    pub(crate) credential_ref: String,
+    pub(crate) provider: String,
+    pub(crate) protocol: String,
+    pub(crate) canonical_base_url: String,
+}
+
+pub(crate) fn credential_binding_ownership_from_raw_config(
+    raw: &str,
+) -> Result<BTreeMap<String, CredentialBindingOwnership>, String> {
+    let config: Value = serde_json::from_str(raw)
+        .map_err(|error| format!("Desktop configuration is not valid JSON: {error}"))?;
+    if !validate_desktop_config(&config) {
+        return Err("Desktop configuration has an invalid schema".to_string());
+    }
+
+    let mut ownership = BTreeMap::new();
+    let providers = config
+        .get("providerCredentials")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "Desktop configuration has invalid provider credentials".to_string())?;
+    for provider in [
+        "deepseek",
+        "openai",
+        "anthropic",
+        "google",
+        "openrouter",
+        "qwen",
+    ] {
+        let Some(binding) = providers.get(provider).and_then(Value::as_object) else {
+            continue;
+        };
+        insert_active_credential_ownership(
+            &mut ownership,
+            format!("providerCredentials.{provider}"),
+            provider,
+            binding,
+        )?;
+    }
+    let custom = config
+        .get("customProvider")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "Desktop configuration has an invalid custom provider".to_string())?;
+    insert_active_credential_ownership(
+        &mut ownership,
+        "customProvider".to_string(),
+        "custom",
+        custom,
+    )?;
+
+    for model_key in ["model", "visionModel"] {
+        let model = config
+            .get(model_key)
+            .and_then(Value::as_object)
+            .ok_or_else(|| "Desktop configuration has an invalid model binding".to_string())?;
+        let credential_ref = model
+            .get("credentialRef")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "Desktop configuration has an invalid model credential".to_string())?;
+        if credential_ref.is_empty() {
+            continue;
+        }
+        let provider = model
+            .get("provider")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "Desktop configuration has an invalid model provider".to_string())?;
+        let provider_slot = if provider == "custom" {
+            "customProvider".to_string()
+        } else {
+            format!("providerCredentials.{provider}")
+        };
+        let provider_ownership = ownership.get(&provider_slot).ok_or_else(|| {
+            "A model credential must match an active provider credential".to_string()
+        })?;
+        let protocol = model
+            .get("protocol")
+            .and_then(Value::as_str)
+            .unwrap_or(&provider_ownership.protocol);
+        if credential_ref != provider_ownership.credential_ref
+            || provider != provider_ownership.provider
+            || protocol != provider_ownership.protocol
+        {
+            return Err("A model credential must match its provider binding".to_string());
+        }
+        ownership.insert(
+            model_key.to_string(),
+            CredentialBindingOwnership {
+                credential_ref: credential_ref.to_string(),
+                provider: provider.to_string(),
+                protocol: protocol.to_string(),
+                canonical_base_url: provider_ownership.canonical_base_url.clone(),
+            },
+        );
+    }
+    Ok(ownership)
+}
+
+fn insert_active_credential_ownership(
+    ownership: &mut BTreeMap<String, CredentialBindingOwnership>,
+    slot: String,
+    provider: &str,
+    binding: &Map<String, Value>,
+) -> Result<(), String> {
+    let credential_ref = binding
+        .get("credentialRef")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "Desktop configuration has an invalid credential reference".to_string())?;
+    if credential_ref.is_empty() {
+        return Ok(());
+    }
+    let protocol = binding
+        .get("protocol")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "Desktop configuration has an invalid credential protocol".to_string())?;
+    let base_url = binding
+        .get("baseUrl")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "Desktop configuration has an invalid credential endpoint".to_string())?;
+    let canonical_base_url = canonicalize_endpoint(base_url)
+        .map_err(|_| "Desktop configuration has an invalid credential endpoint".to_string())?;
+    if canonical_base_url != base_url {
+        return Err("Desktop credential endpoints must already be canonical".to_string());
+    }
+    ownership.insert(
+        slot,
+        CredentialBindingOwnership {
+            credential_ref: credential_ref.to_string(),
+            provider: provider.to_string(),
+            protocol: protocol.to_string(),
+            canonical_base_url,
+        },
+    );
+    Ok(())
 }
 
 pub(crate) fn credential_ref_bindings_from_raw_config(
@@ -339,14 +475,12 @@ pub(crate) fn target_credential_refs_from_raw_config(
 
 fn active_credential_bindings_from_entries(
     entries: &Map<String, Value>,
-) -> Result<BTreeMap<String, String>, String> {
-    let mut bindings = match entries.get(DESKTOP_CONFIG_KEY) {
-        Some(Value::String(raw)) => credential_ref_bindings_from_raw_config(raw)?,
-        Some(_) => return Err("Desktop configuration must use the string transport".to_string()),
-        None => BTreeMap::new(),
-    };
-    bindings.retain(|_, reference| !reference.is_empty());
-    Ok(bindings)
+) -> Result<BTreeMap<String, CredentialBindingOwnership>, String> {
+    match entries.get(DESKTOP_CONFIG_KEY) {
+        Some(Value::String(raw)) => credential_binding_ownership_from_raw_config(raw),
+        Some(_) => Err("Desktop configuration must use the string transport".to_string()),
+        None => Ok(BTreeMap::new()),
+    }
 }
 
 fn storage_parent(path: &Path) -> Result<&Path, String> {
@@ -1689,6 +1823,27 @@ mod tests {
             .set_batch(Map::from_iter([(
                 DESKTOP_CONFIG_KEY.to_string(),
                 encoded_desktop_config(&rebound),
+            )]))
+            .unwrap_err()
+            .contains("native credential lifecycle"));
+
+        let mut protocol_drift = configured.clone();
+        protocol_drift["providerCredentials"]["deepseek"]["protocol"] = json!("anthropic");
+        assert!(storage
+            .set_batch(Map::from_iter([(
+                DESKTOP_CONFIG_KEY.to_string(),
+                encoded_desktop_config(&protocol_drift),
+            )]))
+            .unwrap_err()
+            .contains("native credential lifecycle"));
+
+        let mut endpoint_drift = configured.clone();
+        endpoint_drift["providerCredentials"]["deepseek"]["baseUrl"] =
+            json!("https://example.com/v1");
+        assert!(storage
+            .set_batch(Map::from_iter([(
+                DESKTOP_CONFIG_KEY.to_string(),
+                encoded_desktop_config(&endpoint_drift),
             )]))
             .unwrap_err()
             .contains("native credential lifecycle"));

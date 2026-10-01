@@ -66,7 +66,7 @@ export function useAssistantDebugMcp(input: DebugMcpInput) {
       restoreConversation: (conversationId) => restoreConversationRef.current(conversationId),
       configureTestProvider: async (baseUrl, model, nonce) => {
         const result = await configureDeterministicDebugProvider(baseUrl, model, nonce);
-        inputRef.current.refreshCatalog(model);
+        if (!("setupPending" in result)) inputRef.current.refreshCatalog(model);
         return result;
       },
       clearTestProvider: async (nonce, credentialRef, restoreConfigJson) => {

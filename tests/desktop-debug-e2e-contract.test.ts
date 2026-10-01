@@ -40,6 +40,15 @@ describe("deterministic desktop E2E evidence", () => {
     expect(source).not.toContain("child.exitCode !== null) return");
   });
 
+  test("preserves the native profile whenever provider setup cleanup is incomplete", async () => {
+    const source = await readFile("tools/run-deterministic-desktop-e2e.ts", "utf8");
+    expect(source).toContain("providerConfigurationAttempted = true");
+    expect(source).toContain("const preserveUserDataDir = providerConfigurationAttempted");
+    expect(source).toContain("if (!preserveUserDataDir) rmSync(userDataDir");
+    expect(source).toContain("recoveryPath: userDataDir");
+    expect(source).not.toContain("\n    rmSync(userDataDir, { recursive: true, force: true });");
+  });
+
   test("accepts only a real message and canvas restore result", () => {
     expect(() => assertRestoreEvidence({
       conversationId: "conversation-1",
@@ -98,6 +107,62 @@ describe("deterministic desktop E2E evidence", () => {
     expect(accepted).toEqual([committedConfigJson]);
   });
 
+  test("reconciles a lost begin response before reporting a safe failure", async () => {
+    const original = createDefaultDesktopConfig("en-US");
+    const beginError = new Error("begin response lost");
+    const accepted: string[] = [];
+
+    await expect(configureDeterministicDebugProviderWithPorts(
+      "http://127.0.0.1:8787/v1",
+      "debug-model",
+      nonce,
+      {
+        readConfig: () => original,
+        normalizeConfigJson: (raw) => JSON.parse(raw) as DesktopConfig,
+        begin: async () => { throw beginError; },
+        commit: async () => { throw new Error("must not commit"); },
+        abort: async () => { throw new Error("must not abort without an operation id"); },
+        reconcile: async () => ({ status: "ready", configJson: JSON.stringify(original) }),
+        acceptCommittedConfig: (raw) => accepted.push(raw),
+      },
+    )).rejects.toBe(beginError);
+    expect(accepted).toEqual([JSON.stringify(original)]);
+  });
+
+  test("returns profile recovery ownership when begin reconciliation remains pending", async () => {
+    const original = createDefaultDesktopConfig("en-US");
+    const accepted: string[] = [];
+
+    const result = await configureDeterministicDebugProviderWithPorts(
+      "http://127.0.0.1:8787/v1",
+      "debug-model",
+      nonce,
+      {
+        readConfig: () => original,
+        normalizeConfigJson: (raw) => JSON.parse(raw) as DesktopConfig,
+        begin: async () => { throw new Error("begin response lost"); },
+        commit: async () => { throw new Error("must not commit"); },
+        abort: async () => { throw new Error("must not abort without an operation id"); },
+        reconcile: async () => ({
+          status: "pending",
+          operationId: "operation",
+          configJson: JSON.stringify(original),
+        }),
+        acceptCommittedConfig: (raw) => accepted.push(raw),
+      },
+    );
+
+    expect(result).toEqual({
+      provider: "custom",
+      setupPending: true,
+      cleanupPending: true,
+      operationId: "operation",
+      recovery: { kind: "native-credential-journal", preserveUserDataDir: true },
+      debugOnly: true,
+    });
+    expect(accepted).toEqual([JSON.stringify(original)]);
+  });
+
   test("aborts debug creation when the authoritative config already owns a custom credential", async () => {
     const original = createDefaultDesktopConfig("en-US");
     const authoritative = {
@@ -124,6 +189,42 @@ describe("deterministic desktop E2E evidence", () => {
       },
     )).rejects.toThrow("without a configured custom provider");
     expect(aborted).toBe(true);
+  });
+
+  test("returns profile recovery ownership when abort cleanup remains pending", async () => {
+    const original = createDefaultDesktopConfig("en-US");
+    const authoritative = {
+      ...original,
+      customProvider: { ...original.customProvider, credentialRef: "existing-custom-ref" },
+    };
+    const accepted: string[] = [];
+
+    const result = await configureDeterministicDebugProviderWithPorts(
+      "http://localhost:8787/v1",
+      "debug-model",
+      nonce,
+      {
+        readConfig: () => original,
+        normalizeConfigJson: (raw) => JSON.parse(raw) as DesktopConfig,
+        begin: async () => ({ operationId: "operation", metadata, configJson: JSON.stringify(authoritative) }),
+        commit: async () => { throw new Error("must not commit"); },
+        abort: async () => ({
+          status: "pending",
+          operationId: "operation",
+          configJson: JSON.stringify(original),
+        }),
+        reconcile: async () => { throw new Error("must not reconcile a successful abort response"); },
+        acceptCommittedConfig: (raw) => accepted.push(raw),
+      },
+    );
+
+    expect(result).toMatchObject({
+      setupPending: true,
+      cleanupPending: true,
+      operationId: "operation",
+      recovery: { preserveUserDataDir: true },
+    });
+    expect(accepted).toEqual([JSON.stringify(original)]);
   });
 
   test("returns a cleanup handle when debug creation commits with pending cleanup", async () => {

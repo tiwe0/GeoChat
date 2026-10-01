@@ -269,19 +269,59 @@ describe("controller tool boundary", () => {
     await expect(controller.restoreDocumentBase64("UEsDBA==")).rejects.toThrow(/rejected/);
   });
 
-  test("restores the complete prior document when loading partially mutates and then times out", async () => {
+  test("freezes late document loads until their callback completes and explicit recovery restores the prior file", async () => {
     const applied: string[] = [];
+    const pending: Array<{ base64: string; complete: () => void }> = [];
+    let canvasState = "complete-before";
+    let recoveryStarted!: () => void;
+    let newerStarted!: () => void;
+    const recoveryStart = new Promise<void>((resolve) => { recoveryStarted = resolve; });
+    const newerStart = new Promise<void>((resolve) => { newerStarted = resolve; });
     const controller = new GeoGebraController(undefined, 5);
     controller.setApi(api({
       getBase64: (callback: (value: string) => void) => callback("complete-before"),
       setBase64: (base64: string, callback: () => void) => {
         applied.push(base64);
-        if (base64 === "complete-before") callback();
+        pending.push({
+          base64,
+          complete: () => {
+            canvasState = base64;
+            callback();
+          },
+        });
+        if (base64 === "complete-before") recoveryStarted();
+        if (base64 === "newer-document") newerStarted();
       },
     }));
 
-    await expect(controller.restoreDocumentBase64("partial-new-document")).rejects.toThrow(/timed out/);
-    expect(applied).toEqual(["partial-new-document", "complete-before"]);
+    await expect(controller.restoreDocumentBase64("late-old-document"))
+      .rejects.toMatchObject({ name: "CanvasRecoveryRequiredError" });
+    expect(controller.canvasRecoveryState).toMatchObject({ frozen: true, label: "document:restore" });
+    expect(applied).toEqual(["late-old-document"]);
+
+    await expect(controller.restoreDocumentBase64("newer-document"))
+      .rejects.toMatchObject({ name: "CanvasRecoveryRequiredError" });
+    await expect(controller.retryCanvasRecovery())
+      .rejects.toMatchObject({ name: "CanvasRecoveryRequiredError" });
+    expect(applied).toEqual(["late-old-document"]);
+
+    pending[0]!.complete();
+    expect(canvasState).toBe("late-old-document");
+
+    const recovery = controller.retryCanvasRecovery();
+    await recoveryStart;
+    expect(pending[1]?.base64).toBe("complete-before");
+    pending[1]!.complete();
+    await recovery;
+    expect(controller.canvasRecoveryState).toBeNull();
+    expect(canvasState).toBe("complete-before");
+
+    const newer = controller.restoreDocumentBase64("newer-document");
+    await newerStart;
+    expect(pending[2]?.base64).toBe("newer-document");
+    pending[2]!.complete();
+    await newer;
+    expect(canvasState).toBe("newer-document");
   });
 
   test("clamps PNG export options rather than passing them through", async () => {

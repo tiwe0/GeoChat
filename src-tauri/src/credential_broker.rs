@@ -3,7 +3,7 @@ use ring::hmac;
 use serde::Deserialize;
 use serde_json::json;
 use std::{
-    io::{BufRead, BufReader, Read, Write},
+    io::{BufReader, Read, Write},
     net::{Ipv4Addr, Shutdown, SocketAddrV4, TcpListener, TcpStream},
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -269,7 +269,10 @@ fn spawn_overload_rejection(
         })
         .is_err()
     {
-        let _ = write_overload_rejection(&mut stream, code);
+        // The accept loop must never perform a best-effort nonblocking HTTP write: it can
+        // produce a truncated response and delay accepting healthy connections. Once the
+        // bounded rejection pool is full, close the excess connection explicitly.
+        let _ = stream.shutdown(Shutdown::Both);
         return None;
     }
     let worker_active = active.clone();
@@ -303,11 +306,11 @@ fn handle_connection(
     business_rate: &Mutex<RateWindow>,
     limits: BrokerLimits,
 ) -> Result<(), &'static str> {
-    let _ = stream.set_read_timeout(Some(PRE_AUTH_TIMEOUT));
     let _ = stream.set_write_timeout(Some(SOCKET_TIMEOUT));
     let mut reader = BufReader::new(stream.try_clone().map_err(|_| "stream_clone_failed")?);
     let mut header_bytes = 0;
-    let request_line = match read_header_line(&mut reader, &mut header_bytes) {
+    let pre_auth_deadline = Instant::now() + PRE_AUTH_TIMEOUT;
+    let request_line = match read_header_line(&mut reader, &mut header_bytes, pre_auth_deadline) {
         Ok(line) => line,
         Err(code) => return write_early_rejection(&mut stream, 400, code, None),
     };
@@ -318,7 +321,7 @@ fn handle_connection(
     let mut correlation_id = None;
 
     loop {
-        let line = match read_header_line(&mut reader, &mut header_bytes) {
+        let line = match read_header_line(&mut reader, &mut header_bytes, pre_auth_deadline) {
             Ok(line) => line,
             Err(code) => return write_early_rejection(&mut stream, 400, code, content_length),
         };
@@ -408,10 +411,8 @@ fn handle_connection(
     if !rate_allowed {
         return write_early_rejection(&mut stream, 429, "rate_limited", drain_hint);
     }
-    let _ = stream.set_read_timeout(Some(SOCKET_TIMEOUT));
-
     let mut body = vec![0; content_length];
-    if reader.read_exact(&mut body).is_err() {
+    if read_exact_until_deadline(&mut reader, &mut body, Instant::now() + SOCKET_TIMEOUT).is_err() {
         return write_rejected(&mut stream, 400, "request_body_incomplete");
     }
     if reader
@@ -457,28 +458,79 @@ fn valid_correlation_id(value: &str) -> bool {
 fn read_header_line(
     reader: &mut BufReader<TcpStream>,
     total: &mut usize,
+    deadline: Instant,
 ) -> Result<String, &'static str> {
-    let remaining = MAX_HEADER_BYTES.saturating_sub(*total);
-    if remaining == 0 {
-        return Err("request_headers_too_large");
-    }
-    let mut line = Vec::with_capacity(remaining.min(256));
-    let bytes = reader
-        .take((remaining + 1) as u64)
-        .read_until(b'\n', &mut line)
-        .map_err(|_| "request_read_failed")?;
-    if bytes == 0 {
-        return Err("request_closed");
-    }
-    *total += bytes;
-    if *total > MAX_HEADER_BYTES {
-        return Err("request_headers_too_large");
+    let mut line = Vec::with_capacity(256);
+    loop {
+        if *total >= MAX_HEADER_BYTES {
+            return Err("request_headers_too_large");
+        }
+        let timeout = deadline
+            .checked_duration_since(Instant::now())
+            .filter(|remaining| !remaining.is_zero())
+            .ok_or("request_headers_timeout")?;
+        reader
+            .get_mut()
+            .set_read_timeout(Some(timeout))
+            .map_err(|_| "request_read_failed")?;
+        let mut byte = [0_u8; 1];
+        match reader.read(&mut byte) {
+            Ok(0) => return Err("request_closed"),
+            Ok(_) => {
+                *total += 1;
+                line.push(byte[0]);
+                if byte[0] == b'\n' {
+                    break;
+                }
+            }
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+                ) =>
+            {
+                return Err("request_headers_timeout")
+            }
+            Err(_) => return Err("request_read_failed"),
+        }
     }
     let line = std::str::from_utf8(&line).map_err(|_| "invalid_header_encoding")?;
     Ok(line
         .strip_suffix("\r\n")
         .ok_or("invalid_line_ending")?
         .to_owned())
+}
+
+fn read_exact_until_deadline(
+    reader: &mut BufReader<TcpStream>,
+    body: &mut [u8],
+    deadline: Instant,
+) -> Result<(), &'static str> {
+    let mut offset = 0;
+    while offset < body.len() {
+        let timeout = deadline
+            .checked_duration_since(Instant::now())
+            .filter(|remaining| !remaining.is_zero())
+            .ok_or("request_body_timeout")?;
+        reader
+            .get_mut()
+            .set_read_timeout(Some(timeout))
+            .map_err(|_| "request_read_failed")?;
+        match reader.read(&mut body[offset..]) {
+            Ok(0) => return Err("request_body_incomplete"),
+            Ok(read) => offset += read,
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+                ) =>
+            {
+                return Err("request_body_timeout")
+            }
+            Err(_) => return Err("request_read_failed"),
+        }
+    }
+    Ok(())
 }
 
 fn authorized(header: Option<&str>, expected_token: &[u8]) -> bool {
@@ -506,26 +558,6 @@ fn broker_error(error: CredentialError) -> (u16, &'static str) {
     }
 }
 
-fn write_overload_rejection(
-    stream: &mut TcpStream,
-    code: &'static str,
-) -> Result<(), &'static str> {
-    let body = serde_json::to_vec(&json!({ "error": code }))
-        .map_err(|_| "response_serialization_failed")?;
-    let head = format!(
-        "HTTP/1.1 429 Too Many Requests\r\nContent-Type: application/json\r\nCache-Control: no-store\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        body.len()
-    );
-    let _ = stream.set_nonblocking(true);
-    stream
-        .write_all(head.as_bytes())
-        .and_then(|_| stream.write_all(&body))
-        .and_then(|_| stream.flush())
-        .map_err(|_| "response_write_failed")?;
-    let _ = stream.shutdown(Shutdown::Both);
-    Ok(())
-}
-
 fn write_early_rejection(
     stream: &mut TcpStream,
     status: u16,
@@ -534,12 +566,21 @@ fn write_early_rejection(
 ) -> Result<(), &'static str> {
     write_error(stream, status, code)?;
     let _ = stream.shutdown(Shutdown::Write);
-    let _ = stream.set_read_timeout(Some(REJECT_DRAIN_TIMEOUT));
+    let deadline = Instant::now() + REJECT_DRAIN_TIMEOUT;
     let mut remaining = drain_hint
         .unwrap_or(MAX_REJECT_DRAIN_BYTES)
         .min(MAX_REJECT_DRAIN_BYTES);
     let mut buffer = [0_u8; 512];
     while remaining > 0 {
+        let Some(timeout) = deadline
+            .checked_duration_since(Instant::now())
+            .filter(|remaining| !remaining.is_zero())
+        else {
+            break;
+        };
+        if stream.set_read_timeout(Some(timeout)).is_err() {
+            break;
+        }
         let read_limit = buffer.len().min(remaining);
         match stream.read(&mut buffer[..read_limit]) {
             Ok(0) | Err(_) => break,
@@ -646,9 +687,7 @@ mod tests {
     }
 
     fn read_response(stream: &mut TcpStream) -> String {
-        let mut response = Vec::new();
-        stream.read_to_end(&mut response).unwrap();
-        let response = String::from_utf8(response).unwrap();
+        let response = String::from_utf8(read_raw_response(stream)).unwrap();
         let (head, body) = response.split_once("\r\n\r\n").unwrap();
         let length = head
             .lines()
@@ -657,6 +696,27 @@ mod tests {
             .parse::<usize>()
             .unwrap();
         assert_eq!(body.len(), length, "incomplete response: {response}");
+        response
+    }
+
+    fn read_raw_response(stream: &mut TcpStream) -> Vec<u8> {
+        let mut response = Vec::new();
+        let mut buffer = [0_u8; 512];
+        loop {
+            match stream.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(read) => response.extend_from_slice(&buffer[..read]),
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::BrokenPipe
+                    ) =>
+                {
+                    break
+                }
+                Err(error) => panic!("failed to read broker response: {error}"),
+            }
+        }
         response
     }
 
@@ -766,6 +826,35 @@ mod tests {
     }
 
     #[test]
+    fn credential_broker_pre_auth_deadline_expires_slowloris_connections() {
+        let (runtime, credential_ref) = runtime(BrokerLimits::default());
+        let c = runtime.connection().clone();
+        let mut slow_connections = (0..MAX_PRE_AUTH_CONNECTIONS)
+            .map(|_| {
+                let mut stream = connect(&c);
+                stream.write_all(b"P").unwrap();
+                stream
+            })
+            .collect::<Vec<_>>();
+
+        // Keep sending before the per-read timeout. A relative timeout would let these
+        // connections retain every pre-auth slot indefinitely; the absolute deadline must not.
+        for byte in b"OST /" {
+            thread::sleep(Duration::from_millis(75));
+            for stream in &mut slow_connections {
+                let _ = stream.write_all(&[*byte]);
+            }
+        }
+
+        let started = Instant::now();
+        assert_safe(&valid(&c, &credential_ref, &c.token, ""), 200);
+        assert!(
+            started.elapsed() < Duration::from_secs(1),
+            "expired pre-auth connections still occupied the broker"
+        );
+    }
+
+    #[test]
     fn credential_broker_returns_429_for_concurrency_and_rate_limits() {
         let (concurrency_runtime, credential_ref) = runtime(BrokerLimits {
             max_concurrent: 1,
@@ -838,6 +927,60 @@ mod tests {
         assert!(
             started.elapsed() < REJECT_DRAIN_TIMEOUT + Duration::from_millis(50),
             "accept loop waited for overload request bodies"
+        );
+    }
+
+    #[test]
+    fn credential_broker_overload_pool_saturation_never_returns_partial_http() {
+        let (runtime, _) = runtime(BrokerLimits {
+            max_concurrent: 1,
+            rate_limit: 10,
+            rate_window: Duration::from_secs(30),
+        });
+        let c = runtime.connection().clone();
+        let mut held = connect(&c);
+        held.write_all(headers(&c.token, 100, "").as_bytes())
+            .unwrap();
+        thread::sleep(Duration::from_millis(30));
+
+        let mut overloaded = (0..(MAX_OVERLOAD_DRAIN_CONNECTIONS + 8))
+            .map(|_| {
+                let mut stream = connect(&c);
+                stream
+                    .write_all(headers(&c.token, 100, "").as_bytes())
+                    .unwrap();
+                stream
+            })
+            .collect::<Vec<_>>();
+
+        let mut complete_rejections = 0;
+        let mut silent_closes = 0;
+        for stream in &mut overloaded {
+            let raw = read_raw_response(stream);
+            if raw.is_empty() {
+                silent_closes += 1;
+                continue;
+            }
+            let response = String::from_utf8(raw).unwrap();
+            assert_safe(&response, 429);
+            let (head, body) = response.split_once("\r\n\r\n").unwrap();
+            let declared = head
+                .lines()
+                .find_map(|line| line.strip_prefix("Content-Length: "))
+                .unwrap()
+                .parse::<usize>()
+                .unwrap();
+            assert_eq!(
+                body.len(),
+                declared,
+                "partial overload response: {response}"
+            );
+            complete_rejections += 1;
+        }
+        assert!(complete_rejections > 0);
+        assert!(
+            silent_closes > 0,
+            "test did not saturate the bounded overload rejection pool"
         );
     }
 

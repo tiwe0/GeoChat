@@ -32,6 +32,7 @@ type RecoveryRecord = CanvasRecoveryState & {
   snapshot: string;
   epoch: number;
   restore: (snapshot: string) => boolean | void | PromiseLike<boolean | void>;
+  ready?: () => boolean;
 };
 
 type Lease = {
@@ -45,6 +46,22 @@ export class CanvasRecoveryRequiredError extends Error {
   constructor(message = "Canvas recovery is required before another mutation can run.", options?: ErrorOptions) {
     super(message, options);
     this.name = "CanvasRecoveryRequiredError";
+  }
+}
+
+/**
+ * A canvas write timed out after it crossed the applet boundary, so the caller
+ * cannot know whether GeoGebra will still apply it. The coordinator must keep
+ * the canvas frozen until the underlying callback proves that write is done.
+ */
+export class CanvasMutationStateUnknownError extends Error {
+  constructor(
+    message: string,
+    readonly isSettled: () => boolean,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = "CanvasMutationStateUnknownError";
   }
 }
 
@@ -116,10 +133,21 @@ export class CanvasTransactionCoordinator {
         return result;
       } catch (error) {
         if (snapshot !== undefined && this.activeLease?.id === lease.id) {
+          if (error instanceof CanvasMutationStateUnknownError) {
+            this.freeze(lease, snapshot, error, error.isSettled);
+            throw this.recoveryError(error);
+          }
           try {
             await this.rollback(lease, snapshot);
           } catch (rollbackError) {
-            this.freeze(lease, snapshot, rollbackError);
+            this.freeze(
+              lease,
+              snapshot,
+              rollbackError,
+              rollbackError instanceof CanvasMutationStateUnknownError
+                ? rollbackError.isSettled
+                : undefined,
+            );
             throw this.recoveryError(error);
           }
         }
@@ -134,6 +162,9 @@ export class CanvasTransactionCoordinator {
     return this.enqueue(async () => {
       const recovery = this.recovery;
       if (!recovery) return;
+      if (recovery.ready?.() === false) {
+        throw this.recoveryError();
+      }
       if (this.adapter.epoch() !== recovery.epoch) {
         // A remounted applet cannot accept an XML snapshot owned by the old
         // instance. Explicit retry still verifies that the replacement can
@@ -145,7 +176,17 @@ export class CanvasTransactionCoordinator {
         this.notifyRecoveryChanged();
         return;
       }
-      const restored = await Promise.resolve(recovery.restore(recovery.snapshot));
+      let restored: boolean | void;
+      try {
+        restored = await Promise.resolve(recovery.restore(recovery.snapshot));
+      } catch (error) {
+        if (error instanceof CanvasMutationStateUnknownError) {
+          recovery.error = errorMessage(error);
+          recovery.ready = error.isSettled;
+          this.notifyRecoveryChanged();
+        }
+        throw this.recoveryError(error);
+      }
       if (restored === false) throw new CanvasRecoveryRequiredError("Canvas recovery retry was rejected by GeoGebra.");
       this.recovery = null;
       this.notifyRecoveryChanged();
@@ -192,7 +233,7 @@ export class CanvasTransactionCoordinator {
     return next;
   }
 
-  private freeze(lease: Lease, snapshot: string, error: unknown) {
+  private freeze(lease: Lease, snapshot: string, error: unknown, ready?: () => boolean) {
     if (this.recovery) return;
     this.recovery = {
       frozen: true,
@@ -201,6 +242,7 @@ export class CanvasTransactionCoordinator {
       snapshot,
       epoch: lease.epoch,
       restore: lease.options.restoreSnapshot ?? this.adapter.restore,
+      ready,
     };
     this.notifyRecoveryChanged();
   }

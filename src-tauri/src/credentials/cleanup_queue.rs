@@ -75,14 +75,21 @@ impl CredentialCleanupQueue {
         &self,
         lock: &crate::atomic_json_file::AtomicJsonFileLock,
     ) -> Result<CleanupQueueDocument, CredentialError> {
-        let document = self
+        let had_persisted_version = self
+            .file
+            .has_persisted_version()
+            .map_err(|_| CredentialError::StoreFailure)?;
+        let recovered = self
             .file
             .read_or_recover(lock)
-            .map_err(|_| CredentialError::StoreFailure)?
-            .unwrap_or_else(|| CleanupQueueDocument {
-                schema_version: CLEANUP_QUEUE_SCHEMA_VERSION,
-                credential_refs: BTreeSet::new(),
-            });
+            .map_err(|_| CredentialError::StoreFailure)?;
+        if recovered.is_none() && had_persisted_version {
+            return Err(CredentialError::CorruptEntry);
+        }
+        let document = recovered.unwrap_or_else(|| CleanupQueueDocument {
+            schema_version: CLEANUP_QUEUE_SCHEMA_VERSION,
+            credential_refs: BTreeSet::new(),
+        });
         if document.schema_version != CLEANUP_QUEUE_SCHEMA_VERSION
             || document
                 .credential_refs
@@ -98,6 +105,7 @@ impl CredentialCleanupQueue {
 #[cfg(test)]
 mod tests {
     use super::CredentialCleanupQueue;
+    use crate::credentials::CredentialError;
     use std::{fs, path::PathBuf};
     use uuid::Uuid;
 
@@ -147,6 +155,38 @@ mod tests {
         let mut expected = vec![first, second];
         expected.sort();
         assert_eq!(queue.list().unwrap(), expected);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn corrupt_current_document_fails_closed_instead_of_becoming_an_empty_queue() {
+        let root = temporary_directory("corrupt-current");
+        fs::write(root.join("credential-cleanup-queue.json"), b"not-json").unwrap();
+
+        assert_eq!(
+            CredentialCleanupQueue::new(&root).list(),
+            Err(CredentialError::CorruptEntry)
+        );
+        assert_eq!(
+            CredentialCleanupQueue::new(&root).list(),
+            Err(CredentialError::CorruptEntry)
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn corrupt_backup_fails_closed_when_the_current_document_is_missing() {
+        let root = temporary_directory("corrupt-backup");
+        fs::write(root.join("credential-cleanup-queue.previous"), b"not-json").unwrap();
+
+        assert_eq!(
+            CredentialCleanupQueue::new(&root).list(),
+            Err(CredentialError::CorruptEntry)
+        );
+        assert_eq!(
+            CredentialCleanupQueue::new(&root).list(),
+            Err(CredentialError::CorruptEntry)
+        );
         fs::remove_dir_all(root).unwrap();
     }
 }

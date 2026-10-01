@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  credentialCleanupBlocksSave,
   CredentialCleanupRequiredError,
   replaceProviderCredential,
 } from "../src/renderer-react/src/features/desktop/settings/ModelSettings";
@@ -22,6 +23,13 @@ function request() {
 }
 
 describe("renderer provider credential replacement", () => {
+  test("fails closed until the native cleanup queue is loaded and empty", () => {
+    expect(credentialCleanupBlocksSave({ status: "loading" })).toBe(true);
+    expect(credentialCleanupBlocksSave({ status: "error" })).toBe(true);
+    expect(credentialCleanupBlocksSave({ status: "ready", credentialRefs: ["pending-ref"] })).toBe(true);
+    expect(credentialCleanupBlocksSave({ status: "ready", credentialRefs: [] })).toBe(false);
+  });
+
   test("clears the transient secret, validates by reference, commits, then deletes the old reference", async () => {
     const events: string[] = [];
     const result = await replaceProviderCredential({

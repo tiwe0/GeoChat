@@ -71,15 +71,16 @@ fn delete_and_update_cleanup(
     cleanup_queue: &CredentialCleanupQueue,
     credential_ref: &str,
 ) -> Result<(), CredentialError> {
+    // Persist compensation ownership before the idempotent external delete.
+    // A crash after this point leaves a durable retry marker instead of an
+    // untracked credential in secure storage.
+    cleanup_queue.track(credential_ref)?;
     match vault.delete(credential_ref) {
         Ok(()) | Err(CredentialError::NotFound) => {
             cleanup_queue.remove(credential_ref)?;
             Ok(())
         }
-        Err(error) => {
-            cleanup_queue.track(credential_ref)?;
-            Err(error)
-        }
+        Err(error) => Err(error),
     }
 }
 
@@ -146,6 +147,34 @@ mod tests {
         }
     }
 
+    struct AssertIntentPersistedStore {
+        queue_path: PathBuf,
+        credential_ref: String,
+    }
+
+    impl CredentialStore for AssertIntentPersistedStore {
+        fn put(&self, _: &str, _: &SecretValue) -> Result<(), CredentialError> {
+            unreachable!()
+        }
+
+        fn get(&self, _: &str) -> Result<SecretValue, CredentialError> {
+            unreachable!()
+        }
+
+        fn delete(&self, _: &str) -> Result<(), CredentialError> {
+            let persisted =
+                fs::read_to_string(&self.queue_path).map_err(|_| CredentialError::StoreFailure)?;
+            if !persisted.contains(&self.credential_ref) {
+                return Err(CredentialError::StoreFailure);
+            }
+            Ok(())
+        }
+
+        fn exists(&self, _: &str) -> Result<bool, CredentialError> {
+            Ok(true)
+        }
+    }
+
     fn temporary_directory(label: &str) -> PathBuf {
         let path = std::env::temp_dir().join(format!(
             "geochat-credential-command-{label}-{}",
@@ -187,6 +216,22 @@ mod tests {
             .list()
             .unwrap()
             .is_empty());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn cleanup_intent_is_durable_before_secure_storage_delete_starts() {
+        let root = temporary_directory("intent-first");
+        let credential_ref = Uuid::new_v4().to_string();
+        let queue = CredentialCleanupQueue::new(&root);
+        let vault = CredentialVault::new(Arc::new(AssertIntentPersistedStore {
+            queue_path: root.join("credential-cleanup-queue.json"),
+            credential_ref: credential_ref.clone(),
+        }));
+
+        delete_and_update_cleanup(&vault, &queue, &credential_ref).unwrap();
+
+        assert!(queue.list().unwrap().is_empty());
         fs::remove_dir_all(root).unwrap();
     }
 }

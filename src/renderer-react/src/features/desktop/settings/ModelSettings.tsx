@@ -51,6 +51,15 @@ type CredentialSaveState =
     phase: CredentialCleanupPhase;
   };
 
+export type PendingCredentialCleanupState =
+  | { status: "loading" }
+  | { status: "ready"; credentialRefs: string[] }
+  | { status: "error" };
+
+export function credentialCleanupBlocksSave(state: PendingCredentialCleanupState): boolean {
+  return state.status !== "ready" || state.credentialRefs.length > 0;
+}
+
 export type CredentialCleanupPhase = "uncommitted" | "replaced";
 
 export class CredentialCleanupRequiredError extends Error {
@@ -104,14 +113,22 @@ export function ModelSettings() {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [credentialSave, setCredentialSave] = useState<CredentialSaveState>({ status: "idle" });
-  const [pendingCleanupRefs, setPendingCleanupRefs] = useState<string[]>([]);
+  const [pendingCleanup, setPendingCleanup] = useState<PendingCredentialCleanupState>({ status: "loading" });
 
   const refreshPendingCredentialCleanup = useCallback(async () => {
+    setPendingCleanup({ status: "loading" });
     const desktopApi = installedDesktopApi();
-    if (!desktopApi) return;
+    if (!desktopApi) {
+      setPendingCleanup({ status: "error" });
+      return;
+    }
     try {
-      setPendingCleanupRefs(await desktopApi.listPendingCredentialCleanup());
+      setPendingCleanup({
+        status: "ready",
+        credentialRefs: await desktopApi.listPendingCredentialCleanup(),
+      });
     } catch {
+      setPendingCleanup({ status: "error" });
       logger.warn("provider_credential_cleanup_list_failed", "MODEL_CREDENTIAL_CLEANUP_LIST_FAILED");
     }
   }, []);
@@ -164,6 +181,10 @@ export function ModelSettings() {
 
   const save = useCallback(async () => {
     if (saving) return;
+    if (credentialCleanupBlocksSave(pendingCleanup)) {
+      setCredentialSave({ status: "invalid", message: t("settings.credentialCleanupRequired") });
+      return;
+    }
     const desktopApi = installedDesktopApi();
     if (!desktopApi) {
       setCredentialSave({ status: "invalid", message: "Native credential storage is unavailable." });
@@ -262,7 +283,7 @@ export function ModelSettings() {
     } finally {
       setSaving(false);
     }
-  }, [apiKey, customProvider, isCustom, provider, refreshPendingCredentialCleanup, saving, t]);
+  }, [apiKey, customProvider, isCustom, pendingCleanup, provider, refreshPendingCredentialCleanup, saving, t]);
 
   const retryCredentialCleanup = useCallback(async (credentialRefToDelete: string) => {
     if (saving) return;
@@ -271,7 +292,7 @@ export function ModelSettings() {
     setSaving(true);
     try {
       await desktopApi.deleteProviderCredential(credentialRefToDelete);
-      setPendingCleanupRefs((current) => current.filter((value) => value !== credentialRefToDelete));
+      await refreshPendingCredentialCleanup();
       if (credentialSave.status === "cleanup-required" && credentialSave.credentialRef === credentialRefToDelete) {
         if (credentialSave.phase === "replaced") {
           setCredentialSave({ status: "valid" });
@@ -352,12 +373,20 @@ export function ModelSettings() {
           }}
         />
 
-        {pendingCleanupRefs.length > 0 ? (
+        {pendingCleanup.status === "error" ? (
+          <Typography variant="body2" color="error.main">
+            {t("settings.credentialCleanupRequired")}
+          </Typography>
+        ) : pendingCleanup.status === "loading" ? (
+          <Typography variant="body2" color="text.secondary">
+            {t("settings.pendingCredentialCleanup")}
+          </Typography>
+        ) : pendingCleanup.credentialRefs.length > 0 ? (
           <Stack spacing={1} sx={{ p: 1.5, border: 1, borderColor: "error.main", borderRadius: 1.5 }}>
             <Typography variant="body2" color="error.main">
               {t("settings.pendingCredentialCleanup")}
             </Typography>
-            {pendingCleanupRefs.map((pendingRef) => (
+            {pendingCleanup.credentialRefs.map((pendingRef) => (
               <Stack key={pendingRef} direction="row" spacing={1} sx={{ alignItems: "center" }}>
                 <Typography variant="caption" sx={{ flex: 1, fontFamily: "monospace", overflowWrap: "anywhere" }}>
                   {pendingRef}
@@ -504,7 +533,7 @@ export function ModelSettings() {
             saving
             || saved
             || credentialSave.status === "cleanup-required"
-            || pendingCleanupRefs.length > 0
+            || credentialCleanupBlocksSave(pendingCleanup)
             || (!apiKey.trim() && !credentialRef)
             || (isCustom && customValidationError !== null)
           }

@@ -5,6 +5,7 @@ import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import { evaluateCommand, type CommandResult } from "./command-executor";
 import { GeoGebraAnimationRuntime, type AnimationScheduler, type GeoGebraAnimationEasing, type GeoGebraAnimationMode } from "./animation-runtime";
 import {
+  CanvasMutationStateUnknownError,
   CanvasTransactionCoordinator,
   type CanvasRecoveryState,
   type CanvasTransactionContext,
@@ -214,7 +215,11 @@ export class GeoGebraController {
     }
     return new Promise((resolve, reject) => {
       let settled = false;
-      const timer = setTimeout(() => finish(() => reject(new Error("GeoGebra document restore timed out."))), this.documentIoTimeoutMs);
+      let underlyingSettled = false;
+      const timer = setTimeout(() => finish(() => reject(new CanvasMutationStateUnknownError(
+        "GeoGebra document restore timed out while the applet may still be loading it.",
+        () => underlyingSettled,
+      ))), this.documentIoTimeoutMs);
       const finish = (complete: () => void) => {
         if (settled) return;
         settled = true;
@@ -222,11 +227,16 @@ export class GeoGebraController {
         complete();
       };
       try {
-        const returned = this.call("setBase64", base64, () => finish(resolve));
+        const returned = this.call("setBase64", base64, () => {
+          underlyingSettled = true;
+          finish(resolve);
+        });
         if (returned === false) {
+          underlyingSettled = true;
           finish(() => reject(new Error("GeoGebra rejected the stored document file.")));
         }
       } catch (error) {
+        underlyingSettled = true;
         finish(() => reject(error));
       }
     });

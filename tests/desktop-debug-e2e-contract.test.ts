@@ -211,4 +211,39 @@ describe("deterministic desktop E2E evidence", () => {
     expect(result).toMatchObject({ cleared: true, configRestored: true, credentialDeleted: true });
     expect(accepted).toEqual([JSON.stringify(restoredConfig)]);
   });
+
+  test("accepts authoritative config while debug retirement cleanup is pending", async () => {
+    const ownedConfig = {
+      customProvider: { name: `GeoChat deterministic E2E:${nonce}`, credentialRef: debugCredentialRef },
+    };
+    const restoredConfig = { customProvider: { name: "", credentialRef: "" } };
+    const restoredConfigJson = JSON.stringify(restoredConfig);
+    const accepted: string[] = [];
+
+    const result = await clearDeterministicDebugProviderWithPorts(
+      nonce,
+      debugCredentialRef,
+      restoredConfigJson,
+      {
+        readConfig: () => ownedConfig,
+        normalizeConfigJson: (raw) => JSON.parse(raw) as typeof ownedConfig,
+        commitRetirement: async () => ({
+          status: "pending",
+          operationId: "operation",
+          configJson: restoredConfigJson,
+        }),
+        reconcile: async () => { throw new Error("must not reconcile a successful response"); },
+        acceptCommittedConfig: (raw) => accepted.push(raw),
+      },
+    );
+
+    expect(result).toEqual({
+      cleared: false,
+      configRestored: true,
+      credentialDeleted: false,
+      cleanupPending: true,
+      debugOnly: true,
+    });
+    expect(accepted).toEqual([restoredConfigJson]);
+  });
 });

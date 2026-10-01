@@ -663,11 +663,27 @@ export async function replaceProviderCredential(input: {
   buildNextConfig: (metadata: DesktopProviderCredentialMetadata, authoritativeConfig: DesktopConfig) => DesktopConfig;
   acceptCommittedConfig?: (rawJson: string) => void;
 }): Promise<ReplaceProviderCredentialResult> {
-  const begun = await input.desktopApi.beginProviderCredential(input.request);
-  const metadata = begun.metadata;
   const acceptCommittedConfig = input.acceptCommittedConfig ?? acceptNativeDesktopConfigCommit;
+  let begun;
+  try {
+    begun = await input.desktopApi.beginProviderCredential(input.request);
+  } catch (beginError) {
+    try {
+      const lifecycle = await input.desktopApi.reconcileProviderCredentials();
+      acceptCommittedConfig(lifecycle.configJson);
+      if (lifecycle.status === "pending") {
+        throw new CredentialCleanupRequiredError(lifecycle.operationId, "uncommitted", { cause: beginError });
+      }
+    } catch (reconcileError) {
+      if (reconcileError instanceof CredentialCleanupRequiredError) throw reconcileError;
+      throw new CredentialCleanupRequiredError("", "uncommitted", {
+        cause: new AggregateError([beginError, reconcileError], "Credential creation outcome could not be reconciled."),
+      });
+    }
+    throw beginError;
+  }
+  const metadata = begun.metadata;
   const authoritativeConfig = normalizeDesktopConfigJson(begun.configJson);
-  acceptCommittedConfig(begun.configJson);
   input.onCredentialStored();
 
   let nextConfigJson: string;

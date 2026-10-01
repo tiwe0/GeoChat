@@ -4,7 +4,7 @@ use crate::{
 };
 use serde_json::{Map, Value};
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
 };
@@ -80,10 +80,10 @@ impl RendererStorage {
         let lock = self.file.lock()?;
         scrub_sensitive_storage_artifacts(storage_parent(&self.path)?, &self.path)?;
         let mut candidate = load_and_repair_entries(&self.file, &lock)?;
-        let previous_credential_refs = active_credential_refs_from_entries(&candidate)?;
+        let previous_credential_bindings = active_credential_bindings_from_entries(&candidate)?;
         candidate.extend(values);
         validate_candidate(&candidate)?;
-        if active_credential_refs_from_entries(&candidate)? != previous_credential_refs {
+        if active_credential_bindings_from_entries(&candidate)? != previous_credential_bindings {
             return Err(
                 "Credential references can only be changed through the native credential lifecycle"
                     .to_string(),
@@ -106,13 +106,13 @@ impl RendererStorage {
         let lock = self.file.lock()?;
         scrub_sensitive_storage_artifacts(storage_parent(&self.path)?, &self.path)?;
         let mut candidate = load_and_repair_entries(&self.file, &lock)?;
-        let previous_credential_refs = active_credential_refs_from_entries(&candidate)?;
+        let previous_credential_bindings = active_credential_bindings_from_entries(&candidate)?;
         for key in keys {
             validate_preference_key(&key)?;
             candidate.remove(&key);
         }
         validate_candidate(&candidate)?;
-        if active_credential_refs_from_entries(&candidate)? != previous_credential_refs {
+        if active_credential_bindings_from_entries(&candidate)? != previous_credential_bindings {
             return Err(
                 "Credential references can only be changed through the native credential lifecycle"
                     .to_string(),
@@ -244,29 +244,57 @@ impl RendererStorage {
 pub(crate) fn active_credential_refs_from_raw_config(
     raw: &str,
 ) -> Result<BTreeSet<String>, String> {
+    Ok(credential_ref_bindings_from_raw_config(raw)?
+        .into_values()
+        .filter(|reference| !reference.is_empty())
+        .collect())
+}
+
+pub(crate) fn credential_ref_bindings_from_raw_config(
+    raw: &str,
+) -> Result<BTreeMap<String, String>, String> {
     let config: Value = serde_json::from_str(raw)
         .map_err(|error| format!("Desktop configuration is not valid JSON: {error}"))?;
     if !validate_desktop_config(&config) {
         return Err("Desktop configuration has an invalid schema".to_string());
     }
-    let mut refs = BTreeSet::new();
-    let mut collect = |value: Option<&Value>| {
-        if let Some(reference) = value
+    let mut bindings = BTreeMap::new();
+    for model_key in ["model", "visionModel"] {
+        let reference = config
+            .get(model_key)
+            .and_then(|model| model.get("credentialRef"))
             .and_then(Value::as_str)
-            .filter(|value| !value.is_empty())
-        {
-            refs.insert(reference.to_string());
-        }
-    };
-    collect(config.pointer("/model/credentialRef"));
-    collect(config.pointer("/visionModel/credentialRef"));
-    collect(config.pointer("/customProvider/credentialRef"));
-    if let Some(credentials) = config.get("providerCredentials").and_then(Value::as_object) {
-        for credential in credentials.values() {
-            collect(credential.get("credentialRef"));
-        }
+            .ok_or_else(|| "Desktop configuration has an invalid credential binding".to_string())?;
+        bindings.insert(model_key.to_string(), reference.to_string());
     }
-    Ok(refs)
+    let custom = config
+        .pointer("/customProvider/credentialRef")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "Desktop configuration has an invalid credential binding".to_string())?;
+    bindings.insert("customProvider".to_string(), custom.to_string());
+    let providers = config
+        .get("providerCredentials")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "Desktop configuration has invalid provider credentials".to_string())?;
+    for provider in [
+        "deepseek",
+        "openai",
+        "anthropic",
+        "google",
+        "openrouter",
+        "qwen",
+    ] {
+        let reference = providers
+            .get(provider)
+            .and_then(|credential| credential.get("credentialRef"))
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        bindings.insert(
+            format!("providerCredentials.{provider}"),
+            reference.to_string(),
+        );
+    }
+    Ok(bindings)
 }
 
 pub(crate) fn target_credential_refs_from_raw_config(
@@ -309,14 +337,16 @@ pub(crate) fn target_credential_refs_from_raw_config(
     Ok(refs)
 }
 
-fn active_credential_refs_from_entries(
+fn active_credential_bindings_from_entries(
     entries: &Map<String, Value>,
-) -> Result<BTreeSet<String>, String> {
-    match entries.get(DESKTOP_CONFIG_KEY) {
-        Some(Value::String(raw)) => active_credential_refs_from_raw_config(raw),
-        Some(_) => Err("Desktop configuration must use the string transport".to_string()),
-        None => Ok(BTreeSet::new()),
-    }
+) -> Result<BTreeMap<String, String>, String> {
+    let mut bindings = match entries.get(DESKTOP_CONFIG_KEY) {
+        Some(Value::String(raw)) => credential_ref_bindings_from_raw_config(raw)?,
+        Some(_) => return Err("Desktop configuration must use the string transport".to_string()),
+        None => BTreeMap::new(),
+    };
+    bindings.retain(|_, reference| !reference.is_empty());
+    Ok(bindings)
 }
 
 fn storage_parent(path: &Path) -> Result<&Path, String> {
@@ -1623,6 +1653,53 @@ mod tests {
             )]))
             .unwrap_err()
             .contains("native credential lifecycle"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn generic_storage_write_rejects_rebinding_the_same_active_references() {
+        let root = temporary_directory("renderer-storage-credential-rebinding-guard");
+        let mut storage = RendererStorage::load(&root).expect("load empty storage");
+        let base = valid_desktop_config();
+        let base_raw = serde_json::to_string(&base).unwrap();
+        storage
+            .set_batch(Map::from_iter([(
+                DESKTOP_CONFIG_KEY.to_string(),
+                json!(base_raw.clone()),
+            )]))
+            .unwrap();
+
+        let first_ref = Uuid::new_v4().to_string();
+        let second_ref = Uuid::new_v4().to_string();
+        let mut configured = base;
+        configured["model"]["credentialRef"] = json!(first_ref.clone());
+        configured["providerCredentials"]["deepseek"]["credentialRef"] = json!(first_ref.clone());
+        configured["visionModel"]["credentialRef"] = json!(second_ref.clone());
+        configured["providerCredentials"]["openrouter"]["credentialRef"] =
+            json!(second_ref.clone());
+        let configured_raw = serde_json::to_string(&configured).unwrap();
+        storage
+            .commit_credential_config(&base_raw, &configured_raw)
+            .expect("seed credential bindings through lifecycle CAS");
+
+        let mut rebound = configured.clone();
+        rebound["model"]["credentialRef"] = json!(second_ref);
+        rebound["visionModel"]["credentialRef"] = json!(first_ref);
+        assert!(storage
+            .set_batch(Map::from_iter([(
+                DESKTOP_CONFIG_KEY.to_string(),
+                encoded_desktop_config(&rebound),
+            )]))
+            .unwrap_err()
+            .contains("native credential lifecycle"));
+
+        configured["locale"] = json!("en-US");
+        storage
+            .set_batch(Map::from_iter([(
+                DESKTOP_CONFIG_KEY.to_string(),
+                encoded_desktop_config(&configured),
+            )]))
+            .expect("non-reference configuration changes remain allowed");
         let _ = fs::remove_dir_all(root);
     }
 

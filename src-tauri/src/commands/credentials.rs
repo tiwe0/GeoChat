@@ -3,7 +3,7 @@ use crate::{
         CredentialError, CredentialLifecycleJournal, CredentialLifecycleOperation,
         CredentialMetadata, CredentialVault, SaveCredentialRequest,
     },
-    renderer_storage::RendererStorage,
+    renderer_storage::{credential_ref_bindings_from_raw_config, RendererStorage},
     DesktopState,
 };
 use serde::{Deserialize, Serialize};
@@ -325,12 +325,15 @@ fn validate_operation_transition(
                     }
                     continue;
                 }
-                if next == retiring_credential_ref
-                    || (!next.is_empty() && !expected_refs.contains(next))
-                    || (!next.is_empty()
-                        && matches!(binding.as_str(), "model" | "visionModel")
-                        && !model_binding_matches_provider(&next_config, binding, next))
-                {
+                let valid_replacement = match binding.as_str() {
+                    "model" | "visionModel" => {
+                        next.is_empty()
+                            || (expected_refs.contains(next)
+                                && model_binding_matches_provider(&next_config, binding, next))
+                    }
+                    _ => next.is_empty(),
+                };
+                if next == retiring_credential_ref || !valid_replacement {
                     return Err(CredentialError::InvalidInput);
                 }
             }
@@ -372,44 +375,7 @@ fn target_metadata_matches(
 }
 
 fn credential_ref_bindings(raw: &str) -> Result<BTreeMap<String, String>, CredentialError> {
-    let config = parse_config(raw)?;
-    let mut bindings = BTreeMap::new();
-    for model_key in ["model", "visionModel"] {
-        let reference = config
-            .get(model_key)
-            .and_then(|model| model.get("credentialRef"))
-            .and_then(Value::as_str)
-            .ok_or(CredentialError::InvalidInput)?;
-        bindings.insert(model_key.to_string(), reference.to_string());
-    }
-    let custom = config
-        .pointer("/customProvider/credentialRef")
-        .and_then(Value::as_str)
-        .ok_or(CredentialError::InvalidInput)?;
-    bindings.insert("customProvider".into(), custom.to_string());
-    let providers = config
-        .get("providerCredentials")
-        .and_then(Value::as_object)
-        .ok_or(CredentialError::InvalidInput)?;
-    for provider in [
-        "deepseek",
-        "openai",
-        "anthropic",
-        "google",
-        "openrouter",
-        "qwen",
-    ] {
-        let reference = providers
-            .get(provider)
-            .and_then(|value| value.get("credentialRef"))
-            .and_then(Value::as_str)
-            .unwrap_or_default();
-        bindings.insert(
-            format!("providerCredentials.{provider}"),
-            reference.to_string(),
-        );
-    }
-    Ok(bindings)
+    credential_ref_bindings_from_raw_config(raw).map_err(|_| CredentialError::InvalidInput)
 }
 
 fn binding_targets_provider(config: &Value, binding: &str, target_provider: &str) -> bool {
@@ -467,7 +433,19 @@ fn begin_locked(
         previous_target_refs.into_iter().collect(),
     );
     journal.create(&operation)?;
-    vault.put_prepared(&prepared)?;
+    if let Err(write_error) = vault.put_prepared(&prepared) {
+        // A platform credential store may report an error after the value was
+        // written. Only remove the intent marker when a read proves the new,
+        // randomly generated reference does not exist. Every ambiguous result
+        // keeps the journal discoverable so reconciliation can fail closed.
+        if matches!(
+            vault.resolve(&prepared.metadata.credential_ref),
+            Err(CredentialError::NotFound)
+        ) {
+            journal.clear()?;
+        }
+        return Err(write_error);
+    }
     Ok(BeginCredentialResult {
         operation_id,
         metadata: prepared.metadata,
@@ -632,6 +610,8 @@ mod tests {
     struct RecordingStore {
         entries: Mutex<HashMap<String, String>>,
         puts: Mutex<usize>,
+        fail_puts_before_write: Mutex<usize>,
+        fail_puts_after_write: Mutex<usize>,
         deletes: Mutex<Vec<String>>,
         fail_deletes: Mutex<usize>,
     }
@@ -639,10 +619,21 @@ mod tests {
     impl CredentialStore for RecordingStore {
         fn put(&self, credential_ref: &str, value: &SecretValue) -> Result<(), CredentialError> {
             *self.puts.lock().unwrap() += 1;
+            let mut failures = self.fail_puts_before_write.lock().unwrap();
+            if *failures > 0 {
+                *failures -= 1;
+                return Err(CredentialError::StoreFailure);
+            }
+            drop(failures);
             self.entries.lock().unwrap().insert(
                 credential_ref.to_string(),
                 value.expose_secret().to_string(),
             );
+            let mut failures = self.fail_puts_after_write.lock().unwrap();
+            if *failures > 0 {
+                *failures -= 1;
+                return Err(CredentialError::StoreFailure);
+            }
             Ok(())
         }
         fn get(&self, credential_ref: &str) -> Result<SecretValue, CredentialError> {
@@ -713,6 +704,57 @@ mod tests {
             Err(CredentialError::StoreFailure)
         ));
         assert_eq!(*store.puts.lock().unwrap(), 0);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn vault_failure_before_write_clears_journal_and_allows_retry() {
+        let root = root("vault-fail-before-write");
+        let store = Arc::new(RecordingStore::default());
+        *store.fail_puts_before_write.lock().unwrap() = 1;
+        let vault = CredentialVault::new(store.clone());
+        let journal = CredentialLifecycleJournal::new(&root);
+
+        assert!(matches!(
+            begin_locked(&vault, &journal, config_json(), request()),
+            Err(CredentialError::StoreFailure)
+        ));
+        assert!(journal.load_strict().unwrap().is_none());
+
+        begin_locked(&vault, &journal, config_json(), request()).unwrap();
+        assert!(journal.load_strict().unwrap().is_some());
+        assert_eq!(*store.puts.lock().unwrap(), 2);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn ambiguous_vault_failure_keeps_journal_and_does_not_delete_secret() {
+        let root = root("vault-fail-after-write");
+        let store = Arc::new(RecordingStore::default());
+        *store.fail_puts_after_write.lock().unwrap() = 1;
+        let vault = CredentialVault::new(store.clone());
+        let journal = CredentialLifecycleJournal::new(&root);
+
+        assert!(matches!(
+            begin_locked(&vault, &journal, config_json(), request()),
+            Err(CredentialError::StoreFailure)
+        ));
+        let operation = journal.load_strict().unwrap().unwrap();
+        let prepared_ref = operation.new_ref().unwrap().to_string();
+        assert!(store.exists(&prepared_ref).unwrap());
+        assert!(store.deletes.lock().unwrap().is_empty());
+        assert!(matches!(
+            begin_locked(&vault, &journal, config_json(), request()),
+            Err(CredentialError::AlreadyExists)
+        ));
+        assert_eq!(
+            reconcile_operation(&vault, &journal, operation, &BTreeSet::new(), config_json()),
+            Ok(CredentialLifecycleStatus::Ready {
+                config_json: config_json()
+            })
+        );
+        assert!(!store.exists(&prepared_ref).unwrap());
+        assert!(journal.load_strict().unwrap().is_none());
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -883,6 +925,59 @@ mod tests {
         );
 
         next["providerCredentials"]["openrouter"]["credentialRef"] = serde_json::json!("");
+        assert_eq!(
+            validate_operation_transition(&operation, &serde_json::to_string(&next).unwrap()),
+            Err(CredentialError::InvalidInput)
+        );
+    }
+
+    #[test]
+    fn retirement_rejects_cross_provider_rebinding_for_provider_credentials() {
+        let retiring_ref = Uuid::new_v4().to_string();
+        let unrelated_ref = Uuid::new_v4().to_string();
+        let mut starting: Value =
+            serde_json::from_str(&config_with_deepseek_ref(&retiring_ref)).unwrap();
+        starting["visionModel"]["credentialRef"] = json!(unrelated_ref.clone());
+        starting["providerCredentials"]["openrouter"]["credentialRef"] =
+            json!(unrelated_ref.clone());
+        let starting = serde_json::to_string(&starting).unwrap();
+        let operation = CredentialLifecycleOperation::retirement(
+            Uuid::new_v4().to_string(),
+            starting.clone(),
+            retiring_ref,
+        );
+        let mut next: Value = serde_json::from_str(&starting).unwrap();
+        next["model"]["credentialRef"] = json!("");
+        next["providerCredentials"]["deepseek"]["credentialRef"] = json!(unrelated_ref);
+
+        assert_eq!(
+            validate_operation_transition(&operation, &serde_json::to_string(&next).unwrap()),
+            Err(CredentialError::InvalidInput)
+        );
+    }
+
+    #[test]
+    fn retirement_rejects_cross_provider_rebinding_for_custom_provider() {
+        let retiring_ref = Uuid::new_v4().to_string();
+        let unrelated_ref = Uuid::new_v4().to_string();
+        let mut starting: Value = serde_json::from_str(&config_json()).unwrap();
+        starting["customProvider"] = json!({
+            "name": "debug", "baseUrl": "http://127.0.0.1:8787/v1",
+            "credentialRef": retiring_ref, "protocol": "openai-compatible",
+            "models": [{ "name": "debug", "callName": "debug", "supportsImages": false }]
+        });
+        starting["visionModel"]["credentialRef"] = json!(unrelated_ref.clone());
+        starting["providerCredentials"]["openrouter"]["credentialRef"] =
+            json!(unrelated_ref.clone());
+        let starting = serde_json::to_string(&starting).unwrap();
+        let operation = CredentialLifecycleOperation::retirement(
+            Uuid::new_v4().to_string(),
+            starting.clone(),
+            retiring_ref,
+        );
+        let mut next: Value = serde_json::from_str(&starting).unwrap();
+        next["customProvider"]["credentialRef"] = json!(unrelated_ref);
+
         assert_eq!(
             validate_operation_transition(&operation, &serde_json::to_string(&next).unwrap()),
             Err(CredentialError::InvalidInput)

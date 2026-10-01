@@ -54,7 +54,7 @@ describe("renderer provider credential replacement", () => {
       buildNextConfig: nextConfig,
       acceptCommittedConfig: () => events.push("mirror"),
     });
-    expect(events).toEqual(["begin", "mirror", "clear", "validate:new-ref", "commit", "mirror"]);
+    expect(events).toEqual(["begin", "clear", "validate:new-ref", "commit", "mirror"]);
     expect(result).toEqual({ metadata: METADATA, cleanup: { status: "complete" } });
   });
 
@@ -62,18 +62,59 @@ describe("renderer provider credential replacement", () => {
     const events: string[] = [];
     await expect(replaceProviderCredential({
       desktopApi: {
-        beginProviderCredential: async () => ({ operationId: "operation", metadata: METADATA, configJson: INITIAL_CONFIG_JSON }),
+        beginProviderCredential: async () => { events.push("begin"); return { operationId: "operation", metadata: METADATA, configJson: INITIAL_CONFIG_JSON }; },
         commitProviderCredential: async (_operationId, configJson) => ({ status: "ready", configJson }),
         abortProviderCredential: async () => { events.push("abort"); return { status: "ready", configJson: INITIAL_CONFIG_JSON }; },
         reconcileProviderCredentials: async () => ({ status: "ready", configJson: INITIAL_CONFIG_JSON }),
       },
       request: REQUEST,
-      onCredentialStored: () => undefined,
-      validate: async () => { throw new Error("invalid credential"); },
+      onCredentialStored: () => events.push("clear"),
+      validate: async () => { events.push("validate"); throw new Error("invalid credential"); },
       buildNextConfig: nextConfig,
-      acceptCommittedConfig: () => undefined,
+      acceptCommittedConfig: () => events.push("mirror"),
     })).rejects.toThrow("invalid credential");
-    expect(events).toEqual(["abort"]);
+    expect(events).toEqual(["begin", "clear", "validate", "abort", "mirror"]);
+  });
+
+  test("reconciles an ambiguous begin failure before allowing another save", async () => {
+    const events: string[] = [];
+    const beginError = new Error("begin response lost");
+    await expect(replaceProviderCredential({
+      desktopApi: {
+        beginProviderCredential: async () => { events.push("begin"); throw beginError; },
+        commitProviderCredential: async (_operationId, configJson) => ({ status: "ready", configJson }),
+        abortProviderCredential: async () => ({ status: "ready", configJson: INITIAL_CONFIG_JSON }),
+        reconcileProviderCredentials: async () => {
+          events.push("reconcile");
+          return { status: "pending", operationId: "operation", configJson: INITIAL_CONFIG_JSON };
+        },
+      },
+      request: REQUEST,
+      onCredentialStored: () => events.push("clear"),
+      validate: async () => events.push("validate"),
+      buildNextConfig: nextConfig,
+      acceptCommittedConfig: () => events.push("mirror"),
+    })).rejects.toMatchObject({ operationId: "operation", phase: "uncommitted" });
+    expect(events).toEqual(["begin", "reconcile", "mirror"]);
+  });
+
+  test("publishes ready reconciliation after begin failure and preserves the original error", async () => {
+    const events: string[] = [];
+    const beginError = new Error("credential store unavailable");
+    await expect(replaceProviderCredential({
+      desktopApi: {
+        beginProviderCredential: async () => { events.push("begin"); throw beginError; },
+        commitProviderCredential: async (_operationId, configJson) => ({ status: "ready", configJson }),
+        abortProviderCredential: async () => ({ status: "ready", configJson: INITIAL_CONFIG_JSON }),
+        reconcileProviderCredentials: async () => { events.push("reconcile"); return { status: "ready", configJson: INITIAL_CONFIG_JSON }; },
+      },
+      request: REQUEST,
+      onCredentialStored: () => events.push("clear"),
+      validate: async () => events.push("validate"),
+      buildNextConfig: nextConfig,
+      acceptCommittedConfig: () => events.push("mirror"),
+    })).rejects.toBe(beginError);
+    expect(events).toEqual(["begin", "reconcile", "mirror"]);
   });
 
   test("recovers a lost commit response from the authoritative native config", async () => {

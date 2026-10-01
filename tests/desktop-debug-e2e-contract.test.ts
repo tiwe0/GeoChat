@@ -68,20 +68,22 @@ describe("deterministic desktop E2E evidence", () => {
     const accepted: string[] = [];
     const ports = {
       readConfig: () => currentConfig,
-      normalizeConfigJson: () => restoredConfig,
-      commitRetirement: async (_ref: string, _expected: string, next: string) => {
+      normalizeConfigJson: (raw: string) => JSON.parse(raw) as typeof ownedConfig,
+      commitRetirement: async (_ref: string, next: string) => {
         attempts += 1;
         if (attempts === 1) throw new Error("simulated native lifecycle failure");
         currentConfig = JSON.parse(next);
-        return { status: "ready" as const };
+        return { status: "ready" as const, configJson: next };
       },
+      reconcile: async () => ({ status: "ready" as const, configJson: JSON.stringify(currentConfig) }),
       acceptCommittedConfig: (raw: string) => accepted.push(raw),
     };
 
-    await expect(clearDeterministicDebugProviderWithPorts(nonce, credentialRef, "{}", ports)).rejects.toThrow("native lifecycle failure");
+    const restoreConfigJson = JSON.stringify(restoredConfig);
+    await expect(clearDeterministicDebugProviderWithPorts(nonce, credentialRef, restoreConfigJson, ports)).rejects.toThrow("native lifecycle failure");
     expect(currentConfig).toBe(ownedConfig);
 
-    await expect(clearDeterministicDebugProviderWithPorts(nonce, credentialRef, "{}", ports)).resolves.toMatchObject({
+    await expect(clearDeterministicDebugProviderWithPorts(nonce, credentialRef, restoreConfigJson, ports)).resolves.toMatchObject({
       configRestored: true,
       credentialDeleted: true,
     });

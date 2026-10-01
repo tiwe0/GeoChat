@@ -5,7 +5,7 @@ import {
   CredentialCleanupRequiredError,
   replaceProviderCredential,
 } from "../src/renderer-react/src/features/desktop/settings/ModelSettings";
-import { DEFAULT_DESKTOP_CONFIG } from "../src/shared/desktop/desktop-config";
+import { DEFAULT_DESKTOP_CONFIG, updateProviderCredentials } from "../src/shared/desktop/desktop-config";
 import type { DesktopProviderCredentialMetadata } from "../src/shared/desktop-api";
 
 const METADATA: DesktopProviderCredentialMetadata = {
@@ -17,8 +17,14 @@ const REQUEST = {
   baseUrl: "https://api.deepseek.com", secret: "new-secret",
 };
 
-function nextConfig(metadata: DesktopProviderCredentialMetadata) {
-  return { ...DEFAULT_DESKTOP_CONFIG, model: { ...DEFAULT_DESKTOP_CONFIG.model, credentialRef: metadata.credentialRef } };
+const INITIAL_CONFIG_JSON = JSON.stringify(DEFAULT_DESKTOP_CONFIG);
+
+function nextConfig(metadata: DesktopProviderCredentialMetadata, config = DEFAULT_DESKTOP_CONFIG) {
+  return updateProviderCredentials(config, metadata.provider, {
+    credentialRef: metadata.credentialRef,
+    baseUrl: metadata.canonicalBaseUrl,
+    protocol: metadata.protocol,
+  });
 }
 
 describe("renderer provider credential replacement", () => {
@@ -37,9 +43,10 @@ describe("renderer provider credential replacement", () => {
     const events: string[] = [];
     const result = await replaceProviderCredential({
       desktopApi: {
-        beginProviderCredential: async () => { events.push("begin"); return { operationId: "operation", metadata: METADATA }; },
-        commitProviderCredential: async () => { events.push("commit"); return { status: "ready" }; },
-        abortProviderCredential: async () => { events.push("abort"); return { status: "ready" }; },
+        beginProviderCredential: async () => { events.push("begin"); return { operationId: "operation", metadata: METADATA, configJson: INITIAL_CONFIG_JSON }; },
+        commitProviderCredential: async (_operationId, configJson) => { events.push("commit"); return { status: "ready", configJson }; },
+        abortProviderCredential: async () => { events.push("abort"); return { status: "ready", configJson: INITIAL_CONFIG_JSON }; },
+        reconcileProviderCredentials: async () => ({ status: "ready", configJson: INITIAL_CONFIG_JSON }),
       },
       request: REQUEST,
       onCredentialStored: () => events.push("clear"),
@@ -47,7 +54,7 @@ describe("renderer provider credential replacement", () => {
       buildNextConfig: nextConfig,
       acceptCommittedConfig: () => events.push("mirror"),
     });
-    expect(events).toEqual(["begin", "clear", "validate:new-ref", "commit", "mirror"]);
+    expect(events).toEqual(["begin", "mirror", "clear", "validate:new-ref", "commit", "mirror"]);
     expect(result).toEqual({ metadata: METADATA, cleanup: { status: "complete" } });
   });
 
@@ -55,9 +62,10 @@ describe("renderer provider credential replacement", () => {
     const events: string[] = [];
     await expect(replaceProviderCredential({
       desktopApi: {
-        beginProviderCredential: async () => ({ operationId: "operation", metadata: METADATA }),
-        commitProviderCredential: async () => ({ status: "ready" }),
-        abortProviderCredential: async () => { events.push("abort"); return { status: "ready" }; },
+        beginProviderCredential: async () => ({ operationId: "operation", metadata: METADATA, configJson: INITIAL_CONFIG_JSON }),
+        commitProviderCredential: async (_operationId, configJson) => ({ status: "ready", configJson }),
+        abortProviderCredential: async () => { events.push("abort"); return { status: "ready", configJson: INITIAL_CONFIG_JSON }; },
+        reconcileProviderCredentials: async () => ({ status: "ready", configJson: INITIAL_CONFIG_JSON }),
       },
       request: REQUEST,
       onCredentialStored: () => undefined,
@@ -68,14 +76,34 @@ describe("renderer provider credential replacement", () => {
     expect(events).toEqual(["abort"]);
   });
 
+  test("recovers a lost commit response from the authoritative native config", async () => {
+    const committedConfigJson = JSON.stringify(nextConfig(METADATA));
+    const result = await replaceProviderCredential({
+      desktopApi: {
+        beginProviderCredential: async () => ({ operationId: "operation", metadata: METADATA, configJson: INITIAL_CONFIG_JSON }),
+        commitProviderCredential: async () => { throw new Error("IPC response lost"); },
+        abortProviderCredential: async () => { throw new Error("must not abort an unknown commit outcome"); },
+        reconcileProviderCredentials: async () => ({ status: "ready", configJson: committedConfigJson }),
+      },
+      request: REQUEST,
+      onCredentialStored: () => undefined,
+      validate: async () => undefined,
+      buildNextConfig: nextConfig,
+      acceptCommittedConfig: () => undefined,
+    });
+
+    expect(result).toEqual({ metadata: METADATA, cleanup: { status: "complete" } });
+  });
+
   test("surfaces retryable native pending state without exposing the secret", async () => {
     let caught: unknown;
     try {
       await replaceProviderCredential({
         desktopApi: {
-          beginProviderCredential: async () => ({ operationId: "operation", metadata: METADATA }),
+          beginProviderCredential: async () => ({ operationId: "operation", metadata: METADATA, configJson: INITIAL_CONFIG_JSON }),
           commitProviderCredential: async () => { throw new Error("config CAS failed"); },
-          abortProviderCredential: async () => ({ status: "pending", operationId: "operation" }),
+          abortProviderCredential: async () => { throw new Error("must not abort an unknown commit outcome"); },
+          reconcileProviderCredentials: async () => ({ status: "pending", operationId: "operation", configJson: INITIAL_CONFIG_JSON }),
         },
         request: REQUEST,
         onCredentialStored: () => undefined,

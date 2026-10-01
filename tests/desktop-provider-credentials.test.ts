@@ -86,6 +86,28 @@ describe("desktop provider credential references", () => {
     });
   });
 
+  test("keeps custom credentials out of the built-in provider map", () => {
+    const config = normalizeDesktopConfig({
+      model: {
+        provider: "custom",
+        model: "local-model",
+        credentialRef: "custom-ref",
+        protocol: "openai-compatible",
+      },
+      customProvider: {
+        name: "Local",
+        baseUrl: "http://127.0.0.1:11434/v1",
+        credentialRef: "custom-ref",
+        protocol: "openai-compatible",
+        models: [{ name: "Local", callName: "local-model", supportsImages: false }],
+      },
+    }, "zh-CN");
+
+    expect(config.providerCredentials).not.toHaveProperty("custom");
+    expect(config.customProvider.credentialRef).toBe("custom-ref");
+    expect(config.model.credentialRef).toBe("custom-ref");
+  });
+
   test("normalizes custom provider models without accepting plaintext keys", () => {
     expect(normalizeCustomProviderConfig({
       name: " Local AI ",

@@ -32,13 +32,15 @@ describe("desktop config recovery", () => {
     consumeDesktopConfigRecoveryNotice();
   });
 
-  test("does not write defaults into an empty store during bootstrap", async () => {
-    const storage = {
-      getItem: () => null,
-      setItem: () => { throw new DOMException("The quota has been exceeded.", "QuotaExceededError"); },
-    };
+  test("durably seeds the canonical config into an empty store during bootstrap", async () => {
+    const storage = memoryStorage();
+    let flushes = 0;
 
-    expect(await recoverDesktopConfigBeforeLoad(storage)).toBeNull();
+    expect(await recoverDesktopConfigBeforeLoad(storage, {
+      flushWrites: async () => { flushes += 1; },
+    })).toBeNull();
+    expect(JSON.parse(storage.getItem(CONFIG_STORAGE_KEY) ?? "{}")).toEqual(createDefaultDesktopConfig());
+    expect(flushes).toBe(1);
   });
 
   test("repairs only invalid fields and preserves valid provider, locale, and interaction settings", async () => {

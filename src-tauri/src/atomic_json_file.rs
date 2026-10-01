@@ -1,4 +1,6 @@
 use serde::{de::DeserializeOwned, Serialize};
+#[cfg(test)]
+use std::cell::Cell;
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,
@@ -11,6 +13,10 @@ pub(crate) struct AtomicJsonFile {
     path: PathBuf,
     lock_path: PathBuf,
     description: &'static str,
+    #[cfg(test)]
+    strict_write_calls: Cell<usize>,
+    #[cfg(test)]
+    fail_strict_write_on_call: Cell<Option<usize>>,
 }
 
 impl AtomicJsonFile {
@@ -23,6 +29,10 @@ impl AtomicJsonFile {
             path,
             lock_path,
             description,
+            #[cfg(test)]
+            strict_write_calls: Cell::new(0),
+            #[cfg(test)]
+            fail_strict_write_on_call: Cell::new(None),
         }
     }
 
@@ -118,6 +128,43 @@ impl AtomicJsonFile {
                 _ => Err(error),
             },
         }
+    }
+
+    /// Writes a fully durable new version and reports every I/O or fsync
+    /// failure, even when the destination happens to contain the requested
+    /// bytes after the failure. Credential cleanup decisions must use this
+    /// stricter contract so an ambiguous commit can never authorize deletion.
+    pub(crate) fn write_strict<T: Serialize>(
+        &self,
+        _lock: &AtomicJsonFileLock,
+        value: &T,
+    ) -> Result<(), String> {
+        #[cfg(test)]
+        {
+            let call = self.strict_write_calls.get() + 1;
+            self.strict_write_calls.set(call);
+            if self.fail_strict_write_on_call.get() == Some(call) {
+                return Err(format!(
+                    "Injected strict {} write failure on call {call}",
+                    self.description
+                ));
+            }
+        }
+        let bytes = serde_json::to_vec_pretty(value)
+            .map_err(|error| format!("Failed to serialize {}: {error}", self.description))?;
+        atomic_write(&self.path, &bytes, self.description)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fail_strict_write_on_call(&self, call: usize) {
+        self.strict_write_calls.set(0);
+        self.fail_strict_write_on_call.set(Some(call));
+    }
+
+    #[cfg(test)]
+    pub(crate) fn clear_strict_write_failure(&self) {
+        self.strict_write_calls.set(0);
+        self.fail_strict_write_on_call.set(None);
     }
 
     fn restore_backup_or_empty<T: DeserializeOwned>(&self) -> Result<Option<T>, String> {
@@ -433,6 +480,21 @@ mod tests {
         )
         .expect("parse previous version");
         assert_eq!(previous, json!({"version": 1}));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn strict_write_never_converts_an_injected_io_failure_into_success() {
+        let root = temporary_directory("atomic-json-strict-failure");
+        let file = AtomicJsonFile::new(root.join("state.json"), ".state.lock", "test state");
+        let lock = file.lock().expect("lock state");
+        file.write_strict(&lock, &json!({"version": 1}))
+            .expect("write initial version");
+        file.fail_strict_write_on_call(1);
+        let error = file
+            .write_strict(&lock, &json!({"version": 1}))
+            .expect_err("strict write must surface the injected failure");
+        assert!(error.contains("Injected strict"));
         let _ = fs::remove_dir_all(root);
     }
 

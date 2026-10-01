@@ -24,11 +24,12 @@ export type DesktopProviderCredentialStatus = {
 export type DesktopBeginProviderCredentialResult = {
   operationId: string;
   metadata: DesktopProviderCredentialMetadata;
+  configJson: string;
 };
 
 export type DesktopCredentialLifecycleStatus =
-  | { status: "ready" }
-  | { status: "pending"; operationId: string };
+  | { status: "ready"; configJson: string }
+  | { status: "pending"; operationId: string; configJson: string };
 
 export type DesktopRendererStorage = Record<string, unknown>;
 
@@ -256,10 +257,10 @@ export type DesktopUnifiedUpdateState = {
 
 export type GeoChatDesktopApi = {
   beginProviderCredential: (request: DesktopSaveProviderCredentialRequest) => Promise<DesktopBeginProviderCredentialResult>;
-  commitProviderCredential: (operationId: string, expectedConfigJson: string, nextConfigJson: string) => Promise<DesktopCredentialLifecycleStatus>;
+  commitProviderCredential: (operationId: string, nextConfigJson: string) => Promise<DesktopCredentialLifecycleStatus>;
   abortProviderCredential: (operationId: string) => Promise<DesktopCredentialLifecycleStatus>;
   reconcileProviderCredentials: () => Promise<DesktopCredentialLifecycleStatus>;
-  retireProviderCredential: (credentialRef: string, expectedConfigJson: string, nextConfigJson: string) => Promise<DesktopCredentialLifecycleStatus>;
+  retireProviderCredential: (credentialRef: string, nextConfigJson: string) => Promise<DesktopCredentialLifecycleStatus>;
   getProviderCredentialStatus: (credentialRef: string) => Promise<DesktopProviderCredentialStatus>;
   listProviderCredentialMetadata: (credentialRefs: string[]) => Promise<DesktopProviderCredentialMetadata[]>;
   getRendererStorage: (keys?: string[]) => Promise<DesktopRendererStorage>;

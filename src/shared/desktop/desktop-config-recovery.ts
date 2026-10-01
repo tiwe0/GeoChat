@@ -171,9 +171,11 @@ export async function recoverDesktopConfigBeforeLoad(
   const flushWrites = options.flushWrites ?? (async () => {});
   const rawJson = storage.getItem(CONFIG_STORAGE_KEY);
   if (rawJson === null) {
-    // A fresh profile already reads as the default config. Do not seed an
-    // equivalent value during bootstrap; the first user change is the
-    // persistence boundary.
+    // Native credential transactions require a durable CAS base. Seed the
+    // canonical config before reconciliation so the first credential save is
+    // governed by the same crash-safe contract as every later save.
+    storage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(createDefaultDesktopConfig()));
+    await flushWrites();
     return null;
   }
   let rawConfig: Record<string, unknown>;

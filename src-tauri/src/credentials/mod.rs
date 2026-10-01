@@ -71,7 +71,7 @@ pub(crate) struct SaveCredentialRequest {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct CredentialMetadata {
     pub(crate) credential_ref: String,
     pub(crate) provider: String,

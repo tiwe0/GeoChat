@@ -4,6 +4,7 @@ import {
   MIN_AGENT_MODEL_STEP_TIMEOUT_MS
 } from "@geochat-ai/app/agent-run-config";
 import {
+  CUSTOM_AGENT_PROVIDER_ID,
   agentModelSupportsImagesForSchema,
   getAgentModelPolicyForSchema,
   normalizeAgentModelConfig,
@@ -293,6 +294,7 @@ export function normalizeProviderCredentials(value: unknown, ...models: ModelCon
     }
   }
   for (const model of models) {
+    if (model.provider === CUSTOM_AGENT_PROVIDER_ID) continue;
     if (!credentials[model.provider]) {
       credentials[model.provider] = {
         credentialRef: model.credentialRef,

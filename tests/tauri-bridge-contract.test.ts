@@ -142,8 +142,8 @@ describe("Tauri desktop bridge contract", () => {
     const api = createTauriDesktopApi(async (command, args) => {
       calls.push({ command, args });
       if (command === "list_provider_credential_metadata") return [] as never;
-      if (command === "begin_provider_credential") return { operationId: "operation", metadata: {} } as never;
-      if (["commit_provider_credential", "abort_provider_credential", "reconcile_provider_credentials", "retire_provider_credential"].includes(command)) return { status: "ready" } as never;
+      if (command === "begin_provider_credential") return { operationId: "operation", metadata: {}, configJson: "{}" } as never;
+      if (["commit_provider_credential", "abort_provider_credential", "reconcile_provider_credentials", "retire_provider_credential"].includes(command)) return { status: "ready", configJson: "{}" } as never;
       return (command === "get_runtime_info" ? {
         platform: "darwin",
         appVersion: "0.6.1",
@@ -158,10 +158,10 @@ describe("Tauri desktop bridge contract", () => {
       baseUrl: "https://api.deepseek.com",
       secret: "test-secret"
     });
-    await api.commitProviderCredential("operation", "expected", "next");
+    await api.commitProviderCredential("operation", "next");
     await api.abortProviderCredential("operation");
     await api.reconcileProviderCredentials();
-    await api.retireProviderCredential("old-ref", "expected", "next");
+    await api.retireProviderCredential("old-ref", "next");
     await api.getProviderCredentialStatus("status-ref");
     await api.listProviderCredentialMetadata(["listed-ref"]);
     await api.getRendererStorage(["theme", "zoom"]);
@@ -222,10 +222,10 @@ describe("Tauri desktop bridge contract", () => {
       }
     });
     expect(calls.find((call) => call.command === "commit_provider_credential")?.args).toEqual({
-      operationId: "operation", expectedConfigJson: "expected", nextConfigJson: "next"
+      operationId: "operation", nextConfigJson: "next"
     });
     expect(calls.find((call) => call.command === "retire_provider_credential")?.args).toEqual({
-      credentialRef: "old-ref", expectedConfigJson: "expected", nextConfigJson: "next"
+      credentialRef: "old-ref", nextConfigJson: "next"
     });
     expect(calls.filter((call) => call.command === "list_provider_credential_metadata").map((call) => call.args)).toEqual([
       { request: { credentialRefs: ["status-ref"] } },

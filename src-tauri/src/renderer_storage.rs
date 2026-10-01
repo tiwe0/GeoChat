@@ -1,11 +1,13 @@
-use crate::atomic_json_file::{AtomicJsonFile, AtomicJsonFileLock};
+use crate::{
+    atomic_json_file::{AtomicJsonFile, AtomicJsonFileLock},
+    credentials::canonicalize_endpoint,
+};
 use serde_json::{Map, Value};
 use std::{
     collections::BTreeSet,
     fs,
     path::{Path, PathBuf},
 };
-use url::Url;
 use uuid::Uuid;
 
 pub(crate) const RENDERER_STORAGE_FILE_NAME: &str = "renderer-state.json";
@@ -169,12 +171,48 @@ impl RendererStorage {
         let active_refs = active_credential_refs_from_raw_config(next_config_json)?;
         candidate.insert(DESKTOP_CONFIG_KEY.to_string(), next_value);
         validate_candidate(&candidate)?;
-        self.file.write(&lock, &candidate)?;
+        self.file.write_strict(&lock, &candidate)?;
         // AtomicJsonFile keeps a previous snapshot. Write the same candidate a
         // second time so both current and previous carry the committed refs.
-        self.file.write(&lock, &candidate)?;
+        self.file.write_strict(&lock, &candidate)?;
         self.entries = candidate;
         Ok(active_refs)
+    }
+
+    /// Rewrites an already-committed config with strict durability so the
+    /// `.previous` snapshot is guaranteed to match current before secrets are
+    /// removed. This is also required when retrying after response loss or a
+    /// crash between the two commit writes.
+    pub(crate) fn synchronize_credential_config(
+        &mut self,
+        expected_config_json: &str,
+    ) -> Result<BTreeSet<String>, String> {
+        let lock = self.file.lock()?;
+        let candidate = self.read_current_entries_strict(&lock)?;
+        let current = candidate
+            .get(DESKTOP_CONFIG_KEY)
+            .and_then(Value::as_str)
+            .ok_or_else(|| "The durable desktop configuration is missing".to_string())?;
+        if current != expected_config_json {
+            return Err(
+                "The durable desktop configuration changed during credential reconciliation"
+                    .to_string(),
+            );
+        }
+        let refs = active_credential_refs_from_raw_config(current)?;
+        self.file.write_strict(&lock, &candidate)?;
+        self.entries = candidate;
+        Ok(refs)
+    }
+
+    #[cfg(test)]
+    fn fail_strict_write_on_call(&self, call: usize) {
+        self.file.fail_strict_write_on_call(call);
+    }
+
+    #[cfg(test)]
+    fn clear_strict_write_failure(&self) {
+        self.file.clear_strict_write_failure();
     }
 
     fn read_current_entries_strict(
@@ -226,6 +264,47 @@ pub(crate) fn active_credential_refs_from_raw_config(
     if let Some(credentials) = config.get("providerCredentials").and_then(Value::as_object) {
         for credential in credentials.values() {
             collect(credential.get("credentialRef"));
+        }
+    }
+    Ok(refs)
+}
+
+pub(crate) fn target_credential_refs_from_raw_config(
+    raw: &str,
+    target_provider: &str,
+) -> Result<BTreeSet<String>, String> {
+    let config: Value = serde_json::from_str(raw)
+        .map_err(|error| format!("Desktop configuration is not valid JSON: {error}"))?;
+    if !validate_desktop_config(&config) {
+        return Err("Desktop configuration has an invalid schema".to_string());
+    }
+    let mut refs = BTreeSet::new();
+    let mut collect = |value: Option<&Value>| {
+        if let Some(reference) = value
+            .and_then(Value::as_str)
+            .filter(|reference| !reference.is_empty())
+        {
+            refs.insert(reference.to_string());
+        }
+    };
+    if target_provider == "custom" {
+        collect(config.pointer("/customProvider/credentialRef"));
+    } else {
+        let credential = config
+            .get("providerCredentials")
+            .and_then(Value::as_object)
+            .and_then(|credentials| credentials.get(target_provider))
+            .ok_or_else(|| "The target provider is not configured".to_string())?;
+        collect(credential.get("credentialRef"));
+    }
+    for model_key in ["model", "visionModel"] {
+        let model = config.get(model_key).and_then(Value::as_object);
+        if model
+            .and_then(|model| model.get("provider"))
+            .and_then(Value::as_str)
+            == Some(target_provider)
+        {
+            collect(model.and_then(|model| model.get("credentialRef")));
         }
     }
     Ok(refs)
@@ -763,15 +842,7 @@ fn valid_base_url(value: Option<&Value>, allow_empty: bool) -> bool {
     if raw.len() > MAX_CONFIG_URL_BYTES {
         return false;
     }
-    let Ok(url) = Url::parse(raw) else {
-        return false;
-    };
-    matches!(url.scheme(), "http" | "https")
-        && url.host_str().is_some()
-        && url.username().is_empty()
-        && url.password().is_none()
-        && url.fragment().is_none()
-        && url.query().is_none()
+    canonicalize_endpoint(raw).is_ok()
 }
 
 fn validate_custom_provider(value: &Value) -> bool {
@@ -1585,6 +1656,52 @@ mod tests {
                 serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
             assert_eq!(persisted.get(DESKTOP_CONFIG_KEY), Some(&json!(next_raw)));
         }
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn strict_second_write_failure_blocks_cleanup_until_retry_synchronizes_previous() {
+        let root = temporary_directory("renderer-storage-credential-strict-retry");
+        let mut storage = RendererStorage::load(&root).expect("load empty storage");
+        let initial = valid_desktop_config();
+        let initial_raw = serde_json::to_string(&initial).unwrap();
+        storage
+            .set_batch(Map::from_iter([(
+                DESKTOP_CONFIG_KEY.to_string(),
+                json!(initial_raw.clone()),
+            )]))
+            .unwrap();
+        let mut next = initial;
+        let new_ref = Uuid::new_v4().to_string();
+        next["model"]["credentialRef"] = json!(new_ref.clone());
+        next["providerCredentials"]["deepseek"]["credentialRef"] = json!(new_ref);
+        let next_raw = serde_json::to_string(&next).unwrap();
+
+        storage.fail_strict_write_on_call(2);
+        storage
+            .commit_credential_config(&initial_raw, &next_raw)
+            .expect_err("the failed backup synchronization must remain an error");
+
+        let current: Map<String, Value> =
+            serde_json::from_slice(&fs::read(root.join(RENDERER_STORAGE_FILE_NAME)).unwrap())
+                .unwrap();
+        let previous: Map<String, Value> =
+            serde_json::from_slice(&fs::read(root.join("renderer-state.previous")).unwrap())
+                .unwrap();
+        assert_eq!(
+            current.get(DESKTOP_CONFIG_KEY),
+            Some(&json!(next_raw.clone()))
+        );
+        assert_eq!(previous.get(DESKTOP_CONFIG_KEY), Some(&json!(initial_raw)));
+
+        storage.clear_strict_write_failure();
+        storage
+            .synchronize_credential_config(&next_raw)
+            .expect("response-loss retry must synchronize previous");
+        let previous: Map<String, Value> =
+            serde_json::from_slice(&fs::read(root.join("renderer-state.previous")).unwrap())
+                .unwrap();
+        assert_eq!(previous.get(DESKTOP_CONFIG_KEY), Some(&json!(next_raw)));
         let _ = fs::remove_dir_all(root);
     }
 

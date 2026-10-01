@@ -30,8 +30,9 @@ export async function configureDeterministicDebugProvider(baseUrl: string, model
   }
   const desktopApi = installedDesktopApi();
   if (!desktopApi) throw new Error("Native credential storage is unavailable.");
-  const originalConfig = readDesktopConfig();
-  const expectedConfigJson = JSON.stringify(originalConfig);
+  if (readDesktopConfig().customProvider.credentialRef) {
+    throw new Error("The deterministic provider requires a profile without a configured custom provider.");
+  }
   const begun = await desktopApi.beginProviderCredential({
     provider: "custom",
     protocol: "openai-compatible",
@@ -39,6 +40,12 @@ export async function configureDeterministicDebugProvider(baseUrl: string, model
     secret: TEST_CREDENTIAL_SECRET,
   });
   const metadata = begun.metadata;
+  const originalConfig = normalizeDesktopConfigJson(begun.configJson);
+  if (originalConfig.customProvider.credentialRef) {
+    const aborted = await desktopApi.abortProviderCredential(begun.operationId);
+    acceptNativeDesktopConfigCommit(aborted.configJson);
+    throw new Error("The deterministic provider requires a profile without a configured custom provider.");
+  }
   const nextConfig = {
       ...originalConfig,
       model: {
@@ -56,19 +63,20 @@ export async function configureDeterministicDebugProvider(baseUrl: string, model
       },
     };
   const nextConfigJson = JSON.stringify(nextConfig);
+  let lifecycle;
   try {
-    const lifecycle = await desktopApi.commitProviderCredential(
-      begun.operationId, expectedConfigJson, nextConfigJson,
-    );
-    acceptNativeDesktopConfigCommit(nextConfigJson);
-    if (lifecycle.status !== "ready") throw new Error("Deterministic credential cleanup is pending.");
-  } catch (error) {
+    lifecycle = await desktopApi.commitProviderCredential(begun.operationId, nextConfigJson);
+    acceptNativeDesktopConfigCommit(lifecycle.configJson);
+  } catch (commitError) {
     try {
-      await desktopApi.abortProviderCredential(begun.operationId);
-    } catch (rollbackError) {
-      throw new AggregateError([error, rollbackError], "Failed to persist the E2E config and roll back its credential.");
+      lifecycle = await desktopApi.reconcileProviderCredentials();
+      acceptNativeDesktopConfigCommit(lifecycle.configJson);
+    } catch (reconcileError) {
+      throw new AggregateError([commitError, reconcileError], "The E2E credential commit outcome could not be reconciled.");
     }
-    throw error;
+    if (normalizeDesktopConfigJson(lifecycle.configJson).customProvider.credentialRef !== metadata.credentialRef) {
+      throw commitError;
+    }
   }
   return {
     provider: "custom",
@@ -80,6 +88,7 @@ export async function configureDeterministicDebugProvider(baseUrl: string, model
       credentialRef: metadata.credentialRef,
       restoreConfigJson: JSON.stringify(originalConfig),
     },
+    cleanupPending: lifecycle.status === "pending",
     debugOnly: true,
   };
 }
@@ -91,7 +100,8 @@ export async function clearDeterministicDebugProvider(nonce: string, credentialR
   return clearDeterministicDebugProviderWithPorts(nonce, credentialRef, restoreConfigJson, {
     readConfig: readDesktopConfig,
     normalizeConfigJson: normalizeDesktopConfigJson,
-    commitRetirement: (ref, expected, next) => desktopApi.retireProviderCredential(ref, expected, next),
+    commitRetirement: (ref, next) => desktopApi.retireProviderCredential(ref, next),
+    reconcile: () => desktopApi.reconcileProviderCredentials(),
     acceptCommittedConfig: acceptNativeDesktopConfigCommit,
   });
 }
@@ -110,7 +120,8 @@ export async function clearDeterministicDebugProviderWithPorts<Config extends De
   ports: {
     readConfig(): Config;
     normalizeConfigJson(rawJson: string): Config;
-    commitRetirement(ref: string, expectedConfigJson: string, nextConfigJson: string): Promise<{ status: "ready" } | { status: "pending"; operationId: string }>;
+    commitRetirement(ref: string, nextConfigJson: string): Promise<{ status: "ready" | "pending"; operationId?: string; configJson: string }>;
+    reconcile(): Promise<{ status: "ready" | "pending"; operationId?: string; configJson: string }>;
     acceptCommittedConfig(rawJson: string): void;
   },
 ) {
@@ -121,10 +132,20 @@ export async function clearDeterministicDebugProviderWithPorts<Config extends De
     throw new Error("The current provider configuration is not owned by this deterministic E2E run.");
   }
   const restoreConfig = ports.normalizeConfigJson(restoreConfigJson);
-  const expectedConfigJson = JSON.stringify(current);
   const nextConfigJson = JSON.stringify(restoreConfig);
-  const lifecycle = await ports.commitRetirement(credentialRef, expectedConfigJson, nextConfigJson);
-  ports.acceptCommittedConfig(nextConfigJson);
+  let lifecycle;
+  try {
+    lifecycle = await ports.commitRetirement(credentialRef, nextConfigJson);
+  } catch (commitError) {
+    try {
+      lifecycle = await ports.reconcile();
+    } catch (reconcileError) {
+      throw new AggregateError([commitError, reconcileError], "The debug credential retirement outcome could not be reconciled.");
+    }
+    const reconciled = ports.normalizeConfigJson(lifecycle.configJson);
+    if (reconciled.customProvider.credentialRef === credentialRef) throw commitError;
+  }
+  ports.acceptCommittedConfig(lifecycle.configJson);
   return {
     cleared: lifecycle.status === "ready",
     configRestored: true,

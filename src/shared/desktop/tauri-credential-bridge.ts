@@ -39,17 +39,17 @@ export function createTauriCredentialBridge(invoke: TauriInvoke): CredentialBrid
   return {
     beginProviderCredential: (request: DesktopSaveProviderCredentialRequest) =>
       invoke<DesktopBeginProviderCredentialResult>(TAURI_CREDENTIAL_COMMANDS.beginProviderCredential, { request }),
-    commitProviderCredential: (operationId, expectedConfigJson, nextConfigJson) =>
+    commitProviderCredential: (operationId, nextConfigJson) =>
       invoke<DesktopCredentialLifecycleStatus>(TAURI_CREDENTIAL_COMMANDS.commitProviderCredential, {
-        operationId, expectedConfigJson, nextConfigJson,
+        operationId, nextConfigJson,
       }),
     abortProviderCredential: (operationId) =>
       invoke<DesktopCredentialLifecycleStatus>(TAURI_CREDENTIAL_COMMANDS.abortProviderCredential, { operationId }),
     reconcileProviderCredentials: () =>
       invoke<DesktopCredentialLifecycleStatus>(TAURI_CREDENTIAL_COMMANDS.reconcileProviderCredentials),
-    retireProviderCredential: (credentialRef, expectedConfigJson, nextConfigJson) =>
+    retireProviderCredential: (credentialRef, nextConfigJson) =>
       invoke<DesktopCredentialLifecycleStatus>(TAURI_CREDENTIAL_COMMANDS.retireProviderCredential, {
-        credentialRef, expectedConfigJson, nextConfigJson,
+        credentialRef, nextConfigJson,
       }),
     getProviderCredentialStatus: async (credentialRef: string): Promise<DesktopProviderCredentialStatus> => {
       const metadata = (await listProviderCredentialMetadata([credentialRef]))[0] ?? null;

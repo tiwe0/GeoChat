@@ -27,11 +27,12 @@ import {
   acceptNativeDesktopConfigCommit,
   credentialsForProvider,
   normalizeCustomProviderConfig,
+  normalizeDesktopConfigJson,
   readDesktopConfig,
   updateProviderCredentials,
   updateDesktopConfig,
 } from "../../../../../shared/desktop/desktop-config";
-import type { CustomProviderConfig } from "../../../../../shared/desktop/workbench-types";
+import type { CustomProviderConfig, DesktopConfig } from "../../../../../shared/desktop/workbench-types";
 import type {
   DesktopProviderCredentialMetadata,
   DesktopSaveProviderCredentialRequest,
@@ -130,7 +131,11 @@ export function ModelSettings() {
       return nextState;
     }
     try {
-      const nextState = await desktopApi.reconcileProviderCredentials();
+      const lifecycle = await desktopApi.reconcileProviderCredentials();
+      acceptNativeDesktopConfigCommit(lifecycle.configJson);
+      const nextState: PendingCredentialCleanupState = lifecycle.status === "ready"
+        ? { status: "ready" }
+        : { status: "pending", operationId: lifecycle.operationId };
       setPendingCleanup(nextState);
       return nextState;
     } catch {
@@ -237,10 +242,10 @@ export function ModelSettings() {
             ? t("settings.keyProbeUnsupported")
             : outcome.message);
         },
-        buildNextConfig: (metadata) => {
+        buildNextConfig: (metadata, authoritativeConfig) => {
           if (isCustom) {
             return {
-              ...config,
+              ...authoritativeConfig,
               customProvider: normalizeCustomProviderConfig({
                 ...customProvider,
                 baseUrl: metadata.canonicalBaseUrl,
@@ -249,7 +254,7 @@ export function ModelSettings() {
               }),
             };
           }
-          return updateProviderCredentials(config, provider, {
+          return updateProviderCredentials(authoritativeConfig, provider, {
             credentialRef: metadata.credentialRef,
             baseUrl: metadata.canonicalBaseUrl,
             protocol: metadata.protocol,
@@ -649,32 +654,28 @@ function validateCustomProvider(
 }
 
 export async function replaceProviderCredential(input: {
-  desktopApi: Pick<GeoChatDesktopApi, "beginProviderCredential" | "commitProviderCredential" | "abortProviderCredential">;
+  desktopApi: Pick<GeoChatDesktopApi, "beginProviderCredential" | "commitProviderCredential" | "abortProviderCredential" | "reconcileProviderCredentials">;
   request: DesktopSaveProviderCredentialRequest;
   onCredentialStored: () => void;
   validate: (credentialRef: string) => Promise<void>;
-  buildNextConfig: (metadata: DesktopProviderCredentialMetadata) => ReturnType<typeof readDesktopConfig>;
+  buildNextConfig: (metadata: DesktopProviderCredentialMetadata, authoritativeConfig: DesktopConfig) => DesktopConfig;
   acceptCommittedConfig?: (rawJson: string) => void;
 }): Promise<ReplaceProviderCredentialResult> {
-  const expectedConfigJson = JSON.stringify(readDesktopConfig());
   const begun = await input.desktopApi.beginProviderCredential(input.request);
   const metadata = begun.metadata;
+  const acceptCommittedConfig = input.acceptCommittedConfig ?? acceptNativeDesktopConfigCommit;
+  const authoritativeConfig = normalizeDesktopConfigJson(begun.configJson);
+  acceptCommittedConfig(begun.configJson);
   input.onCredentialStored();
+
+  let nextConfigJson: string;
   try {
     await input.validate(metadata.credentialRef);
-    const nextConfigJson = JSON.stringify(input.buildNextConfig(metadata));
-    const lifecycle = await input.desktopApi.commitProviderCredential(
-      begun.operationId,
-      expectedConfigJson,
-      nextConfigJson,
-    );
-    (input.acceptCommittedConfig ?? acceptNativeDesktopConfigCommit)(nextConfigJson);
-    return lifecycle.status === "ready"
-      ? { metadata, cleanup: { status: "complete" } }
-      : { metadata, cleanup: { status: "retry-required", operationId: lifecycle.operationId, phase: "replaced" } };
+    nextConfigJson = JSON.stringify(input.buildNextConfig(metadata, authoritativeConfig));
   } catch (error) {
     try {
       const lifecycle = await input.desktopApi.abortProviderCredential(begun.operationId);
+      acceptCommittedConfig(lifecycle.configJson);
       if (lifecycle.status === "pending") {
         throw new CredentialCleanupRequiredError(lifecycle.operationId, "uncommitted", { cause: error });
       }
@@ -686,6 +687,45 @@ export async function replaceProviderCredential(input: {
     }
     throw error;
   }
+
+  try {
+    const lifecycle = await input.desktopApi.commitProviderCredential(begun.operationId, nextConfigJson);
+    acceptCommittedConfig(lifecycle.configJson);
+    if (!desktopConfigReferencesCredential(normalizeDesktopConfigJson(lifecycle.configJson), metadata.credentialRef)) {
+      throw new Error("Native credential commit did not activate the new credential reference.");
+    }
+    return lifecycle.status === "ready"
+      ? { metadata, cleanup: { status: "complete" } }
+      : { metadata, cleanup: { status: "retry-required", operationId: lifecycle.operationId, phase: "replaced" } };
+  } catch (commitError) {
+    let lifecycle;
+    try {
+      lifecycle = await input.desktopApi.reconcileProviderCredentials();
+      acceptCommittedConfig(lifecycle.configJson);
+    } catch (reconcileError) {
+      throw new CredentialCleanupRequiredError(begun.operationId, "replaced", {
+        cause: new AggregateError([commitError, reconcileError], "Credential commit outcome could not be reconciled."),
+      });
+    }
+    const reconciledConfig = normalizeDesktopConfigJson(lifecycle.configJson);
+    if (desktopConfigReferencesCredential(reconciledConfig, metadata.credentialRef)) {
+      return lifecycle.status === "ready"
+        ? { metadata, cleanup: { status: "complete" } }
+        : { metadata, cleanup: { status: "retry-required", operationId: lifecycle.operationId, phase: "replaced" } };
+    }
+    if (lifecycle.status === "pending") {
+      throw new CredentialCleanupRequiredError(lifecycle.operationId, "uncommitted", { cause: commitError });
+    }
+    throw commitError;
+  }
+}
+
+export function desktopConfigReferencesCredential(config: DesktopConfig, credentialRef: string): boolean {
+  if (!credentialRef) return false;
+  return config.model.credentialRef === credentialRef
+    || config.visionModel.credentialRef === credentialRef
+    || config.customProvider.credentialRef === credentialRef
+    || Object.values(config.providerCredentials).some((entry) => entry.credentialRef === credentialRef);
 }
 
 function isValidRequiredBaseUrl(value: string) {
@@ -693,7 +733,12 @@ function isValidRequiredBaseUrl(value: string) {
   if (!trimmed) return false;
   try {
     const url = new URL(trimmed);
-    return url.protocol === "http:" || url.protocol === "https:";
+    if (url.username || url.password) return false;
+    if (url.protocol === "https:") return true;
+    if (url.protocol !== "http:") return false;
+    return url.hostname === "localhost"
+      || url.hostname === "127.0.0.1"
+      || url.hostname === "[::1]";
   } catch {
     logger.debug("provider_base_url_invalid", "MODEL_PROVIDER_BASE_URL_INVALID");
     return false;

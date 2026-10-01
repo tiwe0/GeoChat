@@ -3,6 +3,7 @@ import {
   credentialCleanupCanRetry,
   credentialCleanupBlocksSave,
   CredentialCleanupRequiredError,
+  probeUnsavedProviderCredential,
   replaceProviderCredential,
 } from "../src/renderer-react/src/features/desktop/settings/ModelSettings";
 import { DEFAULT_DESKTOP_CONFIG, updateProviderCredentials } from "../src/shared/desktop/desktop-config";
@@ -28,6 +29,55 @@ function nextConfig(metadata: DesktopProviderCredentialMetadata, config = DEFAUL
 }
 
 describe("renderer provider credential replacement", () => {
+  test("probes an unsaved key through a temporary native credential and always removes it", async () => {
+    const events: string[] = [];
+    const outcome = await probeUnsavedProviderCredential({
+      desktopApi: {
+        beginProviderCredential: async (request) => {
+          expect(request).toEqual(REQUEST);
+          events.push("begin");
+          return { operationId: "operation", metadata: METADATA, configJson: INITIAL_CONFIG_JSON };
+        },
+        abortProviderCredential: async () => { events.push("abort"); return { status: "ready", configJson: INITIAL_CONFIG_JSON }; },
+        reconcileProviderCredentials: async () => { events.push("reconcile"); return { status: "ready", configJson: INITIAL_CONFIG_JSON }; },
+      },
+      request: REQUEST,
+      probe: async (credentialRef) => { events.push(`probe:${credentialRef}`); return { status: "ok", ids: [], fetchedAt: 1, fromCache: false }; },
+      acceptConfig: () => events.push("accept"),
+    });
+    expect(outcome.status).toBe("ok");
+    expect(events).toEqual(["begin", "probe:new-ref", "abort", "accept"]);
+  });
+
+  test("cleans up the temporary credential when discovery rejects the key", async () => {
+    const events: string[] = [];
+    const outcome = await probeUnsavedProviderCredential({
+      desktopApi: {
+        beginProviderCredential: async () => ({ operationId: "operation", metadata: METADATA, configJson: INITIAL_CONFIG_JSON }),
+        abortProviderCredential: async () => { events.push("abort"); return { status: "ready", configJson: INITIAL_CONFIG_JSON }; },
+        reconcileProviderCredentials: async () => { throw new Error("unexpected reconcile"); },
+      },
+      request: REQUEST,
+      probe: async () => ({ status: "failed", message: "Provider responded 401" }),
+      acceptConfig: () => undefined,
+    });
+    expect(outcome).toEqual({ status: "failed", message: "Provider responded 401" });
+    expect(events).toEqual(["abort"]);
+  });
+
+  test("blocks further credential writes when temporary credential cleanup remains pending", async () => {
+    await expect(probeUnsavedProviderCredential({
+      desktopApi: {
+        beginProviderCredential: async () => ({ operationId: "operation", metadata: METADATA, configJson: INITIAL_CONFIG_JSON }),
+        abortProviderCredential: async () => ({ status: "pending", operationId: "operation", configJson: INITIAL_CONFIG_JSON }),
+        reconcileProviderCredentials: async () => { throw new Error("unexpected reconcile"); },
+      },
+      request: REQUEST,
+      probe: async () => ({ status: "ok", ids: [], fetchedAt: 1, fromCache: false }),
+      acceptConfig: () => undefined,
+    })).rejects.toMatchObject({ operationId: "operation", phase: "uncommitted" });
+  });
+
   test("fails closed while lifecycle state is loading, pending, or errored", () => {
     expect(credentialCleanupBlocksSave({ status: "loading" })).toBe(true);
     expect(credentialCleanupBlocksSave({ status: "error" })).toBe(true);

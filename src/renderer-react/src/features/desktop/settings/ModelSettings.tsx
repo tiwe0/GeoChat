@@ -41,7 +41,7 @@ import type {
 } from "../../../../../shared/desktop-api";
 import { installedDesktopApi } from "../../../../../shared/desktop/tauri-bridge";
 import { isValidProviderEndpoint } from "../../../../../shared/desktop/provider-endpoint";
-import { discoverProviderModels } from "../../models/modelDiscovery";
+import { discoverProviderModels, type DiscoveryOutcome } from "../../models/modelDiscovery";
 import { backendAuthToken, backendOrigin } from "../runtime";
 import { SettingsHint } from "./SettingsHint";
 
@@ -121,6 +121,7 @@ export function ModelSettings() {
   const [customProvider, setCustomProvider] = useState<CustomProviderConfig>(() => readDesktopConfig().customProvider);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [probing, setProbing] = useState(false);
   const [credentialSave, setCredentialSave] = useState<CredentialSaveState>({ status: "idle" });
   const [pendingCleanup, setPendingCleanup] = useState<PendingCredentialCleanupState>({ status: "loading" });
 
@@ -195,7 +196,7 @@ export function ModelSettings() {
   }, [resetCredentialSave]);
 
   const save = useCallback(async () => {
-    if (saving) return;
+    if (saving || probing) return;
     if (credentialCleanupBlocksSave(pendingCleanup)) {
       setCredentialSave({ status: "invalid", message: t("settings.credentialCleanupRequired") });
       return;
@@ -296,10 +297,61 @@ export function ModelSettings() {
     } finally {
       setSaving(false);
     }
-  }, [apiKey, customProvider, isCustom, pendingCleanup, provider, refreshPendingCredentialCleanup, saving, t]);
+  }, [apiKey, customProvider, isCustom, pendingCleanup, probing, provider, refreshPendingCredentialCleanup, saving, t]);
+
+  const probe = useCallback(async () => {
+    if (saving || probing || credentialCleanupBlocksSave(pendingCleanup)) return;
+    const secret = apiKey.trim();
+    if (!secret && !credentialRef) return;
+    const desktopApi = installedDesktopApi();
+    if (!desktopApi) {
+      setCredentialSave({ status: "invalid", message: "Native credential storage is unavailable." });
+      return;
+    }
+    const existing = isCustom
+      ? readDesktopConfig().customProvider
+      : credentialsForProvider(readDesktopConfig().providerCredentials, provider);
+    const protocol = isCustom ? customProvider.protocol : existing.protocol;
+    const baseUrl = isCustom
+      ? customProvider.baseUrl
+      : existing.baseUrl || getAgentProviderDefinition(provider)?.defaultBaseUrl || "";
+    if (secret && !isValidProviderEndpoint(baseUrl)) {
+      setCredentialSave({ status: "invalid", message: t("settings.customValidation.baseUrlInvalid") });
+      return;
+    }
+    setProbing(true);
+    setCredentialSave({ status: "idle" });
+    try {
+      const result = secret
+        ? await probeUnsavedProviderCredential({
+          desktopApi,
+          request: { provider, protocol, baseUrl, secret },
+          probe: (nextRef) => discoverProviderModels({
+            apiOrigin: backendOrigin(), authToken: backendAuthToken(), credentialRef: nextRef, force: true,
+          }),
+        })
+        : await discoverProviderModels({
+          apiOrigin: backendOrigin(), authToken: backendAuthToken(), credentialRef, force: true,
+        });
+      setCredentialSave(result.status === "ok"
+        ? { status: "valid" }
+        : { status: "invalid", message: result.status === "unsupported" ? t("settings.keyProbeUnsupported") : result.message });
+    } catch (error) {
+      if (error instanceof CredentialCleanupRequiredError) {
+        const cleanup = await refreshPendingCredentialCleanup();
+        setCredentialSave(cleanup.status === "ready"
+          ? { status: "invalid", message: t("settings.credentialNotSaved") }
+          : { status: "cleanup-required", operationId: error.operationId, phase: error.phase });
+      } else {
+        setCredentialSave({ status: "invalid", message: error instanceof Error ? error.message : String(error) });
+      }
+    } finally {
+      setProbing(false);
+    }
+  }, [apiKey, credentialRef, customProvider.baseUrl, customProvider.protocol, isCustom, pendingCleanup, probing, provider, refreshPendingCredentialCleanup, saving, t]);
 
   const retryCredentialCleanup = useCallback(async () => {
-    if (saving) return;
+    if (saving || probing) return;
     const desktopApi = installedDesktopApi();
     if (!desktopApi) return;
     setSaving(true);
@@ -324,7 +376,7 @@ export function ModelSettings() {
     } finally {
       setSaving(false);
     }
-  }, [credentialSave, provider, refreshPendingCredentialCleanup, saving, t]);
+  }, [credentialSave, provider, probing, refreshPendingCredentialCleanup, saving, t]);
 
   const customValidationMessage = customValidationError
     ? t(`settings.customValidation.${customValidationError}`)
@@ -335,7 +387,7 @@ export function ModelSettings() {
       <Stack className="settings-model-form" spacing={2.25}>
         <TextField
           select
-          disabled={saving}
+          disabled={saving || probing}
           size="small"
           label={t("settings.provider")}
           value={provider}
@@ -351,7 +403,7 @@ export function ModelSettings() {
         {isCustom ? (
           <>
             <TextField
-              disabled={saving}
+              disabled={saving || probing}
               size="small"
               label={t("settings.customProviderName")}
               value={customProvider.name}
@@ -359,7 +411,7 @@ export function ModelSettings() {
               onChange={(event) => updateCustomProvider({ ...customProvider, name: event.target.value })}
             />
             <TextField
-              disabled={saving}
+              disabled={saving || probing}
               size="small"
               type="url"
               label={t("settings.customBaseUrl")}
@@ -376,7 +428,14 @@ export function ModelSettings() {
           apiKey={apiKey}
           configured={Boolean(credentialRef)}
           credentialSave={credentialSave}
-          disabled={saving}
+          disabled={saving || probing}
+          probing={probing}
+          probeDisabled={
+            credentialCleanupBlocksSave(pendingCleanup)
+            || credentialSave.status === "cleanup-required"
+            || (!apiKey.trim() && (!credentialRef || (isCustom && customValidationError === "apiKeyRequired")))
+          }
+          onProbe={() => void probe()}
           onRetryCleanup={() => {
             if (credentialSave.status === "cleanup-required") {
               void retryCredentialCleanup();
@@ -395,7 +454,7 @@ export function ModelSettings() {
               {t("settings.credentialCleanupRequired")}
             </Typography>
             <Button
-              disabled={saving}
+              disabled={saving || probing}
               size="small"
               variant="outlined"
               onClick={() => void retryCredentialCleanup()}
@@ -417,7 +476,7 @@ export function ModelSettings() {
                   {pendingCleanup.operationId}
                 </Typography>
                 <Button
-                  disabled={saving}
+                  disabled={saving || probing}
                   size="small"
                   variant="outlined"
                   onClick={() => void retryCredentialCleanup()}
@@ -432,7 +491,7 @@ export function ModelSettings() {
           <>
             <TextField
               select
-              disabled={saving}
+              disabled={saving || probing}
               size="small"
               label={t("settings.customProtocol")}
               value={customProvider.protocol}
@@ -456,7 +515,7 @@ export function ModelSettings() {
                   </SettingsHint>
                 </Stack>
                 <Button
-                  disabled={saving}
+                  disabled={saving || probing}
                   size="small"
                   variant="outlined"
                   startIcon={<PlusIcon />}
@@ -482,7 +541,7 @@ export function ModelSettings() {
                   >
                     <Stack className="settings-custom-model-fields" direction="row" spacing={1}>
                       <TextField
-                        disabled={saving}
+                        disabled={saving || probing}
                         fullWidth
                         size="small"
                         label={t("settings.customModelName")}
@@ -491,7 +550,7 @@ export function ModelSettings() {
                         onChange={(event) => updateCustomModel(customProvider, index, { name: event.target.value }, updateCustomProvider)}
                       />
                       <TextField
-                        disabled={saving}
+                        disabled={saving || probing}
                         fullWidth
                         size="small"
                         label={t("settings.customModelCallName")}
@@ -506,7 +565,7 @@ export function ModelSettings() {
                       />
                       <Tooltip title={t("settings.removeModel")}>
                         <IconButton
-                          disabled={saving}
+                          disabled={saving || probing}
                           aria-label={t("settings.removeModel")}
                           color="error"
                           onClick={() => updateCustomProvider({
@@ -521,7 +580,7 @@ export function ModelSettings() {
                     <FormControlLabel
                       control={(
                         <Switch
-                          disabled={saving}
+                          disabled={saving || probing}
                           size="small"
                           checked={model.supportsImages}
                           onChange={(event) => updateCustomModel(
@@ -554,7 +613,7 @@ export function ModelSettings() {
           size="small"
           onClick={() => void save()}
           disabled={
-            saving
+            saving || probing
             || saved
             || credentialSave.status === "cleanup-required"
             || credentialCleanupBlocksSave(pendingCleanup)
@@ -575,6 +634,9 @@ function ApiKeyField(props: {
   configured: boolean;
   credentialSave: CredentialSaveState;
   disabled?: boolean;
+  probing: boolean;
+  probeDisabled: boolean;
+  onProbe: () => void;
   onChange: (value: string) => void;
   onRetryCleanup: () => void;
 }) {
@@ -583,6 +645,7 @@ function ApiKeyField(props: {
     <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start" }}>
       <TextField
         fullWidth
+        sx={{ flex: 1, minWidth: 0 }}
         size="small"
         type="password"
         disabled={props.disabled}
@@ -590,7 +653,9 @@ function ApiKeyField(props: {
         value={props.apiKey}
         onChange={(event) => props.onChange(event.target.value)}
         helperText={
-          props.credentialSave.status === "valid"
+          props.probing
+              ? t("settings.keyProbing")
+              : props.credentialSave.status === "valid"
               ? t("settings.keyValid")
               : props.credentialSave.status === "invalid"
                 ? t("settings.keyInvalid", { message: props.credentialSave.message })
@@ -614,6 +679,15 @@ function ApiKeyField(props: {
           },
         }}
       />
+      <Button
+        disabled={props.disabled || props.probeDisabled}
+        size="small"
+        variant="outlined"
+        onClick={props.onProbe}
+        sx={{ minWidth: 112, alignSelf: "flex-start", height: 40, whiteSpace: "nowrap" }}
+      >
+        {props.probing ? t("settings.keyProbing") : t("settings.probeKey")}
+      </Button>
       {props.credentialSave.status === "cleanup-required" ? (
         <Button disabled={props.disabled} size="small" variant="outlined" onClick={props.onRetryCleanup}>
           {t("settings.retryCredentialCleanup")}
@@ -653,6 +727,55 @@ function validateCustomProvider(
   if (new Set(callNames).size !== callNames.length) return "duplicateCallName";
   if (callNames.some((callName) => BUILTIN_MODEL_IDS.has(callName))) return "builtinCallNameConflict";
   return null;
+}
+
+export async function probeUnsavedProviderCredential(input: {
+  desktopApi: Pick<GeoChatDesktopApi, "beginProviderCredential" | "abortProviderCredential" | "reconcileProviderCredentials">;
+  request: DesktopSaveProviderCredentialRequest;
+  probe: (credentialRef: string) => Promise<DiscoveryOutcome>;
+  acceptConfig?: (rawJson: string) => void;
+}): Promise<DiscoveryOutcome> {
+  const acceptConfig = input.acceptConfig ?? acceptNativeDesktopConfigCommit;
+  let begun;
+  try {
+    begun = await input.desktopApi.beginProviderCredential(input.request);
+  } catch (beginError) {
+    try {
+      const lifecycle = await input.desktopApi.reconcileProviderCredentials();
+      acceptConfig(lifecycle.configJson);
+      if (lifecycle.status === "pending") {
+        throw new CredentialCleanupRequiredError(lifecycle.operationId, "uncommitted", { cause: beginError });
+      }
+    } catch (reconcileError) {
+      if (reconcileError instanceof CredentialCleanupRequiredError) throw reconcileError;
+      throw new CredentialCleanupRequiredError("", "uncommitted", { cause: reconcileError });
+    }
+    throw beginError;
+  }
+
+  try {
+    return await input.probe(begun.metadata.credentialRef);
+  } finally {
+    try {
+      const lifecycle = await input.desktopApi.abortProviderCredential(begun.operationId);
+      acceptConfig(lifecycle.configJson);
+      if (lifecycle.status === "pending") {
+        throw new CredentialCleanupRequiredError(lifecycle.operationId, "uncommitted");
+      }
+    } catch (abortError) {
+      if (abortError instanceof CredentialCleanupRequiredError) throw abortError;
+      try {
+        const lifecycle = await input.desktopApi.reconcileProviderCredentials();
+        acceptConfig(lifecycle.configJson);
+        if (lifecycle.status === "pending") {
+          throw new CredentialCleanupRequiredError(lifecycle.operationId, "uncommitted", { cause: abortError });
+        }
+      } catch (reconcileError) {
+        if (reconcileError instanceof CredentialCleanupRequiredError) throw reconcileError;
+        throw new CredentialCleanupRequiredError(begun.operationId, "uncommitted", { cause: reconcileError });
+      }
+    }
+  }
 }
 
 export async function replaceProviderCredential(input: {

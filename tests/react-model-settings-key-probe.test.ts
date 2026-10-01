@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import i18next from "i18next";
+import { I18nextProvider } from "react-i18next";
 import { discoverProviderModels } from "../src/renderer-react/src/features/models/modelDiscovery";
+import { ModelSettings } from "../src/renderer-react/src/features/desktop/settings/ModelSettings";
+import { zhCN } from "../src/renderer-react/src/i18n/locales/zh-CN";
 
 const originalFetch = globalThis.fetch;
 const originalBrowser = Object.getOwnPropertyDescriptor(globalThis, "browser");
@@ -11,6 +17,14 @@ afterEach(() => {
 });
 
 describe("model settings API key probe", () => {
+  test("renders the probe button beside the API key field", async () => {
+    const i18n = i18next.createInstance();
+    await i18n.init({ lng: "zh-CN", resources: { "zh-CN": { translation: zhCN } } });
+    const html = renderToStaticMarkup(createElement(I18nextProvider, { i18n }, createElement(ModelSettings)));
+    expect(html).toContain("探测 API 密钥");
+    expect(html.indexOf("API 密钥")).toBeLessThan(html.indexOf("探测 API 密钥"));
+  });
+
   test("reads and writes the catalog through the browser storage adapter", async () => {
     const values = new Map<string, unknown>();
     Object.defineProperty(globalThis, "browser", {

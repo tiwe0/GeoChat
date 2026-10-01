@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { resolve } from "node:path";
 import {
   assertRestoreEvidence,
   createTestProviderCleanupState,
+  finalizeTestProviderProfile,
   redactDesktopE2eEvidenceText,
 } from "../tools/desktop-debug-e2e/evidence";
 import {
@@ -40,13 +44,38 @@ describe("deterministic desktop E2E evidence", () => {
     expect(source).not.toContain("child.exitCode !== null) return");
   });
 
-  test("preserves the native profile whenever provider setup cleanup is incomplete", async () => {
-    const source = await readFile("tools/run-deterministic-desktop-e2e.ts", "utf8");
-    expect(source).toContain("providerConfigurationAttempted = true");
-    expect(source).toContain("const preserveUserDataDir = providerConfigurationAttempted");
-    expect(source).toContain("if (!preserveUserDataDir) rmSync(userDataDir");
-    expect(source).toContain("recoveryPath: userDataDir");
-    expect(source).not.toContain("\n    rmSync(userDataDir, { recursive: true, force: true });");
+  test("preserves the native profile whenever provider setup cleanup is incomplete", () => {
+    const profile = mkdtempSync(resolve(tmpdir(), "geochat-profile-preserve-"));
+    writeFileSync(resolve(profile, "credential-lifecycle-journal.json"), "pending");
+    const cleanup = createTestProviderCleanupState();
+    cleanup.markResult({ attempted: true, completed: false, error: "cleanup failed" });
+
+    expect(finalizeTestProviderProfile(profile, true, cleanup)).toEqual({
+      preserved: true,
+      recoveryPath: profile,
+    });
+    expect(existsSync(profile)).toBe(true);
+    expect(cleanup.evidence()).toMatchObject({
+      attempted: true,
+      completed: false,
+      error: "cleanup failed",
+      recoveryPending: true,
+      recoveryPath: profile,
+    });
+    rmSync(profile, { recursive: true, force: true });
+  });
+
+  test("removes the native profile after completed cleanup or when setup never started", () => {
+    const completedProfile = mkdtempSync(resolve(tmpdir(), "geochat-profile-complete-"));
+    const completed = createTestProviderCleanupState();
+    completed.markResult({ attempted: true, completed: true });
+    expect(finalizeTestProviderProfile(completedProfile, true, completed).preserved).toBe(false);
+    expect(existsSync(completedProfile)).toBe(false);
+
+    const unusedProfile = mkdtempSync(resolve(tmpdir(), "geochat-profile-unused-"));
+    const unused = createTestProviderCleanupState();
+    expect(finalizeTestProviderProfile(unusedProfile, false, unused).preserved).toBe(false);
+    expect(existsSync(unusedProfile)).toBe(false);
   });
 
   test("accepts only a real message and canvas restore result", () => {
@@ -163,6 +192,43 @@ describe("deterministic desktop E2E evidence", () => {
     expect(accepted).toEqual([JSON.stringify(original)]);
   });
 
+  test("reports both failures when begin and native reconciliation fail", async () => {
+    const original = createDefaultDesktopConfig("en-US");
+    const beginError = new Error("begin transport failed");
+    const reconcileError = new Error("journal is corrupt");
+
+    let caught: unknown;
+    try {
+      await configureDeterministicDebugProviderWithPorts(
+        "http://127.0.0.1:8787/v1",
+        "debug-model",
+        nonce,
+        {
+          readConfig: () => original,
+          normalizeConfigJson: (raw) => JSON.parse(raw) as DesktopConfig,
+          begin: async () => { throw beginError; },
+          commit: async () => { throw new Error("must not commit"); },
+          abort: async () => { throw new Error("must not abort"); },
+          reconcile: async () => { throw reconcileError; },
+          acceptCommittedConfig: () => undefined,
+        },
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(AggregateError);
+    expect(caught).toMatchObject({
+      name: "DebugProviderRecoveryError",
+      operationId: null,
+      recovery: { kind: "native-credential-journal", preserveUserDataDir: true },
+    });
+    const aggregate = caught as AggregateError;
+    expect(aggregate.errors).toEqual([beginError, reconcileError]);
+    expect(aggregate.message).toContain("begin transport failed");
+    expect(aggregate.message).toContain("journal is corrupt");
+  });
+
   test("aborts debug creation when the authoritative config already owns a custom credential", async () => {
     const original = createDefaultDesktopConfig("en-US");
     const authoritative = {
@@ -227,6 +293,78 @@ describe("deterministic desktop E2E evidence", () => {
     expect(accepted).toEqual([JSON.stringify(original)]);
   });
 
+  test("keeps abort response-loss pending only when native reconciliation confirms it", async () => {
+    const original = createDefaultDesktopConfig("en-US");
+    const authoritative = {
+      ...original,
+      customProvider: { ...original.customProvider, credentialRef: "existing-custom-ref" },
+    };
+    const accepted: string[] = [];
+
+    const result = await configureDeterministicDebugProviderWithPorts(
+      "http://localhost:8787/v1",
+      "debug-model",
+      nonce,
+      {
+        readConfig: () => original,
+        normalizeConfigJson: (raw) => JSON.parse(raw) as DesktopConfig,
+        begin: async () => ({ operationId: "operation", metadata, configJson: JSON.stringify(authoritative) }),
+        commit: async () => { throw new Error("must not commit"); },
+        abort: async () => { throw new Error("abort response lost"); },
+        reconcile: async () => ({
+          status: "pending",
+          operationId: "operation",
+          configJson: JSON.stringify(original),
+        }),
+        acceptCommittedConfig: (raw) => accepted.push(raw),
+      },
+    );
+
+    expect(result).toMatchObject({
+      setupPending: true,
+      operationId: "operation",
+      recovery: { preserveUserDataDir: true },
+    });
+    expect(accepted).toEqual([JSON.stringify(original)]);
+  });
+
+  test("reports operation ownership when abort and native reconciliation both fail", async () => {
+    const original = createDefaultDesktopConfig("en-US");
+    const authoritative = {
+      ...original,
+      customProvider: { ...original.customProvider, credentialRef: "existing-custom-ref" },
+    };
+    const abortError = new Error("abort response lost");
+    const reconcileError = new Error("reconcile unavailable");
+
+    let caught: unknown;
+    try {
+      await configureDeterministicDebugProviderWithPorts(
+        "http://localhost:8787/v1",
+        "debug-model",
+        nonce,
+        {
+          readConfig: () => original,
+          normalizeConfigJson: (raw) => JSON.parse(raw) as DesktopConfig,
+          begin: async () => ({ operationId: "operation", metadata, configJson: JSON.stringify(authoritative) }),
+          commit: async () => { throw new Error("must not commit"); },
+          abort: async () => { throw abortError; },
+          reconcile: async () => { throw reconcileError; },
+          acceptCommittedConfig: () => undefined,
+        },
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toMatchObject({
+      name: "DebugProviderRecoveryError",
+      operationId: "operation",
+      recovery: { preserveUserDataDir: true },
+    });
+    expect((caught as AggregateError).errors).toEqual([abortError, reconcileError]);
+  });
+
   test("returns a cleanup handle when debug creation commits with pending cleanup", async () => {
     const original = createDefaultDesktopConfig("en-US");
     const result = await configureDeterministicDebugProviderWithPorts(
@@ -250,6 +388,41 @@ describe("deterministic desktop E2E evidence", () => {
 
     expect(result.cleanupPending).toBe(true);
     expect(result.cleanup.credentialRef).toBe(debugCredentialRef);
+  });
+
+  test("reports operation ownership when commit and native reconciliation both fail", async () => {
+    const original = createDefaultDesktopConfig("en-US");
+    const commitError = new Error("commit response lost");
+    const reconcileError = new Error("journal cannot be read");
+
+    let caught: unknown;
+    try {
+      await configureDeterministicDebugProviderWithPorts(
+        "http://127.0.0.1:8787/v1",
+        "debug-model",
+        nonce,
+        {
+          readConfig: () => original,
+          normalizeConfigJson: (raw) => JSON.parse(raw) as DesktopConfig,
+          begin: async () => ({ operationId: "operation", metadata, configJson: JSON.stringify(original) }),
+          commit: async () => { throw commitError; },
+          abort: async () => { throw new Error("must not abort"); },
+          reconcile: async () => { throw reconcileError; },
+          acceptCommittedConfig: () => undefined,
+        },
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toMatchObject({
+      name: "DebugProviderRecoveryError",
+      operationId: "operation",
+      recovery: { preserveUserDataDir: true },
+    });
+    expect((caught as AggregateError).errors).toEqual([commitError, reconcileError]);
+    expect((caught as Error).message).toContain("commit response lost");
+    expect((caught as Error).message).toContain("journal cannot be read");
   });
 
   test("retires the debug credential and restores config in one native lifecycle", async () => {

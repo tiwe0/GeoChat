@@ -1859,6 +1859,30 @@ mod tests {
     }
 
     #[test]
+    fn active_model_credential_must_match_provider_ownership() {
+        let credential_ref = Uuid::new_v4().to_string();
+        let mut config = valid_desktop_config();
+        config["model"]["credentialRef"] = json!(credential_ref.clone());
+        config["providerCredentials"]["deepseek"]["credentialRef"] = json!(credential_ref.clone());
+
+        let mut wrong_provider = config.clone();
+        wrong_provider["model"]["provider"] = json!("openai");
+        assert!(credential_binding_ownership_from_raw_config(
+            &serde_json::to_string(&wrong_provider).unwrap()
+        )
+        .unwrap_err()
+        .contains("active provider credential"));
+
+        let mut wrong_protocol = config;
+        wrong_protocol["model"]["protocol"] = json!("anthropic");
+        assert!(credential_binding_ownership_from_raw_config(
+            &serde_json::to_string(&wrong_protocol).unwrap()
+        )
+        .unwrap_err()
+        .contains("match its provider binding"));
+    }
+
+    #[test]
     fn credential_cas_synchronizes_current_and_previous_before_cleanup() {
         let root = temporary_directory("renderer-storage-credential-cas");
         let mut storage = RendererStorage::load(&root).expect("load empty storage");

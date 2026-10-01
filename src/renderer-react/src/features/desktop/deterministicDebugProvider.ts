@@ -27,6 +27,29 @@ function pendingDebugProviderSetup(operationId?: string) {
   };
 }
 
+function debugProviderRecoveryError(
+  action: "creation" | "abort" | "commit",
+  primaryError: unknown,
+  reconcileError: unknown,
+  operationId?: string,
+) {
+  const describe = (error: unknown) => error instanceof Error ? error.message : String(error);
+  return Object.assign(
+    new AggregateError(
+      [primaryError, reconcileError],
+      `Debug credential ${action} failed (${describe(primaryError)}); native reconciliation also failed (${describe(reconcileError)}).`,
+    ),
+    {
+      name: "DebugProviderRecoveryError",
+      operationId: operationId ?? null,
+      recovery: {
+        kind: "native-credential-journal" as const,
+        preserveUserDataDir: true as const,
+      },
+    },
+  );
+}
+
 function assertDebugBuild() {
   const environment = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env;
   if (environment?.DEV !== true) {
@@ -90,8 +113,8 @@ export async function configureDeterministicDebugProviderWithPorts(
       const lifecycle = await ports.reconcile();
       ports.acceptCommittedConfig(lifecycle.configJson);
       if (lifecycle.status === "pending") return pendingDebugProviderSetup(lifecycle.operationId);
-    } catch {
-      return pendingDebugProviderSetup();
+    } catch (reconcileError) {
+      throw debugProviderRecoveryError("creation", beginError, reconcileError);
     }
     throw beginError;
   }
@@ -101,11 +124,11 @@ export async function configureDeterministicDebugProviderWithPorts(
     let aborted;
     try {
       aborted = await ports.abort(begun.operationId);
-    } catch {
+    } catch (abortError) {
       try {
         aborted = await ports.reconcile();
-      } catch {
-        return pendingDebugProviderSetup(begun.operationId);
+      } catch (reconcileError) {
+        throw debugProviderRecoveryError("abort", abortError, reconcileError, begun.operationId);
       }
     }
     ports.acceptCommittedConfig(aborted.configJson);
@@ -137,8 +160,8 @@ export async function configureDeterministicDebugProviderWithPorts(
     try {
       lifecycle = await ports.reconcile();
       ports.acceptCommittedConfig(lifecycle.configJson);
-    } catch {
-      return pendingDebugProviderSetup(begun.operationId);
+    } catch (reconcileError) {
+      throw debugProviderRecoveryError("commit", commitError, reconcileError, begun.operationId);
     }
     if (ports.normalizeConfigJson(lifecycle.configJson).customProvider.credentialRef !== metadata.credentialRef) {
       if (lifecycle.status === "pending") return pendingDebugProviderSetup(lifecycle.operationId);

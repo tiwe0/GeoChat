@@ -1,11 +1,12 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { startDeterministicFakeProvider } from "./desktop-debug-e2e/fake-openai-provider";
 import {
   assertRestoreEvidence,
   createTestProviderCleanupState,
+  finalizeTestProviderProfile,
   redactDesktopE2eEvidenceText,
 } from "./desktop-debug-e2e/evidence";
 
@@ -208,19 +209,7 @@ async function main() {
     }
     await stopDesktop(desktop);
     fakeProvider.stop();
-    if (providerConfigurationAttempted
-      && testProviderCleanup.evidence().completed !== true
-      && !testProviderCleanup.needsCleanup()) {
-      testProviderCleanup.markResult({
-        attempted: true,
-        completed: false,
-        recoveryPending: true,
-        recoveryPath: userDataDir,
-      });
-    }
-    const preserveUserDataDir = providerConfigurationAttempted
-      && testProviderCleanup.evidence().completed !== true;
-    if (!preserveUserDataDir) rmSync(userDataDir, { recursive: true, force: true });
+    finalizeTestProviderProfile(userDataDir, providerConfigurationAttempted, testProviderCleanup);
   }
   const cleanup = testProviderCleanup.evidence();
   const ok = failure === null && cleanup.completed === true;

@@ -1,3 +1,4 @@
+import { clamp } from "../../lib/numbers";
 import {
   FUSION_BUBBLE_ABOVE_OFFSET,
   FUSION_BUBBLE_BELOW_OFFSET,
@@ -33,10 +34,6 @@ type Rect = { left: number; top: number; right: number; bottom: number };
 const DEFAULT_EXPANDED_SIZE = { width: 420, height: 300 };
 const DEFAULT_COLLAPSED_SIZE = { width: 300, height: 56 };
 const COLLISION_GAP = 10;
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), Math.max(min, max));
-}
 
 function safeBounds(viewport: FusionViewport, insets: FusionSafeInsets) {
   return {

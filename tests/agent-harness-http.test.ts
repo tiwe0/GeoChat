@@ -173,10 +173,11 @@ describe("desktop-only renderer and backend boundaries", () => {
           content: "记录题库作答。",
           createdAt: "2026-06-06T04:03:00.000Z",
           payload: {
+            schemaVersion: 1,
             id: `${conversationId}-user`,
             role: "user",
             content: "记录题库作答。",
-            createdAt: "12:03:00"
+            createdAt: "2026-06-06T04:03:00.000Z"
           }
         }
       })

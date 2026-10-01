@@ -2,11 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { evaluateCommand, normalizeCommandResult } from "../src/renderer-react/src/geogebra/command-executor";
 import { GeoGebraController } from "../src/renderer-react/src/geogebra/controller";
 import {
-  COLLAPSED_GEOGEBRA_TOOLBAR_HEIGHT,
   DEFAULT_GEOGEBRA_FILE_FEATURES_ENABLED,
   DEFAULT_GEOGEBRA_MENU_VISIBLE,
   DEFAULT_GEOGEBRA_TOOLBAR_VISIBLE,
-  geoGebraRuntimeHeight,
   type GeoGebraApi,
 } from "../src/renderer-react/src/geogebra/ggbdeploy-wrapper";
 
@@ -102,15 +100,10 @@ describe("command evaluation across the available applet APIs", () => {
 });
 
 describe("controller tool boundary", () => {
-  test("starts with the GeoGebra menu visible and construction toolbar collapsed", () => {
-    expect(DEFAULT_GEOGEBRA_FILE_FEATURES_ENABLED).toBe(true);
-    expect(DEFAULT_GEOGEBRA_MENU_VISIBLE).toBe(true);
+  test("keeps vendor persistence controls disabled and the construction toolbar collapsed", () => {
+    expect(DEFAULT_GEOGEBRA_FILE_FEATURES_ENABLED).toBe(false);
+    expect(DEFAULT_GEOGEBRA_MENU_VISIBLE).toBe(false);
     expect(DEFAULT_GEOGEBRA_TOOLBAR_VISIBLE).toBe(false);
-  });
-
-  test("reclaims the hidden native toolbar row for the drawing canvas", () => {
-    expect(geoGebraRuntimeHeight(620, false)).toBe(620);
-    expect(geoGebraRuntimeHeight(620, true)).toBe(620 + COLLAPSED_GEOGEBRA_TOOLBAR_HEIGHT);
   });
 
   test("refuses every tool before the applet is mounted", async () => {
@@ -119,7 +112,7 @@ describe("controller tool boundary", () => {
     await expect(controller.executeTool("getCanvasContext", {})).rejects.toThrow();
   });
 
-  test("opens the original toolbar without letting its close API remove the native file menu", () => {
+  test("forwards both toolbar visibility states when the shell owns document persistence", () => {
     const visibility: boolean[] = [];
     const controller = new GeoGebraController();
     controller.setApi(api({
@@ -128,13 +121,24 @@ describe("controller tool boundary", () => {
 
     expect(controller.setToolbarVisible(true)).toBe(true);
     expect(controller.setToolbarVisible(false)).toBe(false);
-    expect(visibility).toEqual([true]);
+    expect(visibility).toEqual([true, false]);
   });
 
   test("reports an unavailable toolbar API instead of faking UI state", () => {
     const controller = new GeoGebraController();
     controller.setApi(api({}));
     expect(() => controller.setToolbarVisible(true)).toThrow(/工具栏切换 API/);
+  });
+
+  test("restores a persisted document through the transactional canvas boundary", async () => {
+    let restored = "";
+    const controller = new GeoGebraController();
+    controller.setApi(api({
+      getXML: () => "<geogebra/>",
+      setXML: (xml: string) => { restored = xml; },
+    }));
+    await controller.restoreCanvasXml("<geogebra><construction/></geogebra>");
+    expect(restored).toBe("<geogebra><construction/></geogebra>");
   });
 
   test("clamps PNG export options rather than passing them through", async () => {

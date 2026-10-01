@@ -49,8 +49,8 @@ const FUNCTION_CALL_GROUP_DATA = {
   skillDiscovery: {
     id: "skillDiscovery",
     label: "Skill discovery",
-    reviewScope: "Skill listing, search, loading, and compatibility command aliases.",
-    toolNames: ["listSkills", "searchSkills", "loadSkill", "activateSkill"]
+    reviewScope: "Skill listing, search, and loading.",
+    toolNames: ["listSkills", "searchSkills", "loadSkill"]
   },
   presentationCards: {
     id: "presentationCards",
@@ -72,8 +72,7 @@ const FUNCTION_CALL_GROUP_DATA = {
   }
 } as const satisfies Record<FunctionCallGroupId, FunctionCallGroup>;
 
-/** @deprecated Prefer getFunctionCallGroups() or getFunctionCallGroupForTool(). */
-export const FUNCTION_CALL_GROUPS = Object.freeze(
+const FUNCTION_CALL_GROUPS = Object.freeze(
   Object.fromEntries(
     Object.entries(FUNCTION_CALL_GROUP_DATA).map(([id, group]) => [
       id,

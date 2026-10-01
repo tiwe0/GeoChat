@@ -1,24 +1,19 @@
-import type { ChatMessageMetadata } from "@geochat-ai/app/contracts";
 import { decodeDesktopConversationDetailResponse } from "@geochat-ai/app/desktop-contracts";
-import type {
-  LegacyConversationImportRequest,
-  LegacyConversationImportResult,
-} from "@geochat-ai/app/legacy-conversation-import";
-import { decodeLegacyConversationImportResponse } from "@geochat-ai/app/legacy-conversation-import";
-import type { UIMessage } from "ai";
-import { isFunctionCallArgs, isFunctionCallToolName } from "@geochat-ai/app/functioncalls";
-import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import {
   isBlackboardCategory,
   isBlackboardEntryStatus,
   type BlackboardEntry,
 } from "@geochat-ai/app/blackboard";
+import {
+  decodeStoredConversationMessages,
+  decodeStoredConversationParts,
+  type StoredConversationMessage,
+  type StoredConversationPart,
+} from "./messageDecoder";
 
-const logger = createStructuredLogger("conversations.api");
+export type { StoredConversationMessage, StoredConversationPart } from "./messageDecoder";
 
 export type ConversationSummary = { id: string; model: string; title: string | null; createdAt: string; updatedAt: string; messageCount: number };
-export type StoredConversationPart = UIMessage["parts"][number];
-export type StoredConversationMessage = { id: string; clientMessageId: string | null; role: string; content: string; parts: StoredConversationPart[]; usage: ChatMessageMetadata["tokenUsage"] | null };
 export type ConversationRestore = { messages: StoredConversationMessage[]; updatedAt: string };
 
 function responseError(data: unknown, fallback: string) {
@@ -36,72 +31,11 @@ export function parseConversationSummaries(value: unknown): ConversationSummary[
 }
 
 export function parseConversationMessages(value: unknown, apiOrigin?: string): StoredConversationMessage[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((item) => {
-    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
-    const data = item as Record<string, unknown>;
-    if (typeof data.id !== "string" || typeof data.role !== "string" || typeof data.content !== "string") return [];
-    const payload = data.payload && typeof data.payload === "object" && !Array.isArray(data.payload)
-      ? data.payload as Record<string, unknown>
-      : {};
-    const parts = parseConversationParts(payload.parts ?? data.parts, apiOrigin);
-    const usageValue = payload.usage ?? data.usage;
-    const usage = isTokenUsage(usageValue) ? usageValue : null;
-    return [{ id: data.id, clientMessageId: typeof data.clientMessageId === "string" ? data.clientMessageId : null, role: data.role, content: data.content, parts, usage }];
-  });
-}
-
-function isTokenUsage(value: unknown): value is NonNullable<ChatMessageMetadata["tokenUsage"]> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const usage = value as Record<string, unknown>;
-  return [usage.inputTokens, usage.outputTokens, usage.totalTokens].every((token) =>
-    token === undefined || (typeof token === "number" && Number.isInteger(token) && token >= 0));
+  return decodeStoredConversationMessages(value, apiOrigin);
 }
 
 export function parseConversationParts(value: unknown, apiOrigin?: string): StoredConversationPart[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((part): StoredConversationPart[] => {
-    if (!part || typeof part !== "object" || Array.isArray(part)) return [];
-    const data = part as Record<string, unknown>;
-    if (data.type === "text" && typeof data.text === "string") return [{ ...data, type: "text", text: data.text } as StoredConversationPart];
-    if (data.type === "reasoning" && typeof data.text === "string") return [{ ...data, type: "reasoning", text: data.text } as StoredConversationPart];
-    if (data.type === "step-start") return [{ ...data, type: "step-start" } as StoredConversationPart];
-    if (
-      data.type === "file"
-      && typeof data.url === "string"
-      && /^(?:https?:|data:)/i.test(data.url)
-      && typeof data.mediaType === "string"
-    ) {
-      return [{ ...data, type: "file", url: proxyStoredImageUrl(data.url, apiOrigin), mediaType: data.mediaType, ...(typeof data.filename === "string" ? { filename: data.filename } : {}) } as StoredConversationPart];
-    }
-    if (typeof data.type === "string" && data.type.startsWith("tool-") && typeof data.toolCallId === "string") {
-      const toolName = data.type.slice("tool-".length);
-      const allowedStates = new Set(["input-streaming", "input-available", "approval-requested", "approval-responded", "output-available", "output-error", "output-denied"]);
-      if (!isFunctionCallToolName(toolName) || !allowedStates.has(String(data.state))) return [];
-      // AI SDK exposes a DeepPartial tool input while it is still streaming.
-      // Once the input is available the registered tool contract must validate,
-      // but applying that full validation here would discard legitimate partial
-      // snapshots during conversation restore.
-      if (data.state !== "input-streaming" && "input" in data && !isFunctionCallArgs(toolName, data.input)) return [];
-      if (data.state === "output-error" && typeof data.errorText !== "string") return [];
-      return [data as StoredConversationPart];
-    }
-    return [];
-  });
-}
-
-function proxyStoredImageUrl(value: string, apiOrigin?: string) {
-  if (!apiOrigin || !/^https?:\/\//i.test(value)) return value;
-  try {
-    const parsed = new URL(value);
-    const prefix = "/v1/images/";
-    if (!parsed.pathname.startsWith(prefix)) return value;
-    const key = decodeURIComponent(parsed.pathname.slice(prefix.length));
-    return `${apiOrigin.replace(/\/$/, "")}/api/media/images/${encodeURIComponent(key)}`;
-  } catch (caughtError) {
-    logger.debug("stored_image_url_parse_failed", "CONVERSATION_IMAGE_URL_INVALID", { error: caughtError });
-    return value;
-  }
+  return decodeStoredConversationParts(value, apiOrigin);
 }
 
 export function parseBlackboardEntries(value: unknown): BlackboardEntry[] {
@@ -173,37 +107,6 @@ export async function deleteConversation(apiOrigin: string, token: string | null
   if (response.status === 404) return;
   const data = await response.json() as { deleted?: unknown; error?: unknown; message?: unknown };
   if (!response.ok) throw new Error(responseError(data, "Unable to delete this conversation."));
-}
-
-export async function importLegacyConversation(
-  apiOrigin: string,
-  token: string | null,
-  body: LegacyConversationImportRequest,
-  request: typeof fetch = fetch,
-): Promise<LegacyConversationImportResult> {
-  const response = await request(`${apiOrigin.replace(/\/$/, "")}/v1/legacy-conversations/import`, {
-    method: "POST",
-    headers: { ...conversationHeaders(token), "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = await readRuntimeJson(
-    response,
-    "legacy_conversation_import_response_invalid",
-    "Legacy conversation import returned invalid JSON."
-  );
-  const decoded = decodeLegacyConversationImportResponse(data);
-  if (!decoded.ok) {
-    const serverError = responseError(data, "Legacy conversation import returned an invalid response.");
-    throw Object.assign(new Error(serverError), { errorCode: decoded.errorCode });
-  }
-  const result = decoded.value.importResult;
-  if (!response.ok && !(response.status === 409 && result.outcome === "conflict")) {
-    throw new Error(responseError(data, `Legacy conversation import failed (${response.status}).`));
-  }
-  if (result.conversationId !== body.conversation.id || result.sourceFingerprint !== body.sourceFingerprint) {
-    throw new Error("Legacy conversation import receipt did not match the source item.");
-  }
-  return result;
 }
 
 async function readRuntimeJson(response: Response, errorCode: string, message: string): Promise<unknown> {

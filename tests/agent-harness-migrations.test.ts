@@ -44,46 +44,6 @@ describe("native AI SDK sqlite schema", () => {
     }
   });
 
-  test("removes the legacy run mode column without losing ledgers", () => {
-    const previousPath = Bun.env.GEOCHAT_DESKTOP_DB_PATH;
-    const databasePath = `/tmp/geochat-native-schema-legacy-${crypto.randomUUID()}.sqlite`;
-    const legacy = new Database(databasePath);
-    legacy.run(`
-      CREATE TABLE agent_run_ledgers (
-        run_id TEXT PRIMARY KEY,
-        conversation_id TEXT NOT NULL,
-        status TEXT NOT NULL,
-        mode TEXT NOT NULL CHECK (mode IN ('ai-sdk', 'local-planner')),
-        model_provider TEXT NOT NULL,
-        model_id TEXT NOT NULL,
-        started_at INTEGER NOT NULL,
-        completed_at INTEGER,
-        payload TEXT NOT NULL
-      )
-    `);
-    legacy.run(`
-      INSERT INTO agent_run_ledgers (
-        run_id, conversation_id, status, mode, model_provider, model_id, started_at, completed_at, payload
-      ) VALUES (
-        'legacy-run', 'legacy-conversation', 'succeeded', 'ai-sdk', 'deepseek', 'deepseek-chat', 1, 2, '{"runId":"legacy-run"}'
-      )
-    `);
-    legacy.close();
-    Bun.env.GEOCHAT_DESKTOP_DB_PATH = databasePath;
-
-    try {
-      createDatabase().close();
-      const migrated = new Database(databasePath);
-      const columns = migrated.query("PRAGMA table_info(agent_run_ledgers)").all() as Array<{ name: string }>;
-      expect(columns.map((column) => column.name)).not.toContain("mode");
-      expect(migrated.query("SELECT run_id FROM agent_run_ledgers").get()).toEqual({ run_id: "legacy-run" });
-      migrated.close();
-    } finally {
-      if (previousPath === undefined) delete Bun.env.GEOCHAT_DESKTOP_DB_PATH;
-      else Bun.env.GEOCHAT_DESKTOP_DB_PATH = previousPath;
-    }
-  });
-
   test("marks runs interrupted by a backend restart as cancelled", () => {
     const previousPath = Bun.env.GEOCHAT_DESKTOP_DB_PATH;
     const databasePath = `/tmp/geochat-native-schema-interrupted-${crypto.randomUUID()}.sqlite`;

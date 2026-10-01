@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, normalize, resolve } from "node:path";
 import packageJson from "../packages/app/package.json";
-import { getAdvancedDrawingToolDefinitions as getAdvancedDrawingToolDefinitionsFromRoot } from "@geochat-ai/app";
 import { getFunctionCallGroups, getFunctionCallSpec } from "@geochat-ai/app/functioncalls";
 import {
   AGENT_MODEL_REGISTRY,
@@ -18,8 +17,7 @@ const REQUIRED_DOMAIN_EXPORTS = [
   "./functioncalls",
   "./geometry",
   "./models",
-  "./problem-bank",
-  "./migration"
+  "./problem-bank"
 ] as const;
 
 const ROOT_EXPORTS = [
@@ -28,7 +26,6 @@ const ROOT_EXPORTS = [
   "blackboard",
   "benchmark",
   "functioncalls",
-  "migration",
   "problem-bank",
   "structured-logger"
 ] as const;
@@ -46,7 +43,7 @@ describe("@geochat-ai/app export policy", () => {
 
     expect(exports).toEqual(ROOT_EXPORTS);
     expect(index).not.toMatch(/agent-prompts|workflow-policy|geogebra-command-reference/);
-    expect(getAdvancedDrawingToolDefinitionsFromRoot().length).toBeGreaterThan(0);
+    expect(index).not.toContain("advanced-drawing-tools");
   });
 
   test("keeps internal registry and grouped schema modules behind public facades", () => {

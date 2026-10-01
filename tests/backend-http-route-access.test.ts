@@ -15,16 +15,13 @@ const routeCases: ReadonlyArray<{
 }> = [
   { id: "health", path: "/health", access: "public", methods: ["GET"] },
   { id: "geogebra-assets-v2", path: "/tools/geogebra-assets-v2/deployggb.js", access: "public", methods: ["GET", "HEAD"] },
-  { id: "geogebra-assets-legacy", path: "/tools/geogebra-assets/deployggb.js", access: "public", methods: ["GET", "HEAD"] },
   { id: "skills", path: "/v1/skills", access: "authenticated", methods: ["GET"] },
   { id: "conversations", path: "/v1/conversations", access: "authenticated", methods: ["GET"] },
   { id: "conversation-messages", path: "/v1/conversations/conversation-1/messages", access: "authenticated", methods: ["POST"] },
   { id: "conversation-blackboard", path: "/v1/conversations/conversation-1/blackboard", access: "authenticated", methods: ["GET"] },
   { id: "conversation-detail", path: "/v1/conversations/conversation-1", access: "authenticated", methods: ["GET", "DELETE"] },
-  { id: "messages", path: "/v1/messages", access: "authenticated", methods: ["GET", "POST"] },
-  { id: "migration-export", path: "/v1/migration/export", access: "authenticated", methods: ["GET"] },
-  { id: "migration-import", path: "/v1/migration/import", access: "authenticated", methods: ["POST"] },
-  { id: "legacy-conversation-import", path: "/v1/legacy-conversations/import", access: "authenticated", methods: ["POST"] },
+  { id: "geogebra-documents", path: "/v1/geogebra-documents", access: "authenticated", methods: ["GET", "POST"] },
+  { id: "geogebra-document-detail", path: "/v1/geogebra-documents/document-1", access: "authenticated", methods: ["GET", "DELETE"] },
   { id: "problem-bank-import", path: "/v1/problem-bank/import", access: "authenticated", methods: ["POST"] },
   { id: "problem-sets", path: "/v1/problem-sets", access: "authenticated", methods: ["GET"] },
   { id: "problem-set-problems", path: "/v1/problem-sets/set-1/problems", access: "authenticated", methods: ["GET"] },
@@ -58,6 +55,21 @@ describe("backend HTTP route access catalog", () => {
     );
   });
 
+  test("does not register removed compatibility and migration routes", async () => {
+    const removedPaths = [
+      "/v1/messages",
+      "/v1/migration/export",
+      "/v1/migration/import",
+      "/tools/geogebra-assets/deployggb.js"
+    ] as const;
+    const { rawHandleRequest } = await createHttpHarness();
+    for (const path of removedPaths) {
+      expect(matchBackendRouteAccess(path), path).toBeUndefined();
+      const response = await rawHandleRequest(new Request(`http://127.0.0.1:17365${path}`));
+      expect(response.status, path).toBe(404);
+    }
+  });
+
   test("classifies malformed encoded dynamic segments without decoding them", () => {
     expect(matchBackendRouteAccess("/v1/conversations/%E0%A4%A/messages")).toMatchObject({
       id: "conversation-messages",
@@ -69,10 +81,10 @@ describe("backend HTTP route access catalog", () => {
     const { rawHandleRequest } = await createHttpHarness();
     const invalidPathCases = [
       ["GET", "/tools/geogebra-assets-v2/%E0%A4%A.js"],
-      ["HEAD", "/tools/geogebra-assets/%E0%A4%A.js"],
       ["POST", "/v1/conversations/%E0%A4%A/messages"],
       ["GET", "/v1/conversations/%E0%A4%A/blackboard"],
       ["GET", "/v1/conversations/%E0%A4%A"],
+      ["GET", "/v1/geogebra-documents/%E0%A4%A"],
       ["GET", "/v1/problem-sets/%E0%A4%A/problems"],
       ["GET", "/v1/problems/%E0%A4%A"],
       ["POST", "/v1/problems/%E0%A4%A/attempts"],

@@ -11,26 +11,29 @@ import App from "./App";
 import "./styles.css";
 import { initializeI18n } from "./i18n";
 import { copilotTheme } from "./theme";
-import { installWebPlatform } from "./platform-web";
 import { installTauriDesktopBridge, installedDesktopApi } from "../../shared/desktop/tauri-bridge";
-import { loadDesktopRuntime } from "./features/desktop/runtime";
-import { desktopLogger, installDesktopLogging } from "./features/desktop/desktopLogger";
+import { desktopLogger } from "./features/desktop/desktopLogger";
 import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
-import { prepareDesktopConfigBeforeLoad } from "../../shared/desktop/desktop-credential-bootstrap";
+import { bootstrapRendererStorage } from "./renderer-storage-bootstrap";
+import { StartupFailure } from "./components/StartupFailure";
 
 const logger = createStructuredLogger("renderer.bootstrap");
 
-installWebPlatform();
 const emotionCache = createCache({ key: "geochat-web" });
+
+function rootElement() {
+  const element = document.getElementById("root");
+  if (!element) throw new Error("The renderer root element is unavailable");
+  return element;
+}
 
 async function bootstrap() {
   await installTauriDesktopBridge();
-  await prepareDesktopConfigBeforeLoad(localStorage, installedDesktopApi());
-  installDesktopLogging();
-  // Resolve the shell-selected backend before the transport is mounted.
-  await loadDesktopRuntime();
+  const desktopApi = installedDesktopApi();
+  if (!desktopApi) throw new Error("The native desktop bridge is unavailable");
+  await bootstrapRendererStorage(desktopApi);
   await initializeI18n();
-  createRoot(document.getElementById("root")!).render(
+  createRoot(rootElement()).render(
     <CacheProvider value={emotionCache}>
       <ThemeProvider theme={copilotTheme}>
         <CssBaseline />
@@ -45,5 +48,5 @@ async function bootstrap() {
 
 void bootstrap().catch((error) => {
   desktopLogger.error(error);
-  document.getElementById("root")!.textContent = error instanceof Error ? error.message : String(error);
+  createRoot(rootElement()).render(<StartupFailure error={error} />);
 });

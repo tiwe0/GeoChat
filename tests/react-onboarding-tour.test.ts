@@ -60,8 +60,8 @@ describe("initial onboarding tour", () => {
 
   test("versions completion so the expanded tutorial is shown once after upgrade", () => {
     expect(onboardingStateSource).toContain("export const ONBOARDING_TOUR_VERSION = 3;");
-    expect(onboardingStateSource).toContain("stored[ONBOARDING_TOUR_STORAGE_KEY] !== ONBOARDING_TOUR_VERSION");
-    expect(onboardingStateSource).toContain("[ONBOARDING_TOUR_STORAGE_KEY]: ONBOARDING_TOUR_VERSION");
+    expect(onboardingStateSource).toContain("nativePreferences().get(ONBOARDING_TOUR_STORAGE_KEY) !== ONBOARDING_TOUR_VERSION");
+    expect(onboardingStateSource).toContain("set(ONBOARDING_TOUR_STORAGE_KEY, ONBOARDING_TOUR_VERSION)");
     expect(workspaceSource).toContain("const onboarding = useOnboardingState();");
     expect(workspaceSource).toContain("onRestartTour: restartOnboardingTour");
   });

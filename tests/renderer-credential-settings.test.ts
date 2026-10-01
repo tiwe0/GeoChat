@@ -30,7 +30,7 @@ describe("renderer provider credential replacement", () => {
       previousCredentialRef: "old-ref",
       onCredentialStored: () => events.push("clear"),
       validate: async (credentialRef) => { events.push(`validate:${credentialRef}`); },
-      commit: (metadata) => { events.push(`commit:${metadata.credentialRef}`); }
+      commit: async (metadata) => { events.push(`commit:${metadata.credentialRef}`); }
     });
 
     expect(events).toEqual([
@@ -54,7 +54,7 @@ describe("renderer provider credential replacement", () => {
       previousCredentialRef: "old-ref",
       onCredentialStored: () => undefined,
       validate: async () => { throw new Error("invalid credential"); },
-      commit: () => { committed = true; }
+      commit: async () => { committed = true; }
     })).rejects.toThrow("invalid credential");
 
     expect(committed).toBe(false);
@@ -72,7 +72,7 @@ describe("renderer provider credential replacement", () => {
       previousCredentialRef: "old-ref",
       onCredentialStored: () => undefined,
       validate: async () => undefined,
-      commit: () => { throw new Error("config write failed"); }
+      commit: async () => { throw new Error("config write failed"); }
     })).rejects.toThrow("config write failed");
 
     expect(deleted).toEqual(["new-ref"]);
@@ -89,7 +89,7 @@ describe("renderer provider credential replacement", () => {
       previousCredentialRef: "old-ref",
       onCredentialStored: () => undefined,
       validate: async () => undefined,
-      commit: () => { committed = true; }
+      commit: async () => { committed = true; }
     })).resolves.toEqual(METADATA);
 
     expect(committed).toBe(true);

@@ -25,6 +25,7 @@ const SKIPPED_DIRECTORIES = new Set([
  * reason so this list cannot become a silent dumping ground.
  */
 export const UNUSED_DEPENDENCY_ALLOWLIST = Object.freeze({
+  "@biomejs/biome": "invoked by the lint:source package script as the repository source-rule gate",
   "@tauri-apps/cli": "invoked by the tauri:* package scripts and CI packaging jobs",
   "@types/bun": "loaded through tsconfig compilerOptions.types for Bun globals",
   "@types/node": "loaded through tsconfig compilerOptions.types for Node globals",

@@ -234,22 +234,16 @@ export const GEOGEBRA_FUNCTION_CALL_INPUT_JSON_SCHEMAS = {
   setPerspective: {
     type: "object",
     additionalProperties: false,
+    required: ["mode"],
     properties: {
       mode: {
         type: "string",
-        nullable: true,
         description: [
-          "GeoGebra SetPerspective text, code, layout, toggle, or supported alias.",
+          "GeoGebra SetPerspective text, code, layout, or toggle.",
           "View letters: A=Algebra, B=Probability Calculator, C=CAS, D=Graphics 2, G=Graphics, L=Construction Protocol, P=Properties, R=Data Analysis, S=Spreadsheet, T=3D Graphics.",
-          "Use T for 3D Graphics; do not pass 3D unless relying on alias normalization.",
-          "Examples: G, AG, AGS, S/G, S/(GA), +D, -D, +T, -T, +Tools, +Table, 1, 2, 3, 4, 5, 6.",
-          "Chinese aliases such as 画板, 代数, 三维视图 are accepted and normalized before execution."
+          "Use T for 3D Graphics.",
+          "Examples: G, AG, AGS, S/G, S/(GA), +D, -D, +T, -T, +Tools, +Table, 1, 2, 3, 4, 5, 6."
         ].join(" ")
-      },
-      perspective: {
-        type: "string",
-        nullable: true,
-        description: "Alias of mode for compatibility. Prefer mode for new calls and follow the same GeoGebra SetPerspective usage rules."
       },
       ...auditProperties
     }

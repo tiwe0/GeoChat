@@ -83,13 +83,13 @@ describe("deterministic desktop E2E evidence", () => {
       },
     };
 
-    await expect(clearDeterministicDebugProviderWithPorts(nonce, credentialRef, "{}", ports)).rejects.toThrow("keychain failure");
+    await expect(clearDeterministicDebugProviderWithPorts(nonce, credentialRef, "{}", ports)).rejects.toThrow("config write failure");
     expect(currentConfig).toBe(ownedConfig);
     expect(credentialConfigured).toBe(true);
 
-    await expect(clearDeterministicDebugProviderWithPorts(nonce, credentialRef, "{}", ports)).rejects.toThrow("config write failure");
+    await expect(clearDeterministicDebugProviderWithPorts(nonce, credentialRef, "{}", ports)).rejects.toThrow("keychain failure");
     expect(currentConfig).toBe(ownedConfig);
-    expect(credentialConfigured).toBe(false);
+    expect(credentialConfigured).toBe(true);
 
     await expect(clearDeterministicDebugProviderWithPorts(nonce, credentialRef, "{}", ports)).resolves.toMatchObject({
       configRestored: true,
@@ -97,5 +97,6 @@ describe("deterministic desktop E2E evidence", () => {
     });
     expect(currentConfig).toBe(restoredConfig);
     expect(deleteAttempts).toBe(2);
+    expect(persistAttempts).toBe(4);
   });
 });

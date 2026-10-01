@@ -5,6 +5,7 @@ import { AgentRunLedgerConflictError } from "../db/agent-run-repository";
 import type { ConversationDataScope } from "../db/conversation-repository";
 import type { NativeChatDependencies, NativeChatRunStore } from "./native-chat-ports";
 import { nativeMessageText } from "./native-chat-request";
+import { encodeConversationMessagePayload } from "./conversation-message-encoder";
 
 export class NativeRunPersistenceCoordinator {
   #run: AgentRunLedgerRecord;
@@ -76,18 +77,12 @@ export async function persistNativeConversationMessages(
         role: message.role,
         content,
         createdAt,
-        payload: {
-          id: message.id,
-          role: message.role,
+        payload: encodeConversationMessagePayload({
+          message,
           content,
           createdAt,
-          parts: message.parts,
-          ...(message.role === "assistant" && usage
-            ? { usage }
-            : message.metadata && typeof message.metadata === "object" && "tokenUsage" in message.metadata
-              ? { usage: message.metadata.tokenUsage as Record<string, number | undefined> }
-              : {}),
-        },
+          ...(message.role === "assistant" && usage ? { usage } : {}),
+        }),
       },
     }, dataScope);
   }

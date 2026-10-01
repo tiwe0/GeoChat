@@ -62,8 +62,7 @@ type LedgerTool = {
 const endpoint = process.env.GEOCHAT_DESKTOP_MCP_URL ?? "http://127.0.0.1:17369/mcp";
 const localAuthToken =
   process.env.GEOCHAT_DESKTOP_MCP_AUTH_TOKEN ??
-  process.env.GEOCHAT_DESKTOP_BACKEND_AUTH_TOKEN ??
-  process.env.GEOCHAT_DESKTOP_LOCAL_AUTH_TOKEN;
+  process.env.GEOCHAT_DESKTOP_BACKEND_AUTH_TOKEN;
 const pollMs = Number(process.env.GEOCHAT_CHOICE_SMOKE_POLL_MS ?? "3000");
 const sampleTimeoutMs = Number(process.env.GEOCHAT_CHOICE_SMOKE_TIMEOUT_MS ?? "240000");
 const actionClaimTimeoutMs = Number(process.env.GEOCHAT_CHOICE_SMOKE_ACTION_TIMEOUT_MS ?? "90000");

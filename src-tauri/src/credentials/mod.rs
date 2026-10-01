@@ -7,7 +7,7 @@ mod store;
 pub(crate) use error::CredentialError;
 #[cfg(test)]
 pub(crate) use memory::InMemoryCredentialStore;
-pub(crate) use platform::PlatformCredentialStore;
+pub(crate) use platform::{CredentialProfile, PlatformCredentialStore};
 pub(crate) use store::CredentialStore;
 
 use serde::{Deserialize, Deserializer, Serialize};
@@ -62,18 +62,6 @@ impl fmt::Debug for SecretValue {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct SaveCredentialRequest {
-    pub(crate) provider: String,
-    pub(crate) protocol: String,
-    pub(crate) base_url: String,
-    pub(crate) secret: SecretValue,
-}
-
-/// One-way migration input with a journal-preallocated reference. It is
-/// deserialize-only and must never be logged or returned to the renderer.
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct ImportLegacyCredentialRequest {
-    pub(crate) credential_ref: String,
     pub(crate) provider: String,
     pub(crate) protocol: String,
     pub(crate) base_url: String,
@@ -179,45 +167,6 @@ impl CredentialVault {
         decode_envelope(credential_ref, encoded)
     }
 
-    /// Idempotently stores a migration entry at its preallocated journal
-    /// reference. A retry may reuse only a byte-for-byte identical binding;
-    /// an existing reference can never be rebound to another secret/provider,
-    /// protocol, origin, or base path.
-    pub(crate) fn import_if_absent(
-        &self,
-        request: ImportLegacyCredentialRequest,
-    ) -> Result<CredentialMetadata, CredentialError> {
-        validate_credential_ref(&request.credential_ref)?;
-        let provider = validate_provider(&request.provider)?.to_owned();
-        let protocol = validate_protocol(&request.protocol)?.to_owned();
-        let canonical_base_url = canonicalize_endpoint(&request.base_url)?;
-        validate_secret(request.secret.expose_secret())?;
-        let metadata = CredentialMetadata {
-            credential_ref: request.credential_ref.clone(),
-            provider,
-            protocol,
-            canonical_base_url,
-        };
-
-        if self.store.exists(&request.credential_ref)? {
-            let existing = self.resolve(&request.credential_ref)?;
-            if existing.metadata == metadata && existing.secret() == request.secret.expose_secret()
-            {
-                return Ok(metadata);
-            }
-            return Err(CredentialError::AlreadyExists);
-        }
-
-        let encoded = encode_envelope(
-            request.secret.expose_secret(),
-            &metadata.provider,
-            &metadata.protocol,
-            &metadata.canonical_base_url,
-        )?;
-        self.store.put(&request.credential_ref, &encoded)?;
-        Ok(metadata)
-    }
-
     pub(crate) fn delete(&self, credential_ref: &str) -> Result<(), CredentialError> {
         validate_credential_ref(credential_ref)?;
         self.store.delete(credential_ref)
@@ -240,12 +189,6 @@ impl CredentialVault {
             }
         }
         Ok(metadata)
-    }
-}
-
-impl ImportLegacyCredentialRequest {
-    pub(crate) fn credential_ref(&self) -> &str {
-        &self.credential_ref
     }
 }
 
@@ -584,41 +527,6 @@ mod tests {
             )
             .unwrap_err(),
             CredentialError::InvalidInput
-        );
-    }
-
-    fn import_request(credential_ref: &str, secret: &str) -> ImportLegacyCredentialRequest {
-        ImportLegacyCredentialRequest {
-            credential_ref: credential_ref.to_owned(),
-            provider: "deepseek".to_owned(),
-            protocol: "openai-compatible".to_owned(),
-            base_url: "api.deepseek.com/v1".to_owned(),
-            secret: SecretValue::new(secret.to_owned()),
-        }
-    }
-
-    #[test]
-    fn legacy_import_is_idempotent_but_never_rebinds_preallocated_reference() {
-        let vault = vault();
-        let credential_ref = Uuid::new_v4().to_string();
-        let first = vault
-            .import_if_absent(import_request(&credential_ref, "same-secret"))
-            .unwrap();
-        let retry = vault
-            .import_if_absent(import_request(&credential_ref, "same-secret"))
-            .unwrap();
-        assert_eq!(retry, first);
-        assert_eq!(retry.credential_ref, credential_ref);
-
-        assert_eq!(
-            vault
-                .import_if_absent(import_request(&credential_ref, "different-secret"))
-                .unwrap_err(),
-            CredentialError::AlreadyExists
-        );
-        assert_eq!(
-            vault.resolve(&credential_ref).unwrap().secret(),
-            "same-secret"
         );
     }
 }

@@ -36,7 +36,6 @@ type ConversationDrawerProps = {
   onClose: () => void;
   onSelect: (conversation: ConversationSummary) => void;
   onDelete: (conversation: ConversationSummary) => Promise<boolean>;
-  onExportRecovery?: () => void;
 };
 
 export function ConversationDrawer({
@@ -52,7 +51,6 @@ export function ConversationDrawer({
   onClose,
   onSelect,
   onDelete,
-  onExportRecovery,
 }: ConversationDrawerProps) {
   const { t } = useTranslation();
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -130,11 +128,7 @@ export function ConversationDrawer({
             </Stack>
           ) : conversations.length === 0 ? (
             error ? (
-              <Alert
-                severity="error"
-                sx={{ mt: 0.5 }}
-                action={onExportRecovery ? <Button size="small" onClick={onExportRecovery}>{t("history.exportRecovery")}</Button> : undefined}
-              >
+              <Alert severity="error" sx={{ mt: 0.5 }}>
                 {error}
               </Alert>
             ) : (
@@ -145,11 +139,7 @@ export function ConversationDrawer({
           ) : (
             <Stack spacing={0.25}>
               {error && (
-                <Alert
-                  severity="error"
-                  sx={{ mb: 0.5 }}
-                  action={onExportRecovery ? <Button size="small" onClick={onExportRecovery}>{t("history.exportRecovery")}</Button> : undefined}
-                >
+                <Alert severity="error" sx={{ mb: 0.5 }}>
                   {error}
                 </Alert>
               )}

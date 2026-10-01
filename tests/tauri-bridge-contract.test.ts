@@ -11,10 +11,9 @@ const expectedCommandByMethod = {
   saveProviderCredential: "save_provider_credential",
   deleteProviderCredential: "delete_provider_credential",
   listProviderCredentialMetadata: "list_provider_credential_metadata",
-  importLegacyCredential: "import_legacy_credential",
-  readCredentialMigrationJournal: "read_credential_migration_journal",
-  persistCredentialMigrationJournal: "persist_credential_migration_journal",
-  deleteCredentialMigrationJournal: "delete_credential_migration_journal",
+  getRendererStorage: "get_renderer_storage",
+  setRendererStorage: "set_renderer_storage",
+  removeRendererStorage: "remove_renderer_storage",
   getRuntimeInfo: "get_runtime_info",
   markRendererReady: "mark_renderer_ready",
   getGraphicsPreferences: "get_graphics_preferences",
@@ -59,14 +58,15 @@ describe("Tauri desktop bridge contract", () => {
         saveProviderCredential: "save_provider_credential",
         deleteProviderCredential: "delete_provider_credential",
         listProviderCredentialMetadata: "list_provider_credential_metadata",
-        importLegacyCredential: "import_legacy_credential",
-        readCredentialMigrationJournal: "read_credential_migration_journal",
-        persistCredentialMigrationJournal: "persist_credential_migration_journal",
-        deleteCredentialMigrationJournal: "delete_credential_migration_journal"
       },
       runtime: {
         getRuntimeInfo: "get_runtime_info",
         markRendererReady: "mark_renderer_ready"
+      },
+      rendererStorage: {
+        getRendererStorage: "get_renderer_storage",
+        setRendererStorage: "set_renderer_storage",
+        removeRendererStorage: "remove_renderer_storage"
       },
       graphics: {
         getGraphicsPreferences: "get_graphics_preferences",
@@ -123,6 +123,7 @@ describe("Tauri desktop bridge contract", () => {
     expect(Object.keys(api).sort()).toEqual([
       ...Object.keys(expectedCommandByMethod),
       "getProviderCredentialStatus",
+      "onBackendRuntimeState",
       "onAppBundleUpdateState",
       "onProblemBankCacheState",
       "onProblemBankDownloadState",
@@ -152,16 +153,9 @@ describe("Tauri desktop bridge contract", () => {
     await api.deleteProviderCredential("old-ref");
     await api.getProviderCredentialStatus("status-ref");
     await api.listProviderCredentialMetadata(["listed-ref"]);
-    await api.importLegacyCredential({
-      credentialRef: "legacy-ref",
-      provider: "deepseek",
-      protocol: "openai-compatible",
-      baseUrl: "https://api.deepseek.com",
-      secret: "legacy-secret"
-    });
-    await api.readCredentialMigrationJournal();
-    await api.persistCredentialMigrationJournal({ schemaVersion: 1, entries: [] });
-    await api.deleteCredentialMigrationJournal();
+    await api.getRendererStorage(["theme", "zoom"]);
+    await api.setRendererStorage({ theme: "dark", zoom: 1.25 });
+    await api.removeRendererStorage(["zoom"]);
     await api.getRuntimeInfo();
     await api.markRendererReady();
     await api.getGraphicsPreferences();
@@ -203,11 +197,7 @@ describe("Tauri desktop bridge contract", () => {
       "delete_provider_credential",
       "list_provider_credential_metadata",
       "list_provider_credential_metadata",
-      "import_legacy_credential",
-      "read_credential_migration_journal",
-      "persist_credential_migration_journal",
-      "delete_credential_migration_journal",
-      ...Object.values(expectedCommandByMethod).slice(7)
+      ...Object.values(expectedCommandByMethod).slice(3)
     ]);
     expect(calls.find((call) => call.command === "save_provider_credential")?.args).toEqual({
       request: {
@@ -224,17 +214,14 @@ describe("Tauri desktop bridge contract", () => {
       { request: { credentialRefs: ["status-ref"] } },
       { request: { credentialRefs: ["listed-ref"] } }
     ]);
-    expect(calls.find((call) => call.command === "import_legacy_credential")?.args).toEqual({
-      request: {
-        credentialRef: "legacy-ref",
-        provider: "deepseek",
-        protocol: "openai-compatible",
-        baseUrl: "https://api.deepseek.com",
-        secret: "legacy-secret"
-      }
+    expect(calls.find((call) => call.command === "set_renderer_storage")?.args).toEqual({
+      values: { theme: "dark", zoom: 1.25 }
     });
-    expect(calls.find((call) => call.command === "persist_credential_migration_journal")?.args).toEqual({
-      journal: { schemaVersion: 1, entries: [] }
+    expect(calls.find((call) => call.command === "get_renderer_storage")?.args).toEqual({
+      keys: ["theme", "zoom"]
+    });
+    expect(calls.find((call) => call.command === "remove_renderer_storage")?.args).toEqual({
+      keys: ["zoom"]
     });
     expect(calls.find((call) => call.command === "set_mcp_enabled")?.args).toEqual({ enabled: true });
     expect(calls.find((call) => call.command === "set_graphics_preferences")?.args).toEqual({
@@ -319,6 +306,7 @@ describe("Tauri desktop bridge contract", () => {
     const events: string[] = [];
     const api = createTauriDesktopApi(async () => undefined, fakeListen(events));
 
+    const disposeBackend = await api.onBackendRuntimeState(() => undefined);
     const disposeUpdate = api.onUpdateState(() => undefined);
     const disposeAppBundle = api.onAppBundleUpdateState(() => undefined);
     const disposeProblemBank = api.onProblemBankCacheState(() => undefined);
@@ -326,16 +314,47 @@ describe("Tauri desktop bridge contract", () => {
     await Promise.resolve();
 
     expect(events).toEqual([
+      TAURI_DESKTOP_EVENTS.backendRuntimeState,
       TAURI_DESKTOP_EVENTS.shellUpdateState,
       TAURI_DESKTOP_EVENTS.appBundleUpdateState,
       TAURI_DESKTOP_EVENTS.problemBankCacheState,
       TAURI_DESKTOP_EVENTS.problemBankDownloadState
     ]);
 
+    disposeBackend();
     disposeUpdate();
     disposeAppBundle();
     disposeProblemBank();
     disposeProblemBankDownload();
+  });
+
+  test("validates backend runtime event payloads before exposing them", async () => {
+    let listener: ((event: { payload: unknown }) => void) | undefined;
+    const api = createTauriDesktopApi(
+      async () => undefined,
+      (async (_event: string, callback: (event: { payload: unknown }) => void) => {
+        listener = callback;
+        return () => undefined;
+      }) as never,
+    );
+    const observed: unknown[] = [];
+    await api.onBackendRuntimeState((state) => observed.push(state));
+
+    listener?.({
+      payload: {
+        mode: "external",
+        state: "unreachable",
+        baseUrl: "http://127.0.0.1:17365",
+        error: "health check failed",
+      },
+    });
+    expect(observed).toEqual([{
+      mode: "external",
+      state: "unreachable",
+      baseUrl: "http://127.0.0.1:17365",
+      error: "health check failed",
+    }]);
+    expect(() => listener?.({ payload: { mode: "external", state: "unknown" } })).toThrow();
   });
 
   test("Tauri command names remain backed by Rust command functions", () => {

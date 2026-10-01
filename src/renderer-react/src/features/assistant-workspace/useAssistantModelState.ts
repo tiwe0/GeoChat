@@ -10,11 +10,18 @@ import type { ThinkingEffort } from "../../components/ModelMenu";
 import { saveStoredModel } from "../local-session/storage";
 import { loadModelCatalog, type RuntimeModelOption } from "../models/modelCatalog";
 import type { AssistantSessionController } from "../session/assistantSessionController";
+import { nativePreferences } from "../../lib/nativePreferences";
+import type { NativePreferenceSchema } from "../../lib/nativePreferences";
 
 const logger = createStructuredLogger("assistant.model-state");
 const THINKING_ENABLED_STORAGE_KEY = "geogebraCopilotThinkingEnabled";
-const LEGACY_REASONING_MODE_STORAGE_KEY = "geogebraCopilotReasoningMode";
 const THINKING_EFFORT_STORAGE_KEY = "geogebraCopilotThinkingEffort";
+
+function persistPreference<Key extends keyof NativePreferenceSchema>(key: Key, value: NativePreferenceSchema[Key]) {
+  void nativePreferences().set(key, value).catch((error) => {
+    logger.warn("preference_write_failed", "ASSISTANT_PREFERENCE_WRITE_FAILED", { error });
+  });
+}
 
 type ModelStateInput = {
   controller: AssistantSessionController;
@@ -79,24 +86,24 @@ export function useAssistantModelState(input: ModelStateInput) {
     input.controller.setModel(selected.id);
     if (!agentModelSupportsReasoning(selected.provider, selected.id)) {
       input.controller.setThinkingEnabled(false);
-      void browser.storage.local.set({ [THINKING_ENABLED_STORAGE_KEY]: false });
+      persistPreference(THINKING_ENABLED_STORAGE_KEY, false);
     }
-    void saveStoredModel(value);
+    void saveStoredModel(value).catch((error) => logger.warn("model_write_failed", "ASSISTANT_MODEL_WRITE_FAILED", { error }));
   }, [input.controller]);
 
   const changeThinkingEnabled = useCallback((enabled: boolean) => {
     input.controller.setThinkingEnabled(enabled);
-    void browser.storage.local.set({ [THINKING_ENABLED_STORAGE_KEY]: enabled });
+    persistPreference(THINKING_ENABLED_STORAGE_KEY, enabled);
   }, [input.controller]);
 
   const changeThinkingEffort = useCallback((effort: ThinkingEffort) => {
     input.controller.setThinkingEffort(effort);
-    void browser.storage.local.set({ [THINKING_EFFORT_STORAGE_KEY]: effort });
+    persistPreference(THINKING_EFFORT_STORAGE_KEY, effort);
   }, [input.controller]);
 
   const restoreModel = useCallback((model: string) => {
     input.controller.setModel(model);
-    void saveStoredModel(model);
+    void saveStoredModel(model).catch((error) => logger.warn("model_write_failed", "ASSISTANT_MODEL_WRITE_FAILED", { error }));
   }, [input.controller]);
 
   useEffect(() => {
@@ -109,32 +116,20 @@ export function useAssistantModelState(input: ModelStateInput) {
   useEffect(() => {
     if (!input.selectedModel || thinkingSupported || !input.thinkingEnabled) return;
     input.controller.setThinkingEnabled(false);
-    void browser.storage.local.set({ [THINKING_ENABLED_STORAGE_KEY]: false });
+    persistPreference(THINKING_ENABLED_STORAGE_KEY, false);
   }, [input.controller, input.selectedModel, input.thinkingEnabled, thinkingSupported]);
 
   useEffect(() => {
-    void browser.storage.local.get([
-      THINKING_ENABLED_STORAGE_KEY,
-      LEGACY_REASONING_MODE_STORAGE_KEY,
-      THINKING_EFFORT_STORAGE_KEY,
-    ]).then((stored) => {
-      const storedThinking = stored[THINKING_ENABLED_STORAGE_KEY];
-      const legacyMode = stored[LEGACY_REASONING_MODE_STORAGE_KEY];
-      const resolvedThinking = typeof storedThinking === "boolean"
-        ? storedThinking
-        : legacyMode === "thinking" || legacyMode === "auto"
-          ? true
-          : legacyMode === "instant"
-            ? false
-            : undefined;
-      if (resolvedThinking !== undefined) input.controller.setThinkingEnabled(resolvedThinking);
-      const effort = stored[THINKING_EFFORT_STORAGE_KEY];
+    try {
+      const storedThinking = nativePreferences().get(THINKING_ENABLED_STORAGE_KEY);
+      if (typeof storedThinking === "boolean") input.controller.setThinkingEnabled(storedThinking);
+      const effort = nativePreferences().get(THINKING_EFFORT_STORAGE_KEY);
       if (effort === "light" || effort === "standard" || effort === "extended") {
         input.controller.setThinkingEffort(effort);
       }
-    }).catch((error) => {
+    } catch (error) {
       logger.debug("thinking_preferences_read_failed", "THINKING_PREFERENCES_READ_FAILED", { error });
-    });
+    }
   }, [input.controller]);
 
   return {

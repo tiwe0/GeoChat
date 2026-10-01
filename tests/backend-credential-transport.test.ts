@@ -100,6 +100,32 @@ describe("backend credential transport", () => {
     ]);
   });
 
+  test("keeps the run correlation context across initial and just-in-time credential resolution", async () => {
+    const correlations: Array<string | undefined> = [];
+    const credentialResolver: CredentialResolver = {
+      resolve: async (_credentialRef, _signal, context) => {
+        correlations.push(context?.correlationId);
+        return envelope("live-secret");
+      },
+    };
+    await createBackendLanguageModel({
+      provider: "openai",
+      model: "gpt-test",
+      credentialRef: CREDENTIAL_REF,
+    }, credentialResolver, { correlationId: "run_context_1" });
+
+    const secureFetch = createCredentialBoundFetch({
+      credentialRef: CREDENTIAL_REF,
+      credentialResolver,
+      binding: envelope("ignored"),
+      correlationId: "run_context_1",
+      fetchImplementation: (async () => new Response("ok")) as typeof fetch,
+    });
+    await secureFetch("https://provider.example/v1/responses");
+
+    expect(correlations).toEqual(["run_context_1", "run_context_1"]);
+  });
+
   test.each([
     ["openai-compatible", "authorization", "Bearer live-secret"],
     ["anthropic", "x-api-key", "live-secret"],

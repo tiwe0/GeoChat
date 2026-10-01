@@ -10,11 +10,27 @@ describe("native agent run lifecycle", () => {
   test("acquires the submission lease synchronously before asynchronous preparation", () => {
     const lease = new AgentRunSubmissionLease();
 
-    expect(lease.tryAcquire()).toBe(true);
-    expect(lease.tryAcquire()).toBe(false);
+    const owner = lease.tryAcquire();
+    expect(owner).toBeTypeOf("symbol");
+    expect(lease.tryAcquire()).toBeNull();
 
-    lease.release();
-    expect(lease.tryAcquire()).toBe(true);
+    lease.release(owner!);
+    expect(lease.tryAcquire()).toBeTypeOf("symbol");
+  });
+
+  test("does not let a stale submission release a newer lease after invalidation", () => {
+    const lease = new AgentRunSubmissionLease();
+    const staleOwner = lease.tryAcquire();
+    expect(staleOwner).toBeTypeOf("symbol");
+
+    lease.invalidate();
+    const currentOwner = lease.tryAcquire();
+    expect(currentOwner).toBeTypeOf("symbol");
+
+    lease.release(staleOwner!);
+    expect(lease.tryAcquire()).toBeNull();
+    lease.release(currentOwner!);
+    expect(lease.tryAcquire()).toBeTypeOf("symbol");
   });
 
   test("captures an immutable request snapshot before attachment upload", () => {

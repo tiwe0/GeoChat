@@ -7,11 +7,15 @@ import {
   type ModelDiscoveryFailureResponse
 } from "@geochat-ai/app/model-discovery";
 import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
+import {
+  CORRELATION_ID_HEADER,
+  createCorrelationId
+} from "@geochat-ai/app/request-correlation";
 
 const logger = createStructuredLogger("models.discovery");
 
-const CACHE_PREFIX = "geochatDesktopModelCatalog:";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const discoveryCache = new Map<string, CachedDiscovery>();
 
 type CachedDiscovery = { ids: string[]; fetchedAt: number };
 
@@ -21,34 +25,15 @@ export type DiscoveryOutcome =
   | { status: "failed"; message: string; errorCode?: string };
 
 function cacheKey(credentialRef: string) {
-  return `${CACHE_PREFIX}${credentialRef}`;
+  return credentialRef;
 }
 
-function readCache(key: string): CachedDiscovery | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object") return null;
-    const { ids, fetchedAt } = parsed as CachedDiscovery;
-    if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string")) return null;
-    if (typeof fetchedAt !== "number") return null;
-    return { ids, fetchedAt };
-  } catch (caughtError) {
-    logger.debug("cache_read_failed", "MODEL_DISCOVERY_CACHE_READ_FAILED", { error: caughtError });
-    return null;
-  }
+async function readCache(key: string): Promise<CachedDiscovery | null> {
+  return discoveryCache.get(key) ?? null;
 }
 
-function writeCache(key: string, value: CachedDiscovery) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch (caughtError) {
-    logger.debug("cache_write_failed", "MODEL_DISCOVERY_CACHE_WRITE_FAILED", { error: caughtError });
-    // A full or blocked store costs freshness on the next launch, nothing more.
-  }
+async function writeCache(key: string, value: CachedDiscovery) {
+  discoveryCache.set(key, value);
 }
 
 export async function discoverProviderModels(input: {
@@ -63,7 +48,7 @@ export async function discoverProviderModels(input: {
 
   const key = cacheKey(credentialRef);
   if (!input.force) {
-    const cached = readCache(key);
+    const cached = await readCache(key);
     if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
       return { status: "ok", ids: cached.ids, fetchedAt: cached.fetchedAt, fromCache: true };
     }
@@ -76,6 +61,7 @@ export async function discoverProviderModels(input: {
       method: "POST",
       headers: {
         "content-type": "application/json",
+        [CORRELATION_ID_HEADER]: createCorrelationId("model-discovery"),
         ...(input.authToken ? { Authorization: `Bearer ${input.authToken}` } : {})
       },
       body: JSON.stringify({ credentialRef }),
@@ -106,7 +92,7 @@ export async function discoverProviderModels(input: {
   if (!("ids" in decoded.value)) return discoveryFailureOutcome(decoded.value, response.status);
   const ids = decoded.value.ids;
   const fetchedAt = Date.now();
-  writeCache(key, { ids, fetchedAt });
+  await writeCache(key, { ids, fetchedAt });
   return { status: "ok", ids, fetchedAt, fromCache: false };
 }
 

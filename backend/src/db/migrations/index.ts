@@ -1,21 +1,9 @@
 import type { Database } from "bun:sqlite";
 import { initialMigration } from "./0001_initial";
-import { conversationOwnershipMigration } from "./0002_conversation_ownership";
-import { nativeAgentRuntimeMigration } from "./0003_native_agent_runtime";
-import { problemBankMigration } from "./0004_problem_bank";
-import { benchmarksMigration } from "./0005_benchmarks";
-import { unifiedProblemBankMigration } from "./0006_unified_problem_bank";
-import { schemaParityMigration } from "./0007_schema_parity";
 import type { SqliteMigration } from "./types";
 
 export const sqliteMigrations: readonly SqliteMigration[] = [
-  initialMigration,
-  conversationOwnershipMigration,
-  nativeAgentRuntimeMigration,
-  problemBankMigration,
-  benchmarksMigration,
-  unifiedProblemBankMigration,
-  schemaParityMigration,
+  initialMigration
 ];
 
 export const latestSqliteSchemaVersion = sqliteMigrations.at(-1)?.version ?? 0;
@@ -25,6 +13,9 @@ export function runSqliteMigrations(
   migrations: readonly SqliteMigration[] = sqliteMigrations,
 ): void {
   assertMigrationSequence(migrations);
+  if (!hasMigrationTable(sqlite) && hasUserSchema(sqlite)) {
+    throw new Error("Unsupported unversioned SQLite schema. Start with an empty database.");
+  }
   sqlite.run(`
     CREATE TABLE IF NOT EXISTS _geochat_schema_migrations (
       version INTEGER PRIMARY KEY,
@@ -37,6 +28,9 @@ export function runSqliteMigrations(
     version: number;
     name: string;
   }>;
+  if (applied.length === 0 && hasSchemaOutsideMigrationTable(sqlite)) {
+    throw new Error("Unsupported unversioned SQLite schema. Start with an empty database.");
+  }
   for (const [index, row] of applied.entries()) {
     const migration = migrations[index];
     if (!migration || migration.version !== row.version || migration.name !== row.name) {
@@ -53,6 +47,33 @@ export function runSqliteMigrations(
         .run(migration.version, migration.name, Date.now());
     })();
   }
+}
+
+function hasMigrationTable(sqlite: Database): boolean {
+  return sqlite.query(`
+    SELECT 1
+    FROM sqlite_schema
+    WHERE type = 'table' AND name = '_geochat_schema_migrations'
+  `).get() !== null;
+}
+
+function hasUserSchema(sqlite: Database): boolean {
+  return sqlite.query(`
+    SELECT 1
+    FROM sqlite_schema
+    WHERE name NOT LIKE 'sqlite_%'
+    LIMIT 1
+  `).get() !== null;
+}
+
+function hasSchemaOutsideMigrationTable(sqlite: Database): boolean {
+  return sqlite.query(`
+    SELECT 1
+    FROM sqlite_schema
+    WHERE name NOT LIKE 'sqlite_%'
+      AND name <> '_geochat_schema_migrations'
+    LIMIT 1
+  `).get() !== null;
 }
 
 function assertMigrationSequence(migrations: readonly SqliteMigration[]): void {

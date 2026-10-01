@@ -4,7 +4,7 @@ import {
 } from "@geochat-ai/app/geogebra-style-policy";
 import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import type { Locale } from "../../../../shared/desktop/locale";
-import { getFrontendGeoGebraController } from "../../geogebra/runtime";
+import type { GeoGebraRuntimePort } from "../../geogebra/runtime";
 import { runRendererCanvasTransaction } from "../agent-run/toolWorker";
 
 const logger = createStructuredLogger("geogebra.choice-scenario");
@@ -43,11 +43,11 @@ export function resetChoiceScenarioBaselines() {
 }
 
 export async function previewChoiceScenario(
+  runtime: GeoGebraRuntimePort,
   input: ChoiceScenarioPreviewInput,
   locale: Locale
 ): Promise<ChoiceScenarioPreviewResult> {
-  const controller = getFrontendGeoGebraController();
-  if (!controller?.ready) return { ok: false, error: null };
+  if (!runtime.ready) return { ok: false, error: null };
 
   const commands = input.commands.map((command) => command.trim()).filter(Boolean);
 
@@ -60,11 +60,11 @@ export async function previewChoiceScenario(
   }
 
   try {
-    return await runRendererCanvasTransaction({
+    return await runRendererCanvasTransaction(runtime, {
       label: `choice-preview:${input.cardKey}:${input.label}`,
       supersedeKey: "choice-preview",
     }, async (execute) => {
-      const baseXml = baseXmlByCard.get(input.cardKey) ?? controller.getCanvasXml();
+      const baseXml = baseXmlByCard.get(input.cardKey) ?? runtime.getCanvasXml();
       if (baseXml && !baseXmlByCard.has(input.cardKey)) baseXmlByCard.set(input.cardKey, baseXml);
       if (!baseXml) return { ok: commands.length === 0, error: null };
 

@@ -23,7 +23,8 @@ describe("skills settings", () => {
     expect(component).toContain("autoActivate: event.target.checked");
     expect(component).toContain("visualProfile: event.target.value as VisualProfileName");
     expect(component).toContain("enabledSkillNames:");
-    expect(component).toContain("persistDesktopConfig({ ...desktopConfig, skills: next })");
+    expect(component).toContain("updateDesktopConfig((desktopConfig) => ({");
+    expect(component).toContain("skills: normalizeSkillConfig(update(desktopConfig.skills))");
   });
 
   test("keeps the long catalog searchable and grouped", () => {

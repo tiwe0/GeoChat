@@ -20,8 +20,8 @@ import {
   DESKTOP_CONFIG_CHANGED_EVENT,
   VISUAL_PROFILE_NAMES,
   normalizeSkillConfig,
-  persistDesktopConfig,
   readDesktopConfig,
+  updateDesktopConfig,
 } from "../../../../../shared/desktop/desktop-config";
 import type { DesktopAgentSkillSummary } from "../../../../../shared/skill-catalog";
 import type { SkillConfig, VisualProfileName } from "../../../../../shared/desktop/workbench-types";
@@ -85,11 +85,16 @@ export function SkillsSettings() {
   const [query, setQuery] = useState("");
 
   const persist = useCallback((update: (current: SkillConfig) => SkillConfig) => {
-    const desktopConfig = readDesktopConfig();
-    const next = normalizeSkillConfig(update(desktopConfig.skills));
+    const next = normalizeSkillConfig(update(config));
     setConfig(next);
-    persistDesktopConfig({ ...desktopConfig, skills: next });
-  }, []);
+    void updateDesktopConfig((desktopConfig) => ({
+      ...desktopConfig,
+      skills: normalizeSkillConfig(update(desktopConfig.skills)),
+    })).catch((error) => {
+      setConfig(readDesktopConfig().skills);
+      logger.warn("skill_config_save_failed", "SKILL_CONFIG_SAVE_FAILED", { error });
+    });
+  }, [config]);
 
   useEffect(() => {
     const sync = () => setConfig(readDesktopConfig().skills);

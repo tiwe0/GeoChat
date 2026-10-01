@@ -244,6 +244,7 @@ function parseConversationJsonPayload(value: unknown): DesktopConversationMessag
   } catch (caughtError) {
     logger.warn("message_payload_parse_failed", "CONVERSATION_PAYLOAD_INVALID", { error: caughtError });
     return {
+      schemaVersion: 1,
       id: "",
       role: "assistant",
       content: value,

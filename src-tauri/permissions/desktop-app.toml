@@ -3,6 +3,9 @@ identifier = "desktop-app"
 description = "Allows the GeoChat renderer to call the desktop application's public commands."
 permissions = [
   "allow-get-runtime-info",
+  "allow-get-renderer-storage",
+  "allow-set-renderer-storage",
+  "allow-remove-renderer-storage",
   "allow-get-graphics-preferences",
   "allow-set-graphics-preferences",
   "allow-get-mcp-status",
@@ -36,12 +39,8 @@ permissions = [
   "allow-load-problem-bank-page",
   "allow-load-problem-detail",
   "allow-save-provider-credential",
-  "allow-import-legacy-credential",
   "allow-delete-provider-credential",
   "allow-list-provider-credential-metadata",
-  "allow-read-credential-migration-journal",
-  "allow-persist-credential-migration-journal",
-  "allow-delete-credential-migration-journal",
   "allow-mark-renderer-ready",
   "allow-install-update",
 ]

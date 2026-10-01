@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   DEFAULT_MODEL_CONFIG,
   DEFAULT_VISION_MODEL_CONFIG,
-  DesktopCredentialMigrationRequiredError,
   normalizeCustomProviderConfig,
   normalizeDesktopConfig,
   normalizeDesktopConfigJson,
@@ -14,7 +13,7 @@ import {
 } from "@geochat-ai/app/model-registry";
 
 describe("desktop provider credential references", () => {
-  test("freezes normalized model DTOs and rejects legacy secret-bearing DTOs", () => {
+  test("freezes normalized model DTOs and rejects plaintext secret-bearing DTOs", () => {
     const normalized = normalizeAgentModelConfig({
       provider: "openai",
       model: "gpt-5.6-sol",
@@ -34,11 +33,11 @@ describe("desktop provider credential references", () => {
     })).toBe(false);
   });
 
-  test("refuses to normalize raw plaintext configuration before migration", () => {
+  test("refuses to normalize plaintext configuration", () => {
     expect(() => normalizeDesktopConfigJson(JSON.stringify({
       locale: "en-US",
       model: { provider: "openai", model: "gpt", apiKey: "legacy-secret" },
-    }), "en-US")).toThrow(DesktopCredentialMigrationRequiredError);
+    }), "en-US")).toThrow("plaintext credentials");
   });
 
   test("keeps only opaque references and display-safe transport metadata", () => {

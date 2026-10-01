@@ -137,7 +137,7 @@ describe("react desktop settings i18n", () => {
     expect(panel).toContain('<SkillsSettings />');
     expect(skills).toContain('className="settings-page settings-skills-page"');
     expect(skills).toContain("fetchSkillCatalog(backendOrigin(), backendAuthToken()");
-    expect(skills).toContain("persistDesktopConfig({ ...desktopConfig, skills: next })");
+    expect(skills).toContain("updateDesktopConfig((desktopConfig) => ({");
     expect(skills).toContain("enabledSkillNames:");
     expect(skills).toContain("visualProfile:");
   });

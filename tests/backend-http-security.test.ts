@@ -31,11 +31,10 @@ describe("local backend HTTP security", () => {
     }));
     expect(postHealth.status).toBe(405);
 
-    const postAsset = await rawHandleRequest(new Request(
-      "http://127.0.0.1:17365/tools/geogebra-assets/deployggb.js",
-      { method: "POST" }
+    const removedLegacyAsset = await rawHandleRequest(new Request(
+      "http://127.0.0.1:17365/tools/geogebra-assets/deployggb.js"
     ));
-    expect(postAsset.status).toBe(405);
+    expect(removedLegacyAsset.status).toBe(404);
   });
 
   test("rejects missing and incorrect tokens before routing", async () => {
@@ -122,7 +121,7 @@ describe("local backend HTTP security", () => {
 
   test("rejects disallowed origins on actual requests before side effects", async () => {
     const { rawHandleRequest } = await createHttpHarness();
-    const response = await rawHandleRequest(new Request("http://127.0.0.1:17365/v1/messages", {
+    const response = await rawHandleRequest(new Request("http://127.0.0.1:17365/v1/conversations", {
       method: "POST",
       headers: {
         origin: "https://attacker.example",

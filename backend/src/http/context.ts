@@ -2,15 +2,13 @@ import { resolve } from "node:path";
 import { createBlackboardRepository } from "../db/blackboard-repository";
 import { createDatabase } from "../db/client";
 import { createConversationRepository } from "../db/conversation-repository";
-import { createMessageRepository } from "../db/message-repository";
-import { createMigrationRepository } from "../db/migration-repository";
 import { createProblemBankRepository } from "../db/problem-bank-repository";
 import { createAgentRunRepository } from "../db/agent-run-repository";
 import { createBenchmarkRepository } from "../db/benchmark-repository";
 import { readDatabaseRuntimeConfig } from "../db/runtime";
 import { defaultProblemCasesRoot } from "../problem-cases";
 import { createCredentialResolverFromEnvironment } from "../credentials/resolver";
-import { createLegacyConversationImportRepository } from "../db/legacy-conversation-import-repository";
+import { createGeoGebraDocumentRepository } from "../db/geogebra-document-repository";
 
 export type BackendHttpContextOptions = {
   databasePath?: string;
@@ -32,11 +30,9 @@ export function createBackendHttpContext(options: BackendHttpContextOptions = {}
     credentials: createCredentialResolverFromEnvironment(),
     repositories: {
       conversations: createConversationRepository(databaseRuntime, database),
-      legacyConversationImports: createLegacyConversationImportRepository(database),
+      geogebraDocuments: createGeoGebraDocumentRepository(database),
       blackboard: createBlackboardRepository(databaseRuntime, database),
       problemBank: createProblemBankRepository(databaseRuntime, database),
-      migration: createMigrationRepository(databaseRuntime, database),
-      messages: createMessageRepository(databaseRuntime, database),
       agentRuns: createAgentRunRepository(databaseRuntime, database),
       benchmarks: createBenchmarkRepository(database)
     },

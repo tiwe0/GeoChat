@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent, type RefObject } from "react";
 import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
+import { clamp } from "../../lib/numbers";
+import { nativePreferences } from "../../lib/nativePreferences";
+
+export { clamp } from "../../lib/numbers";
 
 const logger = createStructuredLogger("assistant.panel-window");
 
@@ -30,10 +34,6 @@ type PanelPosition = { left: number; top: number; right: number };
 type PersistedPanelWindow = { version: 2; left: number; top: number; width?: number; height?: number };
 type PanelDragState = { host: HTMLElement; pointerId: number; offsetX: number; offsetY: number; startX: number; startY: number; moved: boolean; interactiveClick: boolean };
 type PanelResizeState = { panel: HTMLElement; host: HTMLElement; pointerId: number; direction: ResizeDirection; startX: number; startY: number; startLeft: number; startTop: number; startWidth: number; startHeight: number };
-
-export function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), Math.max(min, max));
-}
 
 export function clampPanelGeometry(
   geometry: { left: number; top: number; width: number; height: number },
@@ -71,13 +71,11 @@ function clampPanelPosition(host: HTMLElement, left: number, top: number) {
 export function parsePersistedPanelWindow(value: unknown): PersistedPanelWindow | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const stored = value as Record<string, unknown>;
-  if ((stored.version !== 1 && stored.version !== PANEL_WINDOW_STORAGE_VERSION) || !Number.isFinite(stored.left) || !Number.isFinite(stored.top)) return null;
-  const dimensions = stored.version === PANEL_WINDOW_STORAGE_VERSION
-    ? {
-        ...(typeof stored.width === "number" && Number.isFinite(stored.width) ? { width: stored.width } : {}),
-        ...(typeof stored.height === "number" && Number.isFinite(stored.height) ? { height: stored.height } : {}),
-      }
-    : {};
+  if (stored.version !== PANEL_WINDOW_STORAGE_VERSION || !Number.isFinite(stored.left) || !Number.isFinite(stored.top)) return null;
+  const dimensions = {
+    ...(typeof stored.width === "number" && Number.isFinite(stored.width) ? { width: stored.width } : {}),
+    ...(typeof stored.height === "number" && Number.isFinite(stored.height) ? { height: stored.height } : {}),
+  };
   return {
     version: PANEL_WINDOW_STORAGE_VERSION,
     left: stored.left as number,
@@ -104,24 +102,22 @@ export function usePanelWindow(view: PanelView, enabled = true) {
     const host = panel ? resolvePanelWindowHost(panel) : null;
     if (!panel || !host) return;
     const position = readPanelPosition(host);
-    void browser.storage.local.set({
-      [PANEL_WINDOW_STORAGE_KEY]: {
+    void nativePreferences().set(PANEL_WINDOW_STORAGE_KEY, {
         version: PANEL_WINDOW_STORAGE_VERSION,
         left: position.left,
         top: position.top,
         ...((panel.style.width || expandedWidthRef.current) ? { width: Number.parseFloat(panel.style.width || expandedWidthRef.current!) } : {}),
         ...((panel.style.height || expandedHeightRef.current) ? { height: Number.parseFloat(panel.style.height || expandedHeightRef.current!) } : {}),
-      } satisfies PersistedPanelWindow,
-    });
+      } satisfies PersistedPanelWindow).catch((error) => logger.warn("position_write_failed", "PANEL_WINDOW_POSITION_WRITE_FAILED", { error }));
   }
 
   useEffect(() => {
     if (!enabled) return;
     let disposed = false;
     const frame = window.requestAnimationFrame(() => {
-      void browser.storage.local.get(PANEL_WINDOW_STORAGE_KEY).then((stored) => {
+      try {
         if (disposed) return;
-        const saved = parsePersistedPanelWindow(stored[PANEL_WINDOW_STORAGE_KEY]);
+        const saved = parsePersistedPanelWindow(nativePreferences().get(PANEL_WINDOW_STORAGE_KEY));
         const panel = panelRef.current;
         const host = panel ? resolvePanelWindowHost(panel) : null;
         if (!saved || !panel || !host) return;
@@ -136,9 +132,9 @@ export function usePanelWindow(view: PanelView, enabled = true) {
         expandedPositionRef.current = { left: geometry.left, top: geometry.top, right: Math.max(VIEWPORT_GUTTER, window.innerWidth - geometry.left - geometry.width) };
         expandedWidthRef.current = panel.style.width || null;
         expandedHeightRef.current = panel.style.height || null;
-      }).catch((error) => {
+      } catch (error) {
         logger.debug("geometry_restore_failed", "PANEL_GEOMETRY_RESTORE_FAILED", { error });
-      });
+      }
     });
     return () => {
       disposed = true;

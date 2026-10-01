@@ -4,17 +4,13 @@ import {
   decodeUpsertDesktopConversationMessageInput
 } from "@geochat-ai/app/desktop-contracts";
 import {
-  decodeLegacyConversationImportRequest,
-  decodeLegacyConversationImportResponse
-} from "@geochat-ai/app/legacy-conversation-import";
+  decodeGeoGebraDocumentResponse,
+  decodeUpsertGeoGebraDocumentInput
+} from "@geochat-ai/app/geogebra-documents";
 import {
   decodeModelDiscoveryRequest,
   decodeModelDiscoveryResponse
 } from "@geochat-ai/app/model-discovery";
-import {
-  decodeMigrationExportResponse,
-  decodeMigrationImportRequest
-} from "@geochat-ai/app/migration";
 
 const timestamp = "2026-09-29T00:00:00.000Z";
 
@@ -69,42 +65,21 @@ describe("shared runtime contracts", () => {
     });
   });
 
-  test("decodes legacy import receipts and migration packages", () => {
-    const fingerprint = "a".repeat(64);
-    const legacyRequest = {
-      schemaVersion: 1,
-      sourceFingerprint: fingerprint,
-      conversation: {
-        id: "legacy-1",
-        model: "gpt-5.5",
-        title: null,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-        messages: [{ id: "message-1", role: "user", parts: [{ type: "text", text: "hello" }] }]
-      }
+  test("decodes GeoGebra documents", () => {
+    const documentInput = {
+      id: "worksheet-1",
+      title: "Worksheet",
+      mimeType: "application/xml",
+      contentKind: "text" as const,
+      content: "<xml/>"
     };
-    expect(decodeLegacyConversationImportRequest(legacyRequest).ok).toBe(true);
-    expect(decodeLegacyConversationImportResponse({
-      importResult: { outcome: "imported", conversationId: "legacy-1", sourceFingerprint: fingerprint }
-    }).ok).toBe(true);
+    expect(decodeUpsertGeoGebraDocumentInput(documentInput).ok).toBe(true);
+    expect(decodeGeoGebraDocumentResponse({ document: {
+      ...documentInput,
+      sizeBytes: 6,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    } }).ok).toBe(true);
 
-    const migrationPackage = {
-      schemaVersion: 1,
-      product: "geochat",
-      exportedAt: timestamp,
-      source: { databaseDriver: "sqlite", migrationsSchema: "sqlite" },
-      scope: { ownerUserId: null, mode: "anonymous_offline" },
-      totals: { conversations: 0, messages: 0, blackboardEntries: 0, problemAttempts: 0 },
-      conversations: []
-    };
-    expect(decodeMigrationImportRequest({ migrationPackage })).toEqual({
-      ok: true,
-      value: { migrationPackage }
-    });
-    expect(decodeMigrationExportResponse({ migrationPackage }).ok).toBe(true);
-    expect(decodeMigrationImportRequest({ migrationPackage: { ...migrationPackage, schemaVersion: 2 } })).toEqual({
-      ok: false,
-      errorCode: "migration_package_invalid"
-    });
   });
 });

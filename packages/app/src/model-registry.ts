@@ -33,8 +33,6 @@ export type AgentModelDefinition = {
   capabilities: readonly AgentModelCapability[];
   maxToolSteps: number;
   defaultTemperature: number;
-  /** Retained for saved configurations and run replay, but omitted from new model pickers. */
-  deprecated?: boolean;
 };
 
 export type AgentModelOption = {
@@ -119,7 +117,6 @@ const AGENT_PROVIDER_REGISTRY_DATA = [
   }
 ] as const satisfies readonly AgentProviderDefinition[];
 
-/** @deprecated Prefer createAgentModelRegistrySchema() or the focused lookup helpers. */
 export const AGENT_PROVIDER_REGISTRY: readonly Readonly<AgentProviderDefinition>[] = Object.freeze(
   AGENT_PROVIDER_REGISTRY_DATA.map((provider) => Object.freeze({
     ...provider,
@@ -177,42 +174,6 @@ const AGENT_MODEL_REGISTRY_DATA = [
     defaultTemperature: 0.2
   },
   {
-    provider: "openai",
-    id: "gpt-5.5",
-    label: "GPT-5.5",
-    capabilities: ["text", "imageInput", "toolCalling"],
-    maxToolSteps: 16,
-    defaultTemperature: 0.2,
-    deprecated: true
-  },
-  {
-    provider: "openai",
-    id: "gpt-5.4",
-    label: "GPT-5.4",
-    capabilities: ["text", "imageInput", "toolCalling"],
-    maxToolSteps: 16,
-    defaultTemperature: 0.2,
-    deprecated: true
-  },
-  {
-    provider: "openai",
-    id: "gpt-5.4-mini",
-    label: "GPT-5.4 Mini",
-    capabilities: ["text", "imageInput", "toolCalling"],
-    maxToolSteps: 12,
-    defaultTemperature: 0.2,
-    deprecated: true
-  },
-  {
-    provider: "openai",
-    id: "gpt-4.1",
-    label: "GPT-4.1",
-    capabilities: ["text", "imageInput", "toolCalling"],
-    maxToolSteps: 12,
-    defaultTemperature: 0.2,
-    deprecated: true
-  },
-  {
     provider: "anthropic",
     id: "claude-sonnet-5",
     label: "Claude Sonnet 5",
@@ -245,24 +206,6 @@ const AGENT_MODEL_REGISTRY_DATA = [
     defaultTemperature: 0.2
   },
   {
-    provider: "anthropic",
-    id: "claude-sonnet-4-6",
-    label: "Claude Sonnet 4.6",
-    capabilities: ["text", "imageInput", "toolCalling"],
-    maxToolSteps: 16,
-    defaultTemperature: 0.2,
-    deprecated: true
-  },
-  {
-    provider: "anthropic",
-    id: "claude-opus-4-8",
-    label: "Claude Opus 4.8",
-    capabilities: ["text", "imageInput", "toolCalling"],
-    maxToolSteps: 16,
-    defaultTemperature: 0.2,
-    deprecated: true
-  },
-  {
     provider: "google",
     id: "gemini-3.8-flash",
     label: "Gemini 3.8 Flash",
@@ -285,33 +228,6 @@ const AGENT_MODEL_REGISTRY_DATA = [
     capabilities: ["text", "imageInput", "toolCalling"],
     maxToolSteps: 16,
     defaultTemperature: 0.2
-  },
-  {
-    provider: "google",
-    id: "gemini-3.5-flash",
-    label: "Gemini 3.5 Flash",
-    capabilities: ["text", "imageInput", "toolCalling"],
-    maxToolSteps: 12,
-    defaultTemperature: 0.2,
-    deprecated: true
-  },
-  {
-    provider: "google",
-    id: "gemini-3.1-pro",
-    label: "Gemini 3.1 Pro Preview",
-    capabilities: ["text", "imageInput", "toolCalling"],
-    maxToolSteps: 16,
-    defaultTemperature: 0.2,
-    deprecated: true
-  },
-  {
-    provider: "google",
-    id: "gemini-2.5-pro",
-    label: "Gemini 2.5 Pro",
-    capabilities: ["text", "imageInput", "toolCalling"],
-    maxToolSteps: 16,
-    defaultTemperature: 0.2,
-    deprecated: true
   },
   {
     provider: "openrouter",
@@ -362,15 +278,6 @@ const AGENT_MODEL_REGISTRY_DATA = [
     defaultTemperature: 0.2
   },
   {
-    provider: "openrouter",
-    id: "openai/gpt-5.5",
-    label: "OpenRouter GPT-5.5",
-    capabilities: ["text", "imageInput", "toolCalling"],
-    maxToolSteps: 16,
-    defaultTemperature: 0.2,
-    deprecated: true
-  },
-  {
     provider: "qwen",
     id: "qwen3.7-plus",
     label: "Qwen 3.7 Plus",
@@ -417,37 +324,9 @@ const AGENT_MODEL_REGISTRY_DATA = [
     capabilities: ["text", "toolCalling"],
     maxToolSteps: 16,
     defaultTemperature: 0.2
-  },
-  {
-    provider: "qwen",
-    id: "qwen3.7-max",
-    label: "Qwen 3.7 Max",
-    capabilities: ["text", "toolCalling"],
-    maxToolSteps: 16,
-    defaultTemperature: 0.2,
-    deprecated: true
-  },
-  {
-    provider: "qwen",
-    id: "qwen3.6-plus",
-    label: "Qwen 3.6 Plus",
-    capabilities: ["text", "toolCalling"],
-    maxToolSteps: 16,
-    defaultTemperature: 0.2,
-    deprecated: true
-  },
-  {
-    provider: "qwen",
-    id: "qwen3.6-flash",
-    label: "Qwen 3.6 Flash",
-    capabilities: ["text", "toolCalling"],
-    maxToolSteps: 12,
-    defaultTemperature: 0.2,
-    deprecated: true
   }
 ] as const satisfies readonly AgentModelDefinition[];
 
-/** @deprecated Prefer createAgentModelRegistrySchema() or the focused lookup helpers. */
 export const AGENT_MODEL_REGISTRY: readonly Readonly<AgentModelDefinition>[] = Object.freeze(
   AGENT_MODEL_REGISTRY_DATA.map((model) => Object.freeze({
     ...model,
@@ -476,8 +355,7 @@ function cloneModelDefinition(model: AgentModelDefinition): AgentModelDefinition
     label: model.label,
     capabilities: [...model.capabilities],
     maxToolSteps: model.maxToolSteps,
-    defaultTemperature: model.defaultTemperature,
-    ...(model.deprecated === true ? { deprecated: true } : {})
+    defaultTemperature: model.defaultTemperature
   };
 }
 
@@ -521,8 +399,7 @@ function isAgentModelDefinition(value: unknown): value is AgentModelDefinition {
     Boolean(value.label.trim()) &&
     isAgentModelCapabilityArray(value.capabilities) &&
     isFiniteNumberInRange(value.maxToolSteps, 0, 64) &&
-    isFiniteNumberInRange(value.defaultTemperature, 0, 2) &&
-    (value.deprecated === undefined || typeof value.deprecated === "boolean")
+    isFiniteNumberInRange(value.defaultTemperature, 0, 2)
   );
 }
 
@@ -634,7 +511,7 @@ export function getAgentModelDefinition(provider: string, model: string): AgentM
 }
 
 export function getAgentModelOptionsForSchema(provider: string, schema?: AgentModelRegistrySchema): AgentModelOption[] {
-  return registryModels(schema).filter((entry) => entry.provider === provider && !("deprecated" in entry && entry.deprecated === true)).map((entry) => ({
+  return registryModels(schema).filter((entry) => entry.provider === provider).map((entry) => ({
     value: entry.id,
     label: entry.label,
     supportsImages: modelHasCapability(entry, "imageInput"),

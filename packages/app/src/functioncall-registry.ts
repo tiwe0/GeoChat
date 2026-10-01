@@ -120,23 +120,6 @@ const FUNCTION_CALL_REGISTRY = {
       detailsLabel: "查看技能说明"
     }
   },
-  activateSkill: {
-    name: "activateSkill",
-    label: "激活技能说明",
-    description: "兼容旧模型输出的技能加载工具，等价于 loadSkill。新调用优先使用 listSkills、searchSkills、loadSkill 三步。",
-    executor: "backend",
-    sideEffectLevel: "read",
-    timeoutMs: 10_000,
-    rollbackPolicy: "none",
-    display: {
-      label: "读取技能",
-      running: "读取中",
-      done: "读取完成",
-      error: "读取失败",
-      metric: "技能",
-      detailsLabel: "查看技能说明"
-    }
-  },
   createGeometryPlan: {
     name: "createGeometryPlan",
     label: "生成几何构造计划",
@@ -433,18 +416,6 @@ const FUNCTION_CALL_ENGLISH_OVERRIDES = {
       error: "Update failed",
       metric: "memory",
       detailsLabel: "View blackboard changes"
-    }
-  },
-  activateSkill: {
-    label: "Activate skill instructions",
-    description: "Compatibility alias for loadSkill. Prefer listSkills, searchSkills, then loadSkill for new calls.",
-    display: {
-      label: "Read skill",
-      running: "Reading",
-      done: "Read complete",
-      error: "Read failed",
-      metric: "skill",
-      detailsLabel: "View skill instructions"
     }
   },
   listSkills: {

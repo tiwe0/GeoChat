@@ -2,12 +2,48 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { discoverProviderModels } from "../src/renderer-react/src/features/models/modelDiscovery";
 
 const originalFetch = globalThis.fetch;
+const originalBrowser = Object.getOwnPropertyDescriptor(globalThis, "browser");
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  if (originalBrowser) Object.defineProperty(globalThis, "browser", originalBrowser);
+  else delete (globalThis as { browser?: unknown }).browser;
 });
 
 describe("model settings API key probe", () => {
+  test("reads and writes the catalog through the browser storage adapter", async () => {
+    const values = new Map<string, unknown>();
+    Object.defineProperty(globalThis, "browser", {
+      configurable: true,
+      value: {
+        storage: {
+          local: {
+            get: async (key: string) => ({ [key]: values.get(key) }),
+            set: async (entries: Record<string, unknown>) => {
+              for (const [key, value] of Object.entries(entries)) values.set(key, value);
+            }
+          }
+        }
+      }
+    });
+    globalThis.fetch = (async () => Response.json({ ids: ["deepseek-chat"] })) as typeof fetch;
+
+    const first = await discoverProviderModels({
+      apiOrigin: "http://127.0.0.1:17382",
+      credentialRef: "credential-ref",
+      force: true
+    });
+    expect(first).toMatchObject({ status: "ok", ids: ["deepseek-chat"], fromCache: false });
+
+    globalThis.fetch = (async () => {
+      throw new Error("cache miss");
+    }) as typeof fetch;
+    await expect(discoverProviderModels({
+      apiOrigin: "http://127.0.0.1:17382",
+      credentialRef: "credential-ref"
+    })).resolves.toMatchObject({ status: "ok", ids: ["deepseek-chat"], fromCache: true });
+  });
+
   test("sends only the credential reference and accepts discovered ids", async () => {
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe("http://127.0.0.1:17382/v1/models/discover");

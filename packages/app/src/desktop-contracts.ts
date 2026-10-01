@@ -6,6 +6,11 @@ import {
 } from "./blackboard";
 import { isAgentRunTimestamp } from "./agent-run-time";
 import {
+  isPersistedConversationMessagePayload,
+  type PersistedConversationMessagePayload,
+  type PersistedConversationMessageRole,
+} from "./conversation-message-contract";
+import {
   isRuntimeNonNegativeInteger,
   isRuntimeRecord,
   runtimeDecodeFailure,
@@ -30,24 +35,8 @@ export const CreateGeoChatMessageInput = Schema.Struct({
 
 export type CreateGeoChatMessageInput = Schema.Schema.Type<typeof CreateGeoChatMessageInput>;
 
-export type DesktopConversationMessageRole = "user" | "assistant";
-
-export type DesktopConversationMessagePayload = {
-  id: string;
-  role: DesktopConversationMessageRole;
-  content: string;
-  createdAt: string;
-  attachments?: unknown[];
-  toolCalls?: unknown[];
-  cards?: unknown[];
-  /** Native AI SDK UIMessage parts, including reasoning and tool state. */
-  parts?: unknown[];
-  usage?: {
-    inputTokens?: number;
-    outputTokens?: number;
-    totalTokens?: number;
-  };
-};
+export type DesktopConversationMessageRole = PersistedConversationMessageRole;
+export type DesktopConversationMessagePayload = PersistedConversationMessagePayload;
 
 export type DesktopConversationMessage = {
   id: string;
@@ -79,6 +68,11 @@ export type DesktopConversationListResponse = {
 
 export type DesktopConversationDetailResponse = {
   conversation: DesktopConversationDetail;
+};
+
+/** Wire envelope decoded before individual message rows are isolated. */
+export type DesktopConversationRestoreResponse = {
+  conversation: Omit<DesktopConversationDetail, "messages"> & { messages: unknown[] };
 };
 
 export type UpsertDesktopConversationMessageInput = {
@@ -115,11 +109,11 @@ export function decodeUpsertDesktopConversationMessageInput(
 
 export function decodeDesktopConversationDetailResponse(
   value: unknown
-): RuntimeDecodeResult<DesktopConversationDetailResponse, "conversation_restore_invalid"> {
-  if (!isRuntimeRecord(value) || !isDesktopConversationDetail(value.conversation)) {
+): RuntimeDecodeResult<DesktopConversationRestoreResponse, "conversation_restore_invalid"> {
+  if (!isRuntimeRecord(value) || !isDesktopConversationRestoreEnvelope(value.conversation)) {
     return runtimeDecodeFailure("conversation_restore_invalid");
   }
-  return runtimeDecodeSuccess(value as DesktopConversationDetailResponse);
+  return runtimeDecodeSuccess(value as DesktopConversationRestoreResponse);
 }
 
 function isDesktopConversationUpsertMessage(value: unknown): value is UpsertDesktopConversationMessageInput["message"] {
@@ -136,33 +130,13 @@ function isDesktopConversationUpsertMessage(value: unknown): value is UpsertDesk
 }
 
 function isDesktopConversationMessageSnapshot(value: unknown): value is DesktopConversationMessagePayload {
-  if (!isRuntimeRecord(value)) return false;
-  return (
-    typeof value.id === "string"
-    && Boolean(value.id.trim())
-    && (value.role === "user" || value.role === "assistant")
-    && typeof value.content === "string"
-    && typeof value.createdAt === "string"
-    && (value.attachments === undefined || Array.isArray(value.attachments))
-    && (value.toolCalls === undefined || Array.isArray(value.toolCalls))
-    && (value.cards === undefined || Array.isArray(value.cards))
-    && (value.parts === undefined || Array.isArray(value.parts))
-    && (value.usage === undefined || isDesktopConversationMessageUsage(value.usage))
-  );
+  return isPersistedConversationMessagePayload(value);
 }
 
-function isDesktopConversationMessageUsage(value: unknown) {
-  if (!isRuntimeRecord(value)) return false;
-  return (
-    (value.inputTokens === undefined || isRuntimeNonNegativeInteger(value.inputTokens))
-    && (value.outputTokens === undefined || isRuntimeNonNegativeInteger(value.outputTokens))
-    && (value.totalTokens === undefined || isRuntimeNonNegativeInteger(value.totalTokens))
-  );
-}
-
-function isDesktopConversationDetail(value: unknown): value is DesktopConversationDetail {
+function isDesktopConversationRestoreEnvelope(
+  value: unknown,
+): value is Omit<DesktopConversationDetail, "messages"> & { messages: unknown[] } {
   if (!isRuntimeRecord(value) || !isDesktopConversationSummary(value) || !Array.isArray(value.messages)) return false;
-  if (!value.messages.every((message) => isDesktopConversationStoredMessage(message, value.id))) return false;
   return value.blackboardEntries === undefined
     || (Array.isArray(value.blackboardEntries) && value.blackboardEntries.every(isDesktopConversationBlackboardEntry));
 }
@@ -177,19 +151,6 @@ function isDesktopConversationSummary(value: Record<string, unknown>): value is 
     && isRuntimeNonNegativeInteger(value.messageCount)
     && isAgentRunTimestamp(value.createdAt)
     && isAgentRunTimestamp(value.updatedAt)
-  );
-}
-
-function isDesktopConversationStoredMessage(value: unknown, conversationId: string): value is DesktopConversationMessage {
-  if (!isRuntimeRecord(value)) return false;
-  return (
-    typeof value.id === "string"
-    && Boolean(value.id.trim())
-    && value.conversationId === conversationId
-    && (value.role === "user" || value.role === "assistant")
-    && typeof value.content === "string"
-    && isAgentRunTimestamp(value.createdAt)
-    && isDesktopConversationMessageSnapshot(value.payload)
   );
 }
 
@@ -222,11 +183,22 @@ export const RuntimeBackendAuth = Schema.Union(
 
 export type RuntimeBackendAuth = Schema.Schema.Type<typeof RuntimeBackendAuth>;
 
+export const BackendRuntimeSnapshot = Schema.Struct({
+  mode: Schema.Literal("managed", "external"),
+  state: Schema.Literal("running", "exited", "unreachable", "stopped"),
+  baseUrl: Schema.String,
+  pid: Schema.optional(Schema.Number),
+  error: Schema.optional(Schema.String),
+});
+
+export type BackendRuntimeSnapshot = Schema.Schema.Type<typeof BackendRuntimeSnapshot>;
+
 export const RuntimeInfo = Schema.Struct({
   platform: Schema.String,
   appVersion: Schema.String,
   backendBaseUrl: Schema.String,
-  backendAuth: RuntimeBackendAuth
+  backendAuth: RuntimeBackendAuth,
+  backendRuntime: Schema.optional(BackendRuntimeSnapshot),
 });
 
 export type RuntimeInfo = Schema.Schema.Type<typeof RuntimeInfo>;

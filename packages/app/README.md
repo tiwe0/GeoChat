@@ -15,7 +15,6 @@ New production imports should use a domain subpath:
 - `geometry` — geometry planning, compilation, verification, and GeoGebra protocol.
 - `models` — model catalog snapshots, discovery contracts, and provider policy.
 - `problem-bank` — problem-bank schemas and DTOs.
-- `migration` — migration package contracts and decoders.
 
 Compatibility subpaths such as `desktop-contracts`, `model-registry`, and
 `model-discovery` remain available for existing consumers. New code should prefer the

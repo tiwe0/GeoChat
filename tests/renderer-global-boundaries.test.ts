@@ -11,8 +11,8 @@ const scannedRoots = ["src/renderer-react/src", "src/shared/desktop"];
 
 const allowedBoundaryFiles = {
   "src/renderer-react/src/main.tsx": {
-    maxLines: 50,
-    reason: "renderer bootstrapping is the only startup entrypoint for marking readiness"
+    maxLines: 70,
+    reason: "renderer bootstrapping owns native storage migration, runtime hydration, rendering, and readiness"
   },
   "src/renderer-react/src/features/desktop/runtime.ts": {
     maxLines: 80,
@@ -43,8 +43,8 @@ const allowedBoundaryFiles = {
     reason: "runtime platform detection is the only fallback path for web-vs-desktop runtime info"
   },
   "src/shared/desktop/tauri-bridge.ts": {
-    maxLines: 380,
-    reason: "Tauri bridge installation maps stable desktop API methods to Tauri commands and events"
+    maxLines: 410,
+    reason: "Tauri bridge installation maps stable desktop API methods, native storage, commands, and events"
   },
   "src/shared/desktop/workbench-desktop-runtime.ts": {
     maxLines: 90,

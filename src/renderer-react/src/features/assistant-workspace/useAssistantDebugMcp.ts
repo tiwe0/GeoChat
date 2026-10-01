@@ -12,11 +12,13 @@ import type { AssistantSessionController } from "../session/assistantSessionCont
 import { DEFAULT_MCP_STATUS, type DesktopDebugAction } from "../../../../shared/desktop/mcp-debug-actions";
 import { readDesktopConfig } from "../../../../shared/desktop/desktop-config";
 import type { ModelConfig, RendererMcpStatus } from "../../../../shared/desktop/workbench-types";
+import type { GeoGebraRuntimePort } from "../../geogebra/runtime";
 
 const logger = createStructuredLogger("assistant.debug-mcp");
 type Messages = ReturnType<typeof useAgentRunChat>["messages"];
 
 type DebugMcpInput = {
+  geogebraRuntime: GeoGebraRuntimePort;
   authToken: () => string | undefined;
   conversationId: string | null;
   assistantThreadId: string;
@@ -41,6 +43,7 @@ export function useAssistantDebugMcp(input: DebugMcpInput) {
 
   if (!executeDebugActionRef.current) {
     executeDebugActionRef.current = createDesktopDebugActionExecutor({
+      geogebraRuntime: inputRef.current.geogebraRuntime,
       getConversationId: () => inputRef.current.conversationId,
       getView: () => inputRef.current.panelView,
       getModelConfig: () => inputRef.current.getModelConfig(),

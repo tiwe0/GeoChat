@@ -1,4 +1,5 @@
 import type { AgentModelProtocol } from "@geochat-ai/app/models";
+import { normalizeCorrelationId } from "@geochat-ai/app/request-correlation";
 
 const CREDENTIAL_BROKER_TIMEOUT_MS = 5_000;
 
@@ -11,7 +12,15 @@ export type ResolvedCredentialEnvelope = {
 };
 
 export type CredentialResolver = {
-  resolve(credentialRef: string, signal?: AbortSignal): Promise<ResolvedCredentialEnvelope>;
+  resolve(
+    credentialRef: string,
+    signal?: AbortSignal,
+    context?: CredentialResolutionContext
+  ): Promise<ResolvedCredentialEnvelope>;
+};
+
+export type CredentialResolutionContext = {
+  correlationId?: string;
 };
 
 export class CredentialResolutionError extends Error {
@@ -34,7 +43,7 @@ export function createCredentialResolverFromEnvironment(
   const brokerToken = environment.GEOCHAT_CREDENTIAL_BROKER_TOKEN?.trim();
 
   return {
-    async resolve(credentialRef, downstreamSignal) {
+    async resolve(credentialRef, downstreamSignal, context) {
       const normalizedRef = normalizeCredentialRef(credentialRef);
       if (!brokerUrl || !brokerToken) {
         throw new CredentialResolutionError(
@@ -54,12 +63,14 @@ export function createCredentialResolverFromEnvironment(
       else downstreamSignal?.addEventListener("abort", abortFromDownstream, { once: true });
 
       try {
+        const correlationId = normalizeCorrelationId(context?.correlationId);
         const response = await fetchImplementation(new URL("/v1/credentials/resolve", brokerUrl), {
           method: "POST",
           headers: {
             authorization: `Bearer ${brokerToken}`,
             "cache-control": "no-store",
-            "content-type": "application/json"
+            "content-type": "application/json",
+            ...(correlationId ? { "x-correlation-id": correlationId } : {})
           },
           body: JSON.stringify({ credentialRef: normalizedRef }),
           redirect: "error",

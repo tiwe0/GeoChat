@@ -23,6 +23,7 @@ type TrustedCredentialBinding = Readonly<Pick<
 export type BackendLanguageModelOptions = {
   abortSignal?: AbortSignal;
   fetchImplementation?: typeof fetch;
+  correlationId?: string;
 };
 
 export async function createBackendLanguageModel(
@@ -30,7 +31,11 @@ export async function createBackendLanguageModel(
   credentialResolver: CredentialResolver,
   options: BackendLanguageModelOptions = {},
 ): Promise<LanguageModel> {
-  const resolved = await credentialResolver.resolve(config.credentialRef, options.abortSignal);
+  const resolved = await credentialResolver.resolve(
+    config.credentialRef,
+    options.abortSignal,
+    { correlationId: options.correlationId }
+  );
   validateRequestedBinding(config, resolved);
   const binding = trustedBinding(resolved);
   const secureFetch = createCredentialBoundFetch({
@@ -39,6 +44,7 @@ export async function createBackendLanguageModel(
     binding,
     fetchImplementation: options.fetchImplementation,
     abortSignal: options.abortSignal,
+    correlationId: options.correlationId,
   });
   const registry = createProviderRegistry({
     configured: customProvider({
@@ -56,6 +62,7 @@ export function createCredentialBoundFetch(input: {
   binding: TrustedCredentialBinding;
   fetchImplementation?: typeof fetch;
   abortSignal?: AbortSignal;
+  correlationId?: string;
 }): typeof fetch {
   const fetchImplementation = input.fetchImplementation ?? fetch;
   return (async (requestInput: string | URL | Request, requestInit?: RequestInit) => {
@@ -69,7 +76,11 @@ export function createCredentialBoundFetch(input: {
     // Resolve immediately before the network call. The closure retains only the
     // immutable, non-secret binding; deletion and rotation therefore take effect
     // for every retry, stream, and subsequent model step.
-    const current = await input.credentialResolver.resolve(input.credentialRef, signal ?? undefined);
+    const current = await input.credentialResolver.resolve(
+      input.credentialRef,
+      signal ?? undefined,
+      { correlationId: input.correlationId }
+    );
     validateImmutableBinding(input.binding, current);
 
     const headers = authenticatedHeaders(requested.headers, input.binding.protocol, current.secret);

@@ -1,17 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
-
-export const messages = sqliteTable(
-  "messages",
-  {
-    id: text("id").primaryKey(),
-    role: text("role", { enum: ["user", "assistant", "system"] }).notNull(),
-    content: text("content").notNull(),
-    ownerUserId: text("owner_user_id"),
-    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
-  },
-  (table) => [index("messages_owner_created_at_idx").on(table.ownerUserId, table.createdAt)]
-);
+import { blob, check, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const conversations = sqliteTable(
   "conversations",
@@ -32,25 +20,25 @@ export const conversations = sqliteTable(
   ]
 );
 
-export const legacyConversationImportReceipts = sqliteTable(
-  "legacy_conversation_import_receipts",
+export const geogebraDocuments = sqliteTable(
+  "geogebra_documents",
   {
-    id: text("id").primaryKey(),
     ownerScopeKey: text("owner_scope_key").notNull(),
     ownerUserId: text("owner_user_id"),
-    sourceFingerprint: text("source_fingerprint").notNull(),
-    contentFingerprint: text("content_fingerprint").notNull(),
-    conversationId: text("conversation_id").notNull(),
-    outcome: text("outcome", { enum: ["imported", "skipped", "conflict"] }).notNull(),
-    reason: text("reason", {
-      enum: ["conversation_content_conflict", "message_id_conflict", "source_fingerprint_mismatch"]
-    }),
-    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
+    id: text("id").notNull(),
+    title: text("title").notNull(),
+    mimeType: text("mime_type").notNull(),
+    contentKind: text("content_kind", { enum: ["text", "binary"] }).notNull(),
+    content: blob("content", { mode: "buffer" }).notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   },
   (table) => [
-    uniqueIndex("legacy_conversation_import_receipts_scope_source_uidx")
-      .on(table.ownerScopeKey, table.sourceFingerprint),
-    index("legacy_conversation_import_receipts_conversation_idx").on(table.conversationId)
+    primaryKey({ columns: [table.ownerScopeKey, table.id] }),
+    index("geogebra_documents_scope_updated_idx").on(table.ownerScopeKey, table.updatedAt),
+    check("geogebra_documents_content_kind_ck", sql`${table.contentKind} IN ('text', 'binary')`),
+    check("geogebra_documents_size_ck", sql`${table.sizeBytes} >= 0 AND ${table.sizeBytes} <= 16777216`),
   ]
 );
 
@@ -387,20 +375,15 @@ export const unifiedProblemRecords = sqliteTable(
  * migrations still produce the shape consumed by the Drizzle query schema.
  */
 export const sqliteSchemaContract = {
-  messages: {
-    columns: ["id", "role", "content", "owner_user_id", "created_at"],
-    indexes: ["messages_owner_created_at_idx"],
-    checks: ["role IN ('user', 'assistant', 'system')"],
-  },
   conversations: {
     columns: ["id", "title", "source_title", "summary", "model", "owner_user_id", "message_count", "created_at", "updated_at"],
     indexes: ["conversations_updated_at_idx", "conversations_owner_updated_at_idx"],
     checks: [],
   },
-  legacy_conversation_import_receipts: {
-    columns: ["id", "owner_scope_key", "owner_user_id", "source_fingerprint", "content_fingerprint", "conversation_id", "outcome", "reason", "created_at"],
-    indexes: ["legacy_conversation_import_receipts_scope_source_uidx", "legacy_conversation_import_receipts_conversation_idx"],
-    checks: ["outcome IN ('imported', 'skipped', 'conflict')", "reason IS NULL OR reason IN ('conversation_content_conflict', 'message_id_conflict', 'source_fingerprint_mismatch')"],
+  geogebra_documents: {
+    columns: ["owner_scope_key", "owner_user_id", "id", "title", "mime_type", "content_kind", "content", "size_bytes", "created_at", "updated_at"],
+    indexes: ["geogebra_documents_scope_updated_idx"],
+    checks: ["content_kind IN ('text', 'binary')", "size_bytes >= 0 AND size_bytes <= 16777216"],
   },
   conversation_messages: {
     columns: ["id", "conversation_id", "role", "content", "created_at", "payload"],
@@ -468,9 +451,8 @@ export const sqliteSchemaContract = {
 } as const;
 
 export const sqlitePrimaryKeyContract = {
-  messages: ["id"],
   conversations: ["id"],
-  legacy_conversation_import_receipts: ["id"],
+  geogebra_documents: ["owner_scope_key", "id"],
   conversation_messages: ["id"],
   conversation_blackboard_entries: ["id"],
   agent_run_ledgers: ["run_id"],

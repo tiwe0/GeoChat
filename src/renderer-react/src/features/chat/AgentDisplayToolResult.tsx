@@ -12,6 +12,7 @@ import { STREAMDOWN_PLUGINS } from "./streamdownPlugins";
 import { useStreamdownTranslations } from "../../i18n/useStreamdownTranslations";
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { isGeoChatDisplayToolName } from "../assistant-ui/toolPresentation";
+import { useGeoGebraRuntime } from "../../geogebra/runtime";
 
 export type AgentDisplayToolPart = Pick<
   ToolCallMessagePartProps,
@@ -235,6 +236,7 @@ const ALL_CHOICES = "all";
  */
 function ChoiceAnalysis({ card, copy }: { card: ToolCard; copy: CardLabels }) {
   const { i18n } = useTranslation();
+  const geogebraRuntime = useGeoGebraRuntime();
   const choices = useMemo(() => card.choices ?? [], [card.choices]);
   const cardKey = useMemo(() => choiceScenarioCardKey(card), [card]);
   const [active, setActive] = useState<string>(ALL_CHOICES);
@@ -259,7 +261,7 @@ function ChoiceAnalysis({ card, copy }: { card: ToolCard; copy: CardLabels }) {
     const input: ChoiceScenarioPreviewInput = { cardKey, label, commands };
     const locale: Locale = i18n.language.startsWith("en") ? "en-US" : "zh-CN";
     try {
-      const result = await previewChoiceScenario(input, locale);
+      const result = await previewChoiceScenario(geogebraRuntime, input, locale);
       if (run === runRef.current && !result.ok && result.error) setPreviewError(result.error);
     } finally {
       if (run === runRef.current) setPreviewing(null);

@@ -65,17 +65,11 @@ export class GeoGebraController {
 
   setToolbarVisible(visible: boolean) {
     if (!this.api) throw new Error("GeoGebra 画板尚未加载完成。");
-    if (visible && typeof this.api.showToolBar !== "function") {
+    if (typeof this.api.showToolBar !== "function") {
       throw new Error("当前 GeoGebra applet 不提供工具栏切换 API。");
     }
-    // This vendored GeoGebra build couples showToolBar(false) to its native
-    // file menu and removes both. The shell owns the collapsed presentation:
-    // when closing we hide only the construction modes with scoped CSS, so
-    // Open/Save/Export remain available from GeoGebra's menu button.
-    if (visible) {
-      const result = this.call("showToolBar", true);
-      if (result === false) throw new Error("GeoGebra 拒绝了工具栏切换。");
-    }
+    const result = this.call("showToolBar", visible);
+    if (result === false) throw new Error("GeoGebra 拒绝了工具栏切换。");
     this.refreshVisuals();
     return visible;
   }
@@ -115,7 +109,7 @@ export class GeoGebraController {
       case "getPNGBase64":
         return this.getPngBase64(input);
       case "setPerspective":
-        return this.setPerspective(requiredString(input.mode ?? input.perspective, "mode"), transaction);
+        return this.setPerspective(requiredString(input.mode, "mode"), transaction);
       case "getValue": {
         const name = requiredString(input.name, "name");
         const value = Number(this.call("getValue", name));
@@ -160,6 +154,13 @@ export class GeoGebraController {
     return this.api ? getAppletXml(this.api) : undefined;
   }
 
+  async restoreCanvasXml(xml: string) {
+    const result = await this.executeTool("__restoreCanvasXml", { xml });
+    if (!result || typeof result !== "object" || !("ok" in result) || result.ok !== true) {
+      throw new Error("GeoGebra rejected the stored document snapshot.");
+    }
+  }
+
   private async executeCommands(input: Record<string, unknown>, transaction?: CanvasTransactionContext) {
     // Command batches and business-animation frames must never write the same
     // construction concurrently. A command transaction takes ownership of the
@@ -187,8 +188,8 @@ export class GeoGebraController {
       });
     } else {
       // GeoGebra's runtime command syntax is the final execution boundary.
-      // Normalize aliases, unsupported legacy spellings, and 0-255 RGB values
-      // here so direct MCP calls, model tool calls, and macro output behave the
+      // Normalize supported localized commands, syntax variants, and 0-255 RGB
+      // values here so direct MCP calls, model tool calls, and macro output behave the
       // same way. In particular, SetColor expects channels in the 0-1 range;
       // passing the palette's 0-255 values directly turns every channel into 1
       // and silently renders the object white.

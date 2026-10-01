@@ -3,6 +3,8 @@ import {
   CONFIG_STORAGE_KEY,
   DESKTOP_CONFIG_CHANGED_EVENT,
   createDefaultDesktopConfig,
+  flushDesktopConfigWrites,
+  installDesktopConfigStorage,
   normalizeDesktopConfig,
   normalizeInteractionConfig,
   persistDesktopConfig,
@@ -23,31 +25,27 @@ describe("desktop interaction mode", () => {
       .toEqual({ mode: "window" });
   });
 
-  test("persists fusion mode through the canonical desktop config and restores it after a reload", () => {
-    const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  test("persists fusion mode through the injected desktop config facade and can flush native writes", async () => {
     const values = new Map<string, string>();
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: {
-        getItem: (key: string) => values.get(key) ?? null,
-        setItem: (key: string, value: string) => values.set(key, value),
-      },
-    });
+    let flushed = 0;
+    installDesktopConfigStorage({
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    }, async () => { flushed += 1; });
     let changeEvents = 0;
     const onChange = () => { changeEvents += 1; };
     globalThis.addEventListener(DESKTOP_CONFIG_CHANGED_EVENT, onChange);
 
     try {
       const config = createDefaultDesktopConfig("zh-CN");
-      persistDesktopConfig({ ...config, interaction: { mode: "fusion" } });
+      await persistDesktopConfig({ ...config, interaction: { mode: "fusion" } });
 
       expect(JSON.parse(values.get(CONFIG_STORAGE_KEY) ?? "{}").interaction).toEqual({ mode: "fusion" });
       expect(readDesktopConfig().interaction).toEqual({ mode: "fusion" });
       expect(changeEvents).toBe(1);
+      expect(flushed).toBe(1);
     } finally {
       globalThis.removeEventListener(DESKTOP_CONFIG_CHANGED_EVENT, onChange);
-      if (originalStorage) Object.defineProperty(globalThis, "localStorage", originalStorage);
-      else delete (globalThis as { localStorage?: unknown }).localStorage;
     }
   });
 });

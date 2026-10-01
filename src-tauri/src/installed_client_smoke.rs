@@ -8,7 +8,9 @@ use crate::{
     initial_app_bundle_update_state, initial_graphics_state, initial_shell_update_state,
     install_app_bundle_update, load_settings, local_runtime_auth_token, now_iso,
     problem_bank_cache::ProblemBankCacheRuntime,
-    project_root, stable_device_id, AppBundleUpdateRuntime, BackendRuntime, DesktopState,
+    project_root,
+    renderer_storage::RendererStorage,
+    stable_device_id, AppBundleUpdateRuntime, AppInstanceLock, BackendRuntime, DesktopState,
     McpRuntime, ShellUpdateRuntime,
 };
 use serde::{Deserialize, Serialize};
@@ -92,6 +94,7 @@ pub(crate) fn run_installed_client_update_smoke_cli() -> Result<(), String> {
         .map(PathBuf::from)
         .map_err(|_| "GEOCHAT_DESKTOP_USER_DATA_DIR is required for CLI smoke.".to_string())?;
     fs::create_dir_all(&app_data_dir).map_err(|error| error.to_string())?;
+    let instance_lock = AppInstanceLock::acquire(&app_data_dir)?;
     let resource_dir = packaged_resource_dir()?;
     let settings_path = app_data_dir.join("settings.json");
     let settings = load_settings(&settings_path)?;
@@ -100,11 +103,8 @@ pub(crate) fn run_installed_client_update_smoke_cli() -> Result<(), String> {
     let active_app_bundle =
         resolve_active_app_bundle(&app_data_dir, &resource_dir, env!("CARGO_PKG_VERSION"));
     let state = DesktopState {
-        backend: Mutex::new(BackendRuntime {
-            base_url: "http://127.0.0.1:0".to_string(),
-            child: None,
-            _credential_broker: None,
-        }),
+        _instance_lock: instance_lock,
+        backend: Mutex::new(BackendRuntime::detached("http://127.0.0.1:0".to_string())),
         mcp: Mutex::new(McpRuntime::new()),
         shell_update: Mutex::new(ShellUpdateRuntime::new(initial_shell_update_state(
             settings.update_preferences.clone(),
@@ -120,6 +120,7 @@ pub(crate) fn run_installed_client_update_smoke_cli() -> Result<(), String> {
         problem_bank_cache: Mutex::new(ProblemBankCacheRuntime::new(
             app_data_dir.join("problem-bank-cache"),
         )?),
+        renderer_storage: Mutex::new(RendererStorage::load(&app_data_dir)?),
         settings_path,
         app_data_dir: app_data_dir.clone(),
         database_path: desktop_database_path(&app_data_dir),

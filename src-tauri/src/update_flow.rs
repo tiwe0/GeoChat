@@ -278,6 +278,7 @@ pub(crate) fn install_shell_update(
                 now_iso(),
             );
             let emitted = set_shell_update_state(app, state, next)?;
+            stop_runtime_services(state);
             app.request_restart();
             Ok(emitted)
         }
@@ -714,16 +715,7 @@ fn schedule_app_bundle_restart(app: AppHandle) {
     thread::spawn(move || {
         thread::sleep(Duration::from_millis(500));
         if let Some(state) = app.try_state::<DesktopState>() {
-            if let Ok(mut mcp) = state.mcp.lock() {
-                mcp.stop();
-            }
-            if let Ok(mut backend) = state.backend.lock() {
-                if let Some(child) = backend.child.as_mut() {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                }
-                backend.child = None;
-            }
+            stop_runtime_services(&state);
         }
         if installed_client_update_smoke_external_relaunch_enabled() {
             app.exit(0);
@@ -731,4 +723,13 @@ fn schedule_app_bundle_restart(app: AppHandle) {
         }
         app.request_restart();
     });
+}
+
+fn stop_runtime_services(state: &DesktopState) {
+    if let Ok(mut mcp) = state.mcp.lock() {
+        mcp.stop();
+    }
+    if let Ok(mut backend) = state.backend.lock() {
+        backend.stop();
+    }
 }

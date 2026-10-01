@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import {
   CONFIG_STORAGE_KEY,
   DESKTOP_CONFIG_SCHEMA_VERSION,
-  DesktopCredentialMigrationRequiredError,
   createDefaultDesktopConfig,
   persistDesktopConfig,
 } from "../src/shared/desktop/desktop-config";
@@ -12,7 +11,6 @@ import {
   consumeDesktopConfigRecoveryNotice,
   recoverDesktopConfigBeforeLoad,
 } from "../src/shared/desktop/desktop-config-recovery";
-import { CREDENTIAL_MIGRATION_BACKUP_KEY } from "../src/shared/desktop/desktop-credential-bootstrap";
 
 function memoryStorage(initial: Record<string, string> = {}) {
   const values = new Map(Object.entries(initial));
@@ -34,16 +32,16 @@ describe("desktop config recovery", () => {
     consumeDesktopConfigRecoveryNotice();
   });
 
-  test("does not write defaults into an empty store during bootstrap", () => {
+  test("does not write defaults into an empty store during bootstrap", async () => {
     const storage = {
       getItem: () => null,
       setItem: () => { throw new DOMException("The quota has been exceeded.", "QuotaExceededError"); },
     };
 
-    expect(recoverDesktopConfigBeforeLoad(storage)).toBeNull();
+    expect(await recoverDesktopConfigBeforeLoad(storage)).toBeNull();
   });
 
-  test("repairs only invalid fields and preserves valid provider, locale, and interaction settings", () => {
+  test("repairs only invalid fields and preserves valid provider, locale, and interaction settings", async () => {
     const raw = JSON.stringify({
       schemaVersion: 1,
       locale: "en-US",
@@ -60,7 +58,7 @@ describe("desktop config recovery", () => {
     });
     const storage = memoryStorage({ [CONFIG_STORAGE_KEY]: raw });
 
-    const notice = recoverDesktopConfigBeforeLoad(storage, { createQuarantineId: () => "field-repair" });
+    const notice = await recoverDesktopConfigBeforeLoad(storage, { createQuarantineId: () => "field-repair" });
     const recovered = JSON.parse(storage.getItem(CONFIG_STORAGE_KEY) ?? "{}") as Record<string, any>;
 
     expect(recovered.schemaVersion).toBe(DESKTOP_CONFIG_SCHEMA_VERSION);
@@ -74,44 +72,52 @@ describe("desktop config recovery", () => {
     expect(consumeDesktopConfigRecoveryNotice()).toBeNull();
   });
 
-  test("quarantines truncated JSON before restoring defaults", () => {
+  test("quarantines truncated JSON before restoring defaults", async () => {
     const raw = '{"schemaVersion":1,"locale":"zh-CN"';
     const storage = memoryStorage({ [CONFIG_STORAGE_KEY]: raw });
 
-    const notice = recoverDesktopConfigBeforeLoad(storage, { createQuarantineId: () => "truncated" });
+    const notice = await recoverDesktopConfigBeforeLoad(storage, { createQuarantineId: () => "truncated" });
 
     expect(notice?.reason).toBe("malformed_json");
     expect(storage.getItem(notice!.quarantineKey)).toBe(raw);
     expect(JSON.parse(storage.getItem(CONFIG_STORAGE_KEY) ?? "{}")).toEqual(createDefaultDesktopConfig());
   });
 
-  test("preserves an unsupported schema version byte-for-byte and fails closed", () => {
+  test("preserves an unsupported schema version byte-for-byte and fails closed", async () => {
     const raw = JSON.stringify({ schemaVersion: 999, locale: "en-US" });
     const storage = memoryStorage({ [CONFIG_STORAGE_KEY]: raw });
 
-    expect(() => recoverDesktopConfigBeforeLoad(storage, { createQuarantineId: () => "future" }))
-      .toThrow(DesktopConfigUnsupportedVersionError);
+    await expect(recoverDesktopConfigBeforeLoad(storage, { createQuarantineId: () => "future" }))
+      .rejects.toThrow(DesktopConfigUnsupportedVersionError);
 
     expect(storage.getItem(CONFIG_STORAGE_KEY)).toBe(raw);
     expect(Array.from(storage.values.keys()).some((key) => key.includes(":quarantine:"))).toBe(false);
     expect(consumeDesktopConfigRecoveryNotice()).toBeNull();
   });
 
+  test("rejects a versionless config instead of upgrading it", async () => {
+    const raw = JSON.stringify({ locale: "en-US" });
+    const storage = memoryStorage({ [CONFIG_STORAGE_KEY]: raw });
+
+    await expect(recoverDesktopConfigBeforeLoad(storage)).rejects.toThrow(DesktopConfigUnsupportedVersionError);
+    expect(storage.getItem(CONFIG_STORAGE_KEY)).toBe(raw);
+  });
+
   test.each(["apiKey", "secret", "token", "authorization"])(
     "preserves malformed JSON containing the %s credential marker without copying it",
-    (credentialMarker) => {
+    async (credentialMarker) => {
       const raw = `{"schemaVersion":1,"${credentialMarker}":"sensitive-value"`;
       const storage = memoryStorage({ [CONFIG_STORAGE_KEY]: raw });
 
-      expect(() => recoverDesktopConfigBeforeLoad(storage, { createQuarantineId: () => "sensitive" }))
-        .toThrow(DesktopConfigSensitiveDataRecoveryRequiredError);
+      await expect(recoverDesktopConfigBeforeLoad(storage, { createQuarantineId: () => "sensitive" }))
+        .rejects.toThrow(DesktopConfigSensitiveDataRecoveryRequiredError);
       expect(storage.getItem(CONFIG_STORAGE_KEY)).toBe(raw);
       expect(Array.from(storage.values.keys()).some((key) => key.includes(":quarantine:"))).toBe(false);
       expect(consumeDesktopConfigRecoveryNotice()).toBeNull();
     },
   );
 
-  test("repairs a non-string model id without losing unrelated valid fields", () => {
+  test("repairs a non-string model id without losing unrelated valid fields", async () => {
     const raw = JSON.stringify({
       ...createDefaultDesktopConfig("en-US"),
       interaction: { mode: "window" },
@@ -123,7 +129,7 @@ describe("desktop config recovery", () => {
     });
     const storage = memoryStorage({ [CONFIG_STORAGE_KEY]: raw });
 
-    const notice = recoverDesktopConfigBeforeLoad(storage, { createQuarantineId: () => "bad-model" });
+    const notice = await recoverDesktopConfigBeforeLoad(storage, { createQuarantineId: () => "bad-model" });
     const recovered = JSON.parse(storage.getItem(CONFIG_STORAGE_KEY) ?? "{}") as Record<string, any>;
 
     expect(notice?.reason).toBe("invalid_fields");
@@ -138,44 +144,40 @@ describe("desktop config recovery", () => {
     });
   });
 
-  test("does not replace the original when quarantine persistence fails", () => {
+  test("does not replace the original when quarantine persistence fails", async () => {
     const raw = "{truncated";
     const storage = memoryStorage({ [CONFIG_STORAGE_KEY]: raw });
     storage.failNextWriteFor(`${CONFIG_STORAGE_KEY}:quarantine:v1:blocked`);
 
-    expect(() => recoverDesktopConfigBeforeLoad(storage, { createQuarantineId: () => "blocked" }))
-      .toThrow("storage write failed");
+    await expect(recoverDesktopConfigBeforeLoad(storage, { createQuarantineId: () => "blocked" }))
+      .rejects.toThrow("storage write failed");
     expect(storage.getItem(CONFIG_STORAGE_KEY)).toBe(raw);
   });
 
-  test("does not recover over an unfinished credential migration backup", () => {
+  test("does not queue a replacement when an asynchronous quarantine commit fails", async () => {
     const raw = "{truncated";
-    const backup = JSON.stringify({ model: { apiKey: "secret" } });
-    const storage = memoryStorage({
-      [CONFIG_STORAGE_KEY]: raw,
-      [CREDENTIAL_MIGRATION_BACKUP_KEY]: backup,
-    });
+    const values = new Map([[CONFIG_STORAGE_KEY, raw]]);
+    const pending: Array<readonly [string, string]> = [];
+    const quarantineKey = `${CONFIG_STORAGE_KEY}:quarantine:v1:async-blocked`;
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { pending.push([key, value]); },
+      removeItem: (key: string) => { values.delete(key); },
+    };
+    const flushWrites = async () => {
+      const operation = pending.shift();
+      if (!operation) return;
+      if (operation[0] === quarantineKey) throw new Error("native commit failed");
+      values.set(...operation);
+    };
 
-    expect(() => recoverDesktopConfigBeforeLoad(storage, { createQuarantineId: () => "blocked" }))
-      .toThrow(DesktopCredentialMigrationRequiredError);
-    expect(storage.getItem(CONFIG_STORAGE_KEY)).toBe(raw);
-    expect(storage.getItem(CREDENTIAL_MIGRATION_BACKUP_KEY)).toBe(backup);
-    expect(Array.from(storage.values.keys()).some((key) => key.includes(":quarantine:"))).toBe(false);
-  });
+    await expect(recoverDesktopConfigBeforeLoad(storage, {
+      createQuarantineId: () => "async-blocked",
+      flushWrites,
+    })).rejects.toThrow("native commit failed");
 
-  test("persist refuses to overwrite current or backup plaintext awaiting credential migration", () => {
-    const safeConfig = createDefaultDesktopConfig();
-    const legacy = JSON.stringify({ model: { provider: "deepseek", model: "deepseek-chat", apiKey: "secret" } });
-    const currentLegacy = memoryStorage({ [CONFIG_STORAGE_KEY]: legacy });
-    const backupLegacy = memoryStorage({
-      [CONFIG_STORAGE_KEY]: JSON.stringify(safeConfig),
-      [CREDENTIAL_MIGRATION_BACKUP_KEY]: legacy,
-    });
-
-    expect(() => persistDesktopConfig(safeConfig, currentLegacy)).toThrow(DesktopCredentialMigrationRequiredError);
-    expect(currentLegacy.getItem(CONFIG_STORAGE_KEY)).toBe(legacy);
-    expect(() => persistDesktopConfig(safeConfig, backupLegacy)).toThrow(DesktopCredentialMigrationRequiredError);
-    expect(backupLegacy.getItem(CREDENTIAL_MIGRATION_BACKUP_KEY)).toBe(legacy);
+    expect(values.get(CONFIG_STORAGE_KEY)).toBe(raw);
+    expect(pending).toEqual([]);
   });
 
   test("persist refuses to overwrite a future config version before quarantine", () => {
@@ -183,7 +185,7 @@ describe("desktop config recovery", () => {
     const storage = memoryStorage({ [CONFIG_STORAGE_KEY]: raw });
 
     expect(() => persistDesktopConfig(createDefaultDesktopConfig(), storage))
-      .toThrow(DesktopCredentialMigrationRequiredError);
+      .toThrow(DesktopConfigUnsupportedVersionError);
     expect(storage.getItem(CONFIG_STORAGE_KEY)).toBe(raw);
   });
 });

@@ -1,15 +1,15 @@
 import { isAgentModelConfig } from "@geochat-ai/app/model-registry";
 import {
   CONFIG_STORAGE_KEY,
-  CREDENTIAL_MIGRATION_BACKUP_KEY,
   DESKTOP_CONFIG_SCHEMA_VERSION,
-  DesktopCredentialMigrationRequiredError,
+  DesktopConfigPlaintextCredentialError,
+  DesktopConfigUnsupportedVersionError,
   VISUAL_PROFILE_NAMES,
   createDefaultDesktopConfig,
   normalizeDesktopConfig,
   normalizeModelStepTimeoutMs,
 } from "./desktop-config";
-import { hasLegacyPlaintextCredentials, parseRawDesktopConfig } from "./desktop-credentials";
+import { hasPlaintextCredentials, parseRawDesktopConfig } from "./desktop-credentials";
 import type { DesktopConfig, VisualProfileName } from "./workbench-types";
 
 export const CONFIG_QUARANTINE_KEY_PREFIX = `${CONFIG_STORAGE_KEY}:quarantine:v1`;
@@ -21,16 +21,11 @@ export type DesktopConfigRecoveryNotice = Readonly<{
   recoveredFields: readonly string[];
 }>;
 
-type ConfigRecoveryStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+export type ConfigRecoveryStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 let pendingConfigRecoveryNotice: DesktopConfigRecoveryNotice | null = null;
 
-export class DesktopConfigUnsupportedVersionError extends Error {
-  constructor() {
-    super("Desktop config schema version is not supported by this application version");
-    this.name = "DesktopConfigUnsupportedVersionError";
-  }
-}
+export { DesktopConfigUnsupportedVersionError } from "./desktop-config";
 
 export class DesktopConfigSensitiveDataRecoveryRequiredError extends Error {
   constructor() {
@@ -40,8 +35,9 @@ export class DesktopConfigSensitiveDataRecoveryRequiredError extends Error {
 }
 
 export function isDesktopConfigStorageQuotaError(error: unknown): boolean {
-  if (!(error instanceof DOMException)) return false;
-  return error.name === "QuotaExceededError" || error.code === 22 || error.code === 1014;
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { name?: unknown; code?: unknown };
+  return candidate.name === "QuotaExceededError" || candidate.code === 22 || candidate.code === 1014;
 }
 
 const SENSITIVE_CONFIG_KEY = /(?:["']\s*[^"']*(?:api[_-]?key|secret|token|authorization|password|private[_-]?key|access[_-]?key|cookie)[^"']*["']|(?:^|[,{]\s*)(?:api[_-]?key|secret|token|authorization|password|private[_-]?key|access[_-]?key|cookie))\s*:/i;
@@ -140,43 +136,44 @@ function defaultQuarantineId() {
   return `${Date.now()}-${suffix}`;
 }
 
-function quarantineAndRecover(
+async function quarantineAndRecover(
   storage: ConfigRecoveryStorage,
   rawJson: string,
   reason: DesktopConfigRecoveryReason,
   recovered: DesktopConfig,
   recoveredFields: readonly string[],
   createQuarantineId: () => string,
+  flushWrites: () => Promise<void>,
 ) {
   const quarantineKey = `${CONFIG_QUARANTINE_KEY_PREFIX}:${createQuarantineId()}`;
   // The original config is replaced only after the exact bytes are durable in
   // quarantine. If this write fails, setItem for CONFIG_STORAGE_KEY is never run.
   storage.setItem(quarantineKey, rawJson);
+  await flushWrites();
   storage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(recovered));
+  await flushWrites();
   const notice = Object.freeze({ reason, quarantineKey, recoveredFields: Object.freeze([...recoveredFields]) });
   pendingConfigRecoveryNotice = notice;
   return notice;
 }
 
 /**
- * Validates and upgrades the versioned renderer config before any consumer
- * reads it. Invalid fields are normalized independently; whole-document
- * fallback is reserved for malformed JSON and unsupported schema versions.
+ * Validates the current renderer config before any consumer reads it. Invalid
+ * fields are recovered independently, but other schema versions are rejected.
  */
-export function recoverDesktopConfigBeforeLoad(
-  storage: ConfigRecoveryStorage = globalThis.localStorage,
-  options: Readonly<{ createQuarantineId?: () => string }> = {},
-): DesktopConfigRecoveryNotice | null {
-  const rawJson = storage?.getItem(CONFIG_STORAGE_KEY) ?? null;
-  if (storage?.getItem(CREDENTIAL_MIGRATION_BACKUP_KEY) !== null) {
-    throw new DesktopCredentialMigrationRequiredError();
-  }
+export async function recoverDesktopConfigBeforeLoad(
+  storage: ConfigRecoveryStorage,
+  options: Readonly<{
+    createQuarantineId?: () => string;
+    flushWrites?: () => Promise<void>;
+  }> = {},
+): Promise<DesktopConfigRecoveryNotice | null> {
+  const flushWrites = options.flushWrites ?? (async () => {});
+  const rawJson = storage.getItem(CONFIG_STORAGE_KEY);
   if (rawJson === null) {
     // A fresh profile already reads as the default config. Do not seed an
-    // equivalent localStorage value during bootstrap: WebView storage can be
-    // unavailable or temporarily over quota, and that must not prevent React
-    // from mounting. The first user-initiated change remains the persistence
-    // boundary and can report its own write failure.
+    // equivalent value during bootstrap; the first user change is the
+    // persistence boundary.
     return null;
   }
   let rawConfig: Record<string, unknown>;
@@ -185,7 +182,7 @@ export function recoverDesktopConfigBeforeLoad(
   } catch {
     if (malformedConfigMayContainSensitiveData(rawJson)) {
       // Keep the only copy in place. Duplicating potentially secret-bearing
-      // bytes into another localStorage key would expand the exposure surface.
+      // bytes into another key would expand the exposure surface.
       throw new DesktopConfigSensitiveDataRecoveryRequiredError();
     }
     return quarantineAndRecover(
@@ -195,14 +192,13 @@ export function recoverDesktopConfigBeforeLoad(
       createDefaultDesktopConfig(),
       ["$document"],
       options.createQuarantineId ?? defaultQuarantineId,
+      flushWrites,
     );
   }
-  if (rawConfig.schemaVersion !== undefined && rawConfig.schemaVersion !== DESKTOP_CONFIG_SCHEMA_VERSION) {
-    // A newer application may own fields and credential locations unknown to
-    // this build. Preserve its bytes in place and refuse downgrade recovery.
+  if (rawConfig.schemaVersion !== DESKTOP_CONFIG_SCHEMA_VERSION) {
     throw new DesktopConfigUnsupportedVersionError();
   }
-  if (hasLegacyPlaintextCredentials(rawConfig)) throw new DesktopCredentialMigrationRequiredError();
+  if (hasPlaintextCredentials(rawConfig)) throw new DesktopConfigPlaintextCredentialError();
   const recoveredFields = configFieldIssues(rawConfig);
   const recovered = normalizeDesktopConfig(rawConfig as Partial<DesktopConfig>);
   if (recoveredFields.length) {
@@ -213,10 +209,8 @@ export function recoverDesktopConfigBeforeLoad(
       recovered,
       recoveredFields,
       options.createQuarantineId ?? defaultQuarantineId,
+      flushWrites,
     );
-  }
-  if (rawConfig.schemaVersion !== DESKTOP_CONFIG_SCHEMA_VERSION) {
-    storage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(recovered));
   }
   return null;
 }

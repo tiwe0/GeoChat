@@ -33,7 +33,6 @@ import {
   isFunctionCallRendererExecutable,
   normalizeGeoGebraCommandSyntax,
   normalizeGeoGebraFreeParameterCommands,
-  normalizeGeoGebraPerspectiveMode,
 } from "@geochat-ai/app/functioncalls";
 import {
   compileGeometryPlanToExecuteArgs,
@@ -138,16 +137,16 @@ describe("agent model registry", () => {
     expect(getAgentProviderOptions()).toContainEqual({ value: "qwen", label: "通义千问（阿里云百炼）" });
     expect(agentModelSupportsImages("deepseek", "deepseek-flash")).toBe(true);
     expect(agentModelSupportsImages("deepseek", "deepseek-v4-pro")).toBe(false);
-    expect(agentModelSupportsImages("openai", "gpt-5.5")).toBe(true);
-    expect(agentModelSupportsImages("openrouter", "openai/gpt-5.5")).toBe(true);
+    expect(agentModelSupportsImages("openai", "gpt-5.6-terra")).toBe(true);
+    expect(agentModelSupportsImages("openrouter", "openai/gpt-5.6-terra")).toBe(true);
     expect(agentModelSupportsImages("qwen", "qwen-plus")).toBe(false);
-    expect(getAgentModelPolicy({ provider: "openai", model: "gpt-5.5" })).toMatchObject({
+    expect(getAgentModelPolicy({ provider: "openai", model: "gpt-5.6-terra" })).toMatchObject({
       supportsImages: true,
       supportsTools: true,
       toolCallingMode: "native",
       isKnownModel: true
     });
-    expect(getAgentModelPolicy({ provider: "openrouter", model: "openai/gpt-5.5" })).toMatchObject({
+    expect(getAgentModelPolicy({ provider: "openrouter", model: "openai/gpt-5.6-terra" })).toMatchObject({
       supportsImages: true,
       supportsTools: true,
       toolCallingMode: "native",
@@ -175,17 +174,17 @@ describe("agent model registry", () => {
       isKnownModel: false,
       isCustomModel: false
     });
-    expect(getAgentModelPolicy({ provider: "openai", model: "gpt-5.5", maxToolSteps: 7 })).toMatchObject({
+    expect(getAgentModelPolicy({ provider: "openai", model: "gpt-5.6-terra", maxToolSteps: 7 })).toMatchObject({
       maxToolSteps: 7,
       isKnownModel: true
     });
   });
 
   test("creates a safe model policy snapshot for agent diagnostics", () => {
-    expect(agentModelPolicySnapshotFor({ provider: "openai", model: "gpt-5.5" })).toEqual({
+    expect(agentModelPolicySnapshotFor({ provider: "openai", model: "gpt-5.6-terra" })).toEqual({
       provider: "openai",
-      model: "gpt-5.5",
-      label: "GPT-5.5",
+      model: "gpt-5.6-terra",
+      label: "GPT-5.6 Terra",
       supportsImages: true,
       supportsTools: true,
       toolCallingMode: "native",
@@ -205,10 +204,10 @@ describe("agent model registry", () => {
       isKnownModel: false,
       isCustomModel: true
     });
-    expect(agentModelPolicySnapshotFor({ provider: "openrouter", model: "openai/gpt-5.5" })).toMatchObject({
+    expect(agentModelPolicySnapshotFor({ provider: "openrouter", model: "openai/gpt-5.6-terra" })).toMatchObject({
       provider: "openrouter",
-      model: "openai/gpt-5.5",
-      label: "OpenRouter GPT-5.5",
+      model: "openai/gpt-5.6-terra",
+      label: "GPT-5.6 Terra",
       supportsImages: true,
       supportsTools: true,
       toolCallingMode: "native",
@@ -311,7 +310,6 @@ describe("function call registry", () => {
     expect(getFunctionCallInputJsonSchema("searchGeoGebraCommands", "en-US").properties.tags.description).toContain("Optional exact tag filters");
     expect(getFunctionCallInputJsonSchema("searchGeoGebraCommands", "en-US").properties.tagMatch.description).toContain("all requires every tag");
     expect(getFunctionCallInputJsonSchema("createGeometryPlan", "en-US").properties.sourceText.description).toContain("Original problem statement");
-    expect(getFunctionCallInputJsonSchema("setPerspective", "en-US").properties.mode.description).toContain("Localized aliases");
     expect(getFunctionCallInputJsonSchema("setPerspective", "en-US").properties.mode.description).not.toContain("画板");
     expect(getFunctionCallSpec("showChoiceAnalysis").description).toContain("A/B/C/D");
     expect(getFunctionCallInputJsonSchema("showChoiceAnalysis").properties.choices.description).toContain("分别分析选项");
@@ -451,7 +449,6 @@ describe("function call registry", () => {
       "listSkills",
       "searchSkills",
       "loadSkill",
-      "activateSkill",
       "createGeometryPlan",
       "executeAdvancedDrawingCommand",
       "executeGeoGebraCommands",
@@ -477,7 +474,6 @@ describe("function call registry", () => {
       "listSkills",
       "searchSkills",
       "loadSkill",
-      "activateSkill",
       "createGeometryPlan",
       "executeAdvancedDrawingCommand",
       "showSolutionSteps",
@@ -494,7 +490,6 @@ describe("function call registry", () => {
       "listSkills",
       "searchSkills",
       "loadSkill",
-      "activateSkill",
       "createGeometryPlan",
       "executeAdvancedDrawingCommand",
       "showSolutionSteps",
@@ -562,8 +557,6 @@ describe("function call registry", () => {
     expect(advancedArgsDescription).toContain("snapshot");
     expect(advancedArgsDescription).toContain("禁止");
     expect(isFunctionCallArgs("executeAdvancedDrawingCommand", { name: "unknownAdvancedCommand" })).toBe(false);
-    expect(isFunctionCallArgs("activateSkill", { name: "geometry-proof" })).toBe(true);
-    expect(isFunctionCallArgs("activateSkill", { path: "../geometry-proof" })).toBe(false);
     expect(isFunctionCallArgs("listSkills", { limit: 5 })).toBe(true);
     expect(isFunctionCallArgs("searchSkills", { query: "solid geometry", tags: ["3d"] })).toBe(true);
     expect(isFunctionCallArgs("loadSkill", { name: "geometry-proof" })).toBe(true);
@@ -571,6 +564,8 @@ describe("function call registry", () => {
     expect(isFunctionCallArgs("createGeometryPlan", { recipeId: "unknown.recipe", inputs: {} })).toBe(false);
     expect(isFunctionCallArgs("createGeometryPlan", { recipeId: "", inputs: {} })).toBe(false);
     expect(isFunctionCallArgs("setPerspective", { mode: "T" })).toBe(true);
+    expect(isFunctionCallArgs("setPerspective", { perspective: "T" })).toBe(false);
+    expect(isFunctionCallArgs("setPerspective", {})).toBe(false);
     expect(isFunctionCallArgs("setFinished", { summary: "完成。" })).toBe(true);
     expect(isFunctionCallArgs("setFinished", {})).toBe(false);
     expect(isFunctionCallArgs("setPerspective", { mode: "+D" })).toBe(true);
@@ -794,7 +789,7 @@ describe("function call registry", () => {
       injectedContext: "Use 3D skeleton first."
     }, { tools: [{ toolName: "getCanvasContext", status: "succeeded" }] });
 
-    expect(Object.keys(tools)).toEqual(expect.arrayContaining(["listSkills", "searchSkills", "loadSkill", "activateSkill"]));
+    expect(Object.keys(tools)).toEqual(expect.arrayContaining(["listSkills", "searchSkills", "loadSkill"]));
     expect(Object.keys(tools)).toEqual(expect.arrayContaining(["readBlackboard", "patchBlackboard"]));
     expect(Object.keys(tools)).toContain("executeGeoGebraCommands");
     expect(Object.keys(tools)).toContain("searchGeoGebraCommands");
@@ -840,7 +835,7 @@ describe("function call registry", () => {
       ].join("\n")
     });
 
-    expect(Object.keys(tools)).toEqual(expect.arrayContaining(["listSkills", "searchSkills", "loadSkill", "activateSkill"]));
+    expect(Object.keys(tools)).toEqual(expect.arrayContaining(["listSkills", "searchSkills", "loadSkill"]));
   });
 
   test("hides every skill tool when Agent Skills are disabled", () => {
@@ -856,11 +851,11 @@ describe("function call registry", () => {
       prompt: [
         "画一个圆。",
         "【Agent Skill 策略】",
-        "本轮已关闭 Agent Skills，不要调用 listSkills、searchSkills、loadSkill 或 activateSkill。"
+        "本轮已关闭 Agent Skills，不要调用 listSkills、searchSkills 或 loadSkill。"
       ].join("\n")
     });
 
-    expect(Object.keys(tools)).not.toEqual(expect.arrayContaining(["listSkills", "searchSkills", "loadSkill", "activateSkill"]));
+    expect(Object.keys(tools)).not.toEqual(expect.arrayContaining(["listSkills", "searchSkills", "loadSkill"]));
   });
 
   test("exposes blackboard tools after drawing work has started", () => {
@@ -1144,19 +1139,6 @@ describe("function call registry", () => {
       "C:\\GeoChat\\skills",
       "D:\\GeoChat\\more-skills"
     ]);
-  });
-
-  test("normalizes GeoGebra perspective aliases to manual SetPerspective codes", () => {
-    expect(normalizeGeoGebraPerspectiveMode("3D")).toMatchObject({ code: "T", kind: "layout" });
-    expect(normalizeGeoGebraPerspectiveMode("三维视图")).toMatchObject({ code: "T", kind: "layout" });
-    expect(normalizeGeoGebraPerspectiveMode("画板")).toMatchObject({ code: "G", kind: "layout" });
-    expect(normalizeGeoGebraPerspectiveMode("代数")).toMatchObject({ code: "AG", kind: "layout" });
-    expect(normalizeGeoGebraPerspectiveMode("AGS")).toMatchObject({ code: "AGS", kind: "layout" });
-    expect(normalizeGeoGebraPerspectiveMode("S/(GA)")).toMatchObject({ code: "S/(GA)", kind: "layout" });
-    expect(normalizeGeoGebraPerspectiveMode("+graphics2")).toMatchObject({ code: "+D", kind: "view_toggle" });
-    expect(normalizeGeoGebraPerspectiveMode("-T")).toMatchObject({ code: "-T", kind: "view_toggle" });
-    expect(normalizeGeoGebraPerspectiveMode("5")).toMatchObject({ code: "5", kind: "standard" });
-    expect(normalizeGeoGebraPerspectiveMode("not-a-view")).toBeUndefined();
   });
 
   test("declares free symbolic parameters before dependent GeoGebra commands", () => {
@@ -1723,32 +1705,6 @@ describe("function call registry", () => {
           markdown: expect.stringContaining("# Geometry Proof")
         },
         clientMeta: { source: "backend-agent-skill", operation: "load", name: "geometry-proof" }
-      }
-    });
-    await expect(
-      executeBackendToolRequest(
-        {
-          toolCallId: "backend-skill",
-          toolName: "activateSkill",
-          args: {
-            name: "geometry-proof",
-            reason: "The task needs the formal geometry proof workflow."
-          }
-        },
-        backendContext(),
-        "2026-06-06T00:00:00.000Z"
-      )
-    ).resolves.toMatchObject({
-      toolName: "activateSkill",
-      result: {
-        ok: true,
-        result: {
-          name: "geometry-proof",
-          description: "Use when a problem needs a formal geometry proof workflow.",
-          source: "local",
-          markdown: expect.stringContaining("# Geometry Proof")
-        },
-        clientMeta: { source: "backend-agent-skill", name: "geometry-proof" }
       }
     });
     if (previousSkillsDir === undefined) {
@@ -2803,7 +2759,6 @@ describe("workflow policy", () => {
     expect(evaluateAgentWorkflowToolCall(state, "patchBlackboard")).toEqual({ allowed: true });
     expect(evaluateAgentWorkflowToolCall(state, "searchSkills")).toEqual({ allowed: true });
     expect(evaluateAgentWorkflowToolCall(state, "loadSkill")).toEqual({ allowed: true });
-    expect(evaluateAgentWorkflowToolCall(state, "activateSkill")).toEqual({ allowed: true });
     expect(advanceAgentWorkflowState(state, "listSkills", true)).toMatchObject({
       phase: "needs_canvas_read",
       hasInitialCanvasRead: false

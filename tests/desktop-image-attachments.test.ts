@@ -13,7 +13,7 @@ describe("desktop image attachment model selection", () => {
     const config = normalizeDesktopConfig({
       model: {
         provider: "openai",
-        model: "gpt-5.5",
+        model: "gpt-5.6-terra",
         credentialRef: "primary-ref"
       }
     });
@@ -33,13 +33,13 @@ describe("desktop image attachment model selection", () => {
     const config = normalizeDesktopConfig({
       model: {
         provider: "deepseek",
-        model: "deepseek-v4-flash",
+        model: "deepseek-v4-pro",
         credentialRef: "primary-ref",
         maxToolSteps: 9
       },
       visionModel: {
         provider: "openrouter",
-        model: "openai/gpt-5.5",
+        model: "openai/gpt-5.6-terra",
         credentialRef: "vision-ref"
       }
     });
@@ -61,12 +61,12 @@ describe("desktop image attachment model selection", () => {
     const config = normalizeDesktopConfig({
       model: {
         provider: "deepseek",
-        model: "deepseek-v4-flash",
+        model: "deepseek-v4-pro",
         credentialRef: "primary-ref"
       },
       visionModel: {
         provider: "openrouter",
-        model: "openai/gpt-5.5",
+        model: "openai/gpt-5.6-terra",
         credentialRef: ""
       }
     });
@@ -83,12 +83,12 @@ describe("desktop image attachment model selection", () => {
     const config = normalizeDesktopConfig({
       model: {
         provider: "openai",
-        model: "gpt-5.5",
+        model: "gpt-5.6-terra",
         credentialRef: ""
       },
       visionModel: {
         provider: "openrouter",
-        model: "openai/gpt-5.5",
+        model: "openai/gpt-5.6-terra",
         credentialRef: ""
       }
     });
@@ -107,12 +107,12 @@ describe("desktop image attachment model selection", () => {
     const config = normalizeDesktopConfig({
       model: {
         provider: "openai",
-        model: "gpt-5.5",
+        model: "gpt-5.6-terra",
         credentialRef: ""
       },
       visionModel: {
         provider: "openrouter",
-        model: "openai/gpt-5.5",
+        model: "openai/gpt-5.6-terra",
         credentialRef: "vision-ref"
       }
     });

@@ -10,7 +10,6 @@ import {
   type AgentModelConfig,
   type AgentModelRegistrySchema
 } from "@geochat-ai/app/model-registry";
-import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import type {
   DesktopConfig,
   DebugConfig,
@@ -22,19 +21,45 @@ import type {
   VisualProfileName
 } from "./workbench-types";
 import {
-  hasLegacyPlaintextCredentials,
+  hasPlaintextCredentials,
   parseRawDesktopConfig
 } from "./desktop-credentials";
 import { detectPreferredLocale, type Locale } from "./locale";
 
-const logger = createStructuredLogger("desktop.config");
-
 export const CONFIG_STORAGE_KEY = "geochat-desktop-ui-config";
 export const DESKTOP_CONFIG_SCHEMA_VERSION = 1 as const;
-export const CREDENTIAL_MIGRATION_BACKUP_KEY = `${CONFIG_STORAGE_KEY}:credential-migration-backup:v1`;
 export const DESKTOP_CONFIG_CHANGED_EVENT = "geochat:desktop-config-changed";
 
-type ConfigStorage = Pick<Storage, "getItem" | "setItem">;
+export type DesktopConfigStorage = Pick<Storage, "getItem" | "setItem"> & {
+  setItemDurable?(key: string, value: string): Promise<void>;
+};
+
+let installedConfigStorage: DesktopConfigStorage | null = null;
+let flushInstalledConfigWrites: () => Promise<void> = async () => {};
+let configMutationQueue: Promise<void> = Promise.resolve();
+
+/**
+ * Binds the synchronously readable startup mirror to the desktop config API.
+ * The mirror must already be hydrated from native persistence before install.
+ */
+export function installDesktopConfigStorage(
+  storage: DesktopConfigStorage,
+  flushWrites: () => Promise<void> = async () => {},
+) {
+  installedConfigStorage = storage;
+  flushInstalledConfigWrites = flushWrites;
+  configMutationQueue = Promise.resolve();
+}
+
+/** Waits until writes queued by the native-backed storage facade are durable. */
+export function flushDesktopConfigWrites() {
+  return configMutationQueue.then(() => flushInstalledConfigWrites());
+}
+
+/** Returns the hydrated native-backed storage facade after desktop bootstrap. */
+export function installedDesktopConfigStorage() {
+  return installedConfigStorage;
+}
 
 export const DEFAULT_CUSTOM_PROVIDER_CONFIG: CustomProviderConfig = {
   name: "",
@@ -167,40 +192,6 @@ export const DEFAULT_BUSINESS_AGENT_SKILL_NAMES = [
   "mathematical-animation-design"
 ] as const;
 
-const GEOGEBRA_MATH_SKILL_EXPANSION_NAMES = new Set([
-  "piecewise-domain-function",
-  "dynamic-parameter-exploration",
-  "dynamic-construction-validation",
-  "parametric-surface-revolution",
-  "list-driven-construction",
-  "parametric-polar-curves",
-  "locus-envelope",
-  "regression-model-diagnostics",
-  "geometric-theorem-verification"
-]);
-
-const GEOGEBRA_WORKFLOW_SKILL_EXPANSION_NAMES = new Set([
-  "multi-view-coordination",
-  "cas-graphics-workflow",
-  "spreadsheet-data-workflow",
-  "construction-protocol-presentation",
-  "interactive-controls-workflow",
-  "object-view-layer-management",
-  "dynamic-worksheet-authoring",
-  "dynamic-text-feedback",
-  "visual-style-system",
-  "mathematical-animation-design"
-]);
-
-const PRE_GEOGEBRA_MATH_EXPANSION_DEFAULT_NAMES = DEFAULT_BUSINESS_AGENT_SKILL_NAMES.filter(
-  (name) => !GEOGEBRA_MATH_SKILL_EXPANSION_NAMES.has(name)
-    && !GEOGEBRA_WORKFLOW_SKILL_EXPANSION_NAMES.has(name)
-);
-
-const PRE_GEOGEBRA_WORKFLOW_EXPANSION_DEFAULT_NAMES = DEFAULT_BUSINESS_AGENT_SKILL_NAMES.filter(
-  (name) => !GEOGEBRA_WORKFLOW_SKILL_EXPANSION_NAMES.has(name)
-);
-
 export const VISUAL_PROFILE_NAMES = [
   "exam-clean",
   "teaching-demo",
@@ -261,10 +252,17 @@ export function createDefaultDesktopConfig(locale: Locale = detectPreferredLocal
 
 export const DEFAULT_DESKTOP_CONFIG: DesktopConfig = createDefaultDesktopConfig();
 
-export class DesktopCredentialMigrationRequiredError extends Error {
+export class DesktopConfigPlaintextCredentialError extends Error {
   constructor() {
-    super("Desktop config contains legacy plaintext credentials and must be migrated before normalization");
-    this.name = "DesktopCredentialMigrationRequiredError";
+    super("Desktop config must not contain plaintext credentials");
+    this.name = "DesktopConfigPlaintextCredentialError";
+  }
+}
+
+export class DesktopConfigUnsupportedVersionError extends Error {
+  constructor() {
+    super("Desktop config schema version is not supported by this application version");
+    this.name = "DesktopConfigUnsupportedVersionError";
   }
 }
 
@@ -356,12 +354,7 @@ function normalizeSkillNames(value: unknown) {
     .map((item) => typeof item === "string" ? item.trim() : "")
     .filter(Boolean);
   const uniqueNames = Array.from(new Set(names));
-  const wasPreviousDefaultSelection = [
-    PRE_GEOGEBRA_MATH_EXPANSION_DEFAULT_NAMES,
-    PRE_GEOGEBRA_WORKFLOW_EXPANSION_DEFAULT_NAMES
-  ].some((previousDefaults) => uniqueNames.length === previousDefaults.length
-    && previousDefaults.every((name) => uniqueNames.includes(name)));
-  return wasPreviousDefaultSelection ? [...DEFAULT_SKILL_CONFIG.enabledSkillNames] : uniqueNames;
+  return uniqueNames;
 }
 
 export function normalizeSkillConfig(value: Partial<SkillConfig> | undefined): SkillConfig {
@@ -407,7 +400,7 @@ export function normalizeInteractionConfig(value: unknown): InteractionConfig {
 }
 
 export function normalizeDesktopConfig(value: Partial<DesktopConfig> | undefined, fallbackLocale: Locale = detectPreferredLocale()): DesktopConfig {
-  if (hasLegacyPlaintextCredentials(value)) throw new DesktopCredentialMigrationRequiredError();
+  if (hasPlaintextCredentials(value)) throw new DesktopConfigPlaintextCredentialError();
   const model = normalizeAgentModelConfig(value?.model ?? DEFAULT_MODEL_CONFIG);
   const visionModel = normalizeAgentModelConfig(value?.visionModel ?? DEFAULT_VISION_MODEL_CONFIG);
   const providerCredentials = normalizeProviderCredentials(value?.providerCredentials, model, visionModel);
@@ -434,63 +427,74 @@ export function normalizeDesktopConfig(value: Partial<DesktopConfig> | undefined
   };
 }
 
-/** Parse the original JSON first so normalization cannot erase migration evidence. */
+/** Parse the original JSON first so normalization cannot hide forbidden plaintext credentials. */
 export function normalizeDesktopConfigJson(rawJson: string, fallbackLocale: Locale = detectPreferredLocale()): DesktopConfig {
   const rawConfig = parseRawDesktopConfig(rawJson);
-  if (hasLegacyPlaintextCredentials(rawConfig)) throw new DesktopCredentialMigrationRequiredError();
+  if (hasPlaintextCredentials(rawConfig)) throw new DesktopConfigPlaintextCredentialError();
+  if (rawConfig.schemaVersion !== DESKTOP_CONFIG_SCHEMA_VERSION) throw new DesktopConfigUnsupportedVersionError();
   return normalizeDesktopConfig(rawConfig as Partial<DesktopConfig>, fallbackLocale);
 }
 
 export function readDesktopConfig(): DesktopConfig {
-  if (!globalThis.localStorage) return createDefaultDesktopConfig();
-  try {
-    return normalizeDesktopConfigJson(globalThis.localStorage.getItem(CONFIG_STORAGE_KEY) ?? "{}");
-  } catch (caughtError) {
-    if (caughtError instanceof DesktopCredentialMigrationRequiredError) throw caughtError;
-    logger.warn("config_read_failed", "DESKTOP_CONFIG_READ_FAILED", { error: caughtError });
-    return createDefaultDesktopConfig();
+  if (!installedConfigStorage) return createDefaultDesktopConfig();
+  const rawJson = installedConfigStorage.getItem(CONFIG_STORAGE_KEY);
+  return rawJson === null ? createDefaultDesktopConfig() : normalizeDesktopConfigJson(rawJson);
+}
+
+function assertStoredConfigCanBeReplaced(storage: DesktopConfigStorage) {
+  const rawJson = storage.getItem(CONFIG_STORAGE_KEY);
+  if (rawJson === null) return;
+  const rawConfig = parseRawDesktopConfig(rawJson);
+  if (hasPlaintextCredentials(rawConfig)) throw new DesktopConfigPlaintextCredentialError();
+  if (rawConfig.schemaVersion !== DESKTOP_CONFIG_SCHEMA_VERSION) {
+    throw new DesktopConfigUnsupportedVersionError();
   }
 }
 
-function rawConfigRequiresRecoveryBeforePersist(rawJson: string | null) {
-  if (rawJson === null) return false;
-  try {
-    const rawConfig = parseRawDesktopConfig(rawJson);
-    return hasLegacyPlaintextCredentials(rawConfig)
-      || (rawConfig.schemaVersion !== undefined && rawConfig.schemaVersion !== DESKTOP_CONFIG_SCHEMA_VERSION);
-  } catch {
-    // A caller must pass malformed data through the quarantine path rather
-    // than silently replacing bytes that may contain an unparseable secret.
-    return true;
-  }
-}
-
-export function persistDesktopConfig(
-  config: DesktopConfig,
-  storage: ConfigStorage = globalThis.localStorage,
-) {
-  if (hasLegacyPlaintextCredentials(config)) throw new DesktopCredentialMigrationRequiredError();
-  if (
-    rawConfigRequiresRecoveryBeforePersist(storage?.getItem(CONFIG_STORAGE_KEY) ?? null)
-    || rawConfigRequiresRecoveryBeforePersist(storage?.getItem(CREDENTIAL_MIGRATION_BACKUP_KEY) ?? null)
-  ) {
-    throw new DesktopCredentialMigrationRequiredError();
-  }
-  storage?.setItem(CONFIG_STORAGE_KEY, JSON.stringify({
+async function commitDesktopConfig(config: DesktopConfig, storage: DesktopConfigStorage) {
+  if (hasPlaintextCredentials(config)) throw new DesktopConfigPlaintextCredentialError();
+  assertStoredConfigCanBeReplaced(storage);
+  const serialized = JSON.stringify({
     ...config,
     schemaVersion: DESKTOP_CONFIG_SCHEMA_VERSION,
-  }));
+  });
+  if (storage.setItemDurable) await storage.setItemDurable(CONFIG_STORAGE_KEY, serialized);
+  else {
+    storage.setItem(CONFIG_STORAGE_KEY, serialized);
+    if (storage === installedConfigStorage) await flushInstalledConfigWrites();
+  }
   if (typeof globalThis.dispatchEvent === "function" && typeof Event !== "undefined") {
     globalThis.dispatchEvent(new Event(DESKTOP_CONFIG_CHANGED_EVENT));
   }
 }
 
+function enqueueConfigMutation<T>(operation: () => Promise<T>): Promise<T> {
+  const result = configMutationQueue.catch(() => {}).then(operation);
+  configMutationQueue = result.then(() => {}, () => {});
+  return result;
+}
+
+export function persistDesktopConfig(config: DesktopConfig, storage: DesktopConfigStorage | null = installedConfigStorage): Promise<void> {
+  if (!storage) throw new Error("Desktop config storage has not been installed");
+  if (hasPlaintextCredentials(config)) throw new DesktopConfigPlaintextCredentialError();
+  assertStoredConfigCanBeReplaced(storage);
+  return enqueueConfigMutation(() => commitDesktopConfig(config, storage));
+}
+
+/** Serializes read-modify-write operations against the last durable config snapshot. */
+export function updateDesktopConfig(update: (current: DesktopConfig) => DesktopConfig): Promise<DesktopConfig> {
+  const storage = installedConfigStorage;
+  if (!storage) throw new Error("Desktop config storage has not been installed");
+  return enqueueConfigMutation(async () => {
+    const next = update(readDesktopConfig());
+    await commitDesktopConfig(next, storage);
+    return next;
+  });
+}
+
 export function hasConfiguredCredential(config: AgentModelConfig) {
   return Boolean(config.credentialRef.trim());
 }
-
-/** @deprecated Use hasConfiguredCredential. */
-export const hasConfiguredApiKey = hasConfiguredCredential;
 
 export function modelCanRunImageAttachments(config: AgentModelConfig, schema?: AgentModelRegistrySchema) {
   return hasConfiguredCredential(config) && agentModelSupportsImagesForSchema(config.provider, config.model, schema);
@@ -550,14 +554,14 @@ export function promptWithSkillPolicy(content: string, config: DesktopConfig, lo
           `Visual profile: ${skills.visualProfile}.`,
           skills.autoActivate
             ? "Host skill selector: enabled. A temporary selector will evaluate listSkills, searchSkills, and loadSkill before the main agent runs, then inject a compressed skill packet. The main agent should use that packet and avoid calling skill tools again unless the packet is missing, failed, or clearly insufficient."
-            : "You may call listSkills or searchSkills to evaluate skills, but do not call loadSkill or activateSkill unless the user explicitly asks for a specific skill.",
+            : "You may call listSkills or searchSkills to evaluate skills, but do not call loadSkill unless the user explicitly asks for a specific skill.",
           "Treat recipes as task-type strategy and the visual profile as presentation guidance only; do not let visual style decide mathematical facts.",
           "Never load or activate skills outside the allowed list."
         ].join("\n")
       : [
           "[Agent Skill policy]",
           "This per-run skill policy is authoritative.",
-          "Agent Skills are disabled for this run. Do not call listSkills, searchSkills, loadSkill, or activateSkill."
+          "Agent Skills are disabled for this run. Do not call listSkills, searchSkills, or loadSkill."
         ].join("\n")
     : skills.enabled && enabledSkillNames.length
       ? [
@@ -568,14 +572,14 @@ export function promptWithSkillPolicy(content: string, config: DesktopConfig, lo
           `可视化表达策略：${skills.visualProfile}。`,
           skills.autoActivate
             ? "Host skill selector：开启。临时选择器会在主 agent 运行前评估 listSkills、searchSkills 和 loadSkill，并注入压缩后的 skill packet。主 agent 应优先使用该 packet；除非 packet 缺失、失败或明显不足，否则不要再次调用技能工具。"
-            : "可以调用 listSkills 或 searchSkills 评估技能，但除非用户明确要求某个技能，否则不要调用 loadSkill 或 activateSkill。",
+            : "可以调用 listSkills 或 searchSkills 评估技能，但除非用户明确要求某个技能，否则不要调用 loadSkill。",
           "Recipe 只用于题型策略；可视化表达策略只决定呈现方式，不决定数学事实。",
           "不要加载或激活允许列表之外的技能。"
         ].join("\n")
       : [
           "【Agent Skill 策略】",
           "本轮技能策略优先于默认技能目录说明。",
-          "本轮已关闭 Agent Skills，不要调用 listSkills、searchSkills、loadSkill 或 activateSkill。"
+          "本轮已关闭 Agent Skills，不要调用 listSkills、searchSkills 或 loadSkill。"
         ].join("\n");
   return `${content}\n\n${policy}`;
 }

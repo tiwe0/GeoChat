@@ -8,6 +8,7 @@ export const CORS_ALLOWED_HEADERS = [
   "authorization",
   "content-type",
   "x-client-channel",
+  "x-correlation-id",
   "x-guest-session-id"
 ] as const;
 

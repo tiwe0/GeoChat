@@ -20,10 +20,23 @@ export const zhCN = {
     },
   },
   canvasControls: {
-    openMenu: "打开 GeoGebra 菜单",
+    openMenu: "打开 GeoGebra 文档",
     showToolbar: "显示 GeoGebra 工具栏",
     hideToolbar: "隐藏 GeoGebra 工具栏",
     reset: "重置 GeoGebra 画板",
+  },
+  documents: {
+    title: "GeoGebra 文档",
+    close: "关闭文档面板",
+    new: "新建",
+    name: "文档名称",
+    save: "保存",
+    storageNote: "文档保存在本机 SQLite 数据库中。",
+    empty: "暂无已保存文档",
+    titleRequired: "请输入文档名称。",
+    delete: "删除",
+    deleteLabel: "删除 {{title}}",
+    deleteConfirm: "删除文档“{{title}}”？",
   },
   canvasRecovery: {
     title: "画布需要恢复",
@@ -184,7 +197,6 @@ export const zhCN = {
     minimizeDescription: "\u6536\u8d77\u52a9\u624b\u9762\u677f\u3002",
   },
   history: {
-    exportRecovery: "导出恢复数据",
     title: "\u5386\u53f2\u5bf9\u8bdd",
     open: "\u6253\u5f00\u5386\u53f2\u5bf9\u8bdd",
     close: "\u5173\u95ed\u5386\u53f2\u5bf9\u8bdd",

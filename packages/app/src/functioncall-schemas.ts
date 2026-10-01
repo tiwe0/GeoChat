@@ -47,9 +47,6 @@ const FUNCTION_CALL_INPUT_JSON_SCHEMA_ENGLISH_OVERRIDES = {
   loadSkill: {
     name: "Skill name to load. It must come from listSkills or searchSkills results; pass a name, not a path, and do not invent missing skills."
   },
-  activateSkill: {
-    name: "Compatibility alias for loadSkill. Prefer listSkills, searchSkills, then loadSkill for new calls."
-  },
   createGeometryPlan: {
     recipeId: "Construction recipe ID, for example function.parabola.vertex, function.intersections, or conic.ellipse.foci-point.",
     inputs: "Structured inputs for the recipe, such as expressions, focus coordinates, or object names.",
@@ -116,13 +113,11 @@ const FUNCTION_CALL_INPUT_JSON_SCHEMA_ENGLISH_OVERRIDES = {
   },
   setPerspective: {
     mode: [
-      "GeoGebra SetPerspective text, code, layout, toggle, or supported alias.",
+      "GeoGebra SetPerspective text, code, layout, or toggle.",
       "View letters: A=Algebra, B=Probability Calculator, C=CAS, D=Graphics 2, G=Graphics, L=Construction Protocol, P=Properties, R=Data Analysis, S=Spreadsheet, T=3D Graphics.",
-      "Use T for 3D Graphics; do not pass 3D unless relying on alias normalization.",
-      "Examples: G, AG, AGS, S/G, S/(GA), +D, -D, +T, -T, +Tools, +Table, 1, 2, 3, 4, 5, 6.",
-      "Localized aliases are accepted and normalized before execution."
-    ].join(" "),
-    perspective: "Alias of mode for compatibility. Prefer mode for new calls and follow the same GeoGebra SetPerspective usage rules."
+      "Use T for 3D Graphics.",
+      "Examples: G, AG, AGS, S/G, S/(GA), +D, -D, +T, -T, +Tools, +Table, 1, 2, 3, 4, 5, 6."
+    ].join(" ")
   }
 } as const;
 
@@ -177,9 +172,6 @@ function localizedFunctionCallInputJsonSchema<TToolName extends FunctionCallTool
   }
   if (toolName === "loadSkill") {
     schema.properties.name = { ...schema.properties.name, description: overrides.loadSkill.name };
-  }
-  if (toolName === "activateSkill") {
-    schema.properties.name = { ...schema.properties.name, description: overrides.activateSkill.name };
   }
   if (toolName === "createGeometryPlan") {
     schema.properties.recipeId = { ...schema.properties.recipeId, description: overrides.createGeometryPlan.recipeId };
@@ -249,7 +241,6 @@ function localizedFunctionCallInputJsonSchema<TToolName extends FunctionCallTool
   }
   if (toolName === "setPerspective") {
     schema.properties.mode = { ...schema.properties.mode, description: overrides.setPerspective.mode };
-    schema.properties.perspective = { ...schema.properties.perspective, description: overrides.setPerspective.perspective };
   }
   return schema;
 }

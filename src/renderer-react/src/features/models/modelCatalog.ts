@@ -14,7 +14,7 @@ export type RuntimeModelOption = Pick<
   "provider" | "id" | "label" | "capabilities" | "maxToolSteps" | "defaultTemperature"
 > & { providerLabel?: string };
 
-export const LOCAL_MODEL_OPTIONS: RuntimeModelOption[] = AGENT_MODEL_REGISTRY.filter((model) => !("deprecated" in model && model.deprecated === true)).map((model) => ({
+export const LOCAL_MODEL_OPTIONS: RuntimeModelOption[] = AGENT_MODEL_REGISTRY.map((model) => ({
   provider: model.provider,
   id: model.id,
   label: model.label,

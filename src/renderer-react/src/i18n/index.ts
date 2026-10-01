@@ -3,6 +3,7 @@ import { initReactI18next } from "react-i18next";
 import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import { en } from "./locales/en";
 import { zhCN } from "./locales/zh-CN";
+import { nativePreferences } from "../lib/nativePreferences";
 
 const logger = createStructuredLogger("renderer.i18n");
 
@@ -19,11 +20,10 @@ export async function initializeI18n(_apiOrigin?: string) {
 
   let storedLanguage: unknown;
   try {
-    const stored = await browser.storage.local.get(LANGUAGE_STORAGE_KEY);
-    storedLanguage = stored[LANGUAGE_STORAGE_KEY];
+    storedLanguage = nativePreferences().get(LANGUAGE_STORAGE_KEY);
   } catch (caughtError) {
     logger.debug("stored_language_read_failed", "I18N_LANGUAGE_READ_FAILED", { error: caughtError });
-    // Browser language remains the fallback when extension storage is unavailable.
+    // The machine language remains the fallback when no preference can be read.
   }
 
   const initialLanguage = resolveAppLanguage(storedLanguage ?? navigator.language);
@@ -50,7 +50,7 @@ export async function initializeI18n(_apiOrigin?: string) {
 export async function changeAppLanguage(language: AppLanguage) {
   await i18n.changeLanguage(language);
   try {
-    await browser.storage.local.set({ [LANGUAGE_STORAGE_KEY]: language });
+    await nativePreferences().set(LANGUAGE_STORAGE_KEY, language);
   } catch (caughtError) {
     logger.debug("language_persist_failed", "I18N_LANGUAGE_PERSIST_FAILED", { error: caughtError, language });
     // Keep the in-memory selection even if persistence is unavailable.

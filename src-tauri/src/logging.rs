@@ -47,7 +47,7 @@ impl DesktopLogLevel {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct DesktopLoggingPreferences {
     pub(crate) enabled: bool,
     pub(crate) level: DesktopLogLevel,

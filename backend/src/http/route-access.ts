@@ -4,13 +4,11 @@ import { handleAgentRunObservabilityRoute } from "./routes/agent-run-observabili
 import { handleBenchmarkRoute } from "./routes/benchmark";
 import { handleConversationRoute } from "./routes/conversations";
 import { handleHealthAndAssetRoute } from "./routes/health-assets";
-import { handleMessageRoute } from "./routes/messages";
-import { handleMigrationRoute } from "./routes/migration";
 import { handleModelDiscoveryRoute } from "./routes/model-discovery";
 import { handleNativeChatRoute } from "./routes/native-chat";
 import { handleProblemBankRoute } from "./routes/problem-bank";
 import { handleSkillCatalogRoute } from "./routes/skills";
-import { handleLegacyConversationImportRoute } from "./routes/legacy-conversation-import";
+import { handleGeoGebraDocumentRoute } from "./routes/geogebra-documents";
 
 export type BackendRouteAccess = "public" | "authenticated";
 
@@ -51,13 +49,6 @@ export const BACKEND_ROUTE_ACCESS_CATALOG = [
     handle: handleHealthAndAssetRoute
   },
   {
-    id: "geogebra-assets-legacy",
-    access: "public",
-    methods: ["GET", "HEAD"],
-    matches: pathPrefix("/tools/geogebra-assets/"),
-    handle: handleHealthAndAssetRoute
-  },
-  {
     id: "skills",
     access: "authenticated",
     methods: ["GET"],
@@ -93,32 +84,18 @@ export const BACKEND_ROUTE_ACCESS_CATALOG = [
     handle: handleConversationRoute
   },
   {
-    id: "messages",
+    id: "geogebra-documents",
     access: "authenticated",
     methods: ["GET", "POST"],
-    matches: exactPath("/v1/messages"),
-    handle: handleMessageRoute
+    matches: exactPath("/v1/geogebra-documents"),
+    handle: handleGeoGebraDocumentRoute
   },
   {
-    id: "migration-export",
+    id: "geogebra-document-detail",
     access: "authenticated",
-    methods: ["GET"],
-    matches: exactPath("/v1/migration/export"),
-    handle: handleMigrationRoute
-  },
-  {
-    id: "migration-import",
-    access: "authenticated",
-    methods: ["POST"],
-    matches: exactPath("/v1/migration/import"),
-    handle: handleMigrationRoute
-  },
-  {
-    id: "legacy-conversation-import",
-    access: "authenticated",
-    methods: ["POST"],
-    matches: exactPath("/v1/legacy-conversations/import"),
-    handle: handleLegacyConversationImportRoute
+    methods: ["GET", "DELETE"],
+    matches: dynamicPath(/^\/v1\/geogebra-documents\/[^/]+$/),
+    handle: handleGeoGebraDocumentRoute
   },
   {
     id: "problem-bank-import",

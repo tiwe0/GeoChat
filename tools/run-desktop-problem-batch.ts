@@ -67,8 +67,7 @@ const endpoint = process.env.GEOCHAT_DESKTOP_MCP_URL ?? "http://127.0.0.1:17369/
 const backendBaseUrl = process.env.GEOCHAT_DESKTOP_BACKEND_URL ?? "http://127.0.0.1:17365";
 const localAuthToken =
   process.env.GEOCHAT_DESKTOP_MCP_AUTH_TOKEN ??
-  process.env.GEOCHAT_DESKTOP_BACKEND_AUTH_TOKEN ??
-  process.env.GEOCHAT_DESKTOP_LOCAL_AUTH_TOKEN;
+  process.env.GEOCHAT_DESKTOP_BACKEND_AUTH_TOKEN;
 const pollMs = Number(process.env.GEOCHAT_BATCH_POLL_MS ?? "3000");
 const sampleTimeoutMs = Number(process.env.GEOCHAT_BATCH_SAMPLE_TIMEOUT_MS ?? "480000");
 const desktopReadyTimeoutMs = Number(process.env.GEOCHAT_BATCH_DESKTOP_READY_TIMEOUT_MS ?? "90000");

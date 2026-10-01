@@ -26,9 +26,9 @@ const logger = createStructuredLogger("desktop.model-settings");
 import {
   credentialsForProvider,
   normalizeCustomProviderConfig,
-  persistDesktopConfig,
   readDesktopConfig,
   updateProviderCredentials,
+  updateDesktopConfig,
 } from "../../../../../shared/desktop/desktop-config";
 import type { CustomProviderConfig } from "../../../../../shared/desktop/workbench-types";
 import type {
@@ -139,10 +139,10 @@ export function ModelSettings() {
       const secret = apiKey.trim();
       if (!secret) {
         if (isCustom && customProvider.credentialRef) {
-          persistDesktopConfig({
-            ...config,
+          await updateDesktopConfig((current) => ({
+            ...current,
             customProvider: normalizeCustomProviderConfig(customProvider),
-          });
+          }));
         }
         setSaved(true);
         return;
@@ -171,20 +171,19 @@ export function ModelSettings() {
             ? t("settings.keyProbeUnsupported")
             : outcome.message);
         },
-        commit: (metadata) => {
-          const latestConfig = readDesktopConfig();
+        commit: async (metadata) => {
           if (isCustom) {
-            persistDesktopConfig({
-              ...latestConfig,
+            await updateDesktopConfig((current) => ({
+              ...current,
               customProvider: normalizeCustomProviderConfig({
                 ...customProvider,
                 baseUrl: metadata.canonicalBaseUrl,
                 protocol: metadata.protocol,
                 credentialRef: metadata.credentialRef,
               }),
-            });
+            }));
           } else {
-            persistDesktopConfig(updateProviderCredentials(latestConfig, provider, {
+            await updateDesktopConfig((current) => updateProviderCredentials(current, provider, {
               credentialRef: metadata.credentialRef,
               baseUrl: metadata.canonicalBaseUrl,
               protocol: metadata.protocol,
@@ -482,13 +481,13 @@ export async function replaceProviderCredential(input: {
   previousCredentialRef: string;
   onCredentialStored: () => void;
   validate: (credentialRef: string) => Promise<void>;
-  commit: (metadata: DesktopProviderCredentialMetadata) => void;
+  commit: (metadata: DesktopProviderCredentialMetadata) => Promise<void>;
 }) {
   const metadata = await input.desktopApi.saveProviderCredential(input.request);
   input.onCredentialStored();
   try {
     await input.validate(metadata.credentialRef);
-    input.commit(metadata);
+    await input.commit(metadata);
   } catch (error) {
     await input.desktopApi.deleteProviderCredential(metadata.credentialRef).catch((deleteError) => {
       logger.warn("uncommitted_credential_delete_failed", "MODEL_CREDENTIAL_DELETE_FAILED", { error: deleteError });

@@ -1,5 +1,6 @@
 import { getToolName, isToolUIPart, type UIMessage } from "ai";
 import type { ToolExecutionResult } from "@geochat-ai/app/geogebra-protocol";
+import type { GeoGebraRuntimePort } from "../../geogebra/runtime";
 import { runRendererCanvasTransaction } from "../agent-run/toolWorker";
 
 type ReplayToolName = "resetCanvas" | "executeGeoGebraCommands" | "setPerspective";
@@ -41,6 +42,7 @@ function isSuccessfulReplayOutput(value: unknown) {
 }
 
 export async function replayConversationCanvas(
+  runtime: GeoGebraRuntimePort,
   actions: readonly CanvasReplayAction[],
   execute?: ReplayExecutor,
   shouldContinue: () => boolean = () => true,
@@ -49,7 +51,7 @@ export async function replayConversationCanvas(
   if (!actions.length) return;
 
   if (!execute) {
-    return runRendererCanvasTransaction({
+    return runRendererCanvasTransaction(runtime, {
       label: "conversation-replay",
       supersedeKey: "conversation-replay",
       shouldContinue,

@@ -5,7 +5,6 @@ export type FunctionCallToolName =
   | "listSkills"
   | "searchSkills"
   | "loadSkill"
-  | "activateSkill"
   | "createGeometryPlan"
   | "executeAdvancedDrawingCommand"
   | "executeGeoGebraCommands"

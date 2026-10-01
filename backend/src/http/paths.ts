@@ -25,6 +25,11 @@ export function conversationBlackboardPath(pathname: string) {
   return match ? safeDecodePathComponent(match[1]) : undefined;
 }
 
+export function geogebraDocumentPath(pathname: string) {
+  const match = pathname.match(/^\/v1\/geogebra-documents\/([^/]+)$/);
+  return match ? safeDecodePathComponent(match[1]) : undefined;
+}
+
 export function problemSetProblemsPath(pathname: string) {
   const match = pathname.match(/^\/v1\/problem-sets\/([^/]+)\/problems$/);
   return match ? safeDecodePathComponent(match[1]) : undefined;
@@ -65,5 +70,5 @@ export function benchmarkRunActionPath(pathname: string) {
 }
 
 export function isGeoGebraAssetPath(pathname: string) {
-  return pathname.startsWith("/tools/geogebra-assets-v2/") || pathname.startsWith("/tools/geogebra-assets/");
+  return pathname.startsWith("/tools/geogebra-assets-v2/");
 }

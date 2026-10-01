@@ -1,4 +1,4 @@
-import { MenuIcon, RotateCcwIcon, WrenchIcon } from "lucide-react";
+import { FileTextIcon, RotateCcwIcon, WrenchIcon } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Alert, CircularProgress } from "@mui/material";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -9,7 +9,6 @@ import type { CanvasRecoveryState } from "./geogebra/canvas-transactions";
 import {
   DEFAULT_GEOGEBRA_TOOLBAR_VISIBLE,
   mountGeoGebra,
-  openGeoGebraNativeMenu,
 } from "./geogebra/ggbdeploy-wrapper";
 import {
   createGeoGebraSelectionContextBridge,
@@ -17,11 +16,12 @@ import {
   type GeoGebraSelectionContextBridge,
   type GeoGebraSelectionRefreshReason,
 } from "./geogebra/selection-context";
-import { setFrontendGeoGebraController } from "./geogebra/runtime";
+import { GeoGebraRuntimeProvider } from "./geogebra/runtime";
 import { useInteractionMode } from "./features/fusion-mode";
 import { backendOrigin, desktopRuntimeError } from "./features/desktop/runtime";
 import { desktopLogger } from "./features/desktop/desktopLogger";
 import { consumeDesktopConfigRecoveryNotice } from "../../shared/desktop/desktop-config-recovery";
+import { GeoGebraDocumentPanel } from "./features/geogebra/GeoGebraDocumentPanel";
 
 const logger = createStructuredLogger("renderer.app");
 
@@ -45,6 +45,7 @@ export default function App() {
   const [resetting, setResetting] = useState(false);
   const [toolbarVisible, setToolbarVisible] = useState(DEFAULT_GEOGEBRA_TOOLBAR_VISIBLE);
   const [canvasIntroVisible, setCanvasIntroVisible] = useState(true);
+  const [documentPanelOpen, setDocumentPanelOpen] = useState(false);
   const [configRecoveryNotice, setConfigRecoveryNotice] = useState(() => consumeDesktopConfigRecoveryNotice());
 
   // A shell that will not report its backend is a hard failure, not something
@@ -73,7 +74,6 @@ export default function App() {
         selectionBridgeRef.current?.dispose();
         selectionBridgeRef.current = createGeoGebraSelectionContextBridge(api, { onChange: setSelectionContext });
         setSelectionContext(selectionBridgeRef.current.getSnapshot());
-        setFrontendGeoGebraController(controllerRef.current);
         setToolbarVisible(DEFAULT_GEOGEBRA_TOOLBAR_VISIBLE);
         setCanvasState("ready");
       },
@@ -93,7 +93,6 @@ export default function App() {
       selectionBridgeRef.current?.dispose();
       selectionBridgeRef.current = null;
       controllerRef.current.setApi(null);
-      setFrontendGeoGebraController(null);
     };
   }, [canvasMountGeneration]);
 
@@ -160,20 +159,9 @@ export default function App() {
     }
   }
 
-  function openGeoGebraMenu() {
-    const container = canvasRef.current;
-    if (canvasState !== "ready" || !container) return;
-    if (openGeoGebraNativeMenu(container)) {
-      setCanvasIntroVisible(false);
-      return;
-    }
-    const error = new Error("GeoGebra 原生菜单尚未就绪。");
-    logger.warn("native_menu_open_failed", "GEOGEBRA_NATIVE_MENU_OPEN_FAILED", { error });
-    desktopLogger.warn(error);
-  }
-
   return (
-    <main className="frontend-shell">
+    <GeoGebraRuntimeProvider runtime={controllerRef.current}>
+      <main className="frontend-shell">
       {configRecoveryNotice && (
         <Alert
           className="frontend-config-recovery-notice"
@@ -209,12 +197,13 @@ export default function App() {
           <button
             type="button"
             className="frontend-canvas-control frontend-canvas-menu"
-            onClick={openGeoGebraMenu}
+            onClick={() => setDocumentPanelOpen((current) => !current)}
             disabled={canvasState !== "ready"}
             aria-label={t("canvasControls.openMenu")}
             title={t("canvasControls.openMenu")}
+            aria-expanded={documentPanelOpen}
           >
-            <MenuIcon size={18} />
+            <FileTextIcon size={18} />
           </button>
           <button
             type="button"
@@ -238,6 +227,11 @@ export default function App() {
             {resetting ? <CircularProgress size={18} color="inherit" /> : <RotateCcwIcon size={18} />}
           </button>
         </div>
+        <GeoGebraDocumentPanel
+          controller={controllerRef.current}
+          open={documentPanelOpen}
+          onClose={() => setDocumentPanelOpen(false)}
+        />
         {canvasState !== "ready" && (
           <div className="frontend-canvas-overlay" role={canvasState === "error" ? "alert" : "status"}>
             <div className={canvasState === "error" ? "frontend-canvas-error" : "frontend-loader"} />
@@ -280,6 +274,7 @@ export default function App() {
           />
         </Suspense>
       </div>
-    </main>
+      </main>
+    </GeoGebraRuntimeProvider>
   );
 }

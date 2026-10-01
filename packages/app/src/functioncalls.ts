@@ -98,11 +98,9 @@ export type SearchSkillsArgs = FunctionCallAuditFields & {
   limit?: number | null;
 };
 
-export type ActivateSkillArgs = FunctionCallAuditFields & {
+export type LoadSkillArgs = FunctionCallAuditFields & {
   name: string;
 };
-
-export type LoadSkillArgs = ActivateSkillArgs;
 
 export type GetCanvasContextArgs = FunctionCallAuditFields & {
   includeXml?: boolean | null;
@@ -174,15 +172,12 @@ export type SetFinishedArgs = FunctionCallAuditFields & {
 };
 
 export type SetPerspectiveArgs = FunctionCallAuditFields & {
-  mode?: string | null;
-  perspective?: string | null;
+  mode: string;
 };
 
 export {
   normalizeGeoGebraFreeParameterCommands,
-  normalizeGeoGebraCommandSyntax,
-  normalizeGeoGebraPerspectiveMode,
-  type NormalizedGeoGebraPerspectiveMode
+  normalizeGeoGebraCommandSyntax
 } from "./geogebra-command-normalization";
 
 export type FunctionCallArgsByName = {
@@ -192,7 +187,6 @@ export type FunctionCallArgsByName = {
   listSkills: ListSkillsArgs;
   searchSkills: SearchSkillsArgs;
   loadSkill: LoadSkillArgs;
-  activateSkill: ActivateSkillArgs;
   createGeometryPlan: CreateGeometryPlanArgs;
   executeAdvancedDrawingCommand: ExecuteAdvancedDrawingCommandArgs;
   executeGeoGebraCommands: ExecuteGeoGebraCommandsArgs;

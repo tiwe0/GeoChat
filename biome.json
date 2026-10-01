@@ -1,0 +1,58 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "files": {
+    "ignoreUnknown": true,
+    "includes": [
+      "src/**",
+      "backend/**",
+      "packages/**",
+      "tests/**",
+      "scripts/**",
+      "tools/**",
+      "vite.react.config.ts",
+      "!**/node_modules/**",
+      "!**/dist/**",
+      "!**/target/**",
+      "!**/vendor/**",
+      "!**/generated/**"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "lineWidth": 120,
+    "includes": [
+      "backend/src/agent/conversation-message-encoder.ts",
+      "packages/app/src/conversation-message-contract.ts",
+      "packages/app/src/request-correlation.ts",
+      "src/renderer-react/src/features/agent-run/nativeRunLifecycle.ts",
+      "src/renderer-react/src/features/agent-run/nativeRunRequest.ts",
+      "src/renderer-react/src/features/conversations/messageDecoder.ts",
+      "src/renderer-react/src/geogebra/runtime.ts",
+      "src/renderer-react/src/lib/numbers.ts"
+    ]
+  },
+  "assist": {
+    "enabled": false
+  },
+  "javascript": {
+    "globals": ["Bun", "browser"]
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "none",
+      "correctness": {
+        "noUndeclaredVariables": "error",
+        "noUnreachable": "error"
+      },
+      "suspicious": {
+        "noDebugger": "error",
+        "noDuplicateCase": "error",
+        "noDuplicateObjectKeys": "error",
+        "noDuplicateParameters": "error",
+        "noVar": "error"
+      }
+    }
+  }
+}

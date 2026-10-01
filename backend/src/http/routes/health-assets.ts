@@ -36,9 +36,7 @@ async function serveGeoGebraAsset(pathname: string, method: string, geogebraAsse
     return json({ error: "invalid_path", message: "The request path is not valid." }, { status: 400 });
   }
   const relativePath = normalize(
-    decodedPathname
-      .replace(/^\/tools\/geogebra-assets-v2\/?/, "")
-      .replace(/^\/tools\/geogebra-assets\/?/, "")
+    decodedPathname.replace(/^\/tools\/geogebra-assets-v2\/?/, "")
   );
 
   if (!relativePath || relativePath.startsWith("..") || relativePath.includes(`${sep}..${sep}`)) {

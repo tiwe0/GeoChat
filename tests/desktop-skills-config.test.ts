@@ -8,74 +8,13 @@ import {
 } from "../src/shared/desktop/desktop-config";
 
 describe("desktop Agent Skill configuration", () => {
-  test("defaults older configs to enabled built-in skills", () => {
+  test("defaults a fresh config to enabled built-in skills", () => {
     const config = normalizeDesktopConfig({}, "zh-CN");
 
     expect(config.skills.enabled).toBe(true);
     expect(config.skills.autoActivate).toBe(true);
     expect(config.skills.enabledSkillNames).toEqual([...DEFAULT_BUSINESS_AGENT_SKILL_NAMES]);
     expect(config.skills.visualProfile).toBe(DEFAULT_VISUAL_PROFILE);
-  });
-
-  test("adds the expanded GeoGebra workflows when the saved selection was the previous default catalog", () => {
-    const previousDefaults = DEFAULT_BUSINESS_AGENT_SKILL_NAMES.filter((name) => ![
-      "piecewise-domain-function",
-      "dynamic-parameter-exploration",
-      "dynamic-construction-validation",
-      "parametric-surface-revolution",
-      "list-driven-construction",
-      "parametric-polar-curves",
-      "locus-envelope",
-      "regression-model-diagnostics",
-      "geometric-theorem-verification",
-      "multi-view-coordination",
-      "cas-graphics-workflow",
-      "spreadsheet-data-workflow",
-      "construction-protocol-presentation",
-      "interactive-controls-workflow",
-      "object-view-layer-management",
-      "dynamic-worksheet-authoring",
-      "dynamic-text-feedback",
-      "visual-style-system",
-      "mathematical-animation-design"
-    ].includes(name));
-
-    const config = normalizeDesktopConfig({
-      skills: {
-        enabled: true,
-        autoActivate: true,
-        enabledSkillNames: previousDefaults,
-        visualProfile: DEFAULT_VISUAL_PROFILE
-      }
-    }, "zh-CN");
-
-    expect(config.skills.enabledSkillNames).toEqual([...DEFAULT_BUSINESS_AGENT_SKILL_NAMES]);
-  });
-
-  test("adds software workflow skills when the saved selection was the preceding default catalog", () => {
-    const precedingDefaults = DEFAULT_BUSINESS_AGENT_SKILL_NAMES.filter((name) => ![
-      "multi-view-coordination",
-      "cas-graphics-workflow",
-      "spreadsheet-data-workflow",
-      "construction-protocol-presentation",
-      "interactive-controls-workflow",
-      "object-view-layer-management",
-      "dynamic-worksheet-authoring",
-      "dynamic-text-feedback",
-      "visual-style-system",
-      "mathematical-animation-design"
-    ].includes(name));
-
-    const config = normalizeDesktopConfig({
-      skills: {
-        enabled: true,
-        autoActivate: true,
-        enabledSkillNames: precedingDefaults,
-        visualProfile: DEFAULT_VISUAL_PROFILE
-      }
-    }, "zh-CN");
-
-    expect(config.skills.enabledSkillNames).toEqual([...DEFAULT_BUSINESS_AGENT_SKILL_NAMES]);
   });
 
   test("preserves an intentionally customized skill selection", () => {
@@ -106,7 +45,7 @@ describe("desktop Agent Skill configuration", () => {
 
     expect(prompt).toContain("[Agent Skill policy]");
     expect(prompt).toContain("Agent Skills are disabled for this run");
-    expect(prompt).toContain("Do not call listSkills, searchSkills, loadSkill, or activateSkill");
+    expect(prompt).toContain("Do not call listSkills, searchSkills, or loadSkill");
   });
 
   test("injects the allowed skill list and auto-loading mode", () => {

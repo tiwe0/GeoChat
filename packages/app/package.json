@@ -26,6 +26,10 @@
       "types": "./src/desktop-contracts.ts",
       "default": "./src/desktop-contracts.ts"
     },
+    "./conversation-message-contract": {
+      "types": "./src/conversation-message-contract.ts",
+      "default": "./src/conversation-message-contract.ts"
+    },
     "./functioncalls": {
       "types": "./src/functioncalls.ts",
       "default": "./src/functioncalls.ts"
@@ -74,13 +78,9 @@
       "types": "./src/model-discovery.ts",
       "default": "./src/model-discovery.ts"
     },
-    "./legacy-conversation-import": {
-      "types": "./src/legacy-conversation-import.ts",
-      "default": "./src/legacy-conversation-import.ts"
-    },
-    "./migration": {
-      "types": "./src/migration.ts",
-      "default": "./src/migration.ts"
+    "./geogebra-documents": {
+      "types": "./src/geogebra-documents.ts",
+      "default": "./src/geogebra-documents.ts"
     },
     "./runtime-decode": {
       "types": "./src/runtime-decode.ts",
@@ -89,6 +89,10 @@
     "./structured-logger": {
       "types": "./src/structured-logger.ts",
       "default": "./src/structured-logger.ts"
+    },
+    "./request-correlation": {
+      "types": "./src/request-correlation.ts",
+      "default": "./src/request-correlation.ts"
     }
   },
   "scripts": {

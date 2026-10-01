@@ -135,27 +135,6 @@ var runCallbacks = () => {ggbCallbacks.forEach(cb => cb()); ggbCallbacks.splice(
 		}
 	}
 
-	function getCookieUnsafe(cookieName){
-		var crumbs = document.cookie.split(';');
-		for (var i = 0; i < crumbs.length; ++i) {
-			var nameAndValue = crumbs[i].trim().split("=");
-			if (nameAndValue[0] == cookieName) {
-				//may throw an exception
-				return decodeURIComponent(nameAndValue[1]);
-			}
-		}
-		return false;
-	}
-
-	function getCookie(cookieName){
-		try {
-			return getCookieUnsafe(cookieName);
-		} catch (e) {
-			// ignore error, keep undecoded value
-		}
-		return false;
-	}
-
 	function parentTable(ret){
 		var parent = ret;
 		while(parent = parent.parentElement){
@@ -279,7 +258,7 @@ var runCallbacks = () => {ggbCallbacks.forEach(cb => cb()); ggbCallbacks.splice(
 		var storedTranslation = {};
 		if(getLocalStorage("translation")){
 			try {
-				storedTranslation = JSON.parse(localStorage.translation);
+				storedTranslation = JSON.parse(getLocalStorage("translation"));
 			}
 			catch(e){
 				console.log(e.message);
@@ -330,7 +309,7 @@ var runCallbacks = () => {ggbCallbacks.forEach(cb => cb()); ggbCallbacks.splice(
 	}
 
 	function showStartScreen(){
-		var lang = getURLParam("lang") || getCookie("GeoGebraLangUI") || getLocalStorage("GeoGebraLangUI") || navigator.language || "en";
+		var lang = getURLParam("lang") || getLocalStorage("GeoGebraLangUI") || navigator.language || "en";
 		window.setTimeout(showInEnglish, 1000);
 		switchLang(validLang(lang));
 	}
@@ -989,4 +968,3 @@ div.SymbolTablePopup{
 </body>
 <!--FIREBASE-->
 </html>
-

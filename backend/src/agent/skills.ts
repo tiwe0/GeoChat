@@ -236,7 +236,6 @@ export function formatSkillCatalogPrompt(skills: readonly AgentSkillSummary[], l
       "Maturity: draft skills and their advanced drawing commands are experimental; use only validated/default skills in normal runs unless the host explicitly includes draft skills.",
       "Layering: skills describe math capability, recipes describe task-type strategy, and visual profiles describe presentation. Do not mix presentation choices into mathematical verification.",
       "Skill workflow: call listSkills or searchSkills to evaluate available skills, then call loadSkill only when a returned skill is relevant. It is acceptable to decide that no skill is needed after listing/searching.",
-      "Use activateSkill only as a compatibility alias when older tool names are required; prefer listSkills, searchSkills, then loadSkill.",
       "Remote and built-in skills may declare recommended tools, but only host-provided tools from the current tool schema are executable."
     ].join("\n");
   }
@@ -248,7 +247,6 @@ export function formatSkillCatalogPrompt(skills: readonly AgentSkillSummary[], l
     "成熟度约定：draft 技能及其高级绘图命令仍是实验内容；常规运行只使用 validated/default 技能，除非宿主显式允许 draft。",
     "分层约定：Skill 表示数学能力，Recipe 表示题型策略，Visual Profile 表示呈现策略；不要把呈现风格当成数学验证依据。",
     "技能工作流：先调用 listSkills 或 searchSkills 评估可用技能，再只在返回结果确实相关时调用 loadSkill。列出/检索后判断不需要技能也是允许的。",
-    "activateSkill 仅作为旧工具名兼容；新调用优先使用 listSkills、searchSkills、loadSkill。",
     "远程和内置技能可以声明推荐工具，但只有当前工具 schema 中实际提供的宿主工具可以执行。"
   ].join("\n");
 }

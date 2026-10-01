@@ -1,6 +1,6 @@
 import type { FunctionCallToolName } from "@geochat-ai/app/functioncalls";
 import type { ToolExecutionResult } from "@geochat-ai/app/geogebra-protocol";
-import { getFrontendGeoGebraController } from "../../geogebra/runtime";
+import type { GeoGebraRuntimePort } from "../../geogebra/runtime";
 import type { CanvasTransactionOptions } from "../../geogebra/canvas-transactions";
 
 function redactValue(value: unknown, key = ""): unknown {
@@ -15,24 +15,27 @@ function redactValue(value: unknown, key = ""): unknown {
   return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([childKey, childValue]) => [childKey, redactValue(childValue, childKey)]));
 }
 
-export async function executeRendererTool(toolName: FunctionCallToolName, args: unknown): Promise<ToolExecutionResult> {
+export async function executeRendererTool(
+  runtime: GeoGebraRuntimePort,
+  toolName: FunctionCallToolName,
+  args: unknown,
+): Promise<ToolExecutionResult> {
   // The web build routed renderer tools through an extension native host
   // and gated on that mapping. This build executes them in-process.
-  const controller = getFrontendGeoGebraController();
-  if (!controller) throw new Error("GeoGebra 画板尚未加载完成。");
-  const value = await controller.executeTool(toolName, args);
-  return normalizeToolExecutionResult(controller.ready, toolName, value);
+  if (!runtime.ready) throw new Error("GeoGebra 画板尚未加载完成。");
+  const value = await runtime.executeTool(toolName, args);
+  return normalizeToolExecutionResult(runtime.ready, toolName, value);
 }
 
 export async function runRendererCanvasTransaction<T>(
+  runtime: GeoGebraRuntimePort,
   options: CanvasTransactionOptions,
   work: (execute: (toolName: FunctionCallToolName | "__restoreCanvasXml", args: unknown) => Promise<ToolExecutionResult>) => T | PromiseLike<T>,
 ) {
-  const controller = getFrontendGeoGebraController();
-  if (!controller) throw new Error("GeoGebra 画板尚未加载完成。");
-  return controller.runCanvasTransaction(options, (execute) => work(async (toolName, args) => {
+  if (!runtime.ready) throw new Error("GeoGebra 画板尚未加载完成。");
+  return runtime.runCanvasTransaction(options, (execute) => work(async (toolName, args) => {
     const value = await execute(toolName, args);
-    return normalizeToolExecutionResult(controller.ready, toolName, value);
+    return normalizeToolExecutionResult(runtime.ready, toolName, value);
   }));
 }
 

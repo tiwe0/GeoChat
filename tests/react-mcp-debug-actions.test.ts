@@ -3,7 +3,6 @@ import {
   createDesktopDebugActionExecutor,
   executeRestrictedDesktopUiProbe,
 } from "../src/renderer-react/src/features/desktop/mcpDebugActions";
-import { setFrontendGeoGebraController } from "../src/renderer-react/src/geogebra/runtime";
 import { DEFAULT_MCP_STATUS } from "../src/shared/desktop/mcp-debug-actions";
 import { DEFAULT_MODEL_CONFIG } from "../src/shared/desktop/desktop-config";
 import type { GeoGebraController } from "../src/renderer-react/src/geogebra/controller";
@@ -98,8 +97,9 @@ function harness(overrides: {
   const configured: Array<{ baseUrl: string; model: string; nonce: string }> = [];
   let conversationId = overrides.conversationId ?? null;
   let shownChat = false;
-  setFrontendGeoGebraController((overrides.controller ?? null) as GeoGebraController | null);
+  const controller = (overrides.controller ?? { ready: false }) as GeoGebraController;
   const execute = createDesktopDebugActionExecutor({
+    geogebraRuntime: controller,
     getConversationId: () => conversationId,
     getView: () => "chat",
     getModelConfig: () => overrides.model ?? CONFIGURED,

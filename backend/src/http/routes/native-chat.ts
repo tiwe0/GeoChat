@@ -1,6 +1,10 @@
 import { createNativeChatResponse, isNativeChatRequest } from "../../agent/native-chat";
+import {
+  CORRELATION_ID_HEADER,
+  resolveCorrelationId
+} from "@geochat-ai/app/request-correlation";
 import type { BackendHttpContext } from "../context";
-import { json, readJson } from "../response";
+import { json, readJson, withCorrelationId } from "../response";
 import type { DataScopeResolver } from "../scope";
 
 export async function handleNativeChatRoute(
@@ -16,14 +20,19 @@ export async function handleNativeChatRoute(
   if (!isNativeChatRequest(payload)) {
     return json({ error: "invalid_request", message: "Invalid native AI SDK chat payload." }, { status: 400 });
   }
+  const correlationId = resolveCorrelationId(
+    payload.runId,
+    request.headers.get(CORRELATION_ID_HEADER)
+  );
   const ownerUserId = await context.repositories.conversations.getConversationOwnerUserId(payload.conversationId);
   if (ownerUserId !== undefined && ownerUserId !== (dataScope.scope.ownerUserId ?? null)) {
     return json({ error: "not_found", message: "Conversation was not found." }, { status: 404 });
   }
-  return createNativeChatResponse(payload, {
+  const response = await createNativeChatResponse(payload, {
     credentials: context.credentials,
     runs: context.repositories.agentRuns,
     conversations: context.repositories.conversations,
     blackboard: context.repositories.blackboard,
-  }, { abortSignal: request.signal, dataScope: dataScope.scope });
+  }, { abortSignal: request.signal, dataScope: dataScope.scope, correlationId });
+  return withCorrelationId(response, correlationId);
 }

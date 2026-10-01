@@ -12,8 +12,8 @@ Owner area：Desktop architecture / backend platform / renderer state
 | 阶段 | 状态 | 当前证据边界 |
 | --- | --- | --- |
 | Phase 0：安全边界 | 已完成 | loopback API 鉴权、严格 CORS、CSP/provider 响应边界已有回归测试 |
-| Phase 1：凭据与配置 | 已完成 | 原生凭据库、无损配置恢复、安装包本地验收已落地 |
-| Phase 2：数据一致性 | 已完成 | backend 会话权威、画布事务、迁移与可恢复删除已落地 |
+| Phase 1：凭据与配置 | 已完成 | 原生凭据库、dev/prod 命名空间隔离、事务式 `renderer-state.json` 配置存储已落地 |
+| Phase 2：数据一致性 | 已完成 | backend/SQLite 会话与 GeoGebra 文档权威、画布事务、WebView 持久化和历史迁移运行面已删除 |
 | Phase 3：状态所有权 | 已完成 | session controller、run lease、assistant workspace 拆分及行为回归已落地 |
 | Phase 4：后端与契约 | 已完成 | native chat 最小端口、lifecycle/transport/persistence 拆分、共享 contract facade 与版本化 SQLite migration 已落地 |
 | Phase 5：质量与发布 | 已完成 | 严格静态门禁、结构化日志、package CI、真实桌面重启 E2E、`.app`/DMG smoke 已闭环 |
@@ -145,7 +145,7 @@ Tauri commands                              SQLite
 
 ## 4. 工作流 A：本机 HTTP 与密钥边界
 
-优先级：P0（A3 的完整迁移可延续到 Phase 1，但架构决策与 CSP 不得后置）
+优先级：P0（A3 必须直接切换到新凭据边界，不保留历史凭据迁移运行面；架构决策与 CSP 不得后置）
 目标：在继续扩大 Agent、技能和远程 provider 能力前，先让桌面本机服务真正具备最小可信边界。
 
 ### A1. 接通 backend token
@@ -209,25 +209,23 @@ Phase 0 路由矩阵基线：
 
 选定架构：Tauri 是凭据唯一所有者，Bun backend 通过进程内不可见于 renderer 的本机 credential broker 按引用兑换，renderer 永远不读取明文密钥。
 
-固定实现选型：生产 Rust adapter 使用 `keyring` 4.x 的 `v1` API，并在 `Cargo.lock` 固定解析版本；macOS 后端为 Keychain Services，Windows 后端为 Windows Credential Manager。业务与迁移逻辑只依赖仓库自定义 `CredentialStore` port，单元测试注入内存 fake；不能把 `keyring-core` mock 与 `keyring::v1` 默认 store 混用。真实 Keychain/Credential Manager 只在对应平台 integration smoke 中验证，并使用专用 service/account 前缀后清理。当前桌面发布只覆盖 macOS/Windows，因此本阶段不引入 Stronghold，也不新增 Linux secret-store 分支；若以后恢复 Linux 发布支持，另立迁移决策。参考：[keyring 4.2 API](https://docs.rs/keyring/4.2.0/keyring/)、[`v1` 平台后端](https://docs.rs/keyring/4.2.0/keyring/v1/)。
+固定实现选型：生产 Rust adapter 使用 `keyring` 4.x 的 `v1` API，并在 `Cargo.lock` 固定解析版本；macOS 后端为 Keychain Services，Windows 后端为 Windows Credential Manager。业务逻辑只依赖仓库自定义 `CredentialStore` port，单元测试注入内存 fake；不能把 `keyring-core` mock 与 `keyring::v1` 默认 store 混用。真实 Keychain/Credential Manager 只在对应平台 integration smoke 中验证，并使用专用 service/account 前缀后清理。当前桌面发布只覆盖 macOS/Windows，因此本阶段不引入 Stronghold，也不新增 Linux secret-store 分支；若以后恢复 Linux 发布支持，另立平台存储决策。参考：[keyring 4.2 API](https://docs.rs/keyring/4.2.0/keyring/)、[`v1` 平台后端](https://docs.rs/keyring/4.2.0/keyring/v1/)。
 
 要求：
 
 1. 定义 `CredentialStore` port（put/get/delete/exists）；生产 Tauri adapter 封装 `keyring::v1::Entry`，单元测试 adapter 是仓库内存 fake。production service 固定为 `cafe.ivory.geochat.provider`，account 使用随机 UUID `credentialRef`，不得把 provider 名或 key 片段编码进 reference。
 2. renderer 只可调用 write/delete/status 命令；读取命令不注册到 Tauri invoke allowlist。可见配置仅保存 provider、model、用于展示的 base URL 和 `credentialRef`，其中 base URL 不得作为 backend 请求授权依据。
 3. keyring entry 保存不可拆分的版本化 envelope：`schemaVersion`、`secret`、`provider`、`protocol`、`canonicalBaseUrl`。`credentialRef` 与 provider/protocol/origin/base path 创建后不可变；替换密钥或 endpoint 必须创建新 reference，禁止用旧 reference 指向新目的地。
-4. endpoint canonicalization 必须拒绝 URL credentials、fragment 与非必要 query，规范化 scheme/host/default port/base path；默认只允许 HTTPS，仅 loopback 开发 provider 可使用 HTTP。旧的远程 HTTP 配置必须进入显式迁移冲突，不得静默升级或继续使用。
+4. endpoint canonicalization 必须拒绝 URL credentials、fragment 与非必要 query，规范化 scheme/host/default port/base path；默认只允许 HTTPS，仅 loopback 开发 provider 可使用 HTTP。旧的远程 HTTP 配置必须失败关闭并要求重新录入，不得静默升级或继续使用。
 5. Tauri 启动仅绑定 loopback 的 credential broker，生成独立的每次启动随机 broker token，并把 broker endpoint/token 注入 Bun 子进程环境；不得注入 provider key。
 6. Bun `CredentialResolver` 仅接受 `credentialRef`，通过 broker token 兑换到请求作用域内存；broker 返回的可信 envelope 是 provider/protocol/endpoint 的唯一来源，不接受 renderer 覆写 URL、headers 或 provider。密钥不得持久化、记录或返回 renderer。broker 只接受 Bun 子进程所需的 resolve 操作，响应设置禁止缓存，并限制请求体、并发和频率。
 7. backend 必须用可信 envelope 构造最终 URL 与鉴权头，所有上游请求设置 `redirect: "error"`，每次发送前重新 resolve，不跨请求缓存 secret。chat 与模型发现 DTO 必须拒绝 legacy `apiKey`、`url`、`headers` 和 `customBaseUrl`；模型发现迁入 backend，renderer 只提交 reference 并接收规范化 model ID。
 8. create/replace/delete 由 Tauri command 执行；delete 成功后 reference 立即失效，Bun 不保留跨请求 key cache。若以后为性能引入缓存，必须有短 TTL、显式清零和撤销通知测试。
 9. 威胁边界明确为：防止网页 origin、renderer XSS、普通日志/配置/数据库泄露；不声称抵御已取得同用户调试、进程内存读取或操作系统管理员权限的攻击者。
-10. 旧配置迁移对象是 `geochat-desktop-ui-config` 内的嵌套明文字段，不是独立 key。必须先读取原始 JSON 再运行任何 normalization，避免覆盖式归一化丢失冲突证据。迁移器按 provider + secret + canonical endpoint + protocol 去重读取 `providerCredentials[*].apiKey`、`model.apiKey`、`visionModel.apiKey` 与 `customProvider.apiKey`；冲突进入显式选择/隔离流程，不能静默取最后值。
-11. Tauri 在导入前先生成 `credentialRef`，再把非敏感 migration journal 原子写入 app data。journal 至少记录 schema version、provider、credentialRef、source fingerprint（只用不可逆摘要判断重复，不能用于还原 secret）和阶段 `planned | secretStored | configSanitized | complete`；写入采用同目录临时文件、flush/fsync、atomic rename，journal 永不包含明文 key。
-12. 每个 provider 通过单向 Tauri `import_legacy_credential(provider, credentialRef, secret)` 命令导入。顺序固定为：持久化 `planned` → 写 keyring → 持久化 `secretStored` → 返回 reference。若在任一点崩溃，重启先读取 journal：`planned` 用 `exists` 判定是复用已有 entry 还是重试写入，`secretStored` 直接复用同一 reference，禁止生成第二个 entry。
-13. 全部计划项到达 `secretStored` 后，把同一个 `geochat-desktop-ui-config` 写回为新 schema：`providerCredentials[*]` 仅保留 `credentialRef` 与非敏感 base URL，`model`/`visionModel` 删除 `apiKey` legacy mirror，`customProvider` 删除 `apiKey` 并保存对应 reference；`locale`、`interaction`、`skills`、`debug`、model ID 和自定义模型列表必须原样保留。重新读取并验证脱敏配置后，Tauri 才把对应 journal 推进到 `configSanitized`。
-14. 所有项 `configSanitized` 后，扫描并清除 config backup、旧字段别名及其他 legacy mirror 中的密钥；不能删除整个 `geochat-desktop-ui-config`。完成清理后写 `complete` 并删除 journal。用户取消或不可恢复失败时，根据 journal 精确删除尚未被新配置引用的 entries；进程崩溃不能产生无法定位的 orphan secret。import 命令在已完成迁移的安装中必须禁用，但发布代码要保留到所支持的旧版本升级窗口结束，不得在首次迁移完成后立即删除，以免后续升级用户失去迁移路径。
-15. 禁止在日志、错误 ledger、migration export 和诊断包中输出密钥。
+10. 新版本不读取或迁移历史明文凭据。检测到配置内嵌 `apiKey`、`secret`、`token` 或 `authorization` 时必须失败关闭，并要求用户重新录入；不得保留 migration journal、backup 或 legacy import command。
+11. production 使用 `cafe.ivory.geochat.provider`，dev 使用独立的 `cafe.ivory.geochat.provider.dev`；两个 profile 的同名 `credentialRef` 必须互不可见、互不可删除。
+12. 配置引用更新必须通过串行事务：写入新 secret、验证、持久化新 reference，最后删除旧 secret；配置提交失败时删除未提交的新 secret，且其他设置写入不能复制未提交 reference。
+13. 禁止在日志、错误 ledger、migration export 和诊断包中输出密钥。
 
 验收：
 
@@ -236,7 +234,7 @@ Phase 0 路由矩阵基线：
 - 删除 provider 凭据后 backend 无法继续调用该 provider。
 - renderer 网络请求、React state snapshot、backend 数据库和 broker 日志均不出现明文 key。
 - broker 缺 token、错误 token、未知/已删除 reference 均失败；成功响应不会跨请求缓存。
-- fixture 覆盖 `providerCredentials`、两个 model mirror、custom provider、重复值、冲突值、写回中断，以及“keyring 写入成功后立即崩溃”；重启重试不产生重复 entry、不留下不可达 secret，迁移后非敏感配置逐字段等价且所有明文 mirror 为零。
+- fixture 覆盖事务写回失败、并发配置更新、Keychain 写入成功但配置提交失败；任何失败都不留下配置可见的悬空 reference。
 - 日志脱敏测试覆盖常见 bearer/API key 形态。
 
 ### A4. 建立 CSP
@@ -283,22 +281,17 @@ Phase 0 路由矩阵基线：
 - localStorage 不再保存完整已提交会话副本，优先删除双写。
 - 如离线启动确实需要缓存，缓存必须携带 backend revision/etag，而不是本地写入时间。
 - 草稿、待上传附件和未提交输入使用独立 key 与 schema。
-- 现有 version 1 local cache 必须无损迁移；在没有用户明确的数据丢弃授权时，不允许以“安全废弃”代替迁移。
-- 启动迁移先把原始 key 复制到带时间戳/版本的只读 backup key，再逐条处理：
-  - backend 不存在、本地独有：以稳定 legacy ID 幂等导入 SQLite。
-  - 两端存在且内容等价：标记 migrated，不重复写入。
-  - 两端存在但 revision/内容冲突：backend 记录保持权威，本地副本进入 quarantine 并向用户提供导出，不静默覆盖任一方。
-  - 仅有被旧缓存压缩或无法还原的二进制附件：保留消息与附件 metadata，标记 `attachmentPayloadMissing`，不得伪造完整迁移。
-- 迁移 journal 记录 `migrated/skipped/conflicted/quarantined/failed` 计数与稳定 item ID；单项失败不删除原始 backup。
-- 只有全部可迁移项完成且用户可见冲突已处理后，才删除旧主 key；backup 至少保留一个版本周期或到用户显式确认。二次启动必须读取 journal 并幂等继续。
+- 新版本不读取、导入或备份历史 WebView 会话缓存；旧迁移模块、journal、quarantine、backup 和 import API 全部删除。
+- `localStorage`、`sessionStorage` 仅作为进程内 vendor 兼容层；IndexedDB、Cache Storage、Service Worker 注册和 OPFS 禁用。
+- GeoGebra 用户文档通过显式可等待 API 写入 SQLite，不能把同步 Storage 返回当作持久化成功。
 
 验收：
 
 - `metadata.tokenUsage`、tool state、attachments 和 reasoning 状态 round-trip 无损。
 - 改模型或标题不会制造“比 backend 更新”的伪版本。
 - backend 暂时不可用时，不会用旧缓存静默覆盖更新数据。
-- 构造本地独有、双端等价、双端冲突、缺附件和中途崩溃五类 fixture；第二次运行不产生重复会话/消息。
-- migration summary 的五类计数与 fixture 一致，失败项可从 quarantine/backup 导出恢复。
+- 静态门禁证明生产代码不存在 legacy WebView conversation import 路径。
+- SQLite 会话与 GeoGebra 文档 repository 均具备作用域隔离和往返测试。
 
 ### B2. 删除语义
 
@@ -337,14 +330,15 @@ Phase 0 路由矩阵基线：
 
 - 桌面配置使用带版本的 runtime schema。
 - 采用字段级容错，而不是任一 JSON 错误导致整份配置重置。
-- 损坏原始数据进入 quarantine key，便于诊断和用户恢复。
-- 自动恢复后展示一次性、可关闭的提示。
+- 原生 JSON 文件使用跨进程锁、临时文件、文件同步、原子替换和父目录同步。
+- 损坏主文件隔离到独立文件；存在有效 `.previous` 时恢复最近一次已同步版本，否则失败关闭到默认配置。
+- renderer 启动失败必须展示可重试、可打开日志目录的 React 错误界面，不回退到 WebView 存储。
 
 验收：
 
 - 单一字段损坏不丢失其他 provider、locale、interaction 设置。
 - 无效版本和截断 JSON 有确定性行为。
-- persist 前不会覆盖尚未完成迁移的原始值。
+- 配置写入失败时不会发布未提交快照，后续事务仍可从最近一次已提交值继续。
 
 ## 6. 工作流 C：前端状态与模块边界
 
@@ -751,9 +745,9 @@ launch app
 
 - 实现 A3 的 Tauri credential store 与 backend-only credential broker。
 - 将 renderer/provider 配置改为 `credentialRef`。
-- 实现 `geochat-desktop-ui-config` 嵌套明文字段的一次性迁移、撤销和日志脱敏测试。
+- 删除明文凭据迁移入口，并补充失败关闭、事务提交和日志脱敏测试。
 
-退出条件：明文 provider key 不再持久化或跨 renderer/backend HTTP 传递；删除凭据后 reference 立即失效；迁移失败可恢复。
+退出条件：明文 provider key 不再持久化或跨 renderer/backend HTTP 传递；删除凭据后 reference 立即失效；历史明文配置被拒绝且不会进入兼容迁移流程。
 
 ### Phase 2：修复一致性
 
@@ -831,8 +825,8 @@ launch app
 | 3 | provider bounded response | B0 |
 | G1 | Integration Gate I 汇合提交 | assistant-ui 完成提交、PR 1–3；这是门禁，不是可并行功能 PR |
 | 4 | Tauri `keyring` credential store + backend broker | G1 |
-| 5 | renderer credentialRef + exact nested-config migration | PR 4、G1 |
-| 6 | conversation authority + lossless cache migration | G1 |
+| 5 | renderer credentialRef + transactional config cutover | PR 4、G1 |
+| 6 | conversation authority + delete legacy WebView cache paths | G1 |
 | 7 | serialized atomic canvas replay | G1；与 PR 6 相邻改动需顺序合并 |
 | 8 | session controller | G1、PR 6、7 |
 | 9 | AssistantPanel composition split | PR 8 |
@@ -849,8 +843,8 @@ launch app
 | 指标 | 当前基线 | 目标 |
 | --- | --- | --- |
 | 缺少 token 校验的数据路由 | 生产默认多数开放 | 0；`/health` 与登记的静态 GET/HEAD 不计入 |
-| 明文持久化 provider key | localStorage | 0 |
-| 已提交会话权威源 | SQLite + localStorage | 1 个 |
+| 明文持久化 provider key | 已归零 | 0 |
+| 已提交会话权威源 | SQLite | 1 个 |
 | 会话切换事务 | 非原子 | 原子，可恢复 |
 | `AssistantPanel` 状态所有权 | 多领域混合 | composition only |
 | Agent service 依赖 | 完整 HTTP context | 最小 ports |
@@ -866,9 +860,9 @@ launch app
 
 控制：显式区分 desktop production、desktop dev 和 browser-only dev profile；不同 profile 使用独立 auth/origin 配置，禁止隐式开放。
 
-### 风险：删除 localStorage 会损失用户历史
+### 风险：破坏性删除旧 WebView 存储会损失用户历史
 
-控制：按 B1 的幂等导入、backup、quarantine 和五类计数执行；未取得明确数据丢弃授权时不得删除无法证明已迁移的数据。
+控制：本轮已取得明确的数据丢弃授权。发布说明必须标明旧 WebView 本地数据不会自动升级；运行时代码不再保留迁移、backup 或 quarantine 分支。
 
 ### 风险：session controller 成为新的 god object
 
@@ -948,3 +942,28 @@ launch app
 - `.app` 主程序为 arm64 Mach-O，SHA-256 为 `d74be4dfb2894883d151f1a25e1e3abf80cbcbe1c82b918842131d8ab645eb61`；bundle id 为 `ai.geochat.desktop`，版本为 `0.6.1`。
 
 证据边界：本轮证明本地源码、构建、真实桌面 debug 链路、macOS 应用包与 DMG 完整性；当前 `.app` 仅为 ad-hoc/linker-signed，未证明 Developer ID 签名、公证、Windows NSIS/MSI 安装及安装后启动、真实线上 provider 或完整人工视觉/屏幕阅读器验收。Windows CI 的 launch smoke 只启动 release-build executable，并在证据中显式标记安装器未验证。宿主 WebView 的 `prefers-reduced-motion` 环境未被测试 runner 强行伪造，代码与静态门禁覆盖该分支，但不将其记为本轮真实 WebView 证据。上述边界同时写入 `docs/release-boundaries.md`，tag 发布流程会把它们加入新建或既有 Release 的说明。
+
+## 20. 2026-10-01 原生持久化收口
+
+应用运行期的数据所有权进一步收口为三类：业务数据以 backend SQLite 为唯一权威源；轻量
+配置与偏好写入 Tauri 应用数据目录中的 `renderer-state.json`；Provider 密钥写入操作系统安全
+凭据库。WebView 不再承担应用持久化。
+
+- 历史 WebView conversation/config/credential migration、journal、backup 和 import API 已全部
+  删除；启动过程不会读取或复制旧 WebView 数据。仅保留当前版本损坏配置的严格、限额隔离，
+  不包含任何旧 schema 升级逻辑。
+- `localStorage` 与 `sessionStorage` 均为进程内 vendor 兼容实现；IndexedDB、Cache Storage、
+  Service Worker 注册与 OPFS 被禁用。静态门禁禁止第一方模块新增 WebView 持久化路径。
+- 会话、运行内容和 GeoGebra 文档由 backend SQLite repository 独占；`renderer-state.json` 只接受
+  固定白名单内的语言、模型选择、思考开关、面板、onboarding 和 installation ID 等偏好，
+  Provider secret 仅写入按 dev/prod 隔离的系统凭据库。
+- `renderer-state.json` 使用原子替换、父目录同步、系统 advisory file lock、跨实例读刷新、
+  单项/总量上限和 Windows 中断恢复。配置凭据引用使用单次 durable write 的独立 Promise，
+  不会被前序或后续无关缓存写入错误污染提交结果。
+- dev 与 production 使用不同 bundle identifier，因此 SQLite、配置和安全凭据命名空间互不
+  污染。
+
+本次 clean-slate 验证：`bun run quality:check` 通过；`bun test tests --max-concurrency=1` 为
+883 pass、0 fail；Rust 为 83 pass、0 fail，Clippy `-D warnings`、格式检查和 `cargo check`
+通过；backend/renderer 生产构建通过，Cargo 重新生成 ACL 后静态门禁仍通过。安装包、签名、
+公证、Windows 安装器和真实 provider 不在本次验证范围内。

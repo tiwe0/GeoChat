@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { UIMessage } from "ai";
 import type { ToolExecutionResult } from "@geochat-ai/app/geogebra-protocol";
 import {
@@ -6,7 +6,6 @@ import {
   replayConversationCanvas,
 } from "../src/renderer-react/src/features/conversations/replay";
 import { GeoGebraController } from "../src/renderer-react/src/geogebra/controller";
-import { setFrontendGeoGebraController } from "../src/renderer-react/src/geogebra/runtime";
 import type { GeoGebraApi } from "../src/renderer-react/src/geogebra/ggbdeploy-wrapper";
 
 function assistant(parts: UIMessage["parts"]): UIMessage {
@@ -14,7 +13,6 @@ function assistant(parts: UIMessage["parts"]): UIMessage {
 }
 
 describe("conversation canvas replay", () => {
-  beforeEach(() => setFrontendGeoGebraController(null));
 
   test("extracts completed canvas mutations in transcript order", () => {
     const messages: UIMessage[] = [assistant([
@@ -68,7 +66,7 @@ describe("conversation canvas replay", () => {
 
   test("does not clear the canvas for a text-only conversation", async () => {
     const calls: unknown[] = [];
-    await replayConversationCanvas([], async (toolName, input) => {
+    await replayConversationCanvas(new GeoGebraController(), [], async (toolName, input) => {
       calls.push([toolName, input]);
       return { ok: true } as ToolExecutionResult;
     });
@@ -79,8 +77,7 @@ describe("conversation canvas replay", () => {
     let snapshots = 0;
     const controller = new GeoGebraController();
     controller.setApi({ getXML: () => { snapshots += 1; return "initial"; } } as GeoGebraApi);
-    setFrontendGeoGebraController(controller);
-    await replayConversationCanvas([]);
+    await replayConversationCanvas(controller, []);
     expect(snapshots).toBe(0);
   });
 
@@ -97,9 +94,7 @@ describe("conversation canvas replay", () => {
         return JSON.stringify({ ok: true, labels: ["A"] });
       },
     } as unknown as GeoGebraApi);
-    setFrontendGeoGebraController(controller);
-
-    await expect(replayConversationCanvas([
+    await expect(replayConversationCanvas(controller, [
       { type: "reset", input: {} },
       { type: "execute", input: {}, commands: ["A=(0,0)"] },
       { type: "execute", input: {}, commands: ["Bad("] },
@@ -110,7 +105,7 @@ describe("conversation canvas replay", () => {
 
   test("replays intermediate resets instead of flattening all commands", async () => {
     const calls: Array<[string, unknown]> = [];
-    await replayConversationCanvas([
+    await replayConversationCanvas(new GeoGebraController(), [
       { type: "execute", input: {}, commands: ["A=(0,0)"] },
       { type: "reset", input: { perspective: "T" } },
       { type: "execute", input: {}, commands: ["B=(1,1)"] },
@@ -129,7 +124,7 @@ describe("conversation canvas replay", () => {
 
   test("replays more than 100 commands atomically instead of splitting restore-on-error batches", async () => {
     const calls: unknown[] = [];
-    await replayConversationCanvas([{
+    await replayConversationCanvas(new GeoGebraController(), [{
       type: "execute",
       input: {},
       commands: Array.from({ length: 101 }, (_, index) => `A${index}=(${index},0)`),

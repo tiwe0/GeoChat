@@ -52,6 +52,14 @@ function createMemoryStorage(): Pick<Storage, "getItem" | "setItem"> {
 }
 
 describe("improvement plan uploader", () => {
+  test("requires an explicit native queue boundary", () => {
+    expect(() => createImprovementPlanUploader({
+      runtime: () => runtime,
+      enabled: () => true,
+      desktopRuntime: {},
+    })).toThrow("Improvement plan queue storage must be supplied by the native runtime");
+  });
+
   test("uploads queued samples through injected runtime boundaries", async () => {
     const uploadedBatches: unknown[][] = [];
     const desktopApi = partialDesktopApi({

@@ -33,7 +33,7 @@ describe("backend http path helpers", () => {
 
   test("recognizes supported GeoGebra asset prefixes", () => {
     expect(isGeoGebraAssetPath("/tools/geogebra-assets-v2/deployggb.js")).toBe(true);
-    expect(isGeoGebraAssetPath("/tools/geogebra-assets/deployggb.js")).toBe(true);
+    expect(isGeoGebraAssetPath("/tools/geogebra-assets/deployggb.js")).toBe(false);
     expect(isGeoGebraAssetPath("/tools/geogebra-assets-v3/deployggb.js")).toBe(false);
     expect(isGeoGebraAssetPath("/v1/tools/geogebra-assets/deployggb.js")).toBe(false);
   });

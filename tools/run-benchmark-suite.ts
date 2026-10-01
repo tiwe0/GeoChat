@@ -29,8 +29,7 @@ export type CanvasContextLike = { objects?: unknown[]; result?: { objects?: unkn
 const mcpUrl = process.env.GEOCHAT_DESKTOP_MCP_URL ?? "http://127.0.0.1:17369/mcp";
 const backendUrl = (process.env.GEOCHAT_DESKTOP_BACKEND_URL ?? "http://127.0.0.1:17365").replace(/\/$/, "");
 const authToken = process.env.GEOCHAT_DESKTOP_MCP_AUTH_TOKEN
-  ?? process.env.GEOCHAT_DESKTOP_BACKEND_AUTH_TOKEN
-  ?? process.env.GEOCHAT_DESKTOP_LOCAL_AUTH_TOKEN;
+  ?? process.env.GEOCHAT_DESKTOP_BACKEND_AUTH_TOKEN;
 const suitePath = resolve(process.env.GEOCHAT_BENCHMARK_SUITE ?? "benchmarks/core-v1/suite.json");
 const outputPath = resolve(process.env.GEOCHAT_BENCHMARK_OUTPUT ?? ".artifacts/benchmarks/latest.json");
 const selectedCaseIds = new Set((process.env.GEOCHAT_BENCHMARK_CASES ?? "").split(",").map((value) => value.trim()).filter(Boolean));

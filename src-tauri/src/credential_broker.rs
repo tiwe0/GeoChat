@@ -16,6 +16,7 @@ use uuid::Uuid;
 
 const MAX_HEADER_BYTES: usize = 8 * 1024;
 const MAX_BODY_BYTES: usize = 1024;
+const MAX_CORRELATION_ID_BYTES: usize = 160;
 const SOCKET_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone)]
@@ -126,6 +127,7 @@ fn handle_connection(
     let mut content_length: Option<usize> = None;
     let mut content_type_valid = false;
     let mut origin_present = false;
+    let mut correlation_id: Option<String> = None;
     loop {
         let line = read_header_line(&mut reader, &mut total_header_bytes)?;
         if line.is_empty() {
@@ -150,6 +152,15 @@ fn handle_connection(
                     .next()
                     .is_some_and(|mime| mime.trim().eq_ignore_ascii_case("application/json"));
             }
+            "x-correlation-id" if correlation_id.is_none() && valid_correlation_id(value) => {
+                correlation_id = Some(value.to_owned())
+            }
+            "x-correlation-id" if correlation_id.is_some() => {
+                return write_rejected(&mut stream, 400, "duplicate_header")
+            }
+            "x-correlation-id" => {
+                return write_rejected(&mut stream, 400, "invalid_correlation_id")
+            }
             "origin" => origin_present = true,
             "transfer-encoding" => {
                 return write_rejected(&mut stream, 400, "transfer_encoding_unsupported")
@@ -158,15 +169,6 @@ fn handle_connection(
         }
     }
 
-    if origin_present {
-        return write_rejected(&mut stream, 403, "origin_forbidden");
-    }
-    if !authorized(authorization.as_deref(), expected_token) {
-        return write_rejected(&mut stream, 401, "unauthorized");
-    }
-    if !content_type_valid {
-        return write_rejected(&mut stream, 415, "unsupported_media_type");
-    }
     let content_length = content_length.ok_or("content_length_required")?;
     if content_length == 0 || content_length > MAX_BODY_BYTES {
         return write_rejected(&mut stream, 413, "request_too_large");
@@ -182,6 +184,15 @@ fn handle_connection(
     {
         return write_rejected(&mut stream, 400, "request_pipelining_forbidden");
     }
+    if origin_present {
+        return write_rejected(&mut stream, 403, "origin_forbidden");
+    }
+    if !authorized(authorization.as_deref(), expected_token) {
+        return write_rejected(&mut stream, 401, "unauthorized");
+    }
+    if !content_type_valid {
+        return write_rejected(&mut stream, 415, "unsupported_media_type");
+    }
     let request: ResolveRequest = match serde_json::from_slice(&body) {
         Ok(request) => request,
         Err(_) => return write_rejected(&mut stream, 400, "invalid_request"),
@@ -189,6 +200,11 @@ fn handle_connection(
 
     match vault.resolve(&request.credential_ref) {
         Ok(resolved) => {
+            log::info!(
+                target: "geochat::credential_broker",
+                "Credential broker request completed: correlation_id={} status=200",
+                correlation_id.as_deref().unwrap_or("unavailable")
+            );
             let body = serde_json::to_vec(&json!({
                 "schemaVersion": 1,
                 "secret": resolved.secret(),
@@ -201,9 +217,22 @@ fn handle_connection(
         }
         Err(error) => {
             let (status, code) = broker_error(error);
+            log::warn!(
+                target: "geochat::credential_broker",
+                "Credential broker request failed: correlation_id={} status={status} error_code={code}",
+                correlation_id.as_deref().unwrap_or("unavailable")
+            );
             write_error(&mut stream, status, code)
         }
     }
+}
+
+fn valid_correlation_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= MAX_CORRELATION_ID_BYTES
+        && value.bytes().enumerate().all(|(index, byte)| {
+            byte.is_ascii_alphanumeric() || (index > 0 && matches!(byte, b'.' | b'_' | b':' | b'-'))
+        })
 }
 
 fn read_header_line(
@@ -315,11 +344,11 @@ mod tests {
     fn broker_requires_its_private_token_and_never_allows_origin_requests() {
         let (runtime, _vault, credential_ref) = test_runtime();
         let connection = runtime.connection();
-        let unauthorized = send_request(connection, &credential_ref, "wrong", None);
+        let unauthorized = send_chunked_request(connection, &credential_ref, "wrong", None);
         assert!(unauthorized.starts_with("HTTP/1.1 401"));
         assert!(!unauthorized.contains("canary-provider-secret"));
 
-        let forbidden = send_request(
+        let forbidden = send_chunked_request(
             connection,
             &credential_ref,
             &connection.token,
@@ -344,26 +373,105 @@ mod tests {
         assert!(!deleted.contains("canary-provider-secret"));
     }
 
+    #[test]
+    fn broker_accepts_only_bounded_opaque_correlation_ids() {
+        let (runtime, _vault, credential_ref) = test_runtime();
+        let connection = runtime.connection();
+        let correlated = send_request(
+            connection,
+            &credential_ref,
+            &connection.token,
+            Some("X-Correlation-Id: run_broker_1\r\n"),
+        );
+        assert!(correlated.starts_with("HTTP/1.1 200"));
+
+        let invalid = send_request(
+            connection,
+            &credential_ref,
+            &connection.token,
+            Some("X-Correlation-Id: user prompt\r\n"),
+        );
+        assert!(invalid.starts_with("HTTP/1.1 400"));
+        assert!(!invalid.contains("canary-provider-secret"));
+    }
+
     fn send_request(
         connection: &CredentialBrokerConnection,
         credential_ref: &str,
         token: &str,
         extra_headers: Option<&str>,
     ) -> String {
+        send_request_with_delay(connection, credential_ref, token, extra_headers, None)
+    }
+
+    fn send_chunked_request(
+        connection: &CredentialBrokerConnection,
+        credential_ref: &str,
+        token: &str,
+        extra_headers: Option<&str>,
+    ) -> String {
+        send_request_with_delay(
+            connection,
+            credential_ref,
+            token,
+            extra_headers,
+            Some(Duration::from_millis(10)),
+        )
+    }
+
+    fn send_request_with_delay(
+        connection: &CredentialBrokerConnection,
+        credential_ref: &str,
+        token: &str,
+        extra_headers: Option<&str>,
+        body_delay: Option<Duration>,
+    ) -> String {
         let url = url::Url::parse(&connection.base_url).unwrap();
         let body = serde_json::to_string(&json!({ "credentialRef": credential_ref })).unwrap();
         let mut stream = TcpStream::connect(("127.0.0.1", url.port().unwrap())).unwrap();
-        write!(
-            stream,
-            "POST /v1/credentials/resolve HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer {token}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n{}\r\n{}",
+        stream.set_nodelay(true).unwrap();
+        let headers = format!(
+            "POST /v1/credentials/resolve HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer {token}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n{}\r\n",
             body.len(),
-            extra_headers.unwrap_or(""),
-            body
-        )
-        .unwrap();
+            extra_headers.unwrap_or("")
+        );
+        stream.write_all(headers.as_bytes()).unwrap();
         stream.flush().unwrap();
-        let mut response = String::new();
-        stream.read_to_string(&mut response).unwrap();
-        response
+        if let Some(delay) = body_delay {
+            thread::sleep(delay);
+        }
+        stream.write_all(body.as_bytes()).unwrap();
+        stream.flush().unwrap();
+        let mut response = Vec::new();
+        let mut buffer = [0_u8; 1024];
+        while !http_response_is_complete(&response) {
+            let read = stream.read(&mut buffer).unwrap();
+            if read == 0 {
+                break;
+            }
+            response.extend_from_slice(&buffer[..read]);
+        }
+        assert!(http_response_is_complete(&response));
+        String::from_utf8(response).unwrap()
+    }
+
+    fn http_response_is_complete(response: &[u8]) -> bool {
+        let Some(header_end) = response
+            .windows(4)
+            .position(|window| window == b"\r\n\r\n")
+            .map(|index| index + 4)
+        else {
+            return false;
+        };
+        let Ok(headers) = std::str::from_utf8(&response[..header_end]) else {
+            return false;
+        };
+        let Some(content_length) = headers.lines().find_map(|line| {
+            line.strip_prefix("Content-Length: ")
+                .and_then(|value| value.parse::<usize>().ok())
+        }) else {
+            return false;
+        };
+        response.len() >= header_end + content_length
     }
 }

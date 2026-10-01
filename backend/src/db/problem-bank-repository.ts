@@ -7,7 +7,6 @@ import type {
   ProblemSetSummary,
   ProblemSummary
 } from "@geochat-ai/app/problem-bank";
-import type { MigrationProblemAttempt } from "@geochat-ai/app/migration";
 import type { GeoChatDatabaseRuntimeConfig } from "./runtime";
 import type { createDatabase } from "./client";
 import { buildLocalProblemBankImportPlan } from "../problem-bank/import-plan";
@@ -72,13 +71,28 @@ export type ProblemAttemptScope = {
   ownerUserId?: string | null;
 };
 
+export type ProblemAttemptRecord = {
+  id: string;
+  problemId: string;
+  conversationId: string;
+  ownerUserId: string | null;
+  runId: string | null;
+  status: "started" | "completed" | "failed";
+  modelProvider: string | null;
+  modelId: string | null;
+  startedAt: string;
+  completedAt: string | null;
+  userRating: number | null;
+  notes: string | null;
+};
+
 export type ProblemBankRepository = {
   ensureSeeded(sourcePath: string): Promise<void>;
   importFromCases(sourcePath: string): Promise<ProblemImportResponse>;
   listProblemSets(): Promise<ProblemSetSummary[]>;
   listProblemsForSet(setIdOrSlug: string, filters?: ProblemListFilters): Promise<ProblemListResponse>;
   getProblemDetail(problemId: string): Promise<ProblemDetail | undefined>;
-  listProblemAttempts(scope?: ProblemAttemptScope): Promise<MigrationProblemAttempt[]>;
+  listProblemAttempts(scope?: ProblemAttemptScope): Promise<ProblemAttemptRecord[]>;
   recordProblemAttempt(problemId: string, input: ProblemAttemptInput): Promise<ProblemAttemptResponse | undefined>;
 };
 
@@ -266,7 +280,7 @@ function sqliteProblemAttemptOwnerCondition(scope?: ProblemAttemptScope) {
   return ownerUserId ? eq(sqliteProblemAttempts.ownerUserId, ownerUserId) : isNull(sqliteProblemAttempts.ownerUserId);
 }
 
-function problemAttemptFromRow(row: ProblemAttemptRow): MigrationProblemAttempt {
+function problemAttemptFromRow(row: ProblemAttemptRow): ProblemAttemptRecord {
   return {
     id: row.id,
     problemId: row.problemId,

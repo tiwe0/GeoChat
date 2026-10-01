@@ -158,6 +158,41 @@ html.interaction-mode-view-transition::view-transition-new(root) {
 .frontend-canvas-control:focus-visible { outline: 2px solid #07c160; outline-offset: 2px; }
 .frontend-canvas-control:disabled { cursor: not-allowed; opacity: .5; }
 .frontend-canvas-toolbar.is-active { color: #078d48; background: #e7f8ed; border-color: #b8dfc5; }
+.geogebra-document-panel {
+  position: absolute;
+  right: 20px;
+  bottom: 70px;
+  z-index: 7;
+  width: min(360px, calc(100vw - 40px));
+  max-height: min(520px, calc(100vh - 120px));
+  padding: 14px;
+  overflow: auto;
+  border: 1px solid #dbe6df;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: 0 18px 48px rgba(24, 59, 36, .16);
+  backdrop-filter: blur(16px);
+}
+.geogebra-document-panel header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; color: #263c31; }
+.geogebra-document-panel header div { display: flex; align-items: center; gap: 8px; }
+.geogebra-document-panel header button { border: 0; color: #52645a; background: transparent; cursor: pointer; line-height: 1; }
+.geogebra-document-panel header button:last-child { font-size: 22px; }
+.geogebra-document-save-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.geogebra-document-save-row input { min-width: 0; height: 36px; padding: 0 10px; border: 1px solid #cfddd5; border-radius: 8px; }
+.geogebra-document-save-row button,
+.geogebra-document-delete { border: 1px solid #c7dbcf; border-radius: 8px; color: #126f3e; background: #eef9f2; cursor: pointer; }
+.geogebra-document-save-row button:disabled { cursor: not-allowed; opacity: .5; }
+.geogebra-document-storage-note,
+.geogebra-document-empty { margin: 9px 0; color: #718078; font-size: 12px; }
+.geogebra-document-error { margin: 9px 0; color: #b43e35; font-size: 12px; overflow-wrap: anywhere; }
+.geogebra-document-loading { display: grid; min-height: 64px; place-items: center; }
+.geogebra-document-panel ul { display: grid; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }
+.geogebra-document-panel li { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px; border: 1px solid #e2eae5; border-radius: 9px; }
+.geogebra-document-panel li.is-current { border-color: #84c79f; background: #f2fbf5; }
+.geogebra-document-open { display: flex; min-width: 0; padding: 8px 10px; flex-direction: column; align-items: flex-start; border: 0; color: #2e4037; background: transparent; cursor: pointer; text-align: left; }
+.geogebra-document-open span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.geogebra-document-open small { color: #7e8d85; }
+.geogebra-document-delete { margin-right: 6px; padding: 5px 8px; color: #a53d35; background: #fff7f6; border-color: #edd0cd; }
 .frontend-canvas-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #607168; background: #fff; font-size: 13px; }
 .frontend-canvas-overlay span { max-width: min(560px, calc(100vw - 40px)); color: #a64d44; font-size: 11px; text-align: center; overflow-wrap: anywhere; }
 .frontend-canvas-recovery-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }

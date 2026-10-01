@@ -23,10 +23,11 @@ describe("conversation history", () => {
           content: "context A only",
           createdAt: "2026-06-06T04:00:00.000Z",
           payload: {
+            schemaVersion: 1,
             id: `${conversationId}-user`,
             role: "user",
             content: "context A only",
-            createdAt: "12:00:00"
+            createdAt: "2026-06-06T04:00:00.000Z"
           }
         }
       })
@@ -35,33 +36,6 @@ describe("conversation history", () => {
     expect(created.status).toBe(201);
     expect((await harnessA.request(`/v1/conversations/${encodeURIComponent(conversationId)}`)).status).toBe(200);
     expect((await harnessB.request(`/v1/conversations/${encodeURIComponent(conversationId)}`)).status).toBe(404);
-  });
-
-  test("serves legacy top-level message routes through the desktop backend", async () => {
-    const { request } = await createHttpHarness();
-    const content = `legacy top-level message ${crypto.randomUUID()}`;
-
-    const created = await request("/v1/messages", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ content })
-    });
-
-    expect(created).toMatchObject({
-      status: 201,
-      json: {
-        message: {
-          role: "user",
-          content
-        }
-      }
-    });
-    expect(typeof created.json.message.id).toBe("string");
-    expect(created.json.message.createdAt).toContain("T");
-
-    const listed = await request("/v1/messages");
-    expect(listed.status).toBe(200);
-    expect(listed.json.messages).toContainEqual(created.json.message);
   });
 
   test("persists, restores, and deletes complete desktop conversations", async () => {
@@ -75,10 +49,11 @@ describe("conversation history", () => {
       content: "画一个椭圆，并标出焦点。",
       createdAt,
       payload: {
+        schemaVersion: 1,
         id: `${conversationId}-user`,
         role: "user",
         content: "画一个椭圆，并标出焦点。",
-        createdAt: "12:00:00",
+        createdAt,
         attachments: [{ id: "image-1", name: "problem.png", mediaType: "image/png", size: 12, dataUrl: "data:image/png;base64,AA==" }]
       }
     };
@@ -88,10 +63,11 @@ describe("conversation history", () => {
       content: "正在规划构造...",
       createdAt: "2026-06-06T04:00:01.000Z",
       payload: {
+        schemaVersion: 1,
         id: `${conversationId}-assistant`,
         role: "assistant",
         content: "正在规划构造...",
-        createdAt: "12:00:01",
+        createdAt: "2026-06-06T04:00:01.000Z",
         toolCalls: []
       }
     };
@@ -101,10 +77,11 @@ describe("conversation history", () => {
       content: "椭圆已经绘制完成。",
       createdAt: "2026-06-06T04:00:01.000Z",
       payload: {
+        schemaVersion: 1,
         id: `${conversationId}-assistant`,
         role: "assistant",
         content: "椭圆已经绘制完成。",
-        createdAt: "12:00:01",
+        createdAt: "2026-06-06T04:00:01.000Z",
         cards: [{ title: "构造画布", status: "done" }],
         toolCalls: [{ callId: "tool-1", toolName: "executeGeoGebraCommands", status: "done" }],
         parts: [
@@ -200,10 +177,11 @@ describe("conversation history", () => {
       content: "继续添加一个动点。",
       createdAt: "2026-06-06T04:00:03.000Z",
       payload: {
+        schemaVersion: 1,
         id: `${conversationId}-follow-up-user`,
         role: "user",
         content: "继续添加一个动点。",
-        createdAt: "12:00:03"
+        createdAt: "2026-06-06T04:00:03.000Z"
       }
     };
     const followUpAssistantMessage = {
@@ -212,10 +190,11 @@ describe("conversation history", () => {
       content: "动点已经加入椭圆轨迹。",
       createdAt: "2026-06-06T04:00:04.000Z",
       payload: {
+        schemaVersion: 1,
         id: `${conversationId}-follow-up-assistant`,
         role: "assistant",
         content: "动点已经加入椭圆轨迹。",
-        createdAt: "12:00:04",
+        createdAt: "2026-06-06T04:00:04.000Z",
         toolCalls: [{ callId: "tool-2", toolName: "executeGeoGebraCommands", status: "done" }]
       }
     };
@@ -282,71 +261,6 @@ describe("conversation history", () => {
     expect((await request(`/v1/conversations/${encodeURIComponent(conversationId)}`)).status).toBe(404);
   });
 
-  test("exports and imports desktop migration packages through the backend API", async () => {
-    const { request } = await createHttpHarness();
-    const conversationId = `migration-${crypto.randomUUID()}`;
-
-    expect(
-      await request(`/v1/conversations/${encodeURIComponent(conversationId)}/messages`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          conversationId,
-          message: {
-            id: `${conversationId}-user`,
-            role: "user",
-            content: "导出迁移测试。",
-            createdAt: "2026-06-06T04:06:00.000Z",
-            payload: {
-              id: `${conversationId}-user`,
-              role: "user",
-              content: "导出迁移测试。",
-              createdAt: "12:06:00"
-            }
-          }
-        })
-      })
-    ).toMatchObject({ status: 201 });
-
-    const exported = await request("/v1/migration/export");
-    expect(exported.status).toBe(200);
-    expect(exported.headers.get("content-disposition")).toContain("geochat-migration-anonymous_offline-");
-    expect(exported.json.migrationPackage).toMatchObject({
-      schemaVersion: 1,
-      product: "geochat",
-      source: {
-        databaseDriver: "sqlite",
-        migrationsSchema: "sqlite"
-      },
-      scope: {
-        ownerUserId: null,
-        mode: "anonymous_offline"
-      }
-    });
-    expect(
-      exported.json.migrationPackage.conversations.some((bundle: { conversation: { id: string } }) => bundle.conversation.id === conversationId)
-    ).toBe(true);
-
-    const invalid = await request("/v1/migration/import", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ migrationPackage: { product: "geochat", schemaVersion: 999 } })
-    });
-    expect(invalid).toMatchObject({
-      status: 400,
-      json: { error: "invalid_migration_package", errorCode: "migration_package_invalid" }
-    });
-
-    const imported = await request("/v1/migration/import", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ migrationPackage: exported.json.migrationPackage })
-    });
-    expect(imported.status).toBe(200);
-    expect(imported.json.importResult.importedConversations).toBeGreaterThan(0);
-    expect(imported.json.importResult.importedMessages).toBeGreaterThan(0);
-  });
-
   test("rejects malformed conversation messages", async () => {
     const { request } = await createHttpHarness();
     const conversationId = `history-invalid-${crypto.randomUUID()}`;
@@ -388,10 +302,11 @@ describe("conversation history", () => {
       content: "画一个圆。",
       createdAt: "2026-06-06T04:08:00.000Z",
       payload: {
+        schemaVersion: 1,
         id: messageId,
         role: "user" as const,
         content: "画一个圆。",
-        createdAt: "12:08:00"
+        createdAt: "2026-06-06T04:08:00.000Z"
       }
     };
 
@@ -435,10 +350,11 @@ describe("conversation history", () => {
           content: "画一个圆并解释半径。",
           createdAt: "2026-06-06T04:10:00.000Z",
           payload: {
+            schemaVersion: 1,
             id: `${conversationId}-user`,
             role: "user",
             content: "画一个圆并解释半径。",
-            createdAt: "12:10:00"
+            createdAt: "2026-06-06T04:10:00.000Z"
           }
         }
       })
@@ -553,10 +469,11 @@ describe("conversation history", () => {
           content: "保持运行中的会话。",
           createdAt: "2026-06-06T04:20:00.000Z",
           payload: {
+            schemaVersion: 1,
             id: `${conversationId}-user`,
             role: "user",
             content: "保持运行中的会话。",
-            createdAt: "12:20:00"
+            createdAt: "2026-06-06T04:20:00.000Z"
           }
         }
       })

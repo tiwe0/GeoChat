@@ -1,7 +1,6 @@
 import {
   getFunctionCallBackendExecutableToolNames,
   isFunctionCallArgs,
-  type ActivateSkillArgs,
   type CreateGeometryPlanArgs,
   type ExecuteAdvancedDrawingCommandArgs,
   type FunctionCallArgsByName,
@@ -192,15 +191,6 @@ async function executeBackendToolResult(request: BackendToolRequest, context: Ba
   }
   if (request.toolName === "loadSkill") {
     const args = request.args as LoadSkillArgs;
-    const skill = await activateAgentSkill(args.name);
-    return okBackendToolResult(skill, {
-      source: "backend-agent-skill",
-      operation: "load",
-      name: skill.name
-    });
-  }
-  if (request.toolName === "activateSkill") {
-    const args = request.args as ActivateSkillArgs;
     const skill = await activateAgentSkill(args.name);
     return okBackendToolResult(skill, {
       source: "backend-agent-skill",

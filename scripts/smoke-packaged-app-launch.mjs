@@ -189,7 +189,6 @@ function isolatedLaunchEnvironment(environment, userDataDir, port) {
   for (const name of [
     "GEOCHAT_DESKTOP_BACKEND_URL",
     "GEOCHAT_DESKTOP_BACKEND_AUTH_TOKEN",
-    "GEOCHAT_DESKTOP_LOCAL_AUTH_TOKEN",
     "GEOCHAT_DESKTOP_DB_PATH",
     "GEOCHAT_DESKTOP_RESOURCE_ROOT",
     "GEOCHAT_APP_BUNDLE_INSTALLED_CLIENT_SMOKE",

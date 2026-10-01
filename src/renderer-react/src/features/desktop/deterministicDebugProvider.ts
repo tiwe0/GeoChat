@@ -2,6 +2,7 @@ import {
   persistDesktopConfig,
   readDesktopConfig,
   normalizeDesktopConfigJson,
+  updateDesktopConfig,
 } from "../../../../shared/desktop/desktop-config";
 import { installedDesktopApi } from "../../../../shared/desktop/tauri-bridge";
 
@@ -38,8 +39,8 @@ export async function configureDeterministicDebugProvider(baseUrl: string, model
     secret: TEST_CREDENTIAL_SECRET,
   });
   try {
-    persistDesktopConfig({
-      ...originalConfig,
+    await updateDesktopConfig((current) => ({
+      ...current,
       model: {
         provider: "custom",
         model,
@@ -53,7 +54,7 @@ export async function configureDeterministicDebugProvider(baseUrl: string, model
         protocol: "openai-compatible",
         models: [{ name: model, callName: model, supportsImages: false }],
       },
-    });
+    }));
   } catch (error) {
     try {
       await desktopApi.deleteProviderCredential(metadata.credentialRef);
@@ -103,7 +104,7 @@ export async function clearDeterministicDebugProviderWithPorts<Config extends De
   ports: {
     readConfig(): Config;
     normalizeConfigJson(rawJson: string): Config;
-    persistConfig(config: Config): void;
+    persistConfig(config: Config): Promise<void> | void;
     isCredentialConfigured(ref: string): Promise<boolean>;
     deleteCredential(ref: string): Promise<void>;
   },
@@ -115,9 +116,20 @@ export async function clearDeterministicDebugProviderWithPorts<Config extends De
     throw new Error("The current provider configuration is not owned by this deterministic E2E run.");
   }
   const restoreConfig = ports.normalizeConfigJson(restoreConfigJson);
-  if (await ports.isCredentialConfigured(credentialRef)) {
-    await ports.deleteCredential(credentialRef);
+  await ports.persistConfig(restoreConfig);
+  try {
+    if (await ports.isCredentialConfigured(credentialRef)) {
+      await ports.deleteCredential(credentialRef);
+    }
+  } catch (error) {
+    try {
+      // Keep the ownership marker retryable when Keychain cleanup fails after
+      // the restored config was durably committed.
+      await ports.persistConfig(current);
+    } catch (rollbackError) {
+      throw new AggregateError([error, rollbackError], "Failed to delete the E2E credential and restore cleanup ownership.");
+    }
+    throw error;
   }
-  ports.persistConfig(restoreConfig);
   return { cleared: true, configRestored: true, credentialDeleted: true, debugOnly: true };
 }

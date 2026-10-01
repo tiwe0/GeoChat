@@ -45,7 +45,7 @@ type ImprovementPlanSample = {
 };
 
 export type ImprovementPlanUploaderRuntime = WorkbenchDesktopRuntime & {
-  queueStorage: Pick<Storage, "getItem" | "setItem"> | undefined;
+  queueStorage: ImprovementPlanQueueStorage;
   isOnline: () => boolean;
   addOnlineListener: (handler: () => void) => void;
   removeOnlineListener: (handler: () => void) => void;
@@ -81,22 +81,22 @@ export function createImprovementPlanUploader(input: {
   }) {
     if (!input.enabled()) return;
     const sample = await createSample(inputMessage);
-    const queue = readQueue(uploaderRuntime.queueStorage);
+    const queue = await readQueue(uploaderRuntime.queueStorage);
     queue.push(sample);
-    writeQueue(uploaderRuntime.queueStorage, queue.slice(-MAX_QUEUE_ITEMS));
+    await writeQueue(uploaderRuntime.queueStorage, queue.slice(-MAX_QUEUE_ITEMS));
   }
 
   async function flush() {
     if (flushing || !input.enabled() || !uploaderRuntime.isOnline()) return;
     const desktopApi = uploaderRuntime.desktopApi();
     if (!desktopApi?.uploadImprovementPlanSamples) return;
-    const queue = readQueue(uploaderRuntime.queueStorage);
+    const queue = await readQueue(uploaderRuntime.queueStorage);
     if (!queue.length) return;
     flushing = true;
     try {
       const batch = queue.slice(0, UPLOAD_BATCH_SIZE);
       const result = await desktopApi.uploadImprovementPlanSamples(batch);
-      if (result.ok) writeQueue(uploaderRuntime.queueStorage, queue.slice(batch.length));
+      if (result.ok) await writeQueue(uploaderRuntime.queueStorage, queue.slice(batch.length));
     } catch (caughtError) {
       logger.debug("upload_deferred", "IMPROVEMENT_PLAN_UPLOAD_DEFERRED", { error: caughtError });
       // Best-effort telemetry: keep the queue for a later background retry.
@@ -128,7 +128,7 @@ function resolveImprovementPlanUploaderRuntime(
   const browserWindow = typeof window === "undefined" ? undefined : window;
   return {
     ...desktopRuntime,
-    queueStorage: runtime?.queueStorage ?? browserWindow?.localStorage,
+    queueStorage: requiredQueueStorage(runtime?.queueStorage),
     isOnline: runtime?.isOnline ?? (() => typeof navigator === "undefined" || navigator.onLine !== false),
     addOnlineListener:
       runtime?.addOnlineListener ??
@@ -171,10 +171,19 @@ async function createSample(input: {
   };
 }
 
-function readQueue(storage: Pick<Storage, "getItem"> | undefined): ImprovementPlanSample[] {
-  if (!storage) return [];
+type ImprovementPlanQueueStorage = {
+  getItem(key: string): Promise<string | null> | string | null;
+  setItem(key: string, value: string): Promise<void> | void;
+};
+
+function requiredQueueStorage(storage: ImprovementPlanQueueStorage | undefined): ImprovementPlanQueueStorage {
+  if (!storage) throw new Error("Improvement plan queue storage must be supplied by the native runtime");
+  return storage;
+}
+
+async function readQueue(storage: ImprovementPlanQueueStorage): Promise<ImprovementPlanSample[]> {
   try {
-    const parsed = JSON.parse(storage.getItem(QUEUE_KEY) ?? "[]");
+    const parsed = JSON.parse((await storage.getItem(QUEUE_KEY)) ?? "[]");
     return Array.isArray(parsed) ? parsed.filter(isSample) : [];
   } catch (caughtError) {
     logger.debug("queue_read_failed", "IMPROVEMENT_PLAN_QUEUE_READ_FAILED", { error: caughtError });
@@ -182,15 +191,14 @@ function readQueue(storage: Pick<Storage, "getItem"> | undefined): ImprovementPl
   }
 }
 
-function writeQueue(storage: Pick<Storage, "setItem"> | undefined, queue: ImprovementPlanSample[]) {
-  if (!storage) return;
+async function writeQueue(storage: ImprovementPlanQueueStorage, queue: ImprovementPlanSample[]) {
   try {
-    storage.setItem(QUEUE_KEY, JSON.stringify(queue));
+    await storage.setItem(QUEUE_KEY, JSON.stringify(queue));
   } catch (caughtError) {
     logger.debug("queue_write_failed", "IMPROVEMENT_PLAN_QUEUE_WRITE_FAILED", { error: caughtError });
     // If local storage is full or unavailable, drop the oldest telemetry instead of affecting chat.
     try {
-      storage.setItem(QUEUE_KEY, JSON.stringify(queue.slice(-Math.floor(MAX_QUEUE_ITEMS / 2))));
+      await storage.setItem(QUEUE_KEY, JSON.stringify(queue.slice(-Math.floor(MAX_QUEUE_ITEMS / 2))));
     } catch (caughtError) {
       logger.debug("queue_compaction_failed", "IMPROVEMENT_PLAN_QUEUE_COMPACTION_FAILED", { error: caughtError });
       // Ignore storage failures; participation is best effort.

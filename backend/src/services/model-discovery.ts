@@ -30,6 +30,7 @@ export type ModelDiscoveryRuntime = {
   fetch?: typeof fetch;
   timeoutMs?: number;
   downstreamSignal?: AbortSignal;
+  correlationId?: string;
 };
 
 export async function discoverCredentialModels(
@@ -50,7 +51,11 @@ export async function discoverCredentialModels(
 
   let credential;
   try {
-    credential = await credentials.resolve(request.credentialRef, runtime.downstreamSignal);
+    credential = await credentials.resolve(
+      request.credentialRef,
+      runtime.downstreamSignal,
+      { correlationId: runtime.correlationId }
+    );
   } catch (error) {
     if (error instanceof CredentialResolutionError) {
       return result(error.status, { error: error.code, message: error.message });

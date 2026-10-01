@@ -26,7 +26,6 @@ const agentRunToolNames = new Set<string>([
   "listSkills",
   "searchSkills",
   "loadSkill",
-  "activateSkill",
   "createGeometryPlan",
   "executeAdvancedDrawingCommand",
   "executeGeoGebraCommands",

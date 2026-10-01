@@ -22,8 +22,6 @@ export function FusionAssistantOverlays(props: {
     selectingId: string | null;
     deletingId: string | null;
     error: string | null;
-    migrationRecoveryAvailable: boolean;
-    exportMigrationRecovery: () => void;
     select: (conversation: ConversationSummary) => Promise<unknown>;
     remove: (conversation: ConversationSummary) => Promise<boolean>;
   };
@@ -53,9 +51,6 @@ export function FusionAssistantOverlays(props: {
         selectingId={props.conversationHistory.selectingId}
         deletingId={props.conversationHistory.deletingId}
         error={props.conversationHistory.error}
-        onExportRecovery={props.conversationHistory.migrationRecoveryAvailable
-          ? props.conversationHistory.exportMigrationRecovery
-          : undefined}
         conversations={props.conversationHistory.conversations}
         currentConversationId={props.currentConversationId}
         onClose={props.onClose}

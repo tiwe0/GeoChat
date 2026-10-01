@@ -11,42 +11,68 @@ import {
   isFunctionCallRendererExecutable,
   isFunctionCallToolName,
 } from "@geochat-ai/app/functioncalls";
-import type { AgentRunImageAttachment, ChatMessageMetadata } from "@geochat-ai/app/contracts";
-import { agentModelSupportsReasoning, type AgentModelConfig } from "@geochat-ai/app/model-registry";
+import type { ChatMessageMetadata } from "@geochat-ai/app/contracts";
+import type { BackendRuntimeSnapshot } from "@geochat-ai/app/desktop-contracts";
+import type { AgentModelConfig } from "@geochat-ai/app/model-registry";
 import type { AgentRunThinkingEffort } from "@geochat-ai/app/contracts";
 import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
-import { areSupportedAgentAttachments } from "../features/attachments/capabilities";
 import {
-  clearActiveNativeRun,
-  getInstallationId,
-  readActiveNativeRun,
-  saveActiveNativeRun,
-  type StoredActiveNativeRun,
-} from "../features/agent-run/activeRunStorage";
+  activateNativeRun,
+  AgentRunSubmissionError,
+  AgentRunSubmissionLease,
+  BackendRuntimeListener,
+  BackendRuntimeRecoveryGate,
+  backendRuntimeUnavailable,
+  invalidateNativeRunAfterBackendLoss,
+  recoverInterruptedNativeRun,
+  stopActiveNativeRun,
+  terminalizeInterruptedNativeRun,
+  type ActiveNativeRun,
+} from "../features/agent-run/nativeRunLifecycle";
+import {
+  isRetryableNativeChatError,
+  nativeChatNetworkRetryDelay,
+  nativeChatRequestBody,
+  nativeRunHeaders,
+  prepareNativeRunSubmission,
+  uploadImageAttachments,
+  type NativeRunRequestSnapshot,
+} from "../features/agent-run/nativeRunRequest";
 import { executeRendererTool } from "../features/agent-run/toolWorker";
-import { desktopLogger } from "../features/desktop/desktopLogger";
-import {
-  promptWithSkillPolicy,
-  readDesktopConfig,
-} from "../../../shared/desktop/desktop-config";
-import type { DesktopConfig } from "../../../shared/desktop/workbench-types";
+import type { GeoGebraRuntimePort } from "../geogebra/runtime";
+import { desktopApi, desktopRuntime } from "../features/desktop/runtime";
+
+export {
+  activateNativeRun,
+  AgentRunSubmissionError,
+  AgentRunSubmissionLease,
+  recoverInterruptedNativeRun,
+  stopActiveNativeRun,
+  unwrapAgentRunSubmissionError,
+  wasAgentRunMessageAccepted,
+} from "../features/agent-run/nativeRunLifecycle";
+export {
+  captureNativeRunRequestSnapshot,
+  completeInterruptedToolParts,
+  isRetryableNativeChatError,
+  messagesWithSkillPolicy,
+  nativeChatNetworkRetryDelay,
+  nativeChatTransportMessages,
+} from "../features/agent-run/nativeRunRequest";
 
 const logger = createStructuredLogger("agent-run.renderer");
 
 type ChatMessage = UIMessage<ChatMessageMetadata>;
 type SendMessageInput = { text?: string; files?: FileUIPart[] };
 type SendMessageOptions = { body?: { conversationId?: string } };
-type ActiveNativeRun = { runId: string; conversationId: string };
-type NativeRunRequestContext = Omit<StoredActiveNativeRun, "runId">;
-type NativeRunRequestSnapshot = Readonly<{
-  model: AgentModelConfig;
-  locale: "zh-CN" | "en-US";
+type NativeRunRequestContext = {
+  conversationId: string;
+  modelProvider: string;
+  modelId: string;
+  prompt: string;
   thinking: boolean;
-  thinkingEffort: AgentRunThinkingEffort;
-  desktopConfig: DesktopConfig;
-}>;
-
-const NATIVE_CHAT_NETWORK_RETRY_DELAYS_MS = [750, 1_500, 3_000] as const;
+  thinkingEffort: AgentRunThinkingEffort | null;
+};
 
 export type AddToolOutput = (input: {
   tool: string;
@@ -56,71 +82,12 @@ export type AddToolOutput = (input: {
   errorText?: string;
 }) => void | PromiseLike<void>;
 
-export class AgentRunSubmissionError extends Error {
-  readonly messageAccepted: boolean;
-  readonly originalError: Error;
-
-  constructor(error: unknown, messageAccepted: boolean) {
-    const originalError = error instanceof Error ? error : new Error(String(error));
-    super(originalError.message, { cause: originalError });
-    this.name = "AgentRunSubmissionError";
-    this.messageAccepted = messageAccepted;
-    this.originalError = originalError;
-  }
-}
-
-export function wasAgentRunMessageAccepted(error: unknown) {
-  return error instanceof AgentRunSubmissionError && error.messageAccepted;
-}
-
-export function unwrapAgentRunSubmissionError(error: unknown) {
-  return error instanceof AgentRunSubmissionError ? error.originalError : error;
-}
-
-export class AgentRunSubmissionLease {
-  private acquired = false;
-
-  tryAcquire() {
-    if (this.acquired) return false;
-    this.acquired = true;
-    return true;
-  }
-
-  release() {
-    this.acquired = false;
-  }
-}
-
-export function captureNativeRunRequestSnapshot(
-  input: Pick<Parameters<typeof useAgentRunChat>[0], "getModelConfig" | "getThinking" | "getThinkingEffort" | "locale">,
-  desktopConfig: DesktopConfig = readDesktopConfig(),
-): NativeRunRequestSnapshot {
-  const selectedModel = input.getModelConfig?.();
-  if (!selectedModel) throw new Error("A model configuration is required.");
-  const model = Object.freeze({ ...selectedModel });
-  return Object.freeze({
-    model,
-    locale: input.locale,
-    thinking: input.getThinking() && agentModelSupportsReasoning(model.provider, model.model),
-    thinkingEffort: input.getThinkingEffort(),
-    desktopConfig: structuredClone(desktopConfig),
-  });
-}
-
-export async function stopActiveNativeRun(
-  active: ActiveNativeRun | null,
-  stopChat: () => Promise<unknown>,
-  terminalize: (run: ActiveNativeRun) => Promise<unknown>,
-) {
-  await stopChat();
-  if (active) await terminalize(active);
-}
-
 function isActiveNativeRun(activeRunRef: { current: ActiveNativeRun | null }, runId: string) {
   return activeRunRef.current?.runId === runId;
 }
 
 export function useAgentRunChat(input: {
+  geogebraRuntime: GeoGebraRuntimePort;
   apiOrigin: string;
   getAuthToken: () => string | null;
   getModel: () => string;
@@ -151,6 +118,11 @@ export function useAgentRunChat(input: {
   const submissionLeaseRef = useRef(new AgentRunSubmissionLease());
   const userStopInProgressRef = useRef(false);
   const [canRetry, setCanRetry] = useState(false);
+  const initialBackendRuntime = desktopRuntime()?.backendRuntime ?? null;
+  const backendRuntimeRef = useRef<BackendRuntimeSnapshot | null>(initialBackendRuntime);
+  const backendRuntimeListenerRef = useRef(new BackendRuntimeListener());
+  const backendRuntimeRecoveryGateRef = useRef(new BackendRuntimeRecoveryGate());
+  const [backendRuntime, setBackendRuntime] = useState<BackendRuntimeSnapshot | null>(initialBackendRuntime);
 
   const rememberFailedRequest = (request: NativeRunRequestContext | null) => {
     failedRequestContextRef.current = request;
@@ -202,39 +174,37 @@ export function useAgentRunChat(input: {
     return true;
   };
 
+  const recoverStoredNativeRun = () => {
+    const generation = runGenerationRef.current;
+    const recovery = recoverInterruptedNativeRun(
+      inputRef.current,
+      installationIdRef,
+      fetch,
+      () => runGenerationRef.current === generation,
+    )
+      .then(() => undefined)
+      .catch((error) => {
+        if (runGenerationRef.current === generation) {
+          logger.warn("interrupted_run_recovery_failed", "AGENT_RUN_RECOVERY_FAILED", { error });
+        }
+      })
+      .finally(() => {
+        if (recoveryPromiseRef.current === recovery) recoveryPromiseRef.current = null;
+      });
+    recoveryPromiseRef.current = recovery;
+    return recovery;
+  };
+
   if (!transportRef.current) {
     transportRef.current = new DefaultChatTransport<ChatMessage>({
       api: `${input.apiOrigin.replace(/\/+$/, "")}/v1/chat`,
-      headers: async () => {
-        const token = inputRef.current.getAuthToken();
-        const headers: Record<string, string> = {
-          "x-client-channel": token ? "desktop-workbench" : "web-workbench",
-        };
-        if (token) headers.Authorization = `Bearer ${token}`;
-        else headers["x-guest-session-id"] = guestSessionId(await getInstallationId(installationIdRef));
-        return headers;
-      },
+      headers: () => nativeRunHeaders(inputRef.current, installationIdRef, activeRunRef.current?.runId),
       prepareSendMessagesRequest: ({ messages }) => {
         const active = activeRunRef.current;
         if (!active) throw new Error("A native AI SDK run context is required.");
         const snapshot = activeRequestSnapshotRef.current;
         if (!snapshot) throw new Error("A native AI SDK request snapshot is required.");
-        const transportMessages = nativeChatTransportMessages(
-          messages,
-          snapshot.desktopConfig,
-          snapshot.locale,
-        );
-        return {
-          body: {
-            ...transportMessages,
-            runId: active.runId,
-            conversationId: active.conversationId,
-            model: snapshot.model,
-            locale: snapshot.locale,
-            thinking: snapshot.thinking,
-            thinkingEffort: snapshot.thinkingEffort,
-          },
-        };
+        return { body: nativeChatRequestBody(messages, active, snapshot) };
       },
     });
   }
@@ -264,7 +234,7 @@ export function useAgentRunChat(input: {
       const generation = runGenerationRef.current;
       const isCurrentRun = () => activeRunRef.current?.runId === runId && runGenerationRef.current === generation;
       try {
-        const result = await executeRendererTool(toolName, toolCall.input);
+        const result = await executeRendererTool(inputRef.current.geogebraRuntime, toolName, toolCall.input);
         if (!isCurrentRun()) return;
         if (result.ok) {
           queueToolOutput(addToolOutputRef.current, {
@@ -336,7 +306,6 @@ export function useAgentRunChat(input: {
         // write and incorrectly records a normal tool handoff as user stop.
         return;
       }
-      const completedRun = activeRunRef.current;
       activeRequestContextRef.current = null;
       activeRequestSnapshotRef.current = null;
       rememberFailedRequest(null);
@@ -344,7 +313,6 @@ export function useAgentRunChat(input: {
       activeRunRef.current = null;
       runGenerationRef.current += 1;
       clearNetworkRetry();
-      if (completedRun) void clearActiveNativeRun(completedRun.runId);
       inputRef.current.onFinish?.();
     },
     onError: (error) => {
@@ -374,6 +342,8 @@ export function useAgentRunChat(input: {
       }
     },
   });
+  const stopChatRef = useRef(chat.stop);
+  stopChatRef.current = chat.stop;
   addToolOutputRef.current = chat.addToolOutput as AddToolOutput;
   retryCurrentRequestRef.current = async () => {
     chat.clearError();
@@ -382,17 +352,68 @@ export function useAgentRunChat(input: {
     await chat.sendMessage();
   };
 
-  useEffect(() => {
-    const generation = runGenerationRef.current;
-    const recovery = recoverInterruptedNativeRun(inputRef.current, installationIdRef, fetch, () => runGenerationRef.current === generation)
-      .then(() => undefined)
-      .catch((error) => {
-        if (runGenerationRef.current === generation) logger.warn("interrupted_run_recovery_failed", "AGENT_RUN_RECOVERY_FAILED", { error });
-      })
-      .finally(() => {
-        if (recoveryPromiseRef.current === recovery) recoveryPromiseRef.current = null;
+  const handleBackendRuntimeState = (nextRuntime: BackendRuntimeSnapshot) => {
+    backendRuntimeRef.current = nextRuntime;
+    setBackendRuntime(nextRuntime);
+    const recoveryAction = backendRuntimeRecoveryGateRef.current.observe(nextRuntime);
+    if (recoveryAction === "recover") {
+      void recoverStoredNativeRun();
+      return;
+    }
+    if (recoveryAction !== "interrupt") return;
+
+    const interruptedRun = invalidateNativeRunAfterBackendLoss({
+      activeRunRef,
+      runGenerationRef,
+      submissionLease: submissionLeaseRef.current,
+    });
+    const failedContext = activeRequestContextRef.current;
+    const failedSnapshot = activeRequestSnapshotRef.current;
+    if (failedContext && failedSnapshot) {
+      failedRequestContextRef.current = failedContext;
+      failedRequestSnapshotRef.current = failedSnapshot;
+      setCanRetry(true);
+    }
+    activeRequestContextRef.current = null;
+    activeRequestSnapshotRef.current = null;
+    clearNetworkRetry();
+
+    userStopInProgressRef.current = true;
+    void Promise.resolve(stopChatRef.current()).catch((error) => {
+      logger.warn("backend_loss_stop_failed", "AGENT_BACKEND_LOSS_STOP_FAILED", { error });
+    }).finally(() => {
+      userStopInProgressRef.current = false;
+    });
+    if (interruptedRun) {
+      logger.warn("backend_loss_run_interrupted", "AGENT_BACKEND_LOSS_RUN_INTERRUPTED", {
+        runId: interruptedRun.runId,
+        conversationId: interruptedRun.conversationId,
+        backendState: nextRuntime.state,
       });
-    recoveryPromiseRef.current = recovery;
+    }
+  };
+  backendRuntimeListenerRef.current.updateHandler(handleBackendRuntimeState);
+
+  useEffect(() => {
+    const api = desktopApi();
+    if (!api) return;
+    let disposed = false;
+    const listener = backendRuntimeListenerRef.current;
+    void listener.start((handler) => api.onBackendRuntimeState(handler)).then(async () => {
+      if (disposed) return;
+      const current = await api.getRuntimeInfo();
+      if (!disposed && current.backendRuntime) listener.notify(current.backendRuntime);
+    }).catch((error) => {
+      logger.warn("backend_runtime_listener_failed", "AGENT_BACKEND_RUNTIME_LISTENER_FAILED", { error });
+    });
+    return () => {
+      disposed = true;
+      listener.stop();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!backendRuntimeUnavailable(backendRuntimeRef.current)) void recoverStoredNativeRun();
     return () => {
       runGenerationRef.current += 1;
       if (networkRetryTimerRef.current !== null) globalThis.clearTimeout(networkRetryTimerRef.current);
@@ -401,42 +422,59 @@ export function useAgentRunChat(input: {
   }, []);
 
   const sendMessage = useCallback(async (message: SendMessageInput, options?: SendMessageOptions) => {
-    if (!submissionLeaseRef.current.tryAcquire()) return;
+    if (backendRuntimeUnavailable(backendRuntimeRef.current)) {
+      throw new Error(backendRuntimeRef.current?.error ?? "The desktop backend is unavailable.");
+    }
+    const submissionOwner = submissionLeaseRef.current.tryAcquire();
+    if (!submissionOwner) return;
     const conversationId = options?.body?.conversationId;
     try {
       if (!conversationId) throw new Error("A conversation id is required for an agent run.");
-      const files = message.files ?? [];
-      if (!areSupportedAgentAttachments(files)) {
-        const unsupported = files.find((file) => !file.mediaType?.startsWith("image/"));
-        throw new Error(`Unsupported agent attachment: ${unsupported?.filename ?? "file"}. Only image attachments are supported.`);
-      }
-      const localAttachments = toImageAttachments(files);
-      const currentPrompt = message.text?.trim() || (localAttachments.length ? "Analyze the attached image and help with the GeoGebra task." : "");
-      if (!currentPrompt) return;
       const current = inputRef.current;
-      const snapshot = captureNativeRunRequestSnapshot(current);
+      const draft = prepareNativeRunSubmission(message, current);
+      if (!draft) return;
+      const { files, localAttachments, prompt: currentPrompt, snapshot, text } = draft;
       const submissionGeneration = runGenerationRef.current;
 
       await recoveryPromiseRef.current;
+      if (runGenerationRef.current !== submissionGeneration) {
+        throw new AgentRunSubmissionError(
+          new Error(
+            backendRuntimeRef.current?.error
+              ?? "The agent run submission was interrupted by a backend lifecycle change.",
+          ),
+          false,
+        );
+      }
       if (
-        runGenerationRef.current !== submissionGeneration
-        || chat.status === "submitted"
+        chat.status === "submitted"
         || chat.status === "streaming"
         || activeRunRef.current
       ) return;
 
-      const attachments = await uploadImageAttachments(current.apiOrigin, current.getAuthToken(), localAttachments);
-      if (
-        runGenerationRef.current !== submissionGeneration
-        || activeRunRef.current
-      ) return;
+      const runId = `run_${crypto.randomUUID().replaceAll("-", "")}`;
+      const attachments = await uploadImageAttachments(
+        current.apiOrigin,
+        current.getAuthToken(),
+        localAttachments,
+        runId,
+      );
+      if (runGenerationRef.current !== submissionGeneration) {
+        throw new AgentRunSubmissionError(
+          new Error(
+            backendRuntimeRef.current?.error
+              ?? "The agent run submission was interrupted by a backend lifecycle change.",
+          ),
+          false,
+        );
+      }
+      if (activeRunRef.current) return;
       const uploadedFiles = files.map((file, index) => attachments[index]
         ? { ...file, url: attachments[index]!.dataUrl }
         : file);
-      const runId = `run_${crypto.randomUUID().replaceAll("-", "")}`;
       clearNetworkRetry();
-      runGenerationRef.current += 1;
-      const text = message.text?.trim();
+      const activeGeneration = runGenerationRef.current + 1;
+      runGenerationRef.current = activeGeneration;
       const requestContext: NativeRunRequestContext = {
         conversationId,
         modelProvider: snapshot.model.provider,
@@ -445,47 +483,62 @@ export function useAgentRunChat(input: {
         thinking: snapshot.thinking,
         thinkingEffort: snapshot.thinkingEffort,
       };
-      activeRequestContextRef.current = requestContext;
-      activeRequestSnapshotRef.current = snapshot;
-      rememberFailedRequest(null);
-      failedRequestSnapshotRef.current = null;
       let messageAccepted = false;
+      let requestActivated = false;
       try {
         await activateNativeRun(activeRunRef, {
           runId,
           ...requestContext,
         });
+        requestActivated = true;
+        if (
+          runGenerationRef.current !== activeGeneration
+          || !isActiveNativeRun(activeRunRef, runId)
+          || backendRuntimeUnavailable(backendRuntimeRef.current)
+        ) {
+          throw new Error(backendRuntimeRef.current?.error ?? "Agent run submission was superseded before transport started.");
+        }
         messageAccepted = true;
-        if (!isActiveNativeRun(activeRunRef, runId)) throw new Error("Agent run submission was superseded before transport started.");
+        activeRequestContextRef.current = requestContext;
+        activeRequestSnapshotRef.current = snapshot;
+        rememberFailedRequest(null);
+        failedRequestSnapshotRef.current = null;
         if (text) await chat.sendMessage({ text, ...(uploadedFiles.length ? { files: uploadedFiles } : {}) });
         else await chat.sendMessage({ files: uploadedFiles });
       } catch (error) {
-        if (messageAccepted) {
+        const ownsRun = runGenerationRef.current === activeGeneration && isActiveNativeRun(activeRunRef, runId);
+        if (messageAccepted && ownsRun) {
           rememberFailedRequest(requestContext);
           failedRequestSnapshotRef.current = snapshot;
         }
-        activeRequestContextRef.current = null;
-        activeRequestSnapshotRef.current = null;
-        activeRunRef.current = null;
-        runGenerationRef.current += 1;
+        if (ownsRun) {
+          activeRequestContextRef.current = null;
+          activeRequestSnapshotRef.current = null;
+          activeRunRef.current = null;
+          runGenerationRef.current += 1;
+        }
         let submissionError: unknown = error;
-        try {
-          await terminalizeInterruptedNativeRun({ runId, conversationId }, current, installationIdRef);
-        } catch (cancelError) {
-          submissionError = new AggregateError(
-            [error, cancelError],
-            `Native AI SDK submission failed and run ${runId} could not be terminalized.`,
-          );
+        if (requestActivated) {
+          try {
+            await terminalizeInterruptedNativeRun({ runId, conversationId }, current, installationIdRef);
+          } catch (cancelError) {
+            submissionError = new AggregateError(
+              [error, cancelError],
+              `Native AI SDK submission failed and run ${runId} could not be terminalized.`,
+            );
+          }
         }
         throw new AgentRunSubmissionError(submissionError, messageAccepted);
       }
     } finally {
-      submissionLeaseRef.current.release();
+      submissionLeaseRef.current.release(submissionOwner);
     }
   }, [chat]);
 
   const retry = useCallback(async () => {
-    if (!submissionLeaseRef.current.tryAcquire()) return false;
+    if (backendRuntimeUnavailable(backendRuntimeRef.current)) return false;
+    const submissionOwner = submissionLeaseRef.current.tryAcquire();
+    if (!submissionOwner) return false;
     try {
       await recoveryPromiseRef.current;
       if (chat.status === "submitted" || chat.status === "streaming" || activeRunRef.current) return false;
@@ -494,16 +547,23 @@ export function useAgentRunChat(input: {
       if (!requestContext || !requestSnapshot) return false;
       const runId = `run_${crypto.randomUUID().replaceAll("-", "")}`;
       clearNetworkRetry();
-      runGenerationRef.current += 1;
-      activeRequestContextRef.current = requestContext;
-      activeRequestSnapshotRef.current = requestSnapshot;
-      rememberFailedRequest(null);
-      failedRequestSnapshotRef.current = null;
+      const activeGeneration = runGenerationRef.current + 1;
+      runGenerationRef.current = activeGeneration;
       let requestActivated = false;
       try {
         await activateNativeRun(activeRunRef, { runId, ...requestContext });
         requestActivated = true;
-        if (!isActiveNativeRun(activeRunRef, runId)) throw new Error("Agent run retry was superseded before transport started.");
+        if (
+          runGenerationRef.current !== activeGeneration
+          || !isActiveNativeRun(activeRunRef, runId)
+          || backendRuntimeUnavailable(backendRuntimeRef.current)
+        ) {
+          throw new Error(backendRuntimeRef.current?.error ?? "Agent run retry was superseded before transport started.");
+        }
+        activeRequestContextRef.current = requestContext;
+        activeRequestSnapshotRef.current = requestSnapshot;
+        rememberFailedRequest(null);
+        failedRequestSnapshotRef.current = null;
         chat.clearError();
         // AI SDK owns message truncation and request reconstruction. This
         // removes a partial assistant response, keeps the original user turn,
@@ -511,11 +571,15 @@ export function useAgentRunChat(input: {
         await chat.regenerate();
         return true;
       } catch (error) {
-        activeRequestContextRef.current = null;
-        activeRequestSnapshotRef.current = null;
-        activeRunRef.current = null;
-        rememberFailedRequest(requestContext);
-        failedRequestSnapshotRef.current = requestSnapshot;
+        const ownsRun = runGenerationRef.current === activeGeneration && isActiveNativeRun(activeRunRef, runId);
+        if (ownsRun) {
+          activeRequestContextRef.current = null;
+          activeRequestSnapshotRef.current = null;
+          activeRunRef.current = null;
+          runGenerationRef.current += 1;
+          rememberFailedRequest(requestContext);
+          failedRequestSnapshotRef.current = requestSnapshot;
+        }
         if (requestActivated) {
           let retryError: unknown = error;
           try {
@@ -531,7 +595,7 @@ export function useAgentRunChat(input: {
         throw new AgentRunSubmissionError(error, true);
       }
     } finally {
-      submissionLeaseRef.current.release();
+      submissionLeaseRef.current.release(submissionOwner);
     }
   }, [chat]);
 
@@ -561,36 +625,12 @@ export function useAgentRunChat(input: {
     setMessages: chat.setMessages,
     sendMessage,
     retry,
-    canRetry,
+    canRetry: canRetry && !backendRuntimeUnavailable(backendRuntime),
+    backendRuntime,
     stop,
     status: chat.status,
     error: chat.error,
   };
-}
-
-export function nativeChatNetworkRetryDelay(attempt: number) {
-  return NATIVE_CHAT_NETWORK_RETRY_DELAYS_MS[attempt] ?? null;
-}
-
-export function isRetryableNativeChatError(error: unknown) {
-  if (error instanceof TypeError) return true;
-  const message = error instanceof Error ? error.message : String(error ?? "");
-  if (/\b(?:408|425|429|500|502|503|504)\b/.test(message)) return true;
-  return /(?:failed to fetch|fetch failed|network|connection|disconnected|load failed|timed? ?out|socket|econnreset|enotfound|temporary failure)/i.test(message);
-}
-
-export async function activateNativeRun(
-  activeRunRef: { current: ActiveNativeRun | null },
-  stored: StoredActiveNativeRun,
-  save: (run: StoredActiveNativeRun) => Promise<void> = saveActiveNativeRun,
-) {
-  activeRunRef.current = { runId: stored.runId, conversationId: stored.conversationId };
-  try {
-    await save(stored);
-  } catch (error) {
-    if (activeRunRef.current?.runId === stored.runId) activeRunRef.current = null;
-    throw error;
-  }
 }
 
 export function shouldAutomaticallyContinueNativeRun({ messages }: { messages: UIMessage[] }) {
@@ -611,23 +651,6 @@ export function shouldCompleteNativeRun(message: UIMessage, finishReason?: strin
   return finishReason !== "tool-calls" && !hasPendingToolParts(message);
 }
 
-export function completeInterruptedToolParts<Message extends UIMessage>(messages: Message[]) {
-  return messages.map((message) => {
-    if (message.role !== "assistant") return message;
-    let changed = false;
-    const parts = message.parts.map((part) => {
-      if (!isToolUIPart(part) || isCompletedToolPart(part)) return part;
-      changed = true;
-      return {
-        ...part,
-        state: "output-error" as const,
-        errorText: "Tool execution was interrupted before a result was received.",
-      };
-    });
-    return changed ? { ...message, parts } as Message : message;
-  });
-}
-
 function hasCompletedSetFinished(message: UIMessage) {
   return message.parts.some((part) => isToolUIPart(part)
     && getToolName(part) === "setFinished"
@@ -643,55 +666,6 @@ function toolOutputSucceeded(part: unknown) {
 
 function isCompletedToolPart(part: { state: string }) {
   return part.state === "output-available" || part.state === "output-error" || part.state === "output-denied";
-}
-
-export function messagesWithSkillPolicy<Message extends UIMessage>(
-  messages: Message[],
-  config: DesktopConfig,
-  locale: "zh-CN" | "en-US",
-) {
-  let latestUserIndex = -1;
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    if (messages[index]?.role === "user") {
-      latestUserIndex = index;
-      break;
-    }
-  }
-  if (latestUserIndex < 0) return messages;
-  const latestUser = messages[latestUserIndex]!;
-  let latestTextIndex = -1;
-  for (let index = latestUser.parts.length - 1; index >= 0; index -= 1) {
-    if (latestUser.parts[index]?.type === "text") {
-      latestTextIndex = index;
-      break;
-    }
-  }
-  if (latestTextIndex < 0) return messages;
-  const originalPart = latestUser.parts[latestTextIndex]!;
-  if (originalPart.type !== "text") return messages;
-
-  const parts = [...latestUser.parts];
-  parts[latestTextIndex] = {
-    ...originalPart,
-    text: promptWithSkillPolicy(originalPart.text, config, locale),
-  };
-  const requestMessages = [...messages];
-  requestMessages[latestUserIndex] = { ...latestUser, parts } as Message;
-  return requestMessages;
-}
-
-export function nativeChatTransportMessages<Message extends UIMessage>(
-  messages: Message[],
-  config: DesktopConfig,
-  locale: "zh-CN" | "en-US",
-) {
-  const visibleMessages = completeInterruptedToolParts(messages);
-  return {
-    // This is the only transcript the backend may persist or return to the UI.
-    messages: visibleMessages,
-    // Provider-only augmentation must never become conversation history.
-    providerMessages: messagesWithSkillPolicy(visibleMessages, config, locale),
-  };
 }
 
 /**
@@ -727,159 +701,4 @@ function hasPendingToolParts(message: UIMessage) {
   return message.parts.some((part) => isToolUIPart(part) && (
     part.state === "input-streaming" || part.state === "input-available" || part.state === "approval-requested"
   ));
-}
-
-function guestSessionId(installationId: string) {
-  return `frontend_guest_${installationId}`;
-}
-
-async function cancelNativeRun(
-  active: ActiveNativeRun,
-  input: Parameters<typeof useAgentRunChat>[0],
-  installationIdRef: { current: string | null },
-  request: typeof fetch = fetch,
-) {
-  const headers = await nativeRunHeaders(input, installationIdRef);
-  const response = await request(new URL(`/v1/agent-runs/${encodeURIComponent(active.runId)}/cancel`, input.apiOrigin), {
-    method: "POST",
-    headers,
-  });
-  if (!response.ok && response.status !== 404) throw new Error(`Agent run cancellation failed with HTTP ${response.status}.`);
-}
-
-async function terminalizeInterruptedNativeRun(
-  active: ActiveNativeRun,
-  input: Parameters<typeof useAgentRunChat>[0],
-  installationIdRef: { current: string | null },
-) {
-  await cancelNativeRun(active, input, installationIdRef);
-  await clearActiveNativeRun(active.runId);
-}
-
-type RecoverableAgentRun = {
-  runId: string;
-  conversationId: string;
-  status: "running" | "succeeded" | "failed" | "cancelled";
-  modelProvider: string;
-  modelId: string;
-  prompt: string;
-  thinking?: boolean | null;
-  thinkingEffort?: AgentRunThinkingEffort | null;
-};
-
-export async function recoverInterruptedNativeRun(
-  input: Parameters<typeof useAgentRunChat>[0],
-  installationIdRef: { current: string | null },
-  request: typeof fetch = fetch,
-  isCurrent: () => boolean = () => true,
-) {
-  const stored = await readActiveNativeRun();
-  if (!stored) return null;
-
-  const response = await request(new URL("/v1/agent-runs", input.apiOrigin), {
-    cache: "no-store",
-    headers: await nativeRunHeaders(input, installationIdRef),
-  });
-  if (!response.ok) {
-    if (response.status === 404) {
-      await clearActiveNativeRun(stored.runId);
-      return null;
-    }
-    throw new Error(`Agent run recovery failed with HTTP ${response.status}.`);
-  }
-  const payload = await response.json() as { runs?: unknown };
-  const run = parseRecoverableAgentRun(payload.runs, stored.runId);
-  if (!run) {
-    await clearActiveNativeRun(stored.runId);
-    return null;
-  }
-  if (!isCurrent()) return null;
-  input.onRestore?.({
-    conversationId: run.conversationId,
-    modelProvider: run.modelProvider,
-    modelId: run.modelId,
-    prompt: run.prompt,
-    thinking: run.thinking === true,
-    thinkingEffort: run.thinkingEffort ?? null,
-  });
-  if (run.status === "running") {
-    await cancelNativeRun({ runId: run.runId, conversationId: run.conversationId }, input, installationIdRef, request);
-  }
-  if (!isCurrent()) return null;
-  await clearActiveNativeRun(stored.runId);
-  return run;
-}
-
-function parseRecoverableAgentRun(value: unknown, runId: string): RecoverableAgentRun | null {
-  if (!Array.isArray(value)) return null;
-  const candidate = value.find((item) => item && typeof item === "object" && !Array.isArray(item)
-    && (item as Record<string, unknown>).runId === runId);
-  if (!candidate) return null;
-  const run = candidate as Record<string, unknown>;
-  if (
-    typeof run.runId !== "string"
-    || typeof run.conversationId !== "string"
-    || typeof run.modelProvider !== "string"
-    || typeof run.modelId !== "string"
-    || typeof run.prompt !== "string"
-    || (run.status !== "running" && run.status !== "succeeded" && run.status !== "failed" && run.status !== "cancelled")
-  ) return null;
-  const effort = run.thinkingEffort;
-  return {
-    runId: run.runId,
-    conversationId: run.conversationId,
-    status: run.status,
-    modelProvider: run.modelProvider,
-    modelId: run.modelId,
-    prompt: run.prompt,
-    thinking: typeof run.thinking === "boolean" ? run.thinking : null,
-    thinkingEffort: effort === "light" || effort === "standard" || effort === "extended" ? effort : null,
-  };
-}
-
-async function nativeRunHeaders(
-  input: Parameters<typeof useAgentRunChat>[0],
-  installationIdRef: { current: string | null },
-) {
-  const token = input.getAuthToken();
-  const headers: Record<string, string> = {
-    "x-client-channel": token ? "desktop-workbench" : "web-workbench",
-  };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  else headers["x-guest-session-id"] = guestSessionId(await getInstallationId(installationIdRef));
-  return headers;
-}
-
-function toImageAttachments(files: FileUIPart[]): AgentRunImageAttachment[] {
-  return files.flatMap((file) => {
-    if (!file.mediaType?.startsWith("image/") || typeof file.url !== "string") return [];
-    return [{ name: file.filename ?? "image", mediaType: file.mediaType, dataUrl: file.url }];
-  });
-}
-
-async function uploadImageAttachments(apiOrigin: string, token: string | null, attachments: AgentRunImageAttachment[]) {
-  if (!token || attachments.length === 0) return attachments;
-  desktopLogger.trace(`Uploading ${attachments.length} agent attachment(s)`);
-  return Promise.all(attachments.map(async (attachment) => {
-    try {
-      const image = await fetch(attachment.dataUrl);
-      if (!image.ok) return attachment;
-      const form = new FormData();
-      form.append("file", await image.blob(), attachment.name);
-      const response = await fetch(new URL("/api/media/images", apiOrigin), {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "x-client-channel": "desktop-workbench",
-        },
-        body: form,
-      });
-      if (!response.ok) return attachment;
-      const payload = await response.json() as { url?: unknown };
-      return typeof payload.url === "string" ? { ...attachment, dataUrl: payload.url } : attachment;
-    } catch (caughtError) {
-      logger.warn("attachment_upload_failed", "AGENT_ATTACHMENT_UPLOAD_FAILED", { error: caughtError, attachmentName: attachment.name });
-      return attachment;
-    }
-  }));
 }

@@ -33,6 +33,7 @@ import { useAssistantFusionPanel } from "./useAssistantFusionPanel";
 import { useAssistantRuntimeBridge } from "./useAssistantRuntimeBridge";
 import { useAssistantDebugMcp } from "./useAssistantDebugMcp";
 import { useAssistantLanguageTransition } from "./useAssistantLanguageTransition";
+import { useGeoGebraRuntime } from "../../geogebra/runtime";
 
 export function AssistantWorkspace({
   canvasReady = true,
@@ -46,6 +47,7 @@ export function AssistantWorkspace({
   onConversationStarted?: () => void;
 }) {
   const { t, i18n } = useTranslation();
+  const geogebraRuntime = useGeoGebraRuntime();
   const reduceMotion = useReducedMotion();
   const interaction = useInteractionMode();
   const modeTransition = useInteractionModeTransition(interaction);
@@ -124,7 +126,8 @@ export function AssistantWorkspace({
     setOpen: setProblemBankOpen,
     triggerRef: problemBankTriggerRef,
   } = problemBank;
-  const { messages, setMessages, sendMessage, retry, canRetry, stop, status, error } = useAgentRunChat({
+  const { messages, setMessages, sendMessage, retry, canRetry, stop, status, error, backendRuntime } = useAgentRunChat({
+    geogebraRuntime,
     apiOrigin: API_ORIGIN,
     getAuthToken: () => authSessionRef.current.token,
     getModel: () => assistantSessionController.getSnapshot().model,
@@ -198,6 +201,7 @@ export function AssistantWorkspace({
   });
 
   const { mcp, restoreConversationRef: restoreDebugConversationRef } = useAssistantDebugMcp({
+    geogebraRuntime,
     authToken: () => authSessionRef.current.token ?? undefined,
     conversationId: currentConversationId,
     assistantThreadId,
@@ -233,6 +237,7 @@ export function AssistantWorkspace({
     { target: () => panelRef.current?.querySelector<HTMLElement>('[data-copilot-tour="minimize"]') ?? null, title: t("tour.minimizeTitle"), content: t("tour.minimizeDescription"), placement: "bottom-end", skipBeacon: true, buttons: ["back", "skip", "primary"] },
   ];
   const conversationHistory = useConversations({
+    geogebraRuntime,
     apiOrigin: API_ORIGIN,
     authSessionRef,
     isStreaming,
@@ -294,9 +299,14 @@ export function AssistantWorkspace({
   const panelTitle = panelView === "chat"
     ? currentConversationTitle || (currentConversationId ? t("history.untitled") : t("history.newConversation"))
     : t("settings.title");
-  const toastError = error
+  const backendRuntimeError = backendRuntime?.state === "exited" || backendRuntime?.state === "unreachable"
+    ? backendRuntime.error ?? (i18n.language.startsWith("en")
+      ? "The desktop backend is unavailable. Retry after it recovers."
+      : "桌面后端当前不可用，请等待恢复后重试。")
+    : null;
+  const toastError = backendRuntimeError ?? (error
     ? formatAgentRunError(error, t)
-    : submissionError ?? conversationHistoryError ?? blackboard.error;
+    : submissionError ?? conversationHistoryError ?? blackboard.error);
   function openConversationHistory() {
     setBlackboardOpen(false);
     setConversationDrawerOpen(true);
@@ -407,8 +417,6 @@ export function AssistantWorkspace({
             selectingId: selectingConversationId,
             deletingId: deletingConversationId,
             error: conversationHistoryError,
-            migrationRecoveryAvailable: conversationHistory.migrationRecoveryAvailable,
-            exportMigrationRecovery: conversationHistory.exportMigrationRecovery,
             select: conversationHistory.select,
             remove: conversationHistory.remove,
           },
@@ -459,9 +467,6 @@ export function AssistantWorkspace({
           selectingId: selectingConversationId,
           deletingId: deletingConversationId,
           error: conversationHistoryError,
-          onExportRecovery: conversationHistory.migrationRecoveryAvailable
-            ? conversationHistory.exportMigrationRecovery
-            : undefined,
           conversations,
           currentConversationId,
           onClose: () => setConversationDrawerOpen(false),

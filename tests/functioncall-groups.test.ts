@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  FUNCTION_CALL_GROUPS,
   getFunctionCallGroupForTool,
   getFunctionCallGroups,
   getFunctionCallToolNames
@@ -16,10 +15,11 @@ describe("function-call review groups", () => {
   });
 
   test("keep high-risk tool families in their expected review groups", () => {
-    expect(FUNCTION_CALL_GROUPS.geogebraExecution.toolNames).toContain("executeGeoGebraCommands");
-    expect(FUNCTION_CALL_GROUPS.advancedDrawing.toolNames).toContain("executeAdvancedDrawingCommand");
-    expect(FUNCTION_CALL_GROUPS.blackboardMemory.toolNames).toEqual(["readBlackboard", "patchBlackboard"]);
-    expect(FUNCTION_CALL_GROUPS.choiceAnalysis.toolNames).toContain("showChoiceAnalysis");
+    const groups = Object.fromEntries(getFunctionCallGroups().map((group) => [group.id, group]));
+    expect(groups.geogebraExecution?.toolNames).toContain("executeGeoGebraCommands");
+    expect(groups.advancedDrawing?.toolNames).toContain("executeAdvancedDrawingCommand");
+    expect(groups.blackboardMemory?.toolNames).toEqual(["readBlackboard", "patchBlackboard"]);
+    expect(groups.choiceAnalysis?.toolNames).toContain("showChoiceAnalysis");
     expect(getFunctionCallGroupForTool("setFinished")?.id).toBe("agentControl");
   });
 });

@@ -20,10 +20,23 @@ export const en = {
     },
   },
   canvasControls: {
-    openMenu: "Open GeoGebra menu",
+    openMenu: "Open GeoGebra documents",
     showToolbar: "Show GeoGebra toolbar",
     hideToolbar: "Hide GeoGebra toolbar",
     reset: "Reset GeoGebra canvas",
+  },
+  documents: {
+    title: "GeoGebra documents",
+    close: "Close document panel",
+    new: "New",
+    name: "Document name",
+    save: "Save",
+    storageNote: "Documents are stored in the local SQLite database.",
+    empty: "No saved documents",
+    titleRequired: "Enter a document name.",
+    delete: "Delete",
+    deleteLabel: "Delete {{title}}",
+    deleteConfirm: "Delete “{{title}}”?",
   },
   canvasRecovery: {
     title: "Canvas recovery required",
@@ -184,7 +197,6 @@ export const en = {
     minimizeDescription: "Collapse the assistant panel.",
   },
   history: {
-    exportRecovery: "Export recovery data",
     title: "Conversation history",
     open: "Open conversation history",
     close: "Close conversation history",

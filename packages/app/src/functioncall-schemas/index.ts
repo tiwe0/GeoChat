@@ -12,7 +12,6 @@ export const FUNCTION_CALL_INPUT_JSON_SCHEMAS = {
   listSkills: SKILL_FUNCTION_CALL_INPUT_JSON_SCHEMAS.listSkills,
   searchSkills: SKILL_FUNCTION_CALL_INPUT_JSON_SCHEMAS.searchSkills,
   loadSkill: SKILL_FUNCTION_CALL_INPUT_JSON_SCHEMAS.loadSkill,
-  activateSkill: SKILL_FUNCTION_CALL_INPUT_JSON_SCHEMAS.activateSkill,
   createGeometryPlan: GEOGEBRA_FUNCTION_CALL_INPUT_JSON_SCHEMAS.createGeometryPlan,
   executeAdvancedDrawingCommand: GEOGEBRA_FUNCTION_CALL_INPUT_JSON_SCHEMAS.executeAdvancedDrawingCommand,
   executeGeoGebraCommands: GEOGEBRA_FUNCTION_CALL_INPUT_JSON_SCHEMAS.executeGeoGebraCommands,

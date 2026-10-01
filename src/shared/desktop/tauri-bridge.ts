@@ -11,11 +11,16 @@ import type {
   DesktopProblemBankDownloadState,
   DesktopProblemBankPage,
   DesktopProblemDetail,
+  DesktopRendererStorage,
   DesktopUpdatePreferences,
   DesktopUpdateState,
   GeoChatDesktopApi
 } from "../../shared/desktop-api";
-import { RuntimeInfo } from "@geochat-ai/app/desktop-contracts";
+import {
+  BackendRuntimeSnapshot as BackendRuntimeSnapshotSchema,
+  RuntimeInfo,
+  type BackendRuntimeSnapshot,
+} from "@geochat-ai/app/desktop-contracts";
 import { Schema } from "effect";
 import { createTauriCredentialBridge, TAURI_CREDENTIAL_COMMANDS } from "./tauri-credential-bridge";
 type TauriInvoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
@@ -34,11 +39,20 @@ function subscribe<T>(listen: TauriListen, event: string, callback: (state: T) =
   };
 }
 
+async function subscribeReady<T>(listen: TauriListen, event: string, callback: (state: T) => void) {
+  return listen<T>(event, ({ payload }) => callback(payload));
+}
+
 export const TAURI_DESKTOP_COMMANDS = {
   credentials: TAURI_CREDENTIAL_COMMANDS,
   runtime: {
     getRuntimeInfo: "get_runtime_info",
     markRendererReady: "mark_renderer_ready"
+  },
+  rendererStorage: {
+    getRendererStorage: "get_renderer_storage",
+    setRendererStorage: "set_renderer_storage",
+    removeRendererStorage: "remove_renderer_storage"
   },
   graphics: {
     getGraphicsPreferences: "get_graphics_preferences",
@@ -92,6 +106,7 @@ export const TAURI_DESKTOP_COMMANDS = {
 } as const;
 
 export const TAURI_DESKTOP_EVENTS = {
+  backendRuntimeState: "desktop:backend-runtime-state",
   shellUpdateState: "desktop:update-state",
   appBundleUpdateState: "desktop:app-bundle-update-state",
   problemBankCacheState: "desktop:problem-bank-cache-state",
@@ -121,7 +136,8 @@ export function createTauriDesktopApi(
 ): GeoChatDesktopApi {
   return {
     ...createTauriCredentialBridge(invoke),
-    ...createRuntimeBridge(invoke),
+    ...createRuntimeBridge(invoke, listen),
+    ...createRendererStorageBridge(invoke),
     ...createGraphicsBridge(invoke),
     ...createMcpBridge(invoke),
     ...createAccessBridge(invoke),
@@ -130,6 +146,20 @@ export function createTauriDesktopApi(
     ...createImprovementBridge(invoke),
     ...createLoggingBridge(invoke),
     ...createProblemBankBridge(invoke, listen)
+  };
+}
+
+function createRendererStorageBridge(
+  invoke: TauriInvoke
+): BridgeSlice<"getRendererStorage" | "setRendererStorage" | "removeRendererStorage"> {
+  const commands = TAURI_DESKTOP_COMMANDS.rendererStorage;
+  return {
+    getRendererStorage: (keys?: string[]) =>
+      invoke<DesktopRendererStorage>(commands.getRendererStorage, { keys: keys ?? null }),
+    setRendererStorage: (values: DesktopRendererStorage) =>
+      invoke<void>(commands.setRendererStorage, { values }),
+    removeRendererStorage: (keys: string[]) =>
+      invoke<void>(commands.removeRendererStorage, { keys })
   };
 }
 
@@ -144,11 +174,18 @@ function createGraphicsBridge(
   };
 }
 
-function createRuntimeBridge(invoke: TauriInvoke): BridgeSlice<"getRuntimeInfo" | "markRendererReady"> {
+function createRuntimeBridge(
+  invoke: TauriInvoke,
+  listen: TauriListen,
+): BridgeSlice<"getRuntimeInfo" | "markRendererReady" | "onBackendRuntimeState"> {
   const commands = TAURI_DESKTOP_COMMANDS.runtime;
   return {
     getRuntimeInfo: () => invoke<unknown>(commands.getRuntimeInfo).then(Schema.decodeUnknownSync(RuntimeInfo)),
-    markRendererReady: () => invoke(commands.markRendererReady)
+    markRendererReady: () => invoke(commands.markRendererReady),
+    onBackendRuntimeState: (callback: (state: BackendRuntimeSnapshot) => void) =>
+      subscribeReady<unknown>(listen, TAURI_DESKTOP_EVENTS.backendRuntimeState, (payload) => {
+        callback(Schema.decodeUnknownSync(BackendRuntimeSnapshotSchema)(payload));
+      }),
   };
 }
 

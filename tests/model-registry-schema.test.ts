@@ -19,15 +19,13 @@ describe("agent model registry schema", () => {
     expect(schema.models.some((model) => model.provider === "openai" && model.id === "gpt-5.6-terra")).toBe(true);
   });
 
-  test("offers current models while retaining older saved model policies", () => {
+  test("offers only current bundled models", () => {
     const options = getAgentModelOptionsForSchema("openai");
     expect(options[0]?.value).toBe("gpt-5.6-terra");
     expect(options.some((model) => model.value === "gpt-5.5")).toBe(false);
     expect(getAgentModelPolicyForSchema({ provider: "openai", model: "gpt-5.5" })).toMatchObject({
-      isKnownModel: true,
-      isCustomModel: false,
-      supportsImages: true,
-      supportsTools: true
+      isKnownModel: false,
+      isCustomModel: true
     });
   });
 

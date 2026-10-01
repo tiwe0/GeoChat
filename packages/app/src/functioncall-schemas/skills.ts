@@ -36,18 +36,5 @@ export const SKILL_FUNCTION_CALL_INPUT_JSON_SCHEMAS = {
       },
       ...auditProperties
     }
-  },
-  activateSkill: {
-    type: "object",
-    additionalProperties: false,
-    required: ["name"],
-    properties: {
-      name: {
-        type: "string",
-        minLength: 1,
-        description: "要激活的技能名称。必须来自系统提示列出的可用技能，技能可来自内置、本地目录或远程缓存；不要传路径，也不要臆造不存在的技能名。"
-      },
-      ...auditProperties
-    }
   }
-} as const satisfies Record<"listSkills" | "searchSkills" | "loadSkill" | "activateSkill", FunctionCallInputJsonSchema>;
+} as const satisfies Record<"listSkills" | "searchSkills" | "loadSkill", FunctionCallInputJsonSchema>;

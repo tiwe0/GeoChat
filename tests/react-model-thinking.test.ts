@@ -4,12 +4,12 @@ import { readFileSync } from "node:fs";
 describe("model-aware thinking defaults", () => {
   test("unsupported models are forced to non-reasoning requests and expose a disabled switch", () => {
     const modelState = readFileSync(new URL("../src/renderer-react/src/features/assistant-workspace/useAssistantModelState.ts", import.meta.url), "utf8");
-    const transport = readFileSync(new URL("../src/renderer-react/src/hooks/useAgentRunChat.ts", import.meta.url), "utf8");
+    const request = readFileSync(new URL("../src/renderer-react/src/features/agent-run/nativeRunRequest.ts", import.meta.url), "utf8");
     const menu = readFileSync(new URL("../src/renderer-react/src/components/ModelMenu.tsx", import.meta.url), "utf8");
 
     expect(modelState).toContain("if (!input.selectedModel || thinkingSupported || !input.thinkingEnabled) return;");
     expect(modelState).toContain("agentModelSupportsReasoning(selected.provider, selected.id)");
-    expect(transport).toContain("&& agentModelSupportsReasoning(model.provider, model.model)");
+    expect(request).toContain("&& agentModelSupportsReasoning(model.provider, model.model)");
     expect(menu).toContain("disabled={!thinkingSupported}");
   });
 

@@ -1,3 +1,5 @@
+import { clamp } from "../../lib/numbers";
+
 export type FusionPoint = { x: number; y: number };
 export type FusionPlacement = "above" | "below";
 
@@ -35,10 +37,6 @@ export const FUSION_BUBBLE_ABOVE_OFFSET = -FUSION_BUBBLE_COMPOSER_GAP;
 export const FUSION_BUBBLE_BELOW_OFFSET = FUSION_COMPOSER_HEIGHT + FUSION_BUBBLE_COMPOSER_GAP;
 export const FUSION_BUBBLE_Z_INDEX_BASE = 1320;
 export const FUSION_COMPOSER_Z_INDEX = 1330;
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), Math.max(min, max));
-}
 
 export function defaultFusionPoint(viewport: FusionViewport): FusionPoint {
   return clampFusionPoint({ x: viewport.width / 2, y: viewport.height - 116 }, viewport);

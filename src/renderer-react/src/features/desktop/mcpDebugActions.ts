@@ -1,12 +1,13 @@
 import { hasConfiguredCredential } from "../../../../shared/desktop/desktop-config";
 import type { DesktopDebugAction } from "../../../../shared/desktop/mcp-debug-actions";
 import type { ModelConfig, RendererMcpStatus } from "../../../../shared/desktop/workbench-types";
-import { getFrontendGeoGebraController } from "../../geogebra/runtime";
+import type { GeoGebraRuntimePort } from "../../geogebra/runtime";
 import { assertRestrictedUiProbeOwner, executeRestrictedDesktopUiProbe } from "./realUiProbe";
 export { executeRestrictedDesktopUiProbe } from "./realUiProbe";
 
 /** Executes the finite actions the MCP server may queue for renderer-owned surfaces. */
 export function createDesktopDebugActionExecutor(input: {
+  geogebraRuntime: GeoGebraRuntimePort;
   getConversationId: () => string | null;
   getView: () => string;
   getModelConfig: () => ModelConfig;
@@ -20,7 +21,7 @@ export function createDesktopDebugActionExecutor(input: {
   showChat: () => void;
 }) {
   return async function executeDesktopDebugAction(action: DesktopDebugAction) {
-    const controller = getFrontendGeoGebraController();
+    const runtime = input.geogebraRuntime;
 
     if (action.type === "get_ui_status") {
       const model = input.getModelConfig();
@@ -35,7 +36,7 @@ export function createDesktopDebugActionExecutor(input: {
           hasApiKey: hasConfiguredCredential(model),
           hasCredential: hasConfiguredCredential(model)
         },
-        geogebra: { ready: Boolean(controller?.ready) },
+        geogebra: { ready: runtime.ready },
         running: input.isRunning(),
         mcp: { running: mcp.running, endpoint: mcp.endpoint }
       };
@@ -60,8 +61,8 @@ export function createDesktopDebugActionExecutor(input: {
     if (input.isRunning()) throw new Error("Agent is already running; wait for the current message to finish.");
 
     if (action.type === "export_png") {
-      if (!controller?.ready) throw new Error("The GeoGebra canvas is not ready.");
-      return controller.executeTool("getPNGBase64", {
+      if (!runtime.ready) throw new Error("The GeoGebra canvas is not ready.");
+      return runtime.executeTool("getPNGBase64", {
         exportScale: action.exportScale,
         transparent: action.transparent,
         dpi: action.dpi
@@ -69,8 +70,8 @@ export function createDesktopDebugActionExecutor(input: {
     }
 
     if (action.type === "execute_geogebra_tool") {
-      if (!controller?.ready) throw new Error("The GeoGebra canvas is not ready.");
-      return controller.executeTool(action.toolName, action.args);
+      if (!runtime.ready) throw new Error("The GeoGebra canvas is not ready.");
+      return runtime.executeTool(action.toolName, action.args);
     }
 
     if (action.type === "restore_conversation") {
@@ -90,7 +91,7 @@ export function createDesktopDebugActionExecutor(input: {
       const content = action.content.trim();
       if (!content) throw new Error("send_message needs non-empty content.");
       if (!hasConfiguredCredential(input.getModelConfig())) throw new Error("No API credential is configured; set one in Settings first.");
-      if (!controller?.ready) throw new Error("The GeoGebra canvas is not ready.");
+      if (!runtime.ready) throw new Error("The GeoGebra canvas is not ready.");
       await input.activateConversation(action.conversationId);
       input.showChat();
       const submittedAt = new Date().toISOString();

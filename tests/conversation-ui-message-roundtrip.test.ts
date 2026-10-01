@@ -132,6 +132,19 @@ const toolStateCases: ToolStateCase[] = [
     } as never,
   },
   {
+    name: "output-error with undefined input and rawInput",
+    part: {
+      type: "tool-executeGeoGebraCommands",
+      toolCallId: "tool-output-error-missing-input",
+      state: "output-error",
+      input: undefined,
+      rawInput: "{invalid tool input",
+      errorText: "Tool input could not be parsed.",
+      resultProviderMetadata: { openai: { itemId: "result-input-error" } },
+      providerExtension: { retryable: false },
+    } as never,
+  },
+  {
     name: "output-denied",
     part: {
       type: "tool-executeGeoGebraCommands",

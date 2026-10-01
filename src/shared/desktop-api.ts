@@ -1,4 +1,4 @@
-import type { RuntimeInfo } from "@geochat-ai/app/desktop-contracts";
+import type { BackendRuntimeSnapshot, RuntimeInfo } from "@geochat-ai/app/desktop-contracts";
 import type { AgentModelProtocol } from "@geochat-ai/app/model-registry";
 
 export type DesktopProviderCredentialMetadata = {
@@ -15,28 +15,13 @@ export type DesktopSaveProviderCredentialRequest = {
   secret: string;
 };
 
-export type DesktopImportLegacyCredentialRequest = DesktopSaveProviderCredentialRequest & {
-  credentialRef: string;
-};
-
 export type DesktopProviderCredentialStatus = {
   credentialRef: string;
   configured: boolean;
   metadata: DesktopProviderCredentialMetadata | null;
 };
 
-export type DesktopCredentialMigrationJournal = {
-  readonly schemaVersion: 1;
-  readonly entries: ReadonlyArray<{
-    readonly schemaVersion: 1;
-    readonly provider: string;
-    readonly protocol: AgentModelProtocol;
-    readonly canonicalBaseUrl: string;
-    readonly credentialRef: string;
-    readonly sourceFingerprint: string;
-    readonly phase: "planned" | "secretStored" | "configSanitized" | "complete";
-  }>;
-};
+export type DesktopRendererStorage = Record<string, unknown>;
 
 export type DesktopMcpStatus = {
   available: boolean;
@@ -265,10 +250,9 @@ export type GeoChatDesktopApi = {
   deleteProviderCredential: (credentialRef: string) => Promise<void>;
   getProviderCredentialStatus: (credentialRef: string) => Promise<DesktopProviderCredentialStatus>;
   listProviderCredentialMetadata: (credentialRefs: string[]) => Promise<DesktopProviderCredentialMetadata[]>;
-  importLegacyCredential: (request: DesktopImportLegacyCredentialRequest) => Promise<DesktopProviderCredentialMetadata>;
-  readCredentialMigrationJournal: () => Promise<DesktopCredentialMigrationJournal | null>;
-  persistCredentialMigrationJournal: (journal: DesktopCredentialMigrationJournal) => Promise<void>;
-  deleteCredentialMigrationJournal: () => Promise<void>;
+  getRendererStorage: (keys?: string[]) => Promise<DesktopRendererStorage>;
+  setRendererStorage: (values: DesktopRendererStorage) => Promise<void>;
+  removeRendererStorage: (keys: string[]) => Promise<void>;
   getRuntimeInfo: () => Promise<RuntimeInfo>;
   getGraphicsPreferences: () => Promise<DesktopGraphicsState>;
   setGraphicsPreferences: (preferences: { hardwareAcceleration: boolean }) => Promise<DesktopGraphicsState>;
@@ -304,6 +288,7 @@ export type GeoChatDesktopApi = {
   rollbackAppBundleUpdate: () => Promise<DesktopAppBundleUpdateState>;
   markRendererReady: () => Promise<void>;
   installUpdate: () => Promise<DesktopUpdateState>;
+  onBackendRuntimeState: (callback: (state: BackendRuntimeSnapshot) => void) => Promise<() => void>;
   onUpdateState: (callback: (state: DesktopUpdateState) => void) => () => void;
   onAppBundleUpdateState: (callback: (state: DesktopAppBundleUpdateState) => void) => () => void;
   onProblemBankCacheState: (callback: (state: DesktopProblemBankCacheState) => void) => () => void;

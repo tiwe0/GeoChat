@@ -43,7 +43,7 @@ function shouldExposeSkillDiscoveryTool(
   skillSelection: AgentSkillSelectionPacket | undefined,
   prompt: string,
 ) {
-  if (!["listSkills", "searchSkills", "loadSkill", "activateSkill"].includes(toolName)) return true;
+  if (!["listSkills", "searchSkills", "loadSkill"].includes(toolName)) return true;
   if (!skillSelection) return true;
   if (skillSelection.status !== "disabled") return true;
   return skillRuntimePolicyFromPrompt(prompt).enabled;

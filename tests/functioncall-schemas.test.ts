@@ -42,11 +42,6 @@ const expectedSchemaShapes = {
     properties: ["name", "reason", "intendedOutcome", "nextExpectedAction"],
     modelRequired: ["name", "reason"]
   },
-  activateSkill: {
-    required: ["name"],
-    properties: ["name", "reason", "intendedOutcome", "nextExpectedAction"],
-    modelRequired: ["name", "reason"]
-  },
   createGeometryPlan: {
     required: ["recipeId"],
     properties: ["recipeId", "inputs", "sourceText", "reason", "intendedOutcome", "nextExpectedAction"],
@@ -123,9 +118,9 @@ const expectedSchemaShapes = {
     modelRequired: ["summary", "reason"]
   },
   setPerspective: {
-    required: [],
-    properties: ["mode", "perspective", "reason", "intendedOutcome", "nextExpectedAction"],
-    modelRequired: ["reason"]
+    required: ["mode"],
+    properties: ["mode", "reason", "intendedOutcome", "nextExpectedAction"],
+    modelRequired: ["mode", "reason"]
   }
 } satisfies Record<string, SchemaShape>;
 

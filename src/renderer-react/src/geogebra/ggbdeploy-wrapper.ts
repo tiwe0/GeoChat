@@ -4,22 +4,14 @@ const logger = createStructuredLogger("geogebra.runtime");
 
 export type GeoGebraApi = Record<string, unknown>;
 export const DEFAULT_GEOGEBRA_TOOLBAR_VISIBLE = false;
-export const DEFAULT_GEOGEBRA_MENU_VISIBLE = true;
-export const DEFAULT_GEOGEBRA_FILE_FEATURES_ENABLED = true;
-// GeoGebra keeps this toolbar row in its internal layout when the native menu
-// is enabled, even if the shell hides the row. Give the runtime back the same
-// height so the Euclidian view reaches the bottom edge of the host.
-export const COLLAPSED_GEOGEBRA_TOOLBAR_HEIGHT = 57;
+export const DEFAULT_GEOGEBRA_MENU_VISIBLE = false;
+export const DEFAULT_GEOGEBRA_FILE_FEATURES_ENABLED = false;
 export type GeoGebraApplet = GeoGebraApi & {
   inject: (...args: unknown[]) => unknown;
   setHTML5Codebase: (url: string, offline?: boolean) => void;
   resize?: () => unknown;
   removeExistingApplet?: (...args: unknown[]) => unknown;
 };
-
-export function geoGebraRuntimeHeight(containerHeight: number, toolbarCollapsed: boolean) {
-  return containerHeight + (toolbarCollapsed ? COLLAPSED_GEOGEBRA_TOOLBAR_HEIGHT : 0);
-}
 
 declare global {
   interface Window { GGBApplet?: new (...args: unknown[]) => GeoGebraApplet }
@@ -34,61 +26,6 @@ let stylesheetPromise: Promise<void> | undefined;
 // lease per host as well so a stale StrictMode mount can never dispose the
 // newer applet that replaced it.
 const activeMounts = new WeakMap<HTMLElement, symbol>();
-
-/**
- * Open GeoGebra's own file menu from a shell-owned button.
- *
- * The native menu button remains mounted while its visually heavy toolbar row
- * is collapsed. Forwarding the click preserves GeoGebra's Open/Save/Export
- * implementation instead of duplicating file behavior in the shell.
- */
-export function openGeoGebraNativeMenu(container: HTMLElement) {
-  const headerMenuButton = container.querySelector<HTMLElement>(".menuBtn");
-  const toolbarButtons = container.querySelectorAll<HTMLButtonElement>(
-    ".GeoGebraFrame .rightButtonPanel button",
-  );
-  const menuButton = headerMenuButton ?? toolbarButtons.item(toolbarButtons.length - 1);
-  if (!menuButton) return false;
-  menuButton.click();
-  window.requestAnimationFrame(() => alignNativeMenuToLeft(container));
-  return true;
-}
-
-function alignNativeMenuToLeft(container: HTMLElement) {
-  const frame = container.querySelector<HTMLElement>(".GeoGebraFrame") ?? container;
-  const nativeMenu = frame.querySelector<HTMLElement>(
-    ".GeoGebraMenuBar, .mowMenubar, .menuPanel",
-  );
-  if (!nativeMenu) return;
-
-  const menuCell = nativeMenu.closest<HTMLTableCellElement>("td");
-  if (menuCell?.parentElement?.tagName === "TR") {
-    menuCell.style.removeProperty("position");
-    menuCell.style.removeProperty("inset");
-    menuCell.style.removeProperty("left");
-    menuCell.style.removeProperty("right");
-    menuCell.style.removeProperty("transform");
-    menuCell.classList.add("geochat-native-menu-cell");
-    menuCell.parentElement.insertBefore(menuCell, menuCell.parentElement.firstElementChild);
-    return;
-  }
-
-  const frameRect = frame.getBoundingClientRect();
-  let menuPanel: HTMLElement = nativeMenu;
-  for (let parent = nativeMenu.parentElement; parent && parent !== frame; parent = parent.parentElement) {
-    const rect = parent.getBoundingClientRect();
-    const isSidePanel = rect.height >= frameRect.height * 0.7
-      && rect.width >= 220
-      && rect.width <= Math.min(520, frameRect.width * 0.5);
-    if (isSidePanel) menuPanel = parent;
-  }
-
-  menuPanel.style.setProperty("position", "absolute", "important");
-  menuPanel.style.setProperty("inset", "0 auto 0 0", "important");
-  menuPanel.style.setProperty("left", "0px", "important");
-  menuPanel.style.setProperty("right", "auto", "important");
-  menuPanel.style.setProperty("transform", "none", "important");
-}
 
 function loadDeployScript(url: string) {
   if (window.GGBApplet) return Promise.resolve();
@@ -148,17 +85,6 @@ function pinGeoGebraModuleBase(codebase: string) {
     document.head.appendChild(meta);
   }
   meta.content = content;
-  // The GWT bootstrapper supports a localhost dev-mode hook through
-  // sessionStorage. A previous run can leave that hook pointing at a dead
-  // backend port, which produces a live API object but no visible applet.
-  try {
-    sessionStorage.removeItem("__gwtDevModeHook:web3d");
-    sessionStorage.removeItem("__gwtDevModeHook:webSimple");
-  } catch (caughtError) {
-    logger.debug("dev_hook_cleanup_failed", "GEOGEBRA_STORAGE_UNAVAILABLE", { error: caughtError });
-    // Storage can be unavailable in a restricted WebView; the explicit
-    // module-base meta tag above remains sufficient in that case.
-  }
 }
 
 export async function mountGeoGebra(options: {
@@ -241,7 +167,7 @@ export async function mountGeoGebra(options: {
     if (disposed) return;
     const { width, height } = initialSize();
     const root = options.container;
-    const runtimeHeight = geoGebraRuntimeHeight(height, root.classList.contains("is-toolbar-collapsed"));
+    const runtimeHeight = height;
     root.style.display = "block";
     root.style.visibility = "visible";
     root.style.opacity = "1";
@@ -315,14 +241,12 @@ export async function mountGeoGebra(options: {
     width: initialSize().width,
     height: initialSize().height,
     appName: "classic",
-    // Keep the construction toolbar collapsed by default while exposing
-    // GeoGebra's native menu entry point for applet-level actions.
+    // The shell owns persistence. Vendor file features stay disabled so the
+    // app cannot create a second, WebView-owned document store.
     perspective: "G",
     showToolBar: DEFAULT_GEOGEBRA_TOOLBAR_VISIBLE,
     showToolBarHelp: false,
     showMenuBar: DEFAULT_GEOGEBRA_MENU_VISIBLE,
-    // Keep GeoGebra's own file menu fully functional so users can open local
-    // constructions and export the current worksheet as a .ggb file.
     enableFileFeatures: DEFAULT_GEOGEBRA_FILE_FEATURES_ENABLED,
     showAlgebraInput: false,
     algebraInputPosition: "algebra",

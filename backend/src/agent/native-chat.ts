@@ -81,8 +81,14 @@ export type { NativeChatRequest } from "./native-chat-request";
 export async function createNativeChatResponse(
   input: NativeChatRequest,
   dependencies: NativeChatDependencies,
-  options: { model?: LanguageModel; abortSignal?: AbortSignal; dataScope?: ConversationDataScope } = {},
+  options: {
+    model?: LanguageModel;
+    abortSignal?: AbortSignal;
+    dataScope?: ConversationDataScope;
+    correlationId?: string;
+  } = {},
 ) {
+  const correlationId = options.correlationId ?? input.runId;
   const policyError = validateNativeChatModelPolicy(input);
   if (policyError) return jsonError(policyError, 400);
 
@@ -108,6 +114,7 @@ export async function createNativeChatResponse(
     try {
       model = await createBackendLanguageModel(input.model, dependencies.credentials, {
         abortSignal: options.abortSignal,
+        correlationId,
       });
     } catch (error) {
       if (error instanceof CredentialResolutionError) return jsonError(error.message, error.status);
@@ -137,6 +144,14 @@ export async function createNativeChatResponse(
     if (isLedgerConflict(error)) return jsonError("Agent run continuation conflicted with another request.", 409);
     throw error;
   }
+
+  logger.info("request_accepted", "AGENT_REQUEST_ACCEPTED", {
+    correlationId,
+    runId: persistence.current.runId,
+    conversationId: persistence.current.conversationId,
+    modelProvider: persistence.current.modelProvider,
+    modelId: persistence.current.modelId,
+  });
 
   try {
     await persistNativeConversationMessages(
@@ -327,6 +342,7 @@ export async function createNativeChatResponse(
       const sanitized = sanitizeProviderError(error);
       logger.error("stream_failed", "AGENT_STREAM_FAILED", {
         error,
+        correlationId,
         runId: persistence.current.runId,
         conversationId: persistence.current.conversationId,
       });
@@ -358,6 +374,7 @@ export async function createNativeChatResponse(
         const sanitized = sanitizeProviderError(error);
         logger.error("terminal_persistence_failed", "AGENT_PERSISTENCE_FAILED", {
           error,
+          correlationId,
           runId: persistence.current.runId,
           conversationId: persistence.current.conversationId,
         });
@@ -374,6 +391,7 @@ export async function createNativeChatResponse(
         } catch (terminalError) {
           logger.error("persistence_failure_record_failed", "AGENT_PERSISTENCE_TERMINALIZATION_FAILED", {
             error: terminalError,
+            correlationId,
             runId: persistence.current.runId,
             conversationId: persistence.current.conversationId,
           });

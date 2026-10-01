@@ -1,9 +1,14 @@
 import { Effect } from "effect";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
+import {
+  CORRELATION_ID_HEADER,
+  resolveCorrelationId
+} from "@geochat-ai/app/request-correlation";
 import { createAgentRunDiagnosticsService } from "../services/agent-run-diagnostics";
 import { createAgentRunEventService } from "../services/agent-run-events";
 import type { BackendHttpContext } from "./context";
 import { isValidPathEncoding } from "./paths";
-import { json, withCors } from "./response";
+import { json, withCorrelationId, withCors } from "./response";
 import { matchBackendRouteAccess } from "./route-access";
 import type { DataScopeResolver } from "./scope";
 import {
@@ -14,6 +19,8 @@ import {
   requestIsAuthorized,
   type BackendHttpSecurity
 } from "./security";
+
+const logger = createStructuredLogger("http.handler");
 export function createBackendHttpHandler(
   context: BackendHttpContext,
   options: {
@@ -35,6 +42,7 @@ export function createBackendHttpHandler(
   }
 
   async function handleRequest(request: Request) {
+    const startedAt = performance.now();
     const response = await Effect.runPromise(
       Effect.tryPromise({
         try: () => routeRequest(request, context, authenticateDataScope, security),
@@ -53,7 +61,24 @@ export function createBackendHttpHandler(
         )
       )
     );
-    return withCors(response, request, security);
+    const correlationId = resolveCorrelationId(
+      response.headers.get(CORRELATION_ID_HEADER),
+      request.headers.get(CORRELATION_ID_HEADER)
+    );
+    const path = new URL(request.url).pathname;
+    const requestCompletedContext = {
+      correlationId,
+      method: request.method,
+      path,
+      status: response.status,
+      durationMs: Math.max(0, Math.round(performance.now() - startedAt))
+    };
+    if (request.method === "GET" && path === "/health" && response.status === 200) {
+      logger.debug("request_completed", "HTTP_REQUEST_COMPLETED", requestCompletedContext);
+    } else {
+      logger.info("request_completed", "HTTP_REQUEST_COMPLETED", requestCompletedContext);
+    }
+    return withCors(withCorrelationId(response, correlationId), request, security);
   }
 
   function getConversationPersistenceDiagnostics(conversationId: string, expectedRunIds: string[] = []) {

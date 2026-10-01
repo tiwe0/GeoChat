@@ -38,10 +38,10 @@ export async function loadDesktopRuntime() {
 export function desktopRuntime() {
   return runtime;
 }
+export const desktopApi = () => window.geochatDesktop;
 
 /**
- * This must not fail quietly. The fallback below is a guess at a port the
- * shell scans from, and an unrelated backend left running on that port will
+ * This must not fail quietly. An unrelated backend on the fallback port will
  * answer it — so a broken bridge looks exactly like a working app until a
  * request lands somewhere unexpected. The caller surfaces this instead.
  */

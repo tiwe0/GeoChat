@@ -1,6 +1,4 @@
 import type {
-  DesktopCredentialMigrationJournal,
-  DesktopImportLegacyCredentialRequest,
   DesktopProviderCredentialMetadata,
   DesktopProviderCredentialStatus,
   DesktopSaveProviderCredentialRequest,
@@ -13,10 +11,6 @@ export const TAURI_CREDENTIAL_COMMANDS = {
   saveProviderCredential: "save_provider_credential",
   deleteProviderCredential: "delete_provider_credential",
   listProviderCredentialMetadata: "list_provider_credential_metadata",
-  importLegacyCredential: "import_legacy_credential",
-  readCredentialMigrationJournal: "read_credential_migration_journal",
-  persistCredentialMigrationJournal: "persist_credential_migration_journal",
-  deleteCredentialMigrationJournal: "delete_credential_migration_journal",
 } as const;
 
 type CredentialBridge = Pick<
@@ -25,10 +19,6 @@ type CredentialBridge = Pick<
   | "deleteProviderCredential"
   | "getProviderCredentialStatus"
   | "listProviderCredentialMetadata"
-  | "importLegacyCredential"
-  | "readCredentialMigrationJournal"
-  | "persistCredentialMigrationJournal"
-  | "deleteCredentialMigrationJournal"
 >;
 
 export function createTauriCredentialBridge(invoke: TauriInvoke): CredentialBridge {
@@ -48,13 +38,5 @@ export function createTauriCredentialBridge(invoke: TauriInvoke): CredentialBrid
       return { credentialRef, configured: metadata !== null, metadata };
     },
     listProviderCredentialMetadata,
-    importLegacyCredential: (request: DesktopImportLegacyCredentialRequest) =>
-      invoke(TAURI_CREDENTIAL_COMMANDS.importLegacyCredential, { request }),
-    readCredentialMigrationJournal: () =>
-      invoke<DesktopCredentialMigrationJournal | null>(TAURI_CREDENTIAL_COMMANDS.readCredentialMigrationJournal),
-    persistCredentialMigrationJournal: (journal: DesktopCredentialMigrationJournal) =>
-      invoke(TAURI_CREDENTIAL_COMMANDS.persistCredentialMigrationJournal, { journal }),
-    deleteCredentialMigrationJournal: () =>
-      invoke(TAURI_CREDENTIAL_COMMANDS.deleteCredentialMigrationJournal),
   };
 }

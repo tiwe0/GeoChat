@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
+import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import {
   DESKTOP_CONFIG_CHANGED_EVENT,
-  persistDesktopConfig,
   readDesktopConfig,
+  updateDesktopConfig,
 } from "../../../../shared/desktop/desktop-config";
 import type { InteractionMode } from "../../../../shared/desktop/workbench-types";
+
+const logger = createStructuredLogger("fusion-mode.interaction");
 
 export function useInteractionMode() {
   const [mode, setModeState] = useState<InteractionMode>(() => readDesktopConfig().interaction.mode);
@@ -18,7 +21,9 @@ export function useInteractionMode() {
   const setMode = useCallback((nextMode: InteractionMode) => {
     const config = readDesktopConfig();
     if (config.interaction.mode === nextMode) return;
-    persistDesktopConfig({ ...config, interaction: { mode: nextMode } });
+    void updateDesktopConfig((current) => ({ ...current, interaction: { mode: nextMode } })).catch((error) => {
+      logger.warn("interaction_mode_save_failed", "INTERACTION_MODE_SAVE_FAILED", { error, nextMode });
+    });
   }, []);
 
   return { mode, setMode };

@@ -30,7 +30,7 @@ export const agentWorkflowCanvasVerificationTools = new Set<FunctionCallToolName
   "inspectGeoGebraObjects"
 ]);
 const blackboardTools = new Set<FunctionCallToolName>(["readBlackboard", "patchBlackboard"]);
-const skillTools = new Set<FunctionCallToolName>(["listSkills", "searchSkills", "loadSkill", "activateSkill"]);
+const skillTools = new Set<FunctionCallToolName>(["listSkills", "searchSkills", "loadSkill"]);
 
 const allowedToolsByPhase = {
   needs_canvas_read: new Set<FunctionCallToolName>([
@@ -39,7 +39,6 @@ const allowedToolsByPhase = {
     "listSkills",
     "searchSkills",
     "loadSkill",
-    "activateSkill",
     "getCanvasContext"
   ]),
   planning: new Set<FunctionCallToolName>([
@@ -49,7 +48,6 @@ const allowedToolsByPhase = {
     "listSkills",
     "searchSkills",
     "loadSkill",
-    "activateSkill",
     "createGeometryPlan",
     "executeAdvancedDrawingCommand",
     "executeGeoGebraCommands",
@@ -76,7 +74,6 @@ const allowedToolsByPhase = {
     "listSkills",
     "searchSkills",
     "loadSkill",
-    "activateSkill",
     "createGeometryPlan",
     "executeAdvancedDrawingCommand",
     "executeGeoGebraCommands",

@@ -3,15 +3,16 @@
 mod access;
 mod app_bundle;
 mod app_bundle_protocol;
+mod atomic_json_file;
 mod commands;
 mod credential_broker;
-mod credential_migration;
 mod credentials;
 mod env_config;
 mod installed_client_smoke;
 mod logging;
 mod mcp;
 mod problem_bank_cache;
+mod renderer_storage;
 mod settings;
 mod shell_update;
 mod sidecar;
@@ -32,9 +33,8 @@ use commands::app_bundle_update::{
     rollback_app_bundle_update,
 };
 use commands::credentials::{
-    delete_credential_migration_journal, delete_provider_credential, import_legacy_credential,
-    list_provider_credential_metadata, persist_credential_migration_journal,
-    read_credential_migration_journal, save_provider_credential, CredentialCommandState,
+    delete_provider_credential, list_provider_credential_metadata, save_provider_credential,
+    CredentialCommandState,
 };
 use commands::graphics::{get_graphics_preferences, set_graphics_preferences, DesktopGraphicsMode};
 use commands::improvement::{
@@ -51,13 +51,16 @@ use commands::problem_bank::{
     load_problem_bank_page, load_problem_detail, open_problem_bank_cache_directory,
     sync_problem_bank_metadata,
 };
+use commands::renderer_storage::{
+    get_renderer_storage, remove_renderer_storage, set_renderer_storage,
+};
 use commands::runtime::{get_runtime_info, mark_renderer_ready};
 use commands::shell_update::{
     check_all_updates, check_for_updates, download_update, get_update_state, install_update,
     set_update_preferences,
 };
 use credential_broker::CredentialBrokerRuntime;
-use credentials::{CredentialVault, PlatformCredentialStore};
+use credentials::{CredentialProfile, CredentialVault, PlatformCredentialStore};
 use env_config::configured_string;
 use installed_client_smoke::{
     complete_pending_installed_client_update_evidence, installed_client_update_smoke_cli_enabled,
@@ -65,10 +68,12 @@ use installed_client_smoke::{
 };
 use mcp::{auto_start_desktop_mcp_requested, DesktopMcpStatus, McpRuntime};
 use problem_bank_cache::ProblemBankCacheRuntime;
+use renderer_storage::RendererStorage;
 use settings::{desktop_database_path, load_settings, DesktopSettings, DesktopUpdatePreferences};
 use sidecar::{project_root, start_backend, BackendRuntime};
 use std::{
     env, fs,
+    fs::{File, OpenOptions},
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -85,13 +90,51 @@ use url::Url;
 use uuid::Uuid;
 
 const APP_BUNDLE_PROTOCOL: &str = "geochat-bundle";
+const APP_INSTANCE_LOCK_NAME: &str = ".geochat-instance.lock";
+
+struct AppInstanceLock {
+    file: File,
+}
+
+impl AppInstanceLock {
+    fn acquire(app_data_dir: &std::path::Path) -> Result<Self, String> {
+        let path = app_data_dir.join(APP_INSTANCE_LOCK_NAME);
+        let file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(&path)
+            .map_err(|error| {
+                format!(
+                    "Failed to open GeoChat instance lock {}: {error}",
+                    path.display()
+                )
+            })?;
+        File::try_lock(&file).map_err(|error| {
+            format!(
+                "Another GeoChat instance is already using this profile ({}): {error}",
+                app_data_dir.display()
+            )
+        })?;
+        Ok(Self { file })
+    }
+}
+
+impl Drop for AppInstanceLock {
+    fn drop(&mut self) {
+        let _ = File::unlock(&self.file);
+    }
+}
 
 struct DesktopState {
+    _instance_lock: AppInstanceLock,
     backend: Mutex<BackendRuntime>,
     mcp: Mutex<McpRuntime>,
     shell_update: Mutex<ShellUpdateRuntime>,
     app_bundle_update: Mutex<AppBundleUpdateRuntime>,
     problem_bank_cache: Mutex<ProblemBankCacheRuntime>,
+    renderer_storage: Mutex<RendererStorage>,
     settings_path: PathBuf,
     app_data_dir: PathBuf,
     database_path: PathBuf,
@@ -168,13 +211,12 @@ fn main() {
             sync_problem_bank_metadata,
             load_problem_bank_page,
             load_problem_detail,
+            get_renderer_storage,
+            set_renderer_storage,
+            remove_renderer_storage,
             save_provider_credential,
-            import_legacy_credential,
             delete_provider_credential,
             list_provider_credential_metadata,
-            read_credential_migration_journal,
-            persist_credential_migration_journal,
-            delete_credential_migration_journal,
             mark_renderer_ready,
             install_update
         ])
@@ -186,6 +228,17 @@ fn main() {
     }
     let window_initialized = Arc::new(AtomicBool::new(false));
     app.run(move |app, event| {
+        if matches!(event, RunEvent::Exit) {
+            if let Some(state) = app.try_state::<DesktopState>() {
+                if let Ok(mut mcp) = state.mcp.lock() {
+                    mcp.stop();
+                }
+                if let Ok(mut backend) = state.backend.lock() {
+                    backend.stop();
+                }
+            }
+            return;
+        }
         if !matches!(event, RunEvent::Ready) {
             return;
         }
@@ -256,6 +309,7 @@ fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
             app_data_dir.display()
         )
     })?;
+    let instance_lock = AppInstanceLock::acquire(&app_data_dir)?;
     let settings_path = app_data_dir.join("settings.json");
     let database_path = desktop_database_path(&app_data_dir);
     let settings = load_settings(&settings_path)?;
@@ -265,7 +319,13 @@ fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
     log::info!(target: "geochat::lifecycle", "GeoChat desktop shell is starting");
     let local_backend_auth_token = local_runtime_auth_token();
     let runtime_authorized = access_allows_runtime_use();
-    let credential_store = PlatformCredentialStore::new().map_err(|error| error.to_string())?;
+    let credential_profile = if cfg!(debug_assertions) {
+        CredentialProfile::Development
+    } else {
+        CredentialProfile::Production
+    };
+    let credential_store =
+        PlatformCredentialStore::new(credential_profile).map_err(|error| error.to_string())?;
     let credential_vault = Arc::new(CredentialVault::new(Arc::new(credential_store)));
     let credential_broker = CredentialBrokerRuntime::start(credential_vault.clone())?;
     let backend = start_backend(
@@ -274,7 +334,7 @@ fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
         &local_backend_auth_token,
         credential_broker,
     )?;
-    app.manage(CredentialCommandState::new(credential_vault, &app_data_dir));
+    app.manage(CredentialCommandState::new(credential_vault));
     let shell_update_state = initial_shell_update_state(settings.update_preferences.clone());
     // Resolving verifies every asset in the manifest by hash, so it happens
     // exactly once here and everything downstream reads the cached result.
@@ -287,12 +347,15 @@ fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
             .map(|bundle| bundle.manifest.bundle_version.clone()),
     );
     let problem_bank_cache = ProblemBankCacheRuntime::new(app_data_dir.join("problem-bank-cache"))?;
+    let renderer_storage = RendererStorage::load(&app_data_dir)?;
     app.manage(DesktopState {
+        _instance_lock: instance_lock,
         backend: Mutex::new(backend),
         mcp: Mutex::new(McpRuntime::new()),
         shell_update: Mutex::new(ShellUpdateRuntime::new(shell_update_state)),
         app_bundle_update: Mutex::new(AppBundleUpdateRuntime::new(app_bundle_update_state)),
         problem_bank_cache: Mutex::new(problem_bank_cache),
+        renderer_storage: Mutex::new(renderer_storage),
         settings_path,
         app_data_dir: app_data_dir.clone(),
         database_path,
@@ -308,6 +371,13 @@ fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
         renderer_ready: AtomicBool::new(false),
         silent_shell_update_task_running: AtomicBool::new(false),
     });
+    if let Some(state) = app.try_state::<DesktopState>() {
+        state
+            .backend
+            .lock()
+            .map_err(|error| error.to_string())?
+            .start_monitor(app.clone());
+    }
     if auto_start_desktop_mcp_requested() {
         if let Some(state) = app.try_state::<DesktopState>() {
             let mut mcp = state.mcp.lock().map_err(|error| error.to_string())?;
@@ -337,7 +407,8 @@ fn initialize_main_window(app: &AppHandle) -> Result<(), String> {
         let mut window_config = app.config().app.windows[0].clone();
         window_config.url = initial_window_url(active_app_bundle.as_ref())?;
         let window_builder = tauri::WebviewWindowBuilder::from_config(app, &window_config)
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| error.to_string())?
+            .incognito(true);
         #[cfg(target_os = "windows")]
         let window_builder = if hardware_acceleration_enabled {
             window_builder
@@ -515,15 +586,10 @@ fn now_iso() -> String {
 
 fn local_runtime_auth_token() -> String {
     if cfg!(debug_assertions) {
-        for name in [
-            "GEOCHAT_DESKTOP_BACKEND_AUTH_TOKEN",
-            "GEOCHAT_DESKTOP_LOCAL_AUTH_TOKEN",
-        ] {
-            if let Ok(configured) = env::var(name) {
-                let trimmed = configured.trim();
-                if !trimmed.is_empty() {
-                    return trimmed.to_string();
-                }
+        if let Ok(configured) = env::var("GEOCHAT_DESKTOP_BACKEND_AUTH_TOKEN") {
+            let trimmed = configured.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
             }
         }
     }
@@ -536,9 +602,26 @@ mod tests {
         app_bundle::{AppBundleAsset, AppBundleEntry, AppBundleManifest},
         app_bundle_content_type, app_bundle_protocol_request_path, initial_window_url,
         mcp::auto_start_desktop_mcp_requested_for,
-        ActiveAppBundle, DEFAULT_DEV_URL,
+        ActiveAppBundle, AppInstanceLock, DEFAULT_DEV_URL,
     };
-    use std::path::PathBuf;
+    use std::{fs, path::PathBuf};
+    use uuid::Uuid;
+
+    #[test]
+    fn profile_instance_lock_rejects_a_second_process_owner() {
+        let root = std::env::temp_dir().join(format!("geochat-instance-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("create profile root");
+        let first = AppInstanceLock::acquire(&root).expect("acquire first instance lock");
+
+        let error = AppInstanceLock::acquire(&root)
+            .err()
+            .expect("second instance must be rejected");
+
+        assert!(error.contains("Another GeoChat instance"));
+        drop(first);
+        AppInstanceLock::acquire(&root).expect("lock should release with owner");
+        let _ = fs::remove_dir_all(root);
+    }
 
     #[test]
     fn app_bundle_protocol_accepts_manifest_relative_paths() {

@@ -7,6 +7,7 @@ import {
   assertRestoreEvidence,
   createTestProviderCleanupState,
   finalizeTestProviderProfile,
+  recordTestProviderRecoveryFailure,
   redactDesktopE2eEvidenceText,
 } from "./desktop-debug-e2e/evidence";
 
@@ -15,6 +16,8 @@ type ActionRecord = {
   status: "queued" | "claimed" | "succeeded" | "failed";
   result?: Record<string, unknown>;
   error?: string;
+  operationId?: string | null;
+  recovery?: { kind: "native-credential-journal"; preserveUserDataDir: true };
 };
 
 type ConversationRecord = {
@@ -66,11 +69,17 @@ async function main() {
     await waitForDesktopReady(false);
 
     providerConfigurationAttempted = true;
-    const configured = await queueAndWait("configure_deterministic_test_provider", {
-      baseUrl: fakeProvider.baseUrl,
-      model: fakeProvider.model,
-      nonce: e2eNonce,
-    });
+    let configured: ActionRecord;
+    try {
+      configured = await queueAndWait("configure_deterministic_test_provider", {
+        baseUrl: fakeProvider.baseUrl,
+        model: fakeProvider.model,
+        nonce: e2eNonce,
+      });
+    } catch (error) {
+      recordTestProviderRecoveryFailure(testProviderCleanup, error);
+      throw error;
+    }
     if (configured.result?.setupPending === true) {
       testProviderCleanup.markResult({
         attempted: true,
@@ -363,7 +372,12 @@ async function queueAndWait(name: string, args: Record<string, unknown>, actionT
   return waitUntil(async () => {
     const listed = await callTool<{ actions: ActionRecord[] }>("list_desktop_debug_actions", { limit: 100 });
     const action = listed.actions.find((candidate) => candidate.id === queued.action.id);
-    if (action?.status === "failed") throw new Error(action.error ?? `${name} failed.`);
+    if (action?.status === "failed") {
+      throw Object.assign(new Error(action.error ?? `${name} failed.`), {
+        operationId: action.operationId,
+        recovery: action.recovery,
+      });
+    }
     return action?.status === "succeeded" ? action : false;
   }, `${name} action`, actionTimeoutMs);
 }

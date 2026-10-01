@@ -1,104 +1,66 @@
 export type DesktopDebugActionStatus = "queued" | "claimed" | "succeeded" | "failed";
 
-export type DesktopDebugAction =
+export type DesktopDebugActionRecovery = {
+  kind: "native-credential-journal";
+  preserveUserDataDir: true;
+};
+
+type DesktopDebugActionState = {
+  id: string;
+  createdAt: string;
+  status: DesktopDebugActionStatus;
+  claimedAt?: string;
+  completedAt?: string;
+  result?: unknown;
+  error?: string;
+  operationId?: string | null;
+  recovery?: DesktopDebugActionRecovery;
+};
+
+export type DesktopDebugAction = DesktopDebugActionState & (
   | {
-      id: string;
       type: "get_ui_status";
-      createdAt: string;
-      status: DesktopDebugActionStatus;
-      claimedAt?: string;
-      completedAt?: string;
-      result?: unknown;
-      error?: string;
     }
   | {
-      id: string;
       type: "export_png";
       exportScale?: number;
       transparent?: boolean;
       dpi?: number;
-      createdAt: string;
-      status: DesktopDebugActionStatus;
-      claimedAt?: string;
-      completedAt?: string;
-      result?: unknown;
-      error?: string;
     }
   | {
-      id: string;
       type: "execute_geogebra_tool";
       toolName: string;
       args: Record<string, unknown>;
-      createdAt: string;
-      status: DesktopDebugActionStatus;
-      claimedAt?: string;
-      completedAt?: string;
-      result?: unknown;
-      error?: string;
     }
   | {
-      id: string;
       type: "send_message";
       conversationId?: string;
       content: string;
-      createdAt: string;
-      status: DesktopDebugActionStatus;
-      claimedAt?: string;
-      completedAt?: string;
-      result?: unknown;
-      error?: string;
     }
   | {
-      id: string;
       type: "restore_conversation";
       conversationId: string;
-      createdAt: string;
-      status: DesktopDebugActionStatus;
-      claimedAt?: string;
-      completedAt?: string;
-      result?: unknown;
-      error?: string;
     }
   | {
-      id: string;
       type: "configure_test_provider";
       baseUrl: string;
       model: string;
       nonce: string;
-      createdAt: string;
-      status: DesktopDebugActionStatus;
-      claimedAt?: string;
-      completedAt?: string;
-      result?: unknown;
-      error?: string;
     }
   | {
-      id: string;
       type: "clear_test_provider";
       nonce: string;
       credentialRef: string;
       restoreConfigJson: string;
-      createdAt: string;
-      status: DesktopDebugActionStatus;
-      claimedAt?: string;
-      completedAt?: string;
-      result?: unknown;
-      error?: string;
     }
   | {
-      id: string;
       type: "probe_real_ui";
       nonce: string;
       operation: DesktopRealUiProbeOperation;
       text?: string;
       target?: DesktopRealUiProbeTarget;
-      createdAt: string;
-      status: DesktopDebugActionStatus;
-      claimedAt?: string;
-      completedAt?: string;
-      result?: unknown;
-      error?: string;
-    };
+    }
+);
 
 export type DesktopRealUiProbeOperation =
   | "snapshot"
@@ -169,12 +131,18 @@ export function createDesktopDebugActionQueue() {
     return action;
   }
 
-  function fail(id: string, error: string) {
+  function fail(
+    id: string,
+    error: string,
+    details: { operationId?: string | null; recovery?: DesktopDebugActionRecovery } = {},
+  ) {
     const action = actions.find((item) => item.id === id);
     if (!action) return undefined;
     action.status = "failed";
     action.completedAt = new Date().toISOString();
     action.error = error;
+    if (details.operationId !== undefined) action.operationId = details.operationId;
+    if (details.recovery) action.recovery = details.recovery;
     return action;
   }
 
@@ -183,4 +151,22 @@ export function createDesktopDebugActionQueue() {
   }
 
   return { enqueue, claimNext, complete, fail, list };
+}
+
+export function desktopDebugActionFailureDetails(payload: {
+  operationId?: unknown;
+  recovery?: unknown;
+}) {
+  const operationId = payload.operationId === null
+    || (typeof payload.operationId === "string" && payload.operationId.length > 0 && payload.operationId.length <= 128)
+    ? payload.operationId as string | null
+    : undefined;
+  const recovery = payload.recovery;
+  const validRecovery = recovery
+    && typeof recovery === "object"
+    && (recovery as { kind?: unknown }).kind === "native-credential-journal"
+    && (recovery as { preserveUserDataDir?: unknown }).preserveUserDataDir === true
+    ? { kind: "native-credential-journal" as const, preserveUserDataDir: true as const }
+    : undefined;
+  return { operationId, recovery: validRecovery };
 }

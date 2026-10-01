@@ -28,6 +28,36 @@ export function createTestProviderCleanupState() {
   };
 }
 
+export function recordTestProviderRecoveryFailure(
+  cleanupState: ReturnType<typeof createTestProviderCleanupState>,
+  failure: unknown,
+) {
+  if (!failure || typeof failure !== "object") return false;
+  const candidate = failure as { operationId?: unknown; recovery?: unknown };
+  const recovery = candidate.recovery;
+  if (!recovery
+    || typeof recovery !== "object"
+    || (recovery as { kind?: unknown }).kind !== "native-credential-journal"
+    || (recovery as { preserveUserDataDir?: unknown }).preserveUserDataDir !== true) {
+    return false;
+  }
+  const operationId = candidate.operationId === null || typeof candidate.operationId === "string"
+    ? candidate.operationId
+    : null;
+  cleanupState.markResult({
+    ...cleanupState.evidence(),
+    attempted: true,
+    completed: false,
+    recoveryPending: true,
+    operationId,
+    recovery: {
+      kind: "native-credential-journal",
+      preserveUserDataDir: true,
+    },
+  });
+  return true;
+}
+
 export function finalizeTestProviderProfile(
   userDataDir: string,
   providerConfigurationAttempted: boolean,

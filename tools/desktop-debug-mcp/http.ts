@@ -1,7 +1,7 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { createGeoChatDesktopDebugServer } from "./index";
 import { readConfig } from "./config";
-import { createDesktopDebugActionQueue } from "./debug-actions";
+import { createDesktopDebugActionQueue, desktopDebugActionFailureDetails } from "./debug-actions";
 
 const host = process.env.GEOCHAT_DESKTOP_MCP_HOST ?? "127.0.0.1";
 const port = readPort(process.env.GEOCHAT_DESKTOP_MCP_PORT, 17369);
@@ -45,9 +45,19 @@ const server = Bun.serve({
     }
     const debugActionResult = debugActionResultPath(url.pathname);
     if (request.method === "POST" && debugActionResult) {
-      const payload = await request.json().catch(() => ({})) as { ok?: unknown; result?: unknown; error?: unknown };
+      const payload = await request.json().catch(() => ({})) as {
+        ok?: unknown;
+        result?: unknown;
+        error?: unknown;
+        operationId?: unknown;
+        recovery?: unknown;
+      };
       const action = payload.ok === false
-        ? actions.fail(debugActionResult, typeof payload.error === "string" ? payload.error : "Desktop debug action failed.")
+        ? actions.fail(
+            debugActionResult,
+            typeof payload.error === "string" ? payload.error : "Desktop debug action failed.",
+            desktopDebugActionFailureDetails(payload),
+          )
         : actions.complete(debugActionResult, payload.result ?? { ok: true });
       if (!action) return json({ ok: false, error: "Debug action was not found." }, 404);
       return json({ ok: true, action });

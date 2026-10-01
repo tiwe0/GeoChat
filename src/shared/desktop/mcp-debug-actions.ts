@@ -75,6 +75,19 @@ export type DesktopRealUiProbeOperation =
 
 export type DesktopRealUiProbeTarget = "window" | "fusion" | "history" | "settings" | "transcript";
 
+export type DesktopDebugActionRecovery = {
+  kind: "native-credential-journal";
+  preserveUserDataDir: true;
+};
+
+export type DesktopDebugActionReportPayload = {
+  ok: boolean;
+  result?: unknown;
+  error?: string;
+  operationId?: string | null;
+  recovery?: DesktopDebugActionRecovery;
+};
+
 export const DEFAULT_MCP_STATUS: RendererMcpStatus = {
   available: false,
   enabled: false,
@@ -105,7 +118,7 @@ export async function fetchNextDesktopDebugAction(endpoint: string, authToken?: 
   return payload.action ?? null;
 }
 
-export async function reportDesktopDebugAction(endpoint: string, id: string, payload: { ok: boolean; result?: unknown; error?: string }, authToken?: string) {
+export async function reportDesktopDebugAction(endpoint: string, id: string, payload: DesktopDebugActionReportPayload, authToken?: string) {
   const response = await fetch(`${desktopMcpHttpBase(endpoint)}/debug-actions/${encodeURIComponent(id)}/result`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders(authToken) },
@@ -151,9 +164,12 @@ export async function runMcpDebugActionPollOnce(input: {
       result = await input.executeDebugAction(action);
     } catch (error) {
       logger.warn("action_execution_failed", "MCP_DEBUG_ACTION_FAILED", { error, requestId: action.id });
+      const recovery = debugActionRecoveryFromError(error);
       await input.reportDebugAction(input.endpoint, action.id, {
         ok: false,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
+        ...(recovery.operationId !== undefined ? { operationId: recovery.operationId } : {}),
+        ...(recovery.recovery ? { recovery: recovery.recovery } : {})
       }, input.authToken);
       return;
     }
@@ -161,6 +177,26 @@ export async function runMcpDebugActionPollOnce(input: {
   } finally {
     input.setBusy(false);
   }
+}
+
+function debugActionRecoveryFromError(error: unknown): {
+  operationId?: string | null;
+  recovery?: DesktopDebugActionRecovery;
+} {
+  if (!error || typeof error !== "object") return {};
+  const candidate = error as { operationId?: unknown; recovery?: unknown };
+  const operationId = candidate.operationId === null
+    || (typeof candidate.operationId === "string" && candidate.operationId.length > 0 && candidate.operationId.length <= 128)
+    ? candidate.operationId as string | null
+    : undefined;
+  const recovery = candidate.recovery;
+  const validRecovery = recovery
+    && typeof recovery === "object"
+    && (recovery as { kind?: unknown }).kind === "native-credential-journal"
+    && (recovery as { preserveUserDataDir?: unknown }).preserveUserDataDir === true
+    ? { kind: "native-credential-journal" as const, preserveUserDataDir: true as const }
+    : undefined;
+  return { operationId, recovery: validRecovery };
 }
 
 export function createMcpDebugActionPolling(input: {

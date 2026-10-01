@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { resolve } from "node:path";
 import {
   createMcpDebugActionPolling,
   desktopMcpHttpBase,
@@ -8,6 +11,15 @@ import {
   runMcpDebugActionPollOnce,
   type DesktopDebugAction
 } from "../src/shared/desktop/mcp-debug-actions";
+import {
+  createTestProviderCleanupState,
+  finalizeTestProviderProfile,
+  recordTestProviderRecoveryFailure,
+} from "../tools/desktop-debug-e2e/evidence";
+import {
+  createDesktopDebugActionQueue,
+  desktopDebugActionFailureDetails,
+} from "../tools/desktop-debug-mcp/debug-actions";
 
 function tick() {
   return new Promise((resolve) => setTimeout(resolve, 0));
@@ -112,6 +124,68 @@ describe("MCP debug-action transport", () => {
     });
 
     expect(reports).toEqual([{ id: "action-2", payload: { ok: false, error: "boom" }, authToken: "token" }]);
+  });
+
+  test("preserves credential recovery ownership through renderer report, action queue, and runner evidence", async () => {
+    const actions = createDesktopDebugActionQueue();
+    actions.enqueue({
+      type: "configure_test_provider",
+      baseUrl: "http://127.0.0.1:8787/v1",
+      model: "debug-model",
+      nonce: "12345678-1234-4123-8123-123456789abc",
+    });
+    const operationId = "11111111-1111-4111-8111-111111111111";
+    const recovery = {
+      kind: "native-credential-journal" as const,
+      preserveUserDataDir: true as const,
+    };
+
+    await runMcpDebugActionPollOnce({
+      endpoint: "http://127.0.0.1:17369/mcp",
+      authToken: "token",
+      busy: () => false,
+      setBusy: () => undefined,
+      fetchNextDebugAction: async () => actions.claimNext() as DesktopDebugAction,
+      reportDebugAction: async (_endpoint, id, payload) => {
+        actions.fail(
+          id,
+          payload.error ?? "missing error",
+          desktopDebugActionFailureDetails(payload),
+        );
+      },
+      executeDebugAction: async () => {
+        throw Object.assign(new Error("commit and reconciliation failed"), {
+          operationId,
+          recovery,
+        });
+      },
+    });
+
+    const failed = actions.list(1)[0];
+    expect(failed).toMatchObject({
+      status: "failed",
+      error: "commit and reconciliation failed",
+      operationId,
+      recovery,
+    });
+    const cleanup = createTestProviderCleanupState();
+    expect(recordTestProviderRecoveryFailure(cleanup, failed)).toBe(true);
+    expect(cleanup.evidence()).toMatchObject({
+      attempted: true,
+      completed: false,
+      recoveryPending: true,
+      operationId,
+      recovery,
+    });
+
+    const profile = mkdtempSync(resolve(tmpdir(), "geochat-action-recovery-"));
+    expect(finalizeTestProviderProfile(profile, true, cleanup)).toEqual({
+      preserved: true,
+      recoveryPath: profile,
+    });
+    expect(existsSync(profile)).toBe(true);
+    expect(cleanup.evidence()).toMatchObject({ operationId, recoveryPath: profile });
+    rmSync(profile, { recursive: true, force: true });
   });
 
   test("a poll already in flight is skipped rather than overlapped", async () => {

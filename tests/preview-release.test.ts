@@ -13,8 +13,11 @@ describe("preview publication boundaries", () => {
       jobs: Record<string, { steps: Array<{ name: string; run?: string; uses?: string; with?: { ref?: string } }>; if?: string }>;
     };
     const verify = workflow.jobs.verify.steps;
-    expect(verify.findIndex((step) => step.run === "bun run tauri:prepare"))
-      .toBeLessThan(verify.findIndex((step) => step.run?.startsWith("cargo clippy")));
+    const prepareIndex = verify.findIndex((step) => step.run === "bun run tauri:prepare");
+    const clippyIndex = verify.findIndex((step) => step.run?.startsWith("cargo clippy"));
+    expect(prepareIndex).toBeGreaterThanOrEqual(0);
+    expect(clippyIndex).toBeGreaterThanOrEqual(0);
+    expect(prepareIndex).toBeLessThan(clippyIndex);
     expect(workflow.on.workflow_dispatch.inputs.release_tag).toBeDefined();
     for (const name of ["verify", "package", "release", "mirror"]) {
       const checkout = workflow.jobs[name].steps.find((step) => step.uses === "actions/checkout@v5");
@@ -22,6 +25,8 @@ describe("preview publication boundaries", () => {
     }
     expect(workflow.jobs.release.if).toContain("startsWith(inputs.release_tag, 'v')");
     expect(workflow.jobs.mirror.if).toContain("startsWith(inputs.release_tag, 'v')");
+    expect(workflow.jobs.release.if).toContain("github.event_name == 'push'");
+    expect(workflow.jobs.mirror.if).toContain("github.event_name == 'push'");
   });
 
   test("preview parsers accept the exact release and reject stale or stable payloads", () => {

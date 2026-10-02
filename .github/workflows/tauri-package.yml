@@ -194,7 +194,7 @@ jobs:
 
   release:
     name: Publish GitHub Release assets
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && startsWith(inputs.release_tag, 'v'))
+    if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && startsWith(inputs.release_tag, 'v'))
     needs: package
     runs-on: ubuntu-latest
     permissions:
@@ -250,7 +250,7 @@ jobs:
 
   mirror:
     name: Mirror installers to Cloudflare R2
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && startsWith(inputs.release_tag, 'v'))
+    if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && startsWith(inputs.release_tag, 'v'))
     needs: release
     runs-on: ubuntu-latest
     permissions:

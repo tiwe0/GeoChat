@@ -75,7 +75,8 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libappindicator3-dev \
             librsvg2-dev \
-            patchelf
+            patchelf \
+            ripgrep
 
       - name: Install JavaScript dependencies
         run: bun install --frozen-lockfile

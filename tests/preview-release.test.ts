@@ -13,6 +13,7 @@ describe("preview publication boundaries", () => {
       jobs: Record<string, { steps: Array<{ name: string; run?: string; uses?: string; with?: { ref?: string; components?: string } }>; if?: string }>;
     };
     const verify = workflow.jobs.verify.steps;
+    expect(verify.find((step) => step.name === "Install Linux system dependencies")?.run).toContain("ripgrep");
     for (const name of ["verify", "package"]) {
       const rust = workflow.jobs[name].steps.find((step) => step.name === "Set up Rust");
       expect(rust?.uses).toBe("dtolnay/rust-toolchain@1.96.0");

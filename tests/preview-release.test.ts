@@ -13,6 +13,10 @@ describe("preview publication boundaries", () => {
       jobs: Record<string, { steps: Array<{ name: string; run?: string; uses?: string; with?: { ref?: string } }>; if?: string }>;
     };
     const verify = workflow.jobs.verify.steps;
+    for (const name of ["verify", "package"]) {
+      const rust = workflow.jobs[name].steps.find((step) => step.name === "Set up Rust");
+      expect(rust?.uses).toBe("dtolnay/rust-toolchain@1.96.0");
+    }
     const prepareIndex = verify.findIndex((step) => step.run === "bun run tauri:prepare");
     const clippyIndex = verify.findIndex((step) => step.run?.startsWith("cargo clippy"));
     expect(prepareIndex).toBeGreaterThanOrEqual(0);

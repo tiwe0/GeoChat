@@ -58,7 +58,8 @@ jobs:
           bun-version: 1.3.11
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        # Keep lint and packaging on the same locally validated compiler.
+        uses: dtolnay/rust-toolchain@1.96.0
 
       - name: Cache Rust dependencies
         uses: swatinem/rust-cache@v2
@@ -144,7 +145,7 @@ jobs:
           bun-version: 1.3.11
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.96.0
 
       - name: Cache Rust dependencies
         uses: swatinem/rust-cache@v2

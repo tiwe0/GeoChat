@@ -108,6 +108,9 @@ to `<bucket>/<prefix>/<tag>/` (immutable, cached a year), then writes the channe
 manifest: `latest.json` for stable tags, `preview.json` for prerelease tags.
 Manifests are cached 5 minutes and written last, after every installer upload.
 Preview releases are marked as GitHub prereleases and never replace stable Latest.
+If a tag build fails because of a workflow issue, dispatch `tauri-package.yml`
+from `master` with `release_tag=<existing tag>`. All four jobs check out that
+exact tag, so CI fixes can rebuild the original source without moving the tag.
 
 `PREVIEW_RELEASE_TAG` in `src/site.ts` selects the featured download channel.
 With a preview tag, the page reads `preview.json`, falls back to the exact GitHub

@@ -7,6 +7,23 @@ import { parseGithub, parseMirror } from "../website/src/lib/release";
 const root = join(import.meta.dir, "..");
 
 describe("preview publication boundaries", () => {
+  test("clean-runner resources precede Rust compilation and immutable tags can be rebuilt", () => {
+    const workflow = Bun.YAML.parse(readFileSync(join(root, ".github/workflows/tauri-package.yml"), "utf8")) as {
+      on: { workflow_dispatch: { inputs: { release_tag: unknown } } };
+      jobs: Record<string, { steps: Array<{ name: string; run?: string; uses?: string; with?: { ref?: string } }>; if?: string }>;
+    };
+    const verify = workflow.jobs.verify.steps;
+    expect(verify.findIndex((step) => step.run === "bun run tauri:prepare"))
+      .toBeLessThan(verify.findIndex((step) => step.run?.startsWith("cargo clippy")));
+    expect(workflow.on.workflow_dispatch.inputs.release_tag).toBeDefined();
+    for (const name of ["verify", "package", "release", "mirror"]) {
+      const checkout = workflow.jobs[name].steps.find((step) => step.uses === "actions/checkout@v5");
+      expect(checkout?.with?.ref).toBe("${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}");
+    }
+    expect(workflow.jobs.release.if).toContain("startsWith(inputs.release_tag, 'v')");
+    expect(workflow.jobs.mirror.if).toContain("startsWith(inputs.release_tag, 'v')");
+  });
+
   test("preview parsers accept the exact release and reject stale or stable payloads", () => {
     const mirror = {
       tag: "v0.7.0-preview", version: "0.7.0-preview", prerelease: true,

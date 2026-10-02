@@ -17,11 +17,16 @@ on:
       - 'website/**'
       - '.github/workflows/website.yml'
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing v* tag to rebuild and publish with this workflow (empty for build only)'
+        required: false
+        type: string
 
 concurrency:
   # Keep only the newest package attempt for each branch/PR. Release tags
   # remain isolated so a release build cannot cancel another release build.
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  group: ${{ github.workflow }}-${{ inputs.release_tag || github.head_ref || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -44,6 +49,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
@@ -76,6 +83,10 @@ jobs:
       - name: Check Rust formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
 
+      # Tauri build.rs validates resource paths even during clippy on a clean runner.
+      - name: Prepare Tauri resources
+        run: bun run tauri:prepare
+
       - name: Lint Rust targets
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
@@ -84,9 +95,6 @@ jobs:
 
       - name: Validate benchmark suite
         run: bun run benchmark:validate
-
-      - name: Prepare Tauri resources
-        run: bun run tauri:prepare
 
       - name: Test Tauri Rust shell
         run: cargo test --manifest-path src-tauri/Cargo.toml
@@ -127,6 +135,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
@@ -184,7 +194,7 @@ jobs:
 
   release:
     name: Publish GitHub Release assets
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && startsWith(inputs.release_tag, 'v'))
     needs: package
     runs-on: ubuntu-latest
     permissions:
@@ -194,6 +204,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
 
       - name: Download packaged artifacts
         uses: actions/download-artifact@v5
@@ -206,7 +217,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TAG_NAME: ${{ github.ref_name }}
+          TAG_NAME: ${{ inputs.release_tag || github.ref_name }}
         shell: bash
         run: |
           mapfile -t assets < <(find release-assets -type f \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' \) -print)
@@ -230,6 +241,7 @@ jobs:
             fi
           else
             gh release create "$TAG_NAME" \
+              --verify-tag \
               "${release_flags[@]}" \
               --generate-notes \
               --notes "$(cat docs/release-boundaries.md)" \
@@ -238,7 +250,7 @@ jobs:
 
   mirror:
     name: Mirror installers to Cloudflare R2
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && startsWith(inputs.release_tag, 'v'))
     needs: release
     runs-on: ubuntu-latest
     permissions:
@@ -246,6 +258,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
 
       - name: Download packaged artifacts
         uses: actions/download-artifact@v5
@@ -265,7 +279,7 @@ jobs:
           ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           BUCKET: ${{ vars.R2_BUCKET }}
           DOWNLOADS_BASE: ${{ vars.DOWNLOADS_BASE_URL }}
-          TAG_NAME: ${{ github.ref_name }}
+          TAG_NAME: ${{ inputs.release_tag || github.ref_name }}
         shell: bash
         run: |
           if [[ "$TAG_NAME" == *-* ]]; then
@@ -289,7 +303,7 @@ jobs:
       - name: Build download manifest
         if: steps.config.outputs.ready == 'true'
         env:
-          TAG_NAME: ${{ github.ref_name }}
+          TAG_NAME: ${{ inputs.release_tag || github.ref_name }}
           DOWNLOADS_BASE: ${{ vars.DOWNLOADS_BASE_URL }}
           MANIFEST_NAME: ${{ steps.config.outputs.manifest }}
         shell: bash
@@ -308,7 +322,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           BUCKET: ${{ vars.R2_BUCKET }}
           PREFIX: ${{ vars.R2_PREFIX || 'geochat' }}
-          TAG_NAME: ${{ github.ref_name }}
+          TAG_NAME: ${{ inputs.release_tag || github.ref_name }}
           MANIFEST_NAME: ${{ steps.config.outputs.manifest }}
         shell: bash
         run: |

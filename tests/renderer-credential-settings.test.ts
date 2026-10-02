@@ -4,6 +4,7 @@ import {
   credentialCleanupBlocksSave,
   CredentialCleanupRequiredError,
   probeUnsavedProviderCredential,
+  readCredentialAvailability,
   replaceProviderCredential,
 } from "../src/renderer-react/src/features/desktop/settings/ModelSettings";
 import { DEFAULT_DESKTOP_CONFIG, updateProviderCredentials } from "../src/shared/desktop/desktop-config";
@@ -29,6 +30,36 @@ function nextConfig(metadata: DesktopProviderCredentialMetadata, config = DEFAUL
 }
 
 describe("renderer provider credential replacement", () => {
+  test("treats a stale credential reference as missing", async () => {
+    expect(await readCredentialAvailability({
+      getProviderCredentialStatus: async (credentialRef) => ({
+        credentialRef,
+        configured: false,
+        metadata: null,
+      }),
+    }, "stale-ref")).toBe("missing");
+  });
+
+  test("reports configured only when native storage resolves the reference", async () => {
+    expect(await readCredentialAvailability({
+      getProviderCredentialStatus: async (credentialRef) => ({
+        credentialRef,
+        configured: true,
+        metadata: { ...METADATA, credentialRef },
+      }),
+    }, "stored-ref")).toBe("configured");
+  });
+
+  test("fails closed when credential status cannot be read", async () => {
+    expect(await readCredentialAvailability(null, "stored-ref")).toBe("unavailable");
+    expect(await readCredentialAvailability({
+      getProviderCredentialStatus: async () => { throw new Error("native store unavailable"); },
+    }, "stored-ref")).toBe("unavailable");
+    expect(await readCredentialAvailability({
+      getProviderCredentialStatus: async () => { throw new Error("must not be called"); },
+    }, "")).toBe("missing");
+  });
+
   test("probes an unsaved key through a temporary native credential and always removes it", async () => {
     const events: string[] = [];
     const outcome = await probeUnsavedProviderCredential({

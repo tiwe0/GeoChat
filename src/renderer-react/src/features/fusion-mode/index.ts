@@ -20,7 +20,6 @@ export {
 } from "./selection-context";
 export type { FusionChatMessage, FusionChatStatus } from "./types";
 export type { FusionSpatialState, FusionSpatialTurn, FusionTurnStatus } from "./spatialTurns";
-export { fusionPanelSafeInsets, layoutFusionSpatialTurns } from "./spatialLayout";
 export type {
   GeoGebraSelectionContext,
   GeoGebraSelectionContextBridge,

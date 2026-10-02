@@ -1,15 +1,11 @@
-import { FileTextIcon, RotateCcwIcon, WrenchIcon } from "lucide-react";
+import { FileTextIcon, RotateCcwIcon } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Alert, CircularProgress } from "@mui/material";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import { GeoGebraController } from "./geogebra/controller";
 import type { CanvasRecoveryState } from "./geogebra/canvas-transactions";
-import {
-  DEFAULT_GEOGEBRA_TOOLBAR_VISIBLE,
-  mountGeoGebra,
-} from "./geogebra/ggbdeploy-wrapper";
+import { mountGeoGebra } from "./geogebra/ggbdeploy-wrapper";
 import {
   createGeoGebraSelectionContextBridge,
   type GeoGebraSelectionContext,
@@ -17,11 +13,11 @@ import {
   type GeoGebraSelectionRefreshReason,
 } from "./geogebra/selection-context";
 import { GeoGebraRuntimeProvider } from "./geogebra/runtime";
-import { useInteractionMode } from "./features/fusion-mode";
 import { backendOrigin, desktopRuntimeError } from "./features/desktop/runtime";
 import { desktopLogger } from "./features/desktop/desktopLogger";
 import { consumeDesktopConfigRecoveryNotice } from "../../shared/desktop/desktop-config-recovery";
 import { GeoGebraDocumentPanel } from "./features/geogebra/GeoGebraDocumentPanel";
+import { GeoGebraCanvasMenu } from "./features/geogebra/GeoGebraCanvasMenu";
 
 const logger = createStructuredLogger("renderer.app");
 
@@ -31,8 +27,6 @@ const AssistantPanel = lazy(async () => ({
 
 export default function App() {
   const { t } = useTranslation();
-  const reduceMotion = useReducedMotion();
-  const interaction = useInteractionMode();
   const canvasRef = useRef<HTMLDivElement>(null);
   const controllerRef = useRef(new GeoGebraController());
   const selectionBridgeRef = useRef<GeoGebraSelectionContextBridge | null>(null);
@@ -43,8 +37,6 @@ export default function App() {
   const [canvasMountGeneration, setCanvasMountGeneration] = useState(0);
   const [retryingRecovery, setRetryingRecovery] = useState(false);
   const [resetting, setResetting] = useState(false);
-  const [toolbarVisible, setToolbarVisible] = useState(DEFAULT_GEOGEBRA_TOOLBAR_VISIBLE);
-  const [canvasIntroVisible, setCanvasIntroVisible] = useState(true);
   const [documentPanelOpen, setDocumentPanelOpen] = useState(false);
   const [configRecoveryNotice, setConfigRecoveryNotice] = useState(() => consumeDesktopConfigRecoveryNotice());
 
@@ -74,7 +66,6 @@ export default function App() {
         selectionBridgeRef.current?.dispose();
         selectionBridgeRef.current = createGeoGebraSelectionContextBridge(api, { onChange: setSelectionContext });
         setSelectionContext(selectionBridgeRef.current.getSnapshot());
-        setToolbarVisible(DEFAULT_GEOGEBRA_TOOLBAR_VISIBLE);
         setCanvasState("ready");
       },
     }).then((mounted) => {
@@ -147,18 +138,6 @@ export default function App() {
     }
   }
 
-  function toggleGeoGebraToolbar() {
-    if (canvasState !== "ready") return;
-    const nextVisible = !toolbarVisible;
-    try {
-      controllerRef.current.setToolbarVisible(nextVisible);
-      setToolbarVisible(nextVisible);
-    } catch (error) {
-      logger.warn("toolbar_toggle_failed", "GEOGEBRA_TOOLBAR_TOGGLE_FAILED", { error });
-      desktopLogger.warn(error);
-    }
-  }
-
   return (
     <GeoGebraRuntimeProvider runtime={controllerRef.current}>
       <main className="frontend-shell">
@@ -174,25 +153,8 @@ export default function App() {
       <section className="frontend-canvas" aria-label="GeoGebra 画板">
         <div
           ref={canvasRef}
-          className={`frontend-canvas-host${toolbarVisible ? "" : " is-toolbar-collapsed"}`}
+          className="frontend-canvas-host is-toolbar-collapsed"
         />
-        <AnimatePresence initial={false}>
-          {canvasState === "ready" && canvasIntroVisible && (
-            <motion.div
-              className={`frontend-canvas-intro${interaction.mode === "fusion" ? " frontend-canvas-intro-fusion" : ""}`}
-              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 12, clipPath: "inset(0 0 0% 0)" }}
-              animate={{ opacity: 1, y: 0, clipPath: "inset(0 0 0% 0)", filter: "blur(0px)" }}
-              exit={reduceMotion
-                ? { opacity: 0 }
-                : { opacity: 0, y: -58, clipPath: "inset(0 0 100% 0)", filter: "blur(2px)" }}
-              transition={{ duration: reduceMotion ? 0.12 : 0.38, ease: [0.22, 1, 0.36, 1] }}
-              aria-live="polite"
-            >
-              <h1>{t("canvasIntro.title")}</h1>
-              <p>{t("canvasIntro.description")}</p>
-            </motion.div>
-          )}
-        </AnimatePresence>
         <div className="frontend-canvas-controls">
           <button
             type="button"
@@ -207,17 +169,6 @@ export default function App() {
           </button>
           <button
             type="button"
-            className={`frontend-canvas-control frontend-canvas-toolbar${toolbarVisible ? " is-active" : ""}`}
-            onClick={toggleGeoGebraToolbar}
-            disabled={canvasState !== "ready"}
-            aria-label={toolbarVisible ? t("canvasControls.hideToolbar") : t("canvasControls.showToolbar")}
-            title={toolbarVisible ? t("canvasControls.hideToolbar") : t("canvasControls.showToolbar")}
-            aria-pressed={toolbarVisible}
-          >
-            <WrenchIcon size={18} />
-          </button>
-          <button
-            type="button"
             className="frontend-canvas-control frontend-canvas-reset"
             onClick={() => void resetCanvas()}
             disabled={canvasState !== "ready" || resetting}
@@ -227,6 +178,10 @@ export default function App() {
             {resetting ? <CircularProgress size={18} color="inherit" /> : <RotateCcwIcon size={18} />}
           </button>
         </div>
+        <GeoGebraCanvasMenu
+          onOpenDocuments={() => setDocumentPanelOpen(true)}
+          disabled={canvasState !== "ready" || Boolean(canvasRecovery) || resetting}
+        />
         <GeoGebraDocumentPanel
           controller={controllerRef.current}
           open={documentPanelOpen}
@@ -271,7 +226,6 @@ export default function App() {
               if (next) setSelectionContext(next);
               return next;
             }}
-            onConversationStarted={() => setCanvasIntroVisible(false)}
           />
         </Suspense>
       </div>

@@ -13,7 +13,7 @@ export function InteractionModeButton(props: {
   const targetMode = props.mode === "window" ? "fusion" : "window";
 
   return (
-    <Tooltip title={props.label} arrow>
+    <Tooltip title={props.label} placement={props.mode === "fusion" ? "left" : "bottom"} arrow>
       <IconButton
         type="button"
         size="small"

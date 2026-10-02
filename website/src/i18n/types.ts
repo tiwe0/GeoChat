@@ -117,6 +117,7 @@ export type Content = {
     lede: string;
     version: string;
     versionUnknown: string;
+    preview: string;
     released: string;
     detected: string;
     otherPlatforms: string;

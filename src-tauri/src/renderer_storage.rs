@@ -24,6 +24,7 @@ const THINKING_EFFORT_KEY: &str = "geogebraCopilotThinkingEffort";
 const ONBOARDING_TOUR_KEY: &str = "geogebraCopilotOnboardingTourCompleted";
 const PANEL_WINDOW_KEY: &str = "geogebraCopilotPanelWindow";
 const INSTALLATION_ID_KEY: &str = "geogebraCopilotInstallationId";
+const LEGAL_CONSENT_KEY: &str = "geochatLegalConsent";
 const CONFIG_QUARANTINE_KEY_PREFIX: &str = "geochat-desktop-ui-config:quarantine:v1:";
 const MAX_CONFIG_QUARANTINE_VALUE_BYTES: usize = 256 * 1024;
 const MAX_CONFIG_IDENTIFIER_BYTES: usize = 128;
@@ -149,7 +150,7 @@ impl RendererStorage {
     }
 
     /// Credential-only CAS. The second identical write synchronizes the
-    /// `.previous` snapshot before any now-inactive Keychain entry is deleted.
+    /// `.previous` snapshot before any now-inactive credential is deleted.
     pub(crate) fn commit_credential_config(
         &mut self,
         expected_config_json: &str,
@@ -670,9 +671,8 @@ fn validate_candidate(candidate: &Map<String, Value>) -> Result<(), String> {
 fn validate_preference_key(key: &str) -> Result<(), String> {
     match key {
         DESKTOP_CONFIG_KEY | LANGUAGE_KEY | SELECTED_MODEL_KEY | THINKING_ENABLED_KEY
-        | THINKING_EFFORT_KEY | ONBOARDING_TOUR_KEY | PANEL_WINDOW_KEY | INSTALLATION_ID_KEY => {
-            Ok(())
-        }
+        | THINKING_EFFORT_KEY | ONBOARDING_TOUR_KEY | PANEL_WINDOW_KEY | INSTALLATION_ID_KEY
+        | LEGAL_CONSENT_KEY => Ok(()),
         _ if valid_config_quarantine_key(key) => Ok(()),
         _ => Err(format!("{key} is not an allowed renderer preference")),
     }
@@ -730,6 +730,7 @@ fn validate_preference_value(key: &str, value: &Value) -> Result<(), String> {
         INSTALLATION_ID_KEY => decoded
             .as_str()
             .is_some_and(|value| Uuid::parse_str(value).is_ok()),
+        LEGAL_CONSENT_KEY => validate_legal_consent(&decoded),
         PANEL_WINDOW_KEY => validate_panel_window(&decoded),
         DESKTOP_CONFIG_KEY => validate_desktop_config(&decoded),
         _ => false,
@@ -737,6 +738,58 @@ fn validate_preference_value(key: &str, value: &Value) -> Result<(), String> {
     valid
         .then_some(())
         .ok_or_else(|| format!("Renderer preference {key} has an invalid value"))
+}
+
+fn validate_legal_consent(value: &Value) -> bool {
+    let Some(record) = value.as_object() else {
+        return false;
+    };
+    record.len() == 2
+        && record.get("version").and_then(Value::as_u64) == Some(1)
+        && record
+            .get("acceptedAt")
+            .and_then(Value::as_str)
+            .is_some_and(is_canonical_utc_timestamp)
+}
+
+fn is_canonical_utc_timestamp(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.len() != 24
+        || bytes[4] != b'-'
+        || bytes[7] != b'-'
+        || bytes[10] != b'T'
+        || bytes[13] != b':'
+        || bytes[16] != b':'
+        || bytes[19] != b'.'
+        || bytes[23] != b'Z'
+    {
+        return false;
+    }
+    for index in [0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 17, 18, 20, 21, 22] {
+        if !bytes[index].is_ascii_digit() {
+            return false;
+        }
+    }
+    let number = |start: usize, end: usize| value[start..end].parse::<u32>().ok();
+    let (Some(year), Some(month), Some(day), Some(hour), Some(minute), Some(second)) = (
+        number(0, 4),
+        number(5, 7),
+        number(8, 10),
+        number(11, 13),
+        number(14, 16),
+        number(17, 19),
+    ) else {
+        return false;
+    };
+    let leap_year = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let days_in_month = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap_year => 29,
+        2 => 28,
+        _ => return false,
+    };
+    (1..=days_in_month).contains(&day) && hour < 24 && minute < 60 && second < 60
 }
 
 fn value_may_contain_sensitive_data(value: &Value) -> bool {
@@ -1635,6 +1688,10 @@ mod tests {
                     json!(format!("\"{}\"", Uuid::new_v4())),
                 ),
                 (
+                    "geochatLegalConsent".to_string(),
+                    json!(r#"{"version":1,"acceptedAt":"2026-10-02T03:04:05.678Z"}"#),
+                ),
+                (
                     "geochat-desktop-ui-config".to_string(),
                     encoded_desktop_config(&valid_desktop_config()),
                 ),
@@ -1653,6 +1710,10 @@ mod tests {
             ),
             ("geogebraCopilotInstallationId", json!("\"not-a-uuid\"")),
             (
+                "geochatLegalConsent",
+                json!(r#"{"version":0,"acceptedAt":"2026-10-02T03:04:05.678Z"}"#),
+            ),
+            (
                 "geochat-desktop-ui-config",
                 json!(r#"{"schemaVersion":99}"#),
             ),
@@ -1660,6 +1721,43 @@ mod tests {
             assert!(storage
                 .set_batch(Map::from_iter([(key.to_string(), invalid)]))
                 .is_err());
+        }
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn legal_consent_roundtrips_and_rejects_invalid_records() {
+        let root = temporary_directory("renderer-storage-legal-consent");
+        let mut storage = RendererStorage::load(&root).expect("load empty storage");
+        let valid = json!(r#"{"version":1,"acceptedAt":"2026-10-02T03:04:05.678Z"}"#);
+
+        storage
+            .set_batch(Map::from_iter([(
+                LEGAL_CONSENT_KEY.to_string(),
+                valid.clone(),
+            )]))
+            .expect("persist legal consent");
+        assert_eq!(
+            RendererStorage::load(&root)
+                .expect("reload legal consent")
+                .get(Some(vec![LEGAL_CONSENT_KEY.to_string()]))
+                .expect("read legal consent")
+                .get(LEGAL_CONSENT_KEY),
+            Some(&valid)
+        );
+
+        for invalid in [
+            json!("true"),
+            json!(r#"{"version":2,"acceptedAt":"2026-10-02T03:04:05.678Z"}"#),
+            json!(r#"{"version":1,"acceptedAt":"2026-02-30T03:04:05.678Z"}"#),
+            json!(r#"{"version":1,"acceptedAt":"2026-10-02T03:04:05Z"}"#),
+            json!(r#"{"version":1,"acceptedAt":"2026-10-02T03:04:05.678Z","extra":true}"#),
+        ] {
+            storage
+                .set_batch(Map::from_iter([(LEGAL_CONSENT_KEY.to_string(), invalid)]))
+                .expect_err("invalid legal consent must be rejected");
+            assert_eq!(storage.all().get(LEGAL_CONSENT_KEY), Some(&valid));
         }
 
         let _ = fs::remove_dir_all(root);

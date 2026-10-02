@@ -8,6 +8,7 @@ import {
   type FusionPlacement,
   type FusionPoint,
   type FusionViewport,
+  type FusionSurfaceSize,
 } from "./geometry";
 import {
   beginFusionSpatialTurn,
@@ -36,7 +37,6 @@ function isEditableTarget(target: EventTarget | null) {
 
 export type FusionModeController = {
   visible: boolean;
-  positioning: boolean;
   summonVersion: number;
   composerPoint: FusionPoint;
   turnAnchor: FusionPoint | null;
@@ -45,10 +45,7 @@ export type FusionModeController = {
   bubblePlacement: FusionPlacement;
   viewport: FusionViewport;
   summonAt: (point?: FusionPoint) => void;
-  beginPositioning: () => void;
-  cancelPositioning: () => void;
   dismissComposer: () => void;
-  pickPosition: (point: FusionPoint) => void;
   freezeTurnAnchor: (runId?: string, selectionObjectNames?: readonly string[]) => string;
   clearTurnAnchor: () => void;
   synchronizeTurns: (messages: readonly FusionMessageIdentity[], status: FusionChatStatus) => void;
@@ -60,6 +57,7 @@ export type FusionModeController = {
   completeActiveTurn: () => void;
   continueAtTurn: (turnId: string) => void;
   resetTurns: () => void;
+  measureComposer: (size: FusionSurfaceSize) => void;
   startDragging: (event: ReactPointerEvent<HTMLElement>) => void;
   moveDragging: (event: ReactPointerEvent<HTMLElement>) => void;
   stopDragging: (event: ReactPointerEvent<HTMLElement>) => void;
@@ -67,7 +65,6 @@ export type FusionModeController = {
 
 export function useFusionModeController(enabled: boolean): FusionModeController {
   const [visible, setVisible] = useState(true);
-  const [positioning, setPositioning] = useState(false);
   const [summonVersion, setSummonVersion] = useState(0);
   const [viewportSize, setViewportSize] = useState<FusionViewport>(() => viewport());
   const [composerPoint, setComposerPoint] = useState<FusionPoint>(() => defaultFusionPoint(viewport()));
@@ -75,11 +72,20 @@ export function useFusionModeController(enabled: boolean): FusionModeController 
   const [spatialState, setSpatialState] = useState(EMPTY_FUSION_SPATIAL_STATE);
   const latestPointerRef = useRef<FusionPoint | null>(null);
   const dragRef = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null);
+  const composerSizeRef = useRef<FusionSurfaceSize>({ width: FUSION_COMPOSER_WIDTH, height: FUSION_COMPOSER_HEIGHT });
+  const automaticPlacementRef = useRef(true);
+
+  const measureComposer = useCallback((size: FusionSurfaceSize) => {
+    composerSizeRef.current = size;
+    setComposerPoint((point) => automaticPlacementRef.current
+      ? defaultFusionPoint(viewport(), size)
+      : clampFusionPoint(point, viewport(), size));
+  }, []);
 
   const summonAt = useCallback((point?: FusionPoint) => {
-    setComposerPoint(clampFusionPoint(point ?? latestPointerRef.current ?? defaultFusionPoint(viewport()), viewport()));
+    automaticPlacementRef.current = false;
+    setComposerPoint(clampFusionPoint(point ?? latestPointerRef.current ?? defaultFusionPoint(viewport(), composerSizeRef.current), viewport(), composerSizeRef.current));
     setVisible(true);
-    setPositioning(false);
     setSummonVersion((version) => version + 1);
   }, []);
 
@@ -93,10 +99,7 @@ export function useFusionModeController(enabled: boolean): FusionModeController 
     const handleShortcut = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         if (event.defaultPrevented || document.querySelector('[role="menu"], [role="listbox"]')) return;
-        if (positioning) {
-          event.preventDefault();
-          setPositioning(false);
-        } else if (visible) {
+        if (visible) {
           event.preventDefault();
           setVisible(false);
         } else {
@@ -114,17 +117,18 @@ export function useFusionModeController(enabled: boolean): FusionModeController 
       globalThis.removeEventListener("pointermove", trackPointer);
       globalThis.removeEventListener("keydown", handleShortcut);
     };
-  }, [enabled, positioning, summonAt, visible]);
+  }, [enabled, summonAt, visible]);
 
   useEffect(() => {
     if (!enabled) {
-      setPositioning(false);
       dragRef.current = null;
       return;
     }
     const handleResize = () => {
       setViewportSize(viewport());
-      setComposerPoint((point) => clampFusionPoint(point, viewport()));
+      setComposerPoint((point) => automaticPlacementRef.current
+        ? defaultFusionPoint(viewport(), composerSizeRef.current)
+        : clampFusionPoint(point, viewport(), composerSizeRef.current));
       setTurnAnchor((point) => point ? clampFusionPoint(point, viewport()) : null);
       setSpatialState((state) => clampFusionTurnAnchors(
         state,
@@ -136,7 +140,6 @@ export function useFusionModeController(enabled: boolean): FusionModeController 
     return () => globalThis.removeEventListener("resize", handleResize);
   }, [enabled]);
 
-  const pickPosition = useCallback((point: FusionPoint) => summonAt(point), [summonAt]);
   const freezeTurnAnchor = useCallback((runId = `fusion-run:${crypto.randomUUID()}`, selectionObjectNames: readonly string[] = []) => {
     setTurnAnchor(composerPoint);
     setSpatialState((state) => beginFusionSpatialTurn(state, { id: runId, anchor: composerPoint, selectionObjectNames }));
@@ -153,11 +156,15 @@ export function useFusionModeController(enabled: boolean): FusionModeController 
 
   const startDragging = useCallback((event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0) return;
+    automaticPlacementRef.current = false;
+    const bounds = event.currentTarget.closest("[data-fusion-composer]")?.getBoundingClientRect();
+    const origin = bounds ? { x: bounds.left + bounds.width / 2, y: bounds.top } : composerPoint;
+    setComposerPoint(origin);
     event.currentTarget.setPointerCapture(event.pointerId);
     dragRef.current = {
       pointerId: event.pointerId,
-      offsetX: event.clientX - composerPoint.x,
-      offsetY: event.clientY - composerPoint.y,
+      offsetX: event.clientX - origin.x,
+      offsetY: event.clientY - origin.y,
     };
   }, [composerPoint]);
 
@@ -167,7 +174,7 @@ export function useFusionModeController(enabled: boolean): FusionModeController 
     setComposerPoint(clampFusionPoint({
       x: event.clientX - drag.offsetX,
       y: event.clientY - drag.offsetY,
-    }, viewport(), { width: FUSION_COMPOSER_WIDTH, height: FUSION_COMPOSER_HEIGHT }));
+    }, viewport(), composerSizeRef.current));
   }, []);
 
   const stopDragging = useCallback((event: ReactPointerEvent<HTMLElement>) => {
@@ -179,15 +186,14 @@ export function useFusionModeController(enabled: boolean): FusionModeController 
   const continueAtTurn = useCallback((turnId: string) => {
     const turn = spatialState.turns.find((candidate) => candidate.id === turnId && !candidate.dismissed);
     if (!turn || turn.status === "active") return;
-    setComposerPoint(clampFusionPoint(turn.anchor, viewport()));
+    automaticPlacementRef.current = false;
+    setComposerPoint(clampFusionPoint(turn.anchor, viewport(), composerSizeRef.current));
     setVisible(true);
-    setPositioning(false);
     setSummonVersion((version) => version + 1);
   }, [spatialState.turns]);
 
   return {
     visible,
-    positioning,
     summonVersion,
     composerPoint,
     turnAnchor,
@@ -196,10 +202,7 @@ export function useFusionModeController(enabled: boolean): FusionModeController 
     bubblePlacement: fusionBubblePlacement(turnAnchor ?? composerPoint, viewport()),
     viewport: viewportSize,
     summonAt,
-    beginPositioning: () => setPositioning(true),
-    cancelPositioning: () => setPositioning(false),
     dismissComposer: () => setVisible(false),
-    pickPosition,
     freezeTurnAnchor,
     clearTurnAnchor: () => setTurnAnchor(null),
     synchronizeTurns,
@@ -214,6 +217,7 @@ export function useFusionModeController(enabled: boolean): FusionModeController 
       setTurnAnchor(null);
       setSpatialState(EMPTY_FUSION_SPATIAL_STATE);
     },
+    measureComposer,
     startDragging,
     moveDragging,
     stopDragging,

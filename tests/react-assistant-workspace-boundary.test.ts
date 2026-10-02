@@ -48,9 +48,25 @@ describe("assistant workspace boundaries", () => {
     expect(onboarding).toContain("export const ONBOARDING_TOUR_VERSION = 3;");
     expect(fusionSurface).toContain("<FusionAssistantOverlays");
     expect(overlays).toContain("<ConversationDrawer");
-    expect(overlays).toContain("<BlackboardDrawer");
+    expect(overlays).toContain("<BlackboardPanel");
     expect(overlays).toContain("<FusionViewportCard");
     expect(overlays).toContain("<FusionOnboardingTour");
+  });
+
+  test("adds composer-style panel shadow without dimming the canvas behind fusion history", () => {
+    const history = readFileSync(join(rendererRoot, "components/ConversationDrawer.tsx"), "utf8");
+    expect(history).toContain('bgcolor: viewport ? "transparent" : "rgba(15, 23, 42, 0.22)"');
+    expect(history).toContain("boxShadow: FLOATING_SURFACE_ELEVATION");
+    expect(history).toContain('data-fusion-panel={viewport ? "history" : undefined}');
+  });
+
+  test("lets fusion blackboard use the shared card shadow without adding a modal veil", () => {
+    const overlays = readFileSync(join(workspaceRoot, "FusionAssistantOverlays.tsx"), "utf8");
+    const styles = readFileSync(join(rendererRoot, "styles.css"), "utf8");
+    expect(overlays).not.toContain("<BlackboardDrawer");
+    expect(overlays).toContain('className="geochat-blackboard geochat-blackboard--fusion"');
+    expect(styles).toContain(".geochat-blackboard:not(.geochat-blackboard--fusion) {\n  box-shadow: var(--app-floating-shadow)");
+    expect(styles).not.toContain(".geochat-blackboard--fusion {\n  box-shadow: none !important;");
   });
 
   test("separates session, model, submission, panel and surface responsibilities", () => {

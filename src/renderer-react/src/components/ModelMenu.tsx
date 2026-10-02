@@ -3,6 +3,7 @@ import { Box, ButtonBase, Divider, ListItemIcon, ListItemText, MenuItem, MenuLis
 import { motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { FLOATING_SURFACE_ELEVATION } from "../theme";
 import { AGENT_PROVIDER_REGISTRY } from "@geochat-ai/app/model-registry";
 import type { RuntimeModelOption } from "../features/models/modelCatalog";
 
@@ -166,7 +167,7 @@ export function ModelMenu({ value, models, disabled, thinkingEnabled, thinkingSu
         sx={{ zIndex: (theme) => theme.zIndex.tooltip }}
       >
         <MotionPaper
-          elevation={6}
+          elevation={FLOATING_SURFACE_ELEVATION}
           initial={{ opacity: 0, y: 4, scale: 0.96 }}
           animate={open ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: 4, scale: 0.96 }}
           transition={{ duration: 0.16, ease: "easeOut" }}

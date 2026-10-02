@@ -3,7 +3,7 @@ use std::fmt;
 
 /// Stable, redacted failures exposed across the credential boundary.
 ///
-/// Platform errors are intentionally collapsed into these codes. They may
+/// File-system errors are intentionally collapsed into these codes. They may
 /// contain credential-store details (and, for malformed entries, raw bytes),
 /// so their messages must never cross the command or logging boundary.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -15,7 +15,6 @@ pub(crate) enum CredentialError {
     NotFound,
     CorruptEntry,
     UnsupportedVersion,
-    StoreUnavailable,
     StoreFailure,
 }
 
@@ -29,7 +28,6 @@ impl CredentialError {
             Self::NotFound => "credential_not_found",
             Self::CorruptEntry => "credential_corrupt_entry",
             Self::UnsupportedVersion => "credential_unsupported_version",
-            Self::StoreUnavailable => "credential_store_unavailable",
             Self::StoreFailure => "credential_store_failure",
         }
     }

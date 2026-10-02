@@ -25,7 +25,7 @@
   <img alt="Windows" src="https://img.shields.io/badge/Windows-supported-0078D4">
 </p>
 
-`v0.6.1` · The new Fusion Mode is enabled by default
+`v0.7.0` · The new Fusion Mode is enabled by default
 
 ## Meet GeoChat
 

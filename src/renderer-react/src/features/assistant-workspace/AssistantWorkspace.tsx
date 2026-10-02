@@ -39,12 +39,10 @@ export function AssistantWorkspace({
   canvasReady = true,
   selectionContext = { status: "unavailable", objectNames: [] },
   onRefreshSelection,
-  onConversationStarted,
 }: {
   canvasReady?: boolean;
   selectionContext?: GeoGebraSelectionContext;
   onRefreshSelection?: (reason: GeoGebraSelectionRefreshReason) => GeoGebraSelectionContext | undefined;
-  onConversationStarted?: () => void;
 }) {
   const { t, i18n } = useTranslation();
   const geogebraRuntime = useGeoGebraRuntime();
@@ -179,7 +177,6 @@ export function AssistantWorkspace({
     },
     retry,
     setError: setSubmissionError,
-    onConversationStarted,
   });
   const {
     retryFailedRun,
@@ -388,7 +385,7 @@ export function AssistantWorkspace({
           selectionContext,
           onRefreshSelection,
           activePanel: fusionPanel,
-          languageControl: <LanguageButton />,
+          languageControl: <LanguageButton tooltipPlacement="left" />,
           onPrepareSubmit: (selectionObjectNames) => { pendingFusionSelectionRef.current = selectionObjectNames; },
           onAttachmentError: (message) => {
             pendingFusionSelectionRef.current = null;

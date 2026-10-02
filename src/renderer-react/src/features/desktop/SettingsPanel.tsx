@@ -76,8 +76,9 @@ export function SettingsPanel(props: SettingsPanelProps) {
           value={tab}
           onChange={(_event, next: SettingsTab) => setTab(next)}
           orientation={verticalNavigation ? "vertical" : "horizontal"}
-          variant={verticalNavigation ? "standard" : "fullWidth"}
-          scrollButtons={false}
+          variant={verticalNavigation ? "standard" : "scrollable"}
+          scrollButtons={verticalNavigation ? false : "auto"}
+          allowScrollButtonsMobile
           aria-label={t("settings.navigationLabel")}
         >
           {TABS.map((value) => (

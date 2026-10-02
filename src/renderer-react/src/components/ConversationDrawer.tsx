@@ -13,6 +13,8 @@ import {
 } from "@mui/material";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { FLOATING_SURFACE_ELEVATION } from "../theme";
+import { FUSION_PANEL_FRAME_SX } from "../features/fusion-mode/panelLayout";
 
 export type ConversationSummary = {
   id: string;
@@ -69,7 +71,7 @@ export function ConversationDrawer({
       variant="temporary"
       ModalProps={{ keepMounted: true, disablePortal: true }}
       slotProps={{
-        backdrop: { sx: { position: "absolute", bgcolor: "rgba(15, 23, 42, 0.22)" } },
+        backdrop: { sx: { position: "absolute", bgcolor: viewport ? "transparent" : "rgba(15, 23, 42, 0.22)" } },
         paper: {
           "aria-label": t("history.title"),
           sx: {
@@ -79,9 +81,10 @@ export function ConversationDrawer({
             width: viewport ? "100%" : "fit-content",
             minWidth: viewport ? 0 : 220,
             maxWidth: viewport ? "100%" : "min(480px, calc(100% - 40px))",
+            border: viewport ? 1 : 0,
             borderRight: 1,
             borderColor: "divider",
-            boxShadow: 6,
+            boxShadow: FLOATING_SURFACE_ELEVATION,
             bgcolor: "background.paper",
             overflowX: "hidden",
             borderRadius: viewport ? 2.5 : 0,
@@ -90,7 +93,7 @@ export function ConversationDrawer({
       }}
       sx={{
         position: viewport ? "fixed" : "absolute",
-        ...(viewport ? { top: 104, right: 18, bottom: 18, left: "auto", width: "min(420px, calc(100vw - 36px))" } : { inset: 0 }),
+        ...(viewport ? FUSION_PANEL_FRAME_SX : { inset: 0 }),
         zIndex: viewport ? 1340 : 4,
         "& .MuiDrawer-paper": { position: "absolute" },
         "& .MuiModal-backdrop": { position: "absolute" },
@@ -99,7 +102,7 @@ export function ConversationDrawer({
       <Stack sx={{ height: "100%", minHeight: 0 }}>
         <Stack
           direction="row"
-          sx={{ minHeight: 56, px: 1.25, alignItems: "center", borderBottom: 1, borderColor: "divider" }}
+          sx={{ minHeight: viewport ? 52 : 56, px: viewport ? 1.5 : 1.25, alignItems: "center", borderBottom: 1, borderColor: "divider" }}
         >
           <Typography variant="subtitle2" sx={{ flex: 1, fontWeight: 800 }}>
             {t("history.title")}

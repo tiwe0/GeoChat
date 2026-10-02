@@ -1,5 +1,6 @@
 import { FolderOpenIcon } from "lucide-react";
 import { Box, Stack, Typography, FormControlLabel, Switch, Button, IconButton, MenuItem, TextField, Tooltip } from "@mui/material";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { DesktopLogLevel } from "../../../../../shared/desktop-api";
 import { UpdateSection } from "../UpdateSection";
@@ -10,6 +11,8 @@ import { ProblemBankCacheSettings } from "./ProblemBankCacheSettings";
 import { SettingsDisclosure } from "./SettingsDisclosure";
 import { SettingsSection } from "./SettingsSection";
 import { InteractionModeSettings } from "../../fusion-mode/InteractionModeSettings";
+import { LegalAgreementDialog } from "../../legal/LegalAgreementDialog";
+import { getLegalCopy } from "../../legal/legalDocuments";
 
 const LOG_LEVELS: DesktopLogLevel[] = ["error", "warn", "info", "debug", "trace"];
 
@@ -25,12 +28,29 @@ export function GeneralSettings({ mcp, onRestartTour }: { mcp: McpController; on
         <InteractionModeSettings />
       </SettingsSection>
       <TourSection onRestartTour={onRestartTour} />
+      <LegalSection />
       <UpdateSection />
       <LoggingSection />
       <McpSection mcp={mcp} />
       <ProblemBankCacheSettings />
       <GraphicsSection />
     </Box>
+  );
+}
+
+function LegalSection() {
+  const { i18n } = useTranslation();
+  const copy = getLegalCopy(i18n.resolvedLanguage ?? i18n.language);
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <SettingsSection title={copy.settingsTitle} description={copy.settingsDescription}>
+        <Button className="settings-row-action" variant="outlined" size="small" onClick={() => setOpen(true)}>
+          {copy.reviewLabel}
+        </Button>
+      </SettingsSection>
+      {open && <LegalAgreementDialog open mode="review" onClose={() => setOpen(false)} />}
+    </>
   );
 }
 

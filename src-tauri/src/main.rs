@@ -61,7 +61,7 @@ use commands::shell_update::{
     set_update_preferences,
 };
 use credential_broker::CredentialBrokerRuntime;
-use credentials::{CredentialProfile, CredentialVault, PlatformCredentialStore};
+use credentials::{CredentialVault, PlatformCredentialStore};
 use env_config::configured_string;
 use installed_client_smoke::{
     complete_pending_installed_client_update_evidence, installed_client_update_smoke_cli_enabled,
@@ -321,13 +321,8 @@ fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
         initial_graphics_state(&settings);
     logging::configure_logging(&settings.logging_preferences);
     log::info!(target: "geochat::lifecycle", "GeoChat desktop shell is starting");
-    let credential_profile = if cfg!(debug_assertions) {
-        CredentialProfile::Development
-    } else {
-        CredentialProfile::Production
-    };
     let credential_store =
-        PlatformCredentialStore::new(credential_profile).map_err(|error| error.to_string())?;
+        PlatformCredentialStore::new(&app_data_dir).map_err(|error| error.to_string())?;
     let credential_vault = Arc::new(CredentialVault::new(Arc::new(credential_store)));
     let mut renderer_storage = RendererStorage::load(&app_data_dir)?;
     let credential_state = CredentialCommandState::new(credential_vault.clone(), &app_data_dir);

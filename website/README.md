@@ -104,12 +104,18 @@ Repository variables:
 
 The `mirror` job in `.github/workflows/tauri-package.yml` runs on `v*` tags
 after the GitHub Release is published. It uploads each `.dmg` / `.exe` / `.msi`
-to `<bucket>/<prefix>/<tag>/` (immutable, cached a year), then overwrites
-`<bucket>/<prefix>/latest.json` (cached 5 minutes, written last so it never
-points at objects that are not there yet).
+to `<bucket>/<prefix>/<tag>/` (immutable, cached a year), then writes the channel
+manifest: `latest.json` for stable tags, `preview.json` for prerelease tags.
+Manifests are cached 5 minutes and written last, after every installer upload.
+Preview releases are marked as GitHub prereleases and never replace stable Latest.
 
-The download page reads `latest.json` first and falls back to the GitHub
-Releases API, then to the version baked in at build time. GitHub's
+`PREVIEW_RELEASE_TAG` in `src/site.ts` selects the featured download channel.
+With a preview tag, the page reads `preview.json`, falls back to the exact GitHub
+release tag, and displays a bilingual preview label even before JavaScript runs.
+It rejects mismatched preview tags and isolates the session cache by tag. Set the
+constant to `null` to feature stable `latest.json` and GitHub's latest endpoint.
+The offline fallback also uses the selected preview tag, not a stable version.
+GitHub's
 unauthenticated API is rate-limited per client IP, so visitors behind a busy
 NAT hit a 403 — the mirror removes that failure mode and is much faster from
 mainland China. GitHub Releases stays the source of truth: if R2 is not

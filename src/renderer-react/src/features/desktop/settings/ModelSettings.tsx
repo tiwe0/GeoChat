@@ -61,6 +61,22 @@ export type PendingCredentialCleanupState =
   | { status: "pending"; operationId: string }
   | { status: "error" };
 
+export type CredentialAvailability = "configured" | "missing" | "unavailable";
+
+export async function readCredentialAvailability(
+  desktopApi: Pick<GeoChatDesktopApi, "getProviderCredentialStatus"> | null | undefined,
+  credentialRef: string,
+): Promise<CredentialAvailability> {
+  if (!credentialRef.trim()) return "missing";
+  if (!desktopApi) return "unavailable";
+  try {
+    const status = await desktopApi.getProviderCredentialStatus(credentialRef);
+    return status.configured ? "configured" : "missing";
+  } catch {
+    return "unavailable";
+  }
+}
+
 export function credentialCleanupBlocksSave(state: PendingCredentialCleanupState): boolean {
   return state.status !== "ready";
 }
@@ -118,6 +134,8 @@ export function ModelSettings() {
   const [provider, setProvider] = useState("deepseek");
   const [apiKey, setApiKey] = useState("");
   const [credentialRef, setCredentialRef] = useState("");
+  const [credentialAvailability, setCredentialAvailability] = useState<CredentialAvailability>("missing");
+  const [checkingCredential, setCheckingCredential] = useState(false);
   const [customProvider, setCustomProvider] = useState<CustomProviderConfig>(() => readDesktopConfig().customProvider);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -169,6 +187,23 @@ export function ModelSettings() {
     setCredentialRef(credentials.credentialRef);
   }, [refreshPendingCredentialCleanup]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setCheckingCredential(Boolean(credentialRef));
+    setCredentialAvailability("missing");
+    void readCredentialAvailability(installedDesktopApi(), credentialRef).then((availability) => {
+      if (cancelled) return;
+      setCredentialAvailability(availability);
+      setCheckingCredential(false);
+      if (availability === "unavailable") {
+        logger.warn("provider_credential_status_failed", "MODEL_PROVIDER_CREDENTIAL_STATUS_FAILED", { provider });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [credentialRef, provider]);
+
   const selectProvider = useCallback((nextProvider: string) => {
     const config = readDesktopConfig();
     setProvider(nextProvider);
@@ -180,13 +215,15 @@ export function ModelSettings() {
       setCredentialRef(credentials.credentialRef);
     }
     setApiKey("");
+    setCredentialAvailability("missing");
     setSaved(false);
     resetCredentialSave();
   }, [resetCredentialSave]);
 
   const isCustom = provider === CUSTOM_AGENT_PROVIDER_ID;
+  const credentialConfigured = credentialAvailability === "configured";
   const customValidationError = isCustom
-    ? validateCustomProvider(customProvider, apiKey, readDesktopConfig().customProvider)
+    ? validateCustomProvider(customProvider, apiKey, readDesktopConfig().customProvider, credentialConfigured)
     : null;
 
   const updateCustomProvider = useCallback((next: CustomProviderConfig) => {
@@ -213,6 +250,10 @@ export function ModelSettings() {
       const config = readDesktopConfig();
       const secret = apiKey.trim();
       if (!secret) {
+        if (!credentialConfigured) {
+          setCredentialSave({ status: "invalid", message: t("settings.keyReentryRequired") });
+          return;
+        }
         if (isCustom && customProvider.credentialRef) {
           await updateDesktopConfig((current) => ({
             ...current,
@@ -266,6 +307,7 @@ export function ModelSettings() {
       });
       const metadata = replacement.metadata;
       setCredentialRef(metadata.credentialRef);
+      setCredentialAvailability("configured");
       if (isCustom) setCustomProvider(readDesktopConfig().customProvider);
       if (replacement.cleanup.status === "retry-required") {
         await refreshPendingCredentialCleanup();
@@ -297,12 +339,12 @@ export function ModelSettings() {
     } finally {
       setSaving(false);
     }
-  }, [apiKey, customProvider, isCustom, pendingCleanup, probing, provider, refreshPendingCredentialCleanup, saving, t]);
+  }, [apiKey, credentialConfigured, customProvider, isCustom, pendingCleanup, probing, provider, refreshPendingCredentialCleanup, saving, t]);
 
   const probe = useCallback(async () => {
     if (saving || probing || credentialCleanupBlocksSave(pendingCleanup)) return;
     const secret = apiKey.trim();
-    if (!secret && !credentialRef) return;
+    if (!secret && !credentialConfigured) return;
     const desktopApi = installedDesktopApi();
     if (!desktopApi) {
       setCredentialSave({ status: "invalid", message: "Native credential storage is unavailable." });
@@ -348,7 +390,7 @@ export function ModelSettings() {
     } finally {
       setProbing(false);
     }
-  }, [apiKey, credentialRef, customProvider.baseUrl, customProvider.protocol, isCustom, pendingCleanup, probing, provider, refreshPendingCredentialCleanup, saving, t]);
+  }, [apiKey, credentialConfigured, credentialRef, customProvider.baseUrl, customProvider.protocol, isCustom, pendingCleanup, probing, provider, refreshPendingCredentialCleanup, saving, t]);
 
   const retryCredentialCleanup = useCallback(async () => {
     if (saving || probing) return;
@@ -426,14 +468,15 @@ export function ModelSettings() {
 
         <ApiKeyField
           apiKey={apiKey}
-          configured={Boolean(credentialRef)}
+          configured={credentialConfigured}
           credentialSave={credentialSave}
           disabled={saving || probing}
           probing={probing}
           probeDisabled={
             credentialCleanupBlocksSave(pendingCleanup)
+            || checkingCredential
             || credentialSave.status === "cleanup-required"
-            || (!apiKey.trim() && (!credentialRef || (isCustom && customValidationError === "apiKeyRequired")))
+            || (!apiKey.trim() && (!credentialConfigured || (isCustom && customValidationError === "apiKeyRequired")))
           }
           onProbe={() => void probe()}
           onRetryCleanup={() => {
@@ -447,6 +490,12 @@ export function ModelSettings() {
             resetCredentialSave();
           }}
         />
+
+        {credentialRef && credentialAvailability === "missing" && !checkingCredential ? (
+          <Typography variant="body2" color="warning.main">
+            {t("settings.keyReentryRequired")}
+          </Typography>
+        ) : null}
 
         {pendingCleanup.status === "error" ? (
           <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
@@ -614,10 +663,11 @@ export function ModelSettings() {
           onClick={() => void save()}
           disabled={
             saving || probing
+            || checkingCredential
             || saved
             || credentialSave.status === "cleanup-required"
             || credentialCleanupBlocksSave(pendingCleanup)
-            || (!apiKey.trim() && !credentialRef)
+            || (!apiKey.trim() && !credentialConfigured)
             || (isCustom && customValidationError !== null)
           }
           sx={{ minWidth: 120 }}
@@ -713,6 +763,7 @@ function validateCustomProvider(
   value: CustomProviderConfig,
   newSecret: string,
   persisted: CustomProviderConfig,
+  credentialConfigured: boolean,
 ): CustomValidationError {
   if (!value.name.trim()) return "nameRequired";
   if (!isValidProviderEndpoint(value.baseUrl)) return "baseUrlInvalid";
@@ -720,7 +771,7 @@ function validateCustomProvider(
     value.baseUrl.trim() !== persisted.baseUrl.trim()
     || value.protocol !== persisted.protocol
   );
-  if ((!value.credentialRef.trim() || bindingChanged) && !newSecret.trim()) return "apiKeyRequired";
+  if ((!credentialConfigured || bindingChanged) && !newSecret.trim()) return "apiKeyRequired";
   if (!value.models.length) return "modelRequired";
   if (value.models.some((model) => !model.name.trim() || !model.callName.trim())) return "modelFieldsRequired";
   const callNames = value.models.map((model) => model.callName.trim());

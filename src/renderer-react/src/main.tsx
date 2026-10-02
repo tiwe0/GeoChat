@@ -16,6 +16,7 @@ import { desktopLogger } from "./features/desktop/desktopLogger";
 import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import { bootstrapRendererStorage } from "./renderer-storage-bootstrap";
 import { StartupFailure } from "./components/StartupFailure";
+import { LegalAgreementGate } from "./features/legal/LegalAgreementGate";
 
 const logger = createStructuredLogger("renderer.bootstrap");
 
@@ -38,7 +39,9 @@ async function bootstrap() {
       <ThemeProvider theme={copilotTheme}>
         <CssBaseline />
         <MotionConfig reducedMotion="user">
-          <App />
+          <LegalAgreementGate onExit={() => import("@tauri-apps/api/window").then(({ getCurrentWindow }) => getCurrentWindow().close())}>
+            <App />
+          </LegalAgreementGate>
         </MotionConfig>
       </ThemeProvider>
     </CacheProvider>,

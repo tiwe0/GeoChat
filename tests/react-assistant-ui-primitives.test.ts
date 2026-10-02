@@ -51,19 +51,15 @@ describe("assistant-ui shared primitives", () => {
     expect(source).toContain("<AssistantProcessGroup indices={part.indices} status={part.status}>{children}</AssistantProcessGroup>");
   });
 
-  test("provides shared thread and runtime-by-id primitives with injectable styling", () => {
+  test("provides the shared thread with injectable styling and message filtering", () => {
     const source = readFileSync(join(root, "GeoChatThread.tsx"), "utf8");
     expect(source).toContain("<ThreadPrimitive.Root");
     expect(source).toContain("<ThreadPrimitive.Viewport");
     expect(source).toContain("<ThreadPrimitive.Messages>");
     expect(source).toContain("<AuiIf condition={(state) => state.thread.isEmpty}");
     expect(source).not.toContain("<ThreadPrimitive.Empty>");
-    expect(source).toContain("<ThreadPrimitive.Unstable_MessageById");
-    expect(source).toContain("messageId={messageId}");
-    expect(source).toContain("<MessagePrimitive.PartByIndex");
-    expect(source).toContain("index={partIndex}");
+    expect(source).not.toContain("<ThreadPrimitive.Unstable_MessageById");
     expect(source).toContain("renderMessage ? renderMessage(message) : defaultMessage(message)");
-    expect(source).toContain("const components = useMemo");
     expect(source).toContain("classNames.userMessage");
     expect(source).toContain("classNames.assistantMessage");
     expect(source).toContain('surface = "window"');

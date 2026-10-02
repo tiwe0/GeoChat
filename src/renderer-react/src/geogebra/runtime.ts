@@ -1,4 +1,5 @@
 import { createContext, createElement, useContext, type ReactNode } from "react";
+import type { GeoGebraCanvasControls } from "./canvas-controls";
 import type { CanvasTransactionOptions } from "./canvas-transactions";
 
 export type GeoGebraTransactionExecute = (toolName: string, args: unknown) => Promise<unknown>;
@@ -9,6 +10,8 @@ export type GeoGebraTransactionExecute = (toolName: string, args: unknown) => Pr
  */
 export interface GeoGebraRuntimePort {
   readonly ready: boolean;
+  /** Optional shell-owned controls for applets that expose the public Apps API. */
+  readonly canvasControls?: GeoGebraCanvasControls;
   executeTool(toolName: string, args: unknown): Promise<unknown>;
   runCanvasTransaction<T>(
     options: CanvasTransactionOptions,

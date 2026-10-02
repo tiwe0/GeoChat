@@ -147,6 +147,9 @@ jobs:
       - name: Build Tauri bundles
         run: bunx tauri build --bundles "${{ matrix.bundles }}"
 
+      - name: Test native credential storage on target platform
+        run: cargo test --manifest-path src-tauri/Cargo.toml credentials::platform::tests
+
       - name: Smoke packaged layout
         env:
           GEOCHAT_TAURI_PACKAGE_EVIDENCE_PATH: .artifacts/package-smoke/layout-${{ matrix.platform }}.json
@@ -212,8 +215,14 @@ jobs:
             exit 1
           fi
 
+          release_flags=(--prerelease=false)
+          if [[ "$TAG_NAME" == *-* ]]; then
+            release_flags=(--prerelease --latest=false)
+          fi
+
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             gh release upload "$TAG_NAME" --clobber "${assets[@]}"
+            gh release edit "$TAG_NAME" "${release_flags[@]}"
             current_notes="$(gh release view "$TAG_NAME" --json body --jq '.body')"
             if [[ "$current_notes" != *'## Verification boundaries'* ]]; then
               gh release edit "$TAG_NAME" \
@@ -221,6 +230,7 @@ jobs:
             fi
           else
             gh release create "$TAG_NAME" \
+              "${release_flags[@]}" \
               --generate-notes \
               --notes "$(cat docs/release-boundaries.md)" \
               "${assets[@]}"
@@ -247,7 +257,7 @@ jobs:
       # Everything below is skipped rather than failed when R2 is not
       # configured, so the GitHub Release remains the source of truth and a
       # missing secret never blocks a release. The website falls back to the
-      # GitHub API on its own when latest.json is absent.
+      # GitHub API on its own when the selected channel manifest is absent.
       - name: Check R2 configuration
         id: config
         env:
@@ -255,8 +265,14 @@ jobs:
           ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           BUCKET: ${{ vars.R2_BUCKET }}
           DOWNLOADS_BASE: ${{ vars.DOWNLOADS_BASE_URL }}
+          TAG_NAME: ${{ github.ref_name }}
         shell: bash
         run: |
+          if [[ "$TAG_NAME" == *-* ]]; then
+            echo 'manifest=preview.json' >> "$GITHUB_OUTPUT"
+          else
+            echo 'manifest=latest.json' >> "$GITHUB_OUTPUT"
+          fi
           if [[ -n "$API_TOKEN" && -n "$ACCOUNT_ID" && -n "$BUCKET" && -n "$DOWNLOADS_BASE" ]]; then
             echo 'ready=true' >> "$GITHUB_OUTPUT"
           else
@@ -275,6 +291,7 @@ jobs:
         env:
           TAG_NAME: ${{ github.ref_name }}
           DOWNLOADS_BASE: ${{ vars.DOWNLOADS_BASE_URL }}
+          MANIFEST_NAME: ${{ steps.config.outputs.manifest }}
         shell: bash
         run: |
           node scripts/build-r2-download-manifest.mjs \
@@ -282,7 +299,7 @@ jobs:
             --tag "$TAG_NAME" \
             --base "$DOWNLOADS_BASE" \
             --repo "$GITHUB_REPOSITORY" \
-            --out release-assets/latest.json
+            --out "release-assets/$MANIFEST_NAME"
 
       - name: Upload installers and manifest to R2
         if: steps.config.outputs.ready == 'true'
@@ -292,6 +309,7 @@ jobs:
           BUCKET: ${{ vars.R2_BUCKET }}
           PREFIX: ${{ vars.R2_PREFIX || 'geochat' }}
           TAG_NAME: ${{ github.ref_name }}
+          MANIFEST_NAME: ${{ steps.config.outputs.manifest }}
         shell: bash
         run: |
           set -euo pipefail
@@ -328,11 +346,12 @@ jobs:
             exit 1
           fi
 
-          # latest.json is overwritten every release, so it gets a short TTL —
+          # Each channel manifest gets a short TTL. Preview tags never replace
+          # stable latest.json —
           # cache it for long and the download page keeps offering the previous
           # version. Uploaded last so it never points at objects that are not
           # there yet.
-          put "$BUCKET/$PREFIX/latest.json" release-assets/latest.json \
+          put "$BUCKET/$PREFIX/$MANIFEST_NAME" "release-assets/$MANIFEST_NAME" \
             'application/json' 'public, max-age=300'
 
           echo "Mirrored $uploaded installer(s) to $BUCKET/$PREFIX/$TAG_NAME/"

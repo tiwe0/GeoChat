@@ -46,19 +46,20 @@ function project(
 }
 
 describe("fusion-mode bubble projection", () => {
-  test("renders runtime messages by id without a detached MessageProvider", () => {
+  test("renders selected runtime messages through the ordinary thread", () => {
     const root = join(import.meta.dir, "../src/renderer-react/src");
     const stack = readFileSync(join(root, "features/fusion-mode/FusionBubbleStack.tsx"), "utf8");
     const thread = readFileSync(join(root, "features/assistant-ui/GeoChatThread.tsx"), "utf8");
     const parts = readFileSync(join(root, "features/assistant-ui/GeoChatMessageParts.tsx"), "utf8");
 
-    expect(stack).toContain("<GeoChatMessageById");
-    expect(stack).toContain("messageId={bubble.messageId}");
-    expect(stack).toContain("<GeoChatDisplayToolById");
+    expect(stack).toContain("<GeoChatThread");
+    expect(stack).toContain("<GeoChatMessage");
+    expect(stack).toContain("messageIds.has(message.id)");
+    expect(stack).not.toContain("<GeoChatDisplayToolById");
     expect(stack).not.toContain("MessageProvider");
     expect(stack).not.toContain("fromThreadMessageLike");
     expect(stack).not.toContain("convertToAssistantUiMessage");
-    expect(thread).toContain("<ThreadPrimitive.Unstable_MessageById");
+    expect(thread).toContain("<ThreadPrimitive.Messages>");
     expect(parts).toContain("<MessagePrimitive.GroupedParts");
     expect(parts).toContain("{({ part, children }) => {");
   });
@@ -145,7 +146,7 @@ describe("fusion-mode bubble projection", () => {
     ]);
   });
 
-  test("preserves each conversation message for the height-based stack window", () => {
+  test("preserves each conversation message for the shared queue", () => {
     const messages = [
       { id: "u1", role: "user", parts: [{ type: "text", text: "first" }] },
       { id: "a1", role: "assistant", parts: [{ type: "text", text: "answer" }] },
@@ -171,54 +172,22 @@ describe("fusion-mode bubble projection", () => {
     expect(stack).not.toContain("selectVisibleFusionBubbleIds");
   });
 
-  test("keeps transparent shell padding while scrolling only inside a complete rounded card", () => {
+  test("keeps the ordinary message styling and native scrolling with a transparent fusion viewport", () => {
     const stack = readFileSync(join(import.meta.dir, "../src/renderer-react/src/features/fusion-mode/FusionBubbleStack.tsx"), "utf8");
-    expect(stack).toContain("px: 2.5");
-    expect(stack).toContain("pb: 3");
-    expect(stack).not.toContain("height: props.maxHeight");
-    expect(stack).toContain('data-fusion-bubble-flow="true"');
-    expect(stack).toContain('overflowY: "auto"');
-    expect(stack).toContain('scrollbarWidth: "none"');
-    expect(stack).toContain('overflow: "hidden"');
-    expect(stack).not.toContain('scrollPaddingBlock: "12px 24px"');
-    expect(stack).toContain('overflow: "visible"');
-    expect(stack).toContain("maxHeight: bubbleHeightLimit");
-  });
-
-  test("animates a bounded suffix of whole cards instead of clipping the stack", () => {
-    const stack = readFileSync(join(import.meta.dir, "../src/renderer-react/src/features/fusion-mode/FusionBubbleStack.tsx"), "utf8");
-    expect(stack).not.toContain("selectVisibleFusionBubbleIds");
-    expect(stack).toContain("renderItems.map");
-    expect(stack).toContain("selectBubbleIdsForHeight");
-    expect(stack).toContain("shiftBubbleIdsForHeight");
-    expect(stack).toContain("interpolateBubbleWindowLayout");
-    expect(stack).not.toContain("visibleCapacity");
-    expect(stack).toContain('position: "absolute"');
-    expect(stack).not.toContain("flexShrink: bodyScrollable ? 1 : 0");
-    expect(stack).toContain("animate={{ y: layout.y, opacity: layout.opacity, scale: layout.scale }}");
-  });
-
-  test("reopens height-evicted history cards by scrolling the complete-card window", () => {
-    const stack = readFileSync(join(import.meta.dir, "../src/renderer-react/src/features/fusion-mode/FusionBubbleStack.tsx"), "utf8");
-    expect(stack).toContain("historyWindowIds");
-    expect(stack).toContain("advanceBubbleWindowGesture");
-    expect(stack).toContain("onWheelCapture={handleHistoryWheel}");
-    expect(stack).toContain('data-fusion-bubble-scroll="true"');
-    expect(stack).toContain("setHistoryWindowIds(sameIds(nextWindowIds, latestBubbleIds) ? null : nextWindowIds)");
-  });
-
-  test("interpolates whole-card entry and exit from the scroll edge and direction", () => {
-    const stack = readFileSync(join(import.meta.dir, "../src/renderer-react/src/features/fusion-mode/FusionBubbleStack.tsx"), "utf8");
-    expect(stack).toContain("interpolateBubbleWindowLayout");
-    expect(stack).toContain("historyGesture.progress");
-    expect(stack).toContain("height: windowLayout.height");
-    expect(stack).toContain("duration: reduceMotion || historyGesture.direction ? 0 : 0.2");
+    const styles = readFileSync(join(import.meta.dir, "../src/renderer-react/src/styles.css"), "utf8");
+    expect(stack).toContain('data-fusion-message-queue="true"');
+    expect(stack).toContain("<GeoChatThread");
+    expect(stack).toContain('event.stopPropagation()');
+    expect(stack).not.toContain("bubbleHeightWindow");
+    expect(styles).toContain("gap: 8px");
+    expect(styles).toContain("overflow-y: auto");
+    expect(styles).toContain(".geochat-assistant-thread--fusion .geochat-assistant-thread__viewport");
+    expect(styles).toContain("background: transparent");
   });
 
   test("does not render a detached connector capsule between the response and composer", () => {
     const stack = readFileSync(join(import.meta.dir, "../src/renderer-react/src/features/fusion-mode/FusionBubbleStack.tsx"), "utf8");
     const surface = readFileSync(join(import.meta.dir, "../src/renderer-react/src/features/fusion-mode/FusionModeSurface.tsx"), "utf8");
-    expect(stack).toContain('width: "min(430px, calc(100vw - 8px))"');
     expect(stack).not.toContain("connectedToComposer?: boolean");
     expect(stack).not.toContain('content: "\'\'"');
     expect(surface).not.toContain("connectedToComposer={turn.id === props.controller.activeTurnId}");

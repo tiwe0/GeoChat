@@ -66,10 +66,25 @@ describe("initial onboarding tour", () => {
     expect(workspaceSource).toContain("onRestartTour: restartOnboardingTour");
   });
 
+  test("offers localized skip controls in both modes and persists skipping as completion", () => {
+    const tooltipSource = readFileSync(new URL("../src/renderer-react/src/components/OnboardingTooltip.tsx", import.meta.url), "utf8");
+    expect(fusionTourSource).toContain('buttons: ["back", "skip", "primary"]');
+    expect(workspaceSource).toContain('buttons: ["back", "skip", "primary"]');
+    for (const source of [windowSurfaceSource, fusionTourSource]) {
+      expect(source).toContain("tooltipComponent={OnboardingTooltip}");
+      expect(source).toContain('skip: t("tour.skip")');
+      expect(source).toContain("data.status === STATUS.SKIPPED");
+    }
+    expect(tooltipSource).not.toContain("!isLastStep");
+    expect(tooltipSource).toContain("{...skipProps}");
+    expect(zhCN.tour.skip).toBe("跳过教程");
+    expect(en.tour.skip).toBe("Skip tour");
+    expect(onboardingStateSource).toContain("set(ONBOARDING_TOUR_STORAGE_KEY, ONBOARDING_TOUR_VERSION)");
+    expect(workspaceSource).toContain("onRestartTour: restartOnboardingTour");
+  });
+
   test("covers the fusion workflow without relying on the window toolbar", () => {
     for (const target of [
-      "fusion-summon",
-      "fusion-position",
       "fusion-composer",
       "fusion-model",
       "fusion-attachments",
@@ -85,6 +100,8 @@ describe("initial onboarding tour", () => {
       expect(fusionTourSource).toContain(`data-copilot-tour=\"${target}\"`);
     }
     expect(fusionTourSource).toContain("data-interaction-mode-toggle");
+    expect(fusionTourSource).not.toContain("fusion-summon");
+    expect(fusionTourSource).not.toContain("fusion-position");
   });
 
   test("localizes every new tour step in both languages", () => {

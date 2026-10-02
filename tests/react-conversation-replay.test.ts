@@ -88,6 +88,8 @@ describe("conversation canvas replay", () => {
       getXML: () => xml,
       setXML: (snapshot: string) => { xml = snapshot; },
       reset: () => { xml = "<xml>reset</xml>"; },
+      getViewProperties: () => JSON.stringify({ width: 1000, height: 600, xMin: -10, yMin: -6, invXscale: 0.02, invYscale: 0.02 }),
+      setCoordSystem: () => undefined,
       asyncEvalCommandResult: (command: string) => {
         if (command === "Bad(") return JSON.stringify({ ok: false, error: "syntax" });
         xml = `<xml>${command}</xml>`;

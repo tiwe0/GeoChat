@@ -1,5 +1,5 @@
 import { LanguagesIcon } from "lucide-react";
-import { IconButton } from "@mui/material";
+import { IconButton, Tooltip, type TooltipProps } from "@mui/material";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -15,9 +15,11 @@ type LanguageChangeTransition = (changeLanguage: () => Promise<void>) => Promise
 export function LanguageButton({
   tourId,
   transitionLanguage,
+  tooltipPlacement = "bottom",
 }: {
   tourId?: string;
   transitionLanguage?: LanguageChangeTransition;
+  tooltipPlacement?: TooltipProps["placement"];
 } = {}) {
   const { t, i18n } = useTranslation();
   const [rotation, setRotation] = useState(0);
@@ -44,11 +46,12 @@ export function LanguageButton({
   }
 
   return (
+    <Tooltip title={label} placement={tooltipPlacement} arrow>
+      <span style={{ display: "inline-flex" }}>
     <MotionIconButton
       type="button"
       size="small"
       aria-label={label}
-      title={label}
       aria-busy={switching}
       disabled={switching}
       data-copilot-tour={tourId}
@@ -69,5 +72,7 @@ export function LanguageButton({
         <LanguagesIcon size={18} />
       </motion.span>
     </MotionIconButton>
+      </span>
+    </Tooltip>
   );
 }

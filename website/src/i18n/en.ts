@@ -174,6 +174,7 @@ export const en: Content = {
     lede: "Free and open source, no account required. After installing, add your own model API key in settings and you are ready to go.",
     version: "Latest version",
     versionUnknown: "Latest version",
+    preview: "Preview",
     released: "Released {date}",
     detected: "Looks like you are on {platform}",
     otherPlatforms: "Other platforms",

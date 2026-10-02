@@ -16,6 +16,7 @@ import { Joyride, STATUS, type Step } from "react-joyride";
 import { AnimatePresence, motion } from "motion/react";
 import type { ComponentProps, PointerEvent as ReactPointerEvent, Ref } from "react";
 import { useTranslation } from "react-i18next";
+import { FLOATING_SURFACE_ELEVATION } from "../../theme";
 import { BlackboardDrawer } from "../../components/BlackboardDrawer";
 import { BrandIcon } from "../../components/BrandIcon";
 import { ConversationDrawer } from "../../components/ConversationDrawer";
@@ -406,7 +407,7 @@ export function AssistantWindowSurface(props: AssistantWindowSurfaceProps) {
           <MotionPaper
             key="problem-bank-sidecar"
             className="problem-bank-sidecar"
-            elevation={6}
+            elevation={FLOATING_SURFACE_ELEVATION}
             initial={props.reduceMotion ? { opacity: 0 } : { opacity: 0, x: 28, scale: 0.985 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={props.reduceMotion ? { opacity: 0 } : { opacity: 0, x: 24, scale: 0.985 }}
@@ -431,7 +432,6 @@ export function AssistantWindowSurface(props: AssistantWindowSurfaceProps) {
                 right: 0,
                 width: "min(88vw, 380px)",
                 zIndex: 6,
-                boxShadow: "-16px 0 42px rgba(24, 59, 36, .16)",
               },
             }}
           >

@@ -28,6 +28,7 @@ import {
   type ReactNode,
 } from "react";
 import { insertTextAtSelection } from "../chat/composerPaste";
+import { FLOATING_SURFACE_ELEVATION } from "../../theme";
 
 export type GeoChatComposerVariant = "window" | "fusion";
 
@@ -232,7 +233,7 @@ export function GeoChatComposer({
               borderRadius: isFusion ? 3 : 1.5,
               bgcolor: isFusion ? "rgba(255,255,255,0.94)" : "background.paper",
               backdropFilter: isFusion ? "blur(22px)" : undefined,
-              boxShadow: isFusion ? 8 : 0,
+              boxShadow: isFusion ? FLOATING_SURFACE_ELEVATION : 0,
               overflow: "hidden",
               transition: (theme) => theme.transitions.create(["background-color", "border-color"], { duration: 150 }),
               "[data-dragging='true'] &": { borderColor: "primary.main", bgcolor: "primary.light" },

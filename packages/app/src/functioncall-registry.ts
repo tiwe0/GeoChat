@@ -204,7 +204,7 @@ const FUNCTION_CALL_REGISTRY = {
   resetCanvas: {
     name: "resetCanvas",
     label: "重置 GeoGebra 画布",
-    description: "清空当前 GeoGebra 画布并恢复默认视图。用于开始新的独立题目、用户明确要求清空，或当前画布与本题无关时；调用后应继续读取或构造画布。",
+    description: "清空当前 GeoGebra 画布，并恢复主二维画板原点居中、横纵轴 1:1、每单位 50 像素的默认视野。用于开始新的独立题目、用户明确要求清空，或当前画布与本题无关时；调用后应继续读取或构造画布。",
     executor: "frontend",
     sideEffectLevel: "destructive",
     approvalRequired: true,
@@ -507,7 +507,7 @@ const FUNCTION_CALL_ENGLISH_OVERRIDES = {
   },
   resetCanvas: {
     label: "Reset GeoGebra canvas",
-    description: "Clear the current GeoGebra canvas and restore the default view. Use this before a new independent problem, when the user explicitly asks to clear the canvas, or when the existing canvas is unrelated to the current problem; after resetting, continue by reading or constructing the canvas.",
+    description: "Clear the current GeoGebra canvas and restore the primary 2D view with a centered origin, a 1:1 axis ratio, and 50 pixels per unit. Use this before a new independent problem, when the user explicitly asks to clear the canvas, or when the existing canvas is unrelated to the current problem; after resetting, continue by reading or constructing the canvas.",
     display: {
       label: "Reset canvas",
       running: "Resetting",

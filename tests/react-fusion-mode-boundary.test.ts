@@ -23,8 +23,8 @@ describe("fusion-mode module boundary", () => {
     expect(source).not.toContain("MessageProvider");
     expect(source).not.toContain("fromThreadMessageLike");
     expect(source).not.toContain("FusionAssistantMessage");
-    expect(source).toContain("GeoChatMessageById");
-    expect(source).toContain("GeoChatDisplayToolById");
+    expect(source).toContain("GeoChatThread");
+    expect(source).toContain("GeoChatMessage");
   });
 
   test("limits the workspace to dedicated fusion and window surface integrations", () => {
@@ -64,14 +64,79 @@ describe("fusion-mode module boundary", () => {
     expect(styles).toContain("interaction-mode-circle-reveal 900ms");
   });
 
-  test("keeps the canvas introduction visible above the initial fusion surface", () => {
+  test("stacks the fusion toolbar on the right without covering viewport panels", () => {
+    const toolbar = readFileSync(join(moduleRoot, "FusionToolbar.tsx"), "utf8");
+    const viewportCard = readFileSync(join(moduleRoot, "FusionViewportCard.tsx"), "utf8");
+    const tour = readFileSync(join(moduleRoot, "FusionOnboardingTour.tsx"), "utf8");
+    expect(toolbar).toContain('direction="column"');
+    expect(toolbar).toContain("right: 18");
+    expect(toolbar).toContain('top: "50%"');
+    expect(toolbar).toContain('transform: "translateY(-50%)"');
+    expect(toolbar).toContain('maxHeight: "calc(100dvh - 24px)"');
+    expect(toolbar).toContain('overflowY: "auto"');
+    expect(toolbar).toContain('overscrollBehavior: "contain"');
+    expect(toolbar).toContain('placement="left"');
+    expect(tour).not.toContain('placement: "bottom-end"');
+    expect(viewportCard).toContain("...FUSION_PANEL_FRAME_SX");
+    for (const drawer of ["ConversationDrawer.tsx"]) {
+      const source = readFileSync(join(import.meta.dir, "../src/renderer-react/src/components", drawer), "utf8");
+      expect(source).toContain('viewport ? FUSION_PANEL_FRAME_SX');
+    }
+  });
+
+  test("reverses the toolbar DOM and onboarding order with the window switch first", () => {
+    const toolbar = readFileSync(join(moduleRoot, "FusionToolbar.tsx"), "utf8");
+    const tour = readFileSync(join(moduleRoot, "FusionOnboardingTour.tsx"), "utf8");
+    const targets = ["fusion-settings", "fusion-language", "fusion-problem-bank", "fusion-blackboard", "fusion-transcript", "fusion-history", "fusion-new"];
+    let previousControl = toolbar.indexOf('<InteractionModeButton mode="fusion"');
+    let previousStep = tour.indexOf("[data-interaction-mode-toggle]");
+    expect(previousControl).toBeGreaterThan(-1);
+    expect(previousStep).toBeGreaterThan(-1);
+    for (const target of targets) {
+      const controlIndex = toolbar.indexOf(`data-copilot-tour="${target}"`);
+      const stepIndex = tour.indexOf(`data-copilot-tour="${target}"`);
+      expect(controlIndex).toBeGreaterThan(previousControl);
+      expect(stepIndex).toBeGreaterThan(previousStep);
+      previousControl = controlIndex;
+      previousStep = stepIndex;
+    }
+    expect(toolbar).not.toContain("column-reverse");
+  });
+
+  test("does not overlay introductory copy or its styles on the canvas", () => {
     const app = readFileSync(join(import.meta.dir, "../src/renderer-react/src/App.tsx"), "utf8");
     const styles = readFileSync(join(import.meta.dir, "../src/renderer-react/src/styles.css"), "utf8");
-    expect(app).toContain('interaction.mode === "fusion" ? " frontend-canvas-intro-fusion"');
-    expect(app).not.toContain("frontend-canvas-intro-badge");
-    expect(styles).toContain(".frontend-canvas-intro-fusion");
-    expect(styles).not.toContain(".frontend-canvas-intro-badge");
-    expect(styles).toContain("z-index: 1320");
+    expect(app).not.toContain("canvasIntro");
+    expect(styles).not.toContain("frontend-canvas-intro");
+    for (const locale of ["en.ts", "zh-CN.ts"]) {
+      const copy = readFileSync(join(import.meta.dir, "../src/renderer-react/src/i18n/locales", locale), "utf8");
+      expect(copy).not.toContain("canvasIntro:");
+    }
+    expect(app).toContain("mountGeoGebra({");
+    expect(app).toContain("<AssistantPanel");
+    expect(app).toContain('className="frontend-canvas-controls"');
+    expect(app).toContain("<GeoGebraDocumentPanel");
+    expect(app).not.toContain("toggleGeoGebraToolbar");
+    expect(app).toContain("onClick={() => void resetCanvas()}");
+  });
+
+  test("removes the native toolbar toggle but preserves document and reset controls", () => {
+    const app = readFileSync(join(import.meta.dir, "../src/renderer-react/src/App.tsx"), "utf8");
+    const styles = readFileSync(join(import.meta.dir, "../src/renderer-react/src/styles.css"), "utf8");
+    expect(app).not.toContain("WrenchIcon");
+    expect(app).not.toContain("toolbarVisible");
+    expect(app).not.toContain("setToolbarVisible");
+    expect(app).not.toContain("frontend-canvas-toolbar");
+    expect(app).toContain('className="frontend-canvas-host is-toolbar-collapsed"');
+    expect(app).toContain('className="frontend-canvas-control frontend-canvas-menu"');
+    expect(app).toContain('className="frontend-canvas-control frontend-canvas-reset"');
+    expect(app).toContain("<GeoGebraCanvasMenu");
+    expect(styles).not.toContain(".frontend-canvas-toolbar.is-active");
+    for (const locale of ["en.ts", "zh-CN.ts"]) {
+      const copy = readFileSync(join(import.meta.dir, "../src/renderer-react/src/i18n/locales", locale), "utf8");
+      expect(copy).not.toContain("showToolbar:");
+      expect(copy).not.toContain("hideToolbar:");
+    }
   });
 
   test("lets assistant-ui own submit validity before freezing a spatial turn", () => {
@@ -108,12 +173,18 @@ describe("fusion-mode module boundary", () => {
     expect(surface).toContain('canvasConnectedLabel={t("canvasStatus.canvas.ready")}');
   });
 
-  test("slides the shared canvas introduction upward after the first request", () => {
+  test("removes the canvas introduction animation and submission callback plumbing", () => {
     const app = readFileSync(join(import.meta.dir, "../src/renderer-react/src/App.tsx"), "utf8");
-    expect(app).toContain("onConversationStarted={() => setCanvasIntroVisible(false)}");
-    expect(app).toContain("y: -58");
-    expect(app).toContain('clipPath: "inset(0 0 100% 0)"');
-    expect(app).toContain("useReducedMotion");
+    const panel = readFileSync(join(import.meta.dir, "../src/renderer-react/src/components/AssistantPanel.tsx"), "utf8");
+    const submission = readFileSync(join(workspaceRoot, "useAssistantSubmission.ts"), "utf8");
+    for (const source of [app, panel, workspace, submission]) {
+      expect(source).not.toContain("onConversationStarted");
+    }
+    expect(app).not.toContain('from "motion/react"');
+    expect(app).not.toContain("useInteractionMode");
+    expect(app).not.toContain("clipPath");
+    expect(submission).toContain("input.controller.activateForSubmit({");
+    expect(submission).toContain("await input.send({ text, files }, conversationId)");
   });
 
   test("lets a completed spatial turn summon the composer at its frozen anchor", () => {
@@ -121,28 +192,54 @@ describe("fusion-mode module boundary", () => {
     const surface = readFileSync(join(moduleRoot, "FusionModeSurface.tsx"), "utf8");
     const bubbleStack = readFileSync(join(moduleRoot, "FusionBubbleStack.tsx"), "utf8");
     expect(controller).toContain("continueAtTurn");
-    expect(controller).toContain("setComposerPoint(clampFusionPoint(turn.anchor, viewport()))");
+    expect(controller).toContain("setComposerPoint(clampFusionPoint(turn.anchor, viewport(), composerSizeRef.current))");
     expect(surface).toContain("props.controller.continueAtTurn(turn.id)");
     expect(bubbleStack).toContain("props.onContinue");
   });
 
-  test("removes fusion motion and transient positioning state at accessibility boundaries", () => {
+  test("uses the shared message queue and clears transient dragging state", () => {
     const bubbleStack = readFileSync(join(moduleRoot, "FusionBubbleStack.tsx"), "utf8");
     const composer = readFileSync(join(moduleRoot, "FusionComposer.tsx"), "utf8");
     const viewportCard = readFileSync(join(moduleRoot, "FusionViewportCard.tsx"), "utf8");
     const controller = readFileSync(join(moduleRoot, "useFusionModeController.ts"), "utf8");
-    expect(bubbleStack).toContain('transition: reduceMotion ? "none"');
-    expect(bubbleStack).toContain("duration: reduceMotion || historyGesture.direction ? 0 : 0.2");
+    expect(bubbleStack).toContain("<GeoChatThread");
+    expect(bubbleStack).toContain('renderMessage={renderMessage}');
+    expect(bubbleStack).not.toContain("interpolateBubbleWindowLayout");
     expect(composer).toContain("transition={{ duration: reduceMotion ? 0 : 0.2");
     expect(viewportCard).toContain("duration: reduceMotion ? 0 : 0.22");
     expect(controller).toContain("if (!enabled)");
-    expect(controller).toContain("setPositioning(false)");
+    expect(controller).toContain("dragRef.current = null");
+    expect(controller).toContain("startDragging");
+  });
+
+  test("removes composer toolbar tools and placement state while retaining keyboard and dragging access", () => {
+    const toolbar = readFileSync(join(moduleRoot, "FusionToolbar.tsx"), "utf8");
+    const tour = readFileSync(join(moduleRoot, "FusionOnboardingTour.tsx"), "utf8");
+    const surface = readFileSync(join(moduleRoot, "FusionModeSurface.tsx"), "utf8");
+    const controller = readFileSync(join(moduleRoot, "useFusionModeController.ts"), "utf8");
+    for (const source of [toolbar, tour, surface, controller]) {
+      for (const removed of ["fusion-position", "fusion-summon", "beginPositioning", "cancelPositioning", "pickPosition", "positioning", "onSummon", "onPosition"]) {
+        expect(source).not.toContain(removed);
+      }
+    }
+    expect(controller).toContain("event.metaKey || event.ctrlKey");
+    expect(controller).toContain('event.key.toLowerCase() !== "k"');
+    expect(controller).toContain("summonAt()");
+    expect(controller).toContain('event.key === "Escape"');
+    expect(surface).toContain("onDragStart={props.controller.startDragging}");
+    expect(surface).toContain("focusSignal={props.controller.summonVersion}");
+    for (const locale of ["en.ts", "zh-CN.ts"]) {
+      const copy = readFileSync(join(import.meta.dir, "../src/renderer-react/src/i18n/locales", locale), "utf8");
+      for (const removed of ["summon:", "choosePosition:", "positioningHint:", "summonTitle:", "summonDescription:", "positionTitle:", "positionDescription:"]) {
+        expect(copy).not.toContain(removed);
+      }
+    }
   });
 
   test("keeps keyboard focus inside viewport cards without trapping portaled menus", () => {
     const viewportCard = readFileSync(join(moduleRoot, "FusionViewportCard.tsx"), "utf8");
     expect(viewportCard).toContain('FocusTrap from "@mui/material/Unstable_TrapFocus"');
-    expect(viewportCard).toContain("<FocusTrap open disableRestoreFocus isEnabled={isViewportFocusTrapEnabled}>");
+    expect(viewportCard).toContain("<FocusTrap open={isPresent} disableRestoreFocus isEnabled={isViewportFocusTrapEnabled}>");
     expect(viewportCard).toContain("!document.querySelector('[role=\"menu\"], [role=\"listbox\"]')");
     expect(viewportCard).toContain("tabIndex={-1}");
     expect(viewportCard).toContain("keepViewportTabFocusInside(event)");
@@ -154,27 +251,40 @@ describe("fusion-mode module boundary", () => {
     expect(fusionPanelState).toContain("trigger.focus({ preventScroll: true })");
   });
 
-  test("keeps complete bubble cards visible while only their body scrolls without a visible scrollbar", () => {
+  test("uses the ordinary thread viewport with a transparent fusion background", () => {
     const bubbleStack = readFileSync(join(moduleRoot, "FusionBubbleStack.tsx"), "utf8");
+    const styles = readFileSync(join(import.meta.dir, "../src/renderer-react/src/styles.css"), "utf8");
     const composer = readFileSync(join(moduleRoot, "FusionComposer.tsx"), "utf8");
-    expect(bubbleStack).not.toContain('height: props.maxHeight');
-    expect(bubbleStack).toContain('data-fusion-bubble-flow="true"');
-    expect(bubbleStack).not.toContain("selectVisibleFusionBubbleIds");
-    expect(bubbleStack).toContain('overflowY: "auto"');
-    expect(bubbleStack).toContain('boxSizing: "border-box"');
-    expect(bubbleStack).toContain('overflow: "visible"');
-    expect(bubbleStack).toContain('overflow: "hidden"');
-    expect(bubbleStack).toContain('scrollbarWidth: "none"');
-    expect(bubbleStack).toContain('"&::-webkit-scrollbar": { display: "none" }');
-    expect(bubbleStack).not.toContain('scrollbarGutter: "stable"');
-    expect(bubbleStack).toContain('ref={managedScroll ? attachViewport : undefined}');
-    expect(bubbleStack).toContain('ref={managedScroll ? fusionCardScroll.contentRef : undefined}');
-    expect(bubbleStack).toContain('bubble.role !== "user"');
-    expect(bubbleStack).toContain('const outlined = bubble.role === "error" || bubble.role === "display-card"');
-    expect(bubbleStack).toContain('border: outlined ? 1 : 0');
-    expect(bubbleStack).toContain("px: 2.5");
-    expect(bubbleStack).toContain("pb: 3");
+    expect(bubbleStack).toContain('data-fusion-message-queue="true"');
+    expect(bubbleStack).toContain('messageIds.has(message.id)');
+    expect(bubbleStack).toContain('event.stopPropagation()');
+    expect(styles).toContain(".geochat-assistant-thread--fusion .geochat-assistant-thread__viewport");
+    expect(styles).toContain("background: transparent");
+    expect(styles).toContain("overscroll-behavior: contain");
     expect(composer).toContain("zIndex: FUSION_COMPOSER_Z_INDEX");
+    expect(composer).toContain("entry?.borderBoxSize?.[0]");
+    expect(composer).toContain("root.offsetHeight");
+  });
+
+  test("keeps the shaded left message container separate from the floating composer", () => {
+    const surface = readFileSync(join(moduleRoot, "FusionModeSurface.tsx"), "utf8");
+    const queueStart = surface.indexOf('data-fusion-conversation="true"');
+    expect(queueStart).toBeGreaterThan(-1);
+    const queueEnd = surface.indexOf("</Stack>", queueStart);
+    expect(queueEnd).toBeGreaterThan(queueStart);
+    const queue = surface.slice(queueStart, queueEnd);
+    expect(queue).toContain("left: FUSION_VIEWPORT_GUTTER");
+    expect(queue).toContain("bgcolor: alpha(theme.palette.background.paper, 0.96)");
+    expect(queue).toContain("boxShadow: FLOATING_SURFACE_ELEVATION");
+    expect(queue).toContain("<FusionBubbleStack");
+    expect(queue).not.toContain("<FusionComposer");
+    expect(surface.indexOf("<FusionComposer", queueEnd)).toBeGreaterThan(queueEnd);
+    expect(surface).toContain("x={composerPoint.x}");
+    expect(surface).toContain("y={composerPoint.y}");
+    expect(surface).toContain("onDragStart={props.controller.startDragging}");
+    expect(queue).toContain("width: conversationLayout.width");
+    expect(queue).toContain("bottom: conversationLayout.bottom");
+    expect(surface).toContain("onSizeChange={reportComposerSize}");
   });
 
   test("keeps the live chat state above the surface split and mounts GeoGebra only once", () => {
@@ -200,24 +310,11 @@ describe("fusion-mode module boundary", () => {
     expect(turns).not.toContain('input.chatStatus === "ready" && Boolean(group)');
   });
 
-  test("shares the follow and free-browse scroll state machine with fusion cards", () => {
+  test("delegates fusion follow behavior to the same assistant-ui viewport as window mode", () => {
     const bubbleStack = readFileSync(join(moduleRoot, "FusionBubbleStack.tsx"), "utf8");
-    expect(bubbleStack).toContain("targetKey: followBubbleId");
-    expect(bubbleStack).toContain("viewportKey: scrollOwnerBubbleId");
-    expect(bubbleStack).toContain('data-scroll-mode={managedScroll ? fusionCardScroll.mode : undefined}');
-    expect(bubbleStack).toContain('onWheelCapture={managedScroll ? fusionCardScroll.handleWheel : undefined}');
-    expect(bubbleStack).toContain('fusionCardScroll.mode !== "follow"');
-    expect(bubbleStack).toContain('props.turnStatus !== "active"');
-    expect(bubbleStack).toContain('useRef<FusionTurnStatus | undefined>(undefined)');
-    expect(bubbleStack).toContain('fusionCardScroll.followLatest()');
-    const fusionCardScroll = readFileSync(join(moduleRoot, "useFusionCardScroll.ts"), "utf8");
-    expect(fusionCardScroll).toContain('if (scrollFrameRef.current !== null) return;');
-    expect(fusionCardScroll).toContain("targetKey?: string");
-    expect(fusionCardScroll).toContain("viewportKey?: string");
-    expect(fusionCardScroll).toContain("changeMode(\"follow\")");
-    expect(fusionCardScroll).toContain("scrollToLatest, viewportKey");
-    expect(fusionCardScroll).toContain("canBrowseEarlier(event.currentTarget)");
-    expect(fusionCardScroll).not.toContain("const movedUp =");
+    expect(bubbleStack).toContain("<GeoChatThread");
+    expect(bubbleStack).not.toContain("useFusionCardScroll");
+    expect(bubbleStack).not.toContain("handleHistoryWheel");
   });
 
   test("delegates window follow behavior to the assistant-ui thread viewport", () => {

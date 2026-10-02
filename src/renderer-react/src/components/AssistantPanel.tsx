@@ -8,7 +8,6 @@ export type AssistantPanelProps = {
   canvasReady?: boolean;
   selectionContext?: GeoGebraSelectionContext;
   onRefreshSelection?: (reason: GeoGebraSelectionRefreshReason) => GeoGebraSelectionContext | undefined;
-  onConversationStarted?: () => void;
 };
 
 export function AssistantPanel(props: AssistantPanelProps) {

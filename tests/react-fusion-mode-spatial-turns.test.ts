@@ -6,8 +6,6 @@ import {
   dismissFusionTurn,
   EMPTY_FUSION_SPATIAL_STATE,
   synchronizeFusionSpatialTurns,
-  fusionTurnDisplayAnchor,
-  fusionTurnVisualOpacity,
   MAX_VISIBLE_FUSION_TURNS,
   selectVisibleFusionTurns,
   failFusionTurn,
@@ -290,7 +288,7 @@ describe("fusion spatial turns", () => {
     expect(state.activeTurnId).toBe("run-error");
   });
 
-  test("imports an existing conversation as one compact historical flow", () => {
+  test("opens an existing conversation as one expanded historical flow", () => {
     const state = synchronizeFusionSpatialTurns(EMPTY_FUSION_SPATIAL_STATE, {
       messages: [
         { id: "u1", role: "user" },
@@ -306,9 +304,48 @@ describe("fusion spatial turns", () => {
     expect(state.turns[0]).toMatchObject({
       id: "message:u1",
       messageIds: ["u1", "a1", "u2", "a2"],
-      collapsed: true,
+      collapsed: false,
       anchor: anchorB,
     });
+  });
+
+  test("preserves a manual history collapse across message synchronization", () => {
+    const input = {
+      messages: [{ id: "history-user", role: "user" as const }, { id: "history-answer", role: "assistant" as const }],
+      chatStatus: "ready" as const,
+      fallbackAnchor: anchorA,
+    };
+    const expanded = synchronizeFusionSpatialTurns(EMPTY_FUSION_SPATIAL_STATE, input);
+    const collapsed = toggleFusionTurnCollapsed(expanded, "message:history-user");
+    expect(collapsed.turns[0]?.collapsed).toBe(true);
+    expect(synchronizeFusionSpatialTurns(collapsed, input)).toBe(collapsed);
+  });
+
+  test("opens a different history expanded after the previous one was collapsed", () => {
+    let state = synchronizeFusionSpatialTurns(EMPTY_FUSION_SPATIAL_STATE, {
+      messages: [{ id: "old-user", role: "user" }, { id: "old-answer", role: "assistant" }],
+      chatStatus: "ready", fallbackAnchor: anchorA,
+    });
+    state = toggleFusionTurnCollapsed(state, "message:old-user");
+    state = synchronizeFusionSpatialTurns(state, {
+      messages: [{ id: "new-user", role: "user" }, { id: "new-answer", role: "assistant" }],
+      chatStatus: "ready", fallbackAnchor: anchorB,
+    });
+    expect(state.turns).toHaveLength(1);
+    expect(state.turns[0]).toMatchObject({ id: "message:new-user", collapsed: false, messageIds: ["new-user", "new-answer"] });
+  });
+
+  test("reopening the same history after selection resets expands all restored messages", () => {
+    const input = {
+      messages: [{ id: "same-user", role: "user" as const }, { id: "same-answer", role: "assistant" as const }],
+      chatStatus: "ready" as const, fallbackAnchor: anchorA,
+    };
+    let state = synchronizeFusionSpatialTurns(EMPTY_FUSION_SPATIAL_STATE, input);
+    state = toggleFusionTurnCollapsed(state, "message:same-user");
+    expect(state.turns[0]?.collapsed).toBe(true);
+    // Successful history selection calls resetTurns, even for the current history.
+    state = synchronizeFusionSpatialTurns(EMPTY_FUSION_SPATIAL_STATE, input);
+    expect(state.turns[0]).toMatchObject({ collapsed: false, messageIds: ["same-user", "same-answer"] });
   });
 
   test("drops anchors from another conversation when message identities are replaced", () => {
@@ -355,7 +392,7 @@ describe("fusion spatial turns", () => {
       chatStatus: "ready",
       fallbackAnchor: anchorA,
     });
-    state = toggleFusionTurnCollapsed(state, "message:u1");
+    expect(state.turns[0]?.collapsed).toBe(false);
     const collapsed = collapseLatestFusionTurn(state);
     expect(collapsed.turns).toHaveLength(1);
     expect(collapsed.turns[0]).toMatchObject({ id: "message:u1", collapsed: true });
@@ -376,33 +413,6 @@ describe("fusion spatial turns", () => {
     const visible = selectVisibleFusionTurns(turns);
     expect(visible).toHaveLength(MAX_VISIBLE_FUSION_TURNS);
     expect(visible.map((turn) => turn.id)).toEqual(["turn-2", "turn-4", "turn-5"]);
-  });
-
-  test("fades older floating windows progressively and keeps active work opaque", () => {
-    expect([
-      fusionTurnVisualOpacity(0, 3, false),
-      fusionTurnVisualOpacity(1, 3, false),
-      fusionTurnVisualOpacity(2, 3, false),
-    ]).toEqual([0.44, 0.72, 1]);
-    expect(fusionTurnVisualOpacity(0, 3, true)).toBe(1);
-  });
-
-  test("attaches only the current turn window to the moving composer", () => {
-    const composerPoint = { x: 640, y: 620 };
-    const current = {
-      id: "turn-current",
-      anchor: anchorA,
-      messageIds: [],
-      selectionObjectNames: [],
-      status: "completed" as const,
-      collapsed: false,
-      pinned: false,
-      dismissed: false,
-      createdAt: 2,
-    };
-    const older = { ...current, id: "turn-older", anchor: anchorB, createdAt: 1 };
-    expect(fusionTurnDisplayAnchor(current, "turn-current", composerPoint)).toEqual(composerPoint);
-    expect(fusionTurnDisplayAnchor(older, "turn-current", composerPoint)).toEqual(anchorB);
   });
 
   test("moves a failed turn through native retry and explicit stop states", () => {

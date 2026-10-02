@@ -553,7 +553,6 @@ fn broker_error(error: CredentialError) -> (u16, &'static str) {
             (400, "invalid_request")
         }
         CredentialError::NotFound => (404, "credential_not_found"),
-        CredentialError::StoreUnavailable => (503, "credential_store_unavailable"),
         _ => (502, "credential_resolution_failed"),
     }
 }

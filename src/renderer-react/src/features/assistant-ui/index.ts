@@ -18,8 +18,6 @@ export {
 } from "./messageAdapter";
 export {
   GeoChatMessage,
-  GeoChatMessageById,
-  GeoChatDisplayToolById,
   GeoChatThread,
   type GeoChatMessageProps,
   type GeoChatThreadClassNames,

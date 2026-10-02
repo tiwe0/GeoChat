@@ -9,7 +9,7 @@ pub(crate) use error::CredentialError;
 pub(crate) use lifecycle_journal::{CredentialLifecycleJournal, CredentialLifecycleOperation};
 #[cfg(test)]
 pub(crate) use memory::InMemoryCredentialStore;
-pub(crate) use platform::{CredentialProfile, PlatformCredentialStore};
+pub(crate) use platform::PlatformCredentialStore;
 pub(crate) use store::CredentialStore;
 
 use serde::{Deserialize, Deserializer, Serialize};
@@ -20,9 +20,8 @@ use zeroize::Zeroizing;
 
 const CREDENTIAL_SCHEMA_VERSION: u32 = 1;
 const MAX_PROVIDER_LENGTH: usize = 128;
-// Windows Credential Manager's generic credential blob limit is 2,560 bytes.
-// The complete versioned envelope (not just the provider key) must fit.
-const MAX_STORED_ENVELOPE_BYTES: usize = 2_560;
+// Bound the complete envelope before it is written to the private config file.
+const MAX_STORED_ENVELOPE_BYTES: usize = 16 * 1024;
 const SUPPORTED_PROTOCOLS: [&str; 3] = ["openai-compatible", "anthropic", "google"];
 
 /// Secret-bearing value with redacted formatting, no serialization support,
@@ -199,10 +198,9 @@ impl CredentialVault {
         self.store.delete(credential_ref)
     }
 
-    /// Keychain and Credential Manager do not provide a portable service-wide
-    /// enumeration through keyring's v1 API. Callers therefore supply the
-    /// references already present in non-secret configuration; missing entries
-    /// are omitted and malformed/corrupt entries fail closed.
+    /// Callers supply the references already present in non-secret
+    /// configuration; missing entries are omitted and malformed/corrupt
+    /// entries fail closed.
     pub(crate) fn list_metadata(
         &self,
         credential_refs: &[String],
@@ -548,19 +546,18 @@ mod tests {
     }
 
     #[test]
-    fn complete_envelope_respects_windows_credential_blob_limit() {
-        let largest_fitting_secret = (1..=MAX_STORED_ENVELOPE_BYTES)
-            .rev()
-            .find(|length| {
-                encode_envelope(
-                    &"x".repeat(*length),
-                    "deepseek",
-                    "openai-compatible",
-                    "https://api.deepseek.com/v1",
-                )
-                .is_ok()
-            })
-            .expect("a non-empty secret should fit");
+    fn complete_envelope_respects_file_entry_limit() {
+        let empty_envelope_bytes = encode_envelope(
+            "x",
+            "deepseek",
+            "openai-compatible",
+            "https://api.deepseek.com/v1",
+        )
+        .unwrap()
+        .expose_secret()
+        .len()
+            - 1;
+        let largest_fitting_secret = MAX_STORED_ENVELOPE_BYTES - empty_envelope_bytes;
         let encoded = encode_envelope(
             &"x".repeat(largest_fitting_secret),
             "deepseek",

@@ -21,6 +21,9 @@ logs/
 docs/local/
 *.local.json
 *.local-generated-key.json
+**/provider-credentials.json
+**/.provider-credentials.json-*.tmp
+**/.provider-credentials.lock
 .DS_Store
 .env
 .env.*

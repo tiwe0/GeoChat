@@ -3,7 +3,7 @@ import { fill, useContent, useLocale } from "../i18n";
 import { formatBytes, type Platform } from "../lib/platform";
 import { usePlatform } from "../lib/usePlatform";
 import { assetsFor, useLatestRelease, type ReleaseAsset } from "../lib/release";
-import { ACTIONS_URL, REPO_URL, RELEASES_URL } from "../site";
+import { ACTIONS_URL, REPO_URL, FEATURED_RELEASE_URL, PREVIEW_RELEASE_TAG } from "../site";
 import { useDocumentMeta } from "../lib/useDocumentMeta";
 
 const KIND_LABEL: Record<ReleaseAsset["kind"], string> = {
@@ -53,6 +53,11 @@ export function Download() {
               </p>
 
               <p className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.8125rem] text-ink-soft">
+                {PREVIEW_RELEASE_TAG ? (
+                  <span className="font-mono text-ochre-ink">
+                    {t.download.preview} {PREVIEW_RELEASE_TAG}
+                  </span>
+                ) : null}
                 {release ? (
                   <>
                     <span className="font-mono text-ink">
@@ -74,7 +79,7 @@ export function Download() {
                 <p className="mt-3 text-[0.8125rem] text-ochre-ink">
                   {t.download.error}{" "}
                   <a
-                    href={RELEASES_URL}
+                    href={FEATURED_RELEASE_URL}
                     target="_blank"
                     rel="noreferrer noopener"
                     className="underline decoration-from-font underline-offset-2 hover:text-ink"
@@ -289,7 +294,7 @@ function PlatformRow({
             ))
           ) : platform === "linux" ? null : (
             <a
-              href={RELEASES_URL}
+              href={FEATURED_RELEASE_URL}
               target="_blank"
               rel="noreferrer noopener"
               className="rounded-[9px] border border-rule-strong px-5 py-3 text-[0.875rem] font-medium text-ink transition-colors hover:border-ink hover:bg-paper-sunk"

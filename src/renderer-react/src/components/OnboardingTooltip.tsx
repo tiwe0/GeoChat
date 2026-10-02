@@ -5,7 +5,7 @@ import type { TooltipRenderProps } from "react-joyride";
 type ButtonPropsWithChildren = { children?: ReactNode };
 
 /** Joyride tooltip with a short step-to-step transition that matches the panel UI. */
-export function OnboardingTooltip({ backProps, index, isLastStep, primaryProps, skipProps, step, tooltipProps }: TooltipRenderProps) {
+export function OnboardingTooltip({ backProps, index, primaryProps, skipProps, step, tooltipProps }: TooltipRenderProps) {
   const primaryButton = primaryProps as typeof primaryProps & ButtonPropsWithChildren;
   const skipButton = skipProps as typeof skipProps & ButtonPropsWithChildren;
   const backButton = backProps as typeof backProps & ButtonPropsWithChildren;
@@ -32,7 +32,7 @@ export function OnboardingTooltip({ backProps, index, isLastStep, primaryProps, 
       {buttons.some((button) => button === "back" || button === "primary" || button === "skip") && (
         <div style={styles.tooltipFooter}>
           <div style={styles.tooltipFooterSpacer}>
-            {buttons.includes("skip") && !isLastStep && <button type="button" style={styles.buttonSkip} {...skipProps}>{skipButton.children}</button>}
+            {buttons.includes("skip") && <button type="button" style={styles.buttonSkip} {...skipProps}>{skipButton.children}</button>}
           </div>
           {buttons.includes("back") && index > 0 && <button type="button" style={styles.buttonBack} {...backProps}>{backButton.children}</button>}
           {buttons.includes("primary") && <button type="button" style={styles.buttonPrimary} {...primaryProps}>{primaryButton.children}</button>}

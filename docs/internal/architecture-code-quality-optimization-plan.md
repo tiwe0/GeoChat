@@ -1,7 +1,7 @@
 # GeoChat 架构与代码质量全面优化计划
 
 状态：已完成；Phase 0–5 均已通过本地实现与验证门禁
-最后更新：2026-09-29
+最后更新：2026-10-02
 Owner area：Desktop architecture / backend platform / renderer state
 适用范围：`/Users/ivory/Project/GeoChat` 当前 Tauri + React + Bun + SQLite 桌面项目
 不适用范围：兄弟仓库 `GeoChatDesktop`、官网视觉改版、未明确授权的线上发布
@@ -12,7 +12,7 @@ Owner area：Desktop architecture / backend platform / renderer state
 | 阶段 | 状态 | 当前证据边界 |
 | --- | --- | --- |
 | Phase 0：安全边界 | 已完成 | loopback API 鉴权、严格 CORS、CSP/provider 响应边界已有回归测试 |
-| Phase 1：凭据与配置 | 已完成 | 原生凭据库、dev/prod 命名空间隔离、事务式 `renderer-state.json` 配置存储已落地 |
+| Phase 1：凭据与配置 | 已完成 | 原生进程独占的 `provider-credentials.json`、dev/prod 目录隔离、事务式 `renderer-state.json` 配置存储已落地 |
 | Phase 2：数据一致性 | 已完成 | backend/SQLite 会话与 GeoGebra 文档权威、画布事务、WebView 持久化和历史迁移运行面已删除 |
 | Phase 3：状态所有权 | 已完成 | session controller、run lease、assistant workspace 拆分及行为回归已落地 |
 | Phase 4：后端与契约 | 已完成 | native chat 最小端口、lifecycle/transport/persistence 拆分、共享 contract facade 与版本化 SQLite migration 已落地 |
@@ -94,7 +94,7 @@ Behavioral proof before release proof.
 ```text
 ┌──────────────────────────────────────────────────────────────┐
 │ Tauri shell                                                  │
-│ lifecycle · window · OS keychain · signed runtime authority │
+│ lifecycle · window · native credential file · signed runtime authority │
 └──────────────┬──────────────────────────────┬────────────────┘
                │ typed commands               │ process env
                ▼                              ▼
@@ -209,21 +209,21 @@ Phase 0 路由矩阵基线：
 
 选定架构：Tauri 是凭据唯一所有者，Bun backend 通过进程内不可见于 renderer 的本机 credential broker 按引用兑换，renderer 永远不读取明文密钥。
 
-固定实现选型：生产 Rust adapter 使用 `keyring` 4.x 的 `v1` API，并在 `Cargo.lock` 固定解析版本；macOS 后端为 Keychain Services，Windows 后端为 Windows Credential Manager。业务逻辑只依赖仓库自定义 `CredentialStore` port，单元测试注入内存 fake；不能把 `keyring-core` mock 与 `keyring::v1` 默认 store 混用。真实 Keychain/Credential Manager 只在对应平台 integration smoke 中验证，并使用专用 service/account 前缀后清理。当前桌面发布只覆盖 macOS/Windows，因此本阶段不引入 Stronghold，也不新增 Linux secret-store 分支；若以后恢复 Linux 发布支持，另立平台存储决策。参考：[keyring 4.2 API](https://docs.rs/keyring/4.2.0/keyring/)、[`v1` 平台后端](https://docs.rs/keyring/4.2.0/keyring/v1/)。
+当前实现选型：生产 Rust adapter 将密钥保存在 Tauri 应用数据目录的独立 `provider-credentials.json`，不调用系统钥匙串。业务逻辑仍只依赖仓库自定义 `CredentialStore` port，单元测试注入内存 fake。文件由原生进程读写，采用文件锁和无历史备份的原子替换；启动时清理崩溃遗留的私有临时文件。Unix 文件权限为 `0600`，损坏、宽松权限或符号链接失败关闭。密钥是本地明文，磁盘备份、同用户进程和管理员均可能读取；这是为避免系统钥匙串反复授权弹窗作出的明确产品取舍。切换前存于钥匙串的密钥不会自动导入；现有安装需在用户确认后按 GeoChat 服务名精确清理旧记录，并在设置页重新录入需要的 Key。
 
 要求：
 
-1. 定义 `CredentialStore` port（put/get/delete/exists）；生产 Tauri adapter 封装 `keyring::v1::Entry`，单元测试 adapter 是仓库内存 fake。production service 固定为 `cafe.ivory.geochat.provider`，account 使用随机 UUID `credentialRef`，不得把 provider 名或 key 片段编码进 reference。
+1. 定义 `CredentialStore` port（put/get/delete/exists）；生产 Tauri adapter 使用原生应用数据目录中的独立私有文件，单元测试 adapter 是仓库内存 fake。条目以随机 UUID `credentialRef` 索引，不得把 provider 名或 key 片段编码进 reference。
 2. renderer 只可调用 write/delete/status 命令；读取命令不注册到 Tauri invoke allowlist。可见配置仅保存 provider、model、用于展示的 base URL 和 `credentialRef`，其中 base URL 不得作为 backend 请求授权依据。
-3. keyring entry 保存不可拆分的版本化 envelope：`schemaVersion`、`secret`、`provider`、`protocol`、`canonicalBaseUrl`。`credentialRef` 与 provider/protocol/origin/base path 创建后不可变；替换密钥或 endpoint 必须创建新 reference，禁止用旧 reference 指向新目的地。
+3. 私有文件条目保存不可拆分的版本化 envelope：`schemaVersion`、`secret`、`provider`、`protocol`、`canonicalBaseUrl`。`credentialRef` 与 provider/protocol/origin/base path 创建后不可变；替换密钥或 endpoint 必须创建新 reference，禁止用旧 reference 指向新目的地。
 4. endpoint canonicalization 必须拒绝 URL credentials、fragment 与非必要 query，规范化 scheme/host/default port/base path；默认只允许 HTTPS，仅 loopback 开发 provider 可使用 HTTP。旧的远程 HTTP 配置必须失败关闭并要求重新录入，不得静默升级或继续使用。
 5. Tauri 启动仅绑定 loopback 的 credential broker，生成独立的每次启动随机 broker token，并把 broker endpoint/token 注入 Bun 子进程环境；不得注入 provider key。
 6. Bun `CredentialResolver` 仅接受 `credentialRef`，通过 broker token 兑换到请求作用域内存；broker 返回的可信 envelope 是 provider/protocol/endpoint 的唯一来源，不接受 renderer 覆写 URL、headers 或 provider。密钥不得持久化、记录或返回 renderer。broker 只接受 Bun 子进程所需的 resolve 操作，响应设置禁止缓存，并限制请求体、并发和频率。
 7. backend 必须用可信 envelope 构造最终 URL 与鉴权头，所有上游请求设置 `redirect: "error"`，每次发送前重新 resolve，不跨请求缓存 secret。chat 与模型发现 DTO 必须拒绝 legacy `apiKey`、`url`、`headers` 和 `customBaseUrl`；模型发现迁入 backend，renderer 只提交 reference 并接收规范化 model ID。
 8. create/replace/delete 由 Tauri command 执行；delete 成功后 reference 立即失效，Bun 不保留跨请求 key cache。若以后为性能引入缓存，必须有短 TTL、显式清零和撤销通知测试。
-9. 威胁边界明确为：防止网页 origin、renderer XSS、普通日志/配置/数据库泄露；不声称抵御已取得同用户调试、进程内存读取或操作系统管理员权限的攻击者。
+9. 威胁边界明确为：防止网页 origin、renderer XSS、普通日志、renderer 配置和数据库泄露；原生凭据文件本身含明文，不声称抵御磁盘备份读取、同用户进程、进程内存读取或操作系统管理员权限的攻击者。
 10. 新版本不读取或迁移历史明文凭据。检测到配置内嵌 `apiKey`、`secret`、`token` 或 `authorization` 时必须失败关闭，并要求用户重新录入；不得保留 migration journal、backup 或 legacy import command。
-11. production 使用 `cafe.ivory.geochat.provider`，dev 使用独立的 `cafe.ivory.geochat.provider.dev`；两个 profile 的同名 `credentialRef` 必须互不可见、互不可删除。
+11. production 与 dev 使用不同 bundle identifier 下的应用数据目录；两个 profile 的同名 `credentialRef` 必须互不可见、互不可删除。
 12. 配置引用更新必须通过串行事务：写入新 secret、验证、持久化新 reference，最后删除旧 secret；配置提交失败时删除未提交的新 secret，且其他设置写入不能复制未提交 reference。
 13. 禁止在日志、错误 ledger、migration export 和诊断包中输出密钥。
 
@@ -234,7 +234,7 @@ Phase 0 路由矩阵基线：
 - 删除 provider 凭据后 backend 无法继续调用该 provider。
 - renderer 网络请求、React state snapshot、backend 数据库和 broker 日志均不出现明文 key。
 - broker 缺 token、错误 token、未知/已删除 reference 均失败；成功响应不会跨请求缓存。
-- fixture 覆盖事务写回失败、并发配置更新、Keychain 写入成功但配置提交失败；任何失败都不留下配置可见的悬空 reference。
+- fixture 覆盖事务写回失败、并发配置更新、凭据文件写入成功但配置提交失败；任何失败都不留下配置可见的悬空 reference。
 - 日志脱敏测试覆盖常见 bearer/API key 形态。
 
 ### A4. 建立 CSP
@@ -824,7 +824,7 @@ launch app
 | 2 | verified CORS profiles + CSP baseline | B0、PR 1 |
 | 3 | provider bounded response | B0 |
 | G1 | Integration Gate I 汇合提交 | assistant-ui 完成提交、PR 1–3；这是门禁，不是可并行功能 PR |
-| 4 | Tauri `keyring` credential store + backend broker | G1 |
+| 4 | Tauri private-file credential store + backend broker | G1 |
 | 5 | renderer credentialRef + transactional config cutover | PR 4、G1 |
 | 6 | conversation authority + delete legacy WebView cache paths | G1 |
 | 7 | serialized atomic canvas replay | G1；与 PR 6 相邻改动需顺序合并 |
@@ -946,8 +946,8 @@ launch app
 ## 20. 2026-10-01 原生持久化收口
 
 应用运行期的数据所有权进一步收口为三类：业务数据以 backend SQLite 为唯一权威源；轻量
-配置与偏好写入 Tauri 应用数据目录中的 `renderer-state.json`；Provider 密钥写入操作系统安全
-凭据库。WebView 不再承担应用持久化。
+配置与偏好写入 Tauri 应用数据目录中的 `renderer-state.json`；Provider 密钥写入同目录下仅供
+原生进程访问的 `provider-credentials.json`。WebView 不再承担应用持久化。
 
 - 历史 WebView conversation/config/credential migration、journal、backup 和 import API 已全部
   删除；启动过程不会读取或复制旧 WebView 数据。仅保留当前版本损坏配置的严格、限额隔离，
@@ -956,7 +956,7 @@ launch app
   Service Worker 注册与 OPFS 被禁用。静态门禁禁止第一方模块新增 WebView 持久化路径。
 - 会话、运行内容和 GeoGebra 文档由 backend SQLite repository 独占；`renderer-state.json` 只接受
   固定白名单内的语言、模型选择、思考开关、面板、onboarding 和 installation ID 等偏好，
-  Provider secret 仅写入按 dev/prod 隔离的系统凭据库。
+  Provider secret 仅写入按 dev/prod 应用数据目录隔离的私有凭据文件。
 - `renderer-state.json` 使用原子替换、父目录同步、系统 advisory file lock、跨实例读刷新、
   单项/总量上限和 Windows 中断恢复。配置凭据引用使用单次 durable write 的独立 Promise，
   不会被前序或后续无关缓存写入错误污染提交结果。

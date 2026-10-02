@@ -75,6 +75,7 @@ const assets = files.map((file) => {
 const manifest = {
   version,
   tag,
+  prerelease: tag.includes("-"),
   publishedAt: new Date().toISOString(),
   releaseUrl: `https://github.com/${repo}/releases/tag/${tag}`,
   assets

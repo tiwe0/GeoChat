@@ -25,7 +25,7 @@
   <img alt="Windows" src="https://img.shields.io/badge/Windows-supported-0078D4">
 </p>
 
-`v0.6.1` · 默认启用全新的融合模式
+`v0.7.0` · 默认启用全新的融合模式
 
 ## 认识 GeoChat
 

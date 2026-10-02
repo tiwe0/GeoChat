@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { DOWNLOADS_BASE, FALLBACK_VERSION, RELEASES_API, RELEASES_URL } from "../site";
+import {
+  DOWNLOADS_BASE, DOWNLOAD_MANIFEST, FALLBACK_VERSION, FEATURED_RELEASE_URL,
+  PREVIEW_RELEASE_TAG, RELEASES_API, RELEASES_URL
+} from "../site";
 import type { Platform } from "./platform";
 
 export type AssetKind = "dmg" | "exe" | "msi";
@@ -29,13 +32,13 @@ export type ReleaseState =
   /** No feed answered; the page still names a version and links to Releases. */
   | { status: "error"; release: Release };
 
-const CACHE_KEY = "geochat:latest-release";
+const CACHE_KEY = `geochat:release:${PREVIEW_RELEASE_TAG ?? "stable"}`;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
 const FALLBACK: Release = {
-  version: FALLBACK_VERSION,
+  version: PREVIEW_RELEASE_TAG?.replace(/^v/, "") ?? FALLBACK_VERSION,
   publishedAt: null,
-  htmlUrl: `${RELEASES_URL}/latest`,
+  htmlUrl: FEATURED_RELEASE_URL,
   assets: [],
   source: "fallback"
 };
@@ -62,10 +65,12 @@ type MirrorAsset = {
   sha256?: unknown;
 };
 
-function parseMirror(payload: unknown): Release | null {
+export function parseMirror(payload: unknown): Release | null {
   if (typeof payload !== "object" || payload === null) return null;
   const body = payload as {
     version?: unknown;
+    tag?: unknown;
+    prerelease?: unknown;
     publishedAt?: unknown;
     releaseUrl?: unknown;
     assets?: unknown;
@@ -73,6 +78,11 @@ function parseMirror(payload: unknown): Release | null {
 
   const version = asString(body.version);
   if (!version) return null;
+  if (PREVIEW_RELEASE_TAG) {
+    if (body.tag !== PREVIEW_RELEASE_TAG || version !== PREVIEW_RELEASE_TAG.replace(/^v/, "")) return null;
+  } else if (body.prerelease === true || version.includes("-")) {
+    return null;
+  }
 
   const rawAssets = Array.isArray(body.assets) ? (body.assets as MirrorAsset[]) : [];
   const assets: ReleaseAsset[] = [];
@@ -111,17 +121,24 @@ type GithubAsset = {
   size?: unknown;
 };
 
-function parseGithub(payload: unknown): Release | null {
+export function parseGithub(payload: unknown): Release | null {
   if (typeof payload !== "object" || payload === null) return null;
   const body = payload as {
     tag_name?: unknown;
+    draft?: unknown;
+    prerelease?: unknown;
     published_at?: unknown;
     html_url?: unknown;
     assets?: unknown;
   };
 
   const tag = asString(body.tag_name);
-  if (!tag) return null;
+  if (!tag || body.draft === true) return null;
+  if (PREVIEW_RELEASE_TAG) {
+    if (tag !== PREVIEW_RELEASE_TAG || body.prerelease !== true) return null;
+  } else if (body.prerelease === true || tag.includes("-")) {
+    return null;
+  }
 
   const rawAssets = Array.isArray(body.assets) ? (body.assets as GithubAsset[]) : [];
   const assets: ReleaseAsset[] = [];
@@ -198,7 +215,7 @@ export function useLatestRelease(): ReleaseState {
       if (DOWNLOADS_BASE) {
         try {
           const payload = await fetchJson(
-            `${DOWNLOADS_BASE}/latest.json`,
+            `${DOWNLOADS_BASE}/${DOWNLOAD_MANIFEST}`,
             controller.signal
           );
           const release = parseMirror(payload);

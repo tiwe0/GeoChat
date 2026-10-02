@@ -157,13 +157,14 @@ describe("fusion assistant-ui runtime projection", () => {
     });
   });
 
-  test("renders shared assistant-ui messages by id without local providers or conversion", () => {
+  test("renders selected assistant-ui messages through the shared thread", () => {
     const root = join(import.meta.dir, "../src/renderer-react/src/features/fusion-mode");
     const stack = readFileSync(join(root, "FusionBubbleStack.tsx"), "utf8");
     const surface = readFileSync(join(root, "FusionModeSurface.tsx"), "utf8");
 
-    expect(stack).toContain("<GeoChatMessageById");
-    expect(stack).toContain("<GeoChatDisplayToolById");
+    expect(stack).toContain("<GeoChatThread");
+    expect(stack).toContain("<GeoChatMessage");
+    expect(stack).toContain("messageIds.has(message.id)");
     expect(stack).not.toContain("MessageProvider");
     expect(stack).not.toContain("fromThreadMessageLike");
     expect(stack).not.toContain("convertToAssistantUiMessage");

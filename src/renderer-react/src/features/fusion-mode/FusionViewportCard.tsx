@@ -1,8 +1,10 @@
 import { XIcon } from "lucide-react";
 import { Box, IconButton, Paper, Stack, Typography } from "@mui/material";
 import FocusTrap from "@mui/material/Unstable_TrapFocus";
-import { motion, useReducedMotion } from "motion/react";
+import { motion, useIsPresent, useReducedMotion } from "motion/react";
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
+import { FLOATING_SURFACE_ELEVATION } from "../../theme";
+import { FUSION_PANEL_FRAME_SX } from "./panelLayout";
 
 const MotionPaper = motion.create(Paper);
 const isViewportFocusTrapEnabled = () => !document.querySelector('[role="menu"], [role="listbox"]');
@@ -37,31 +39,29 @@ export function FusionViewportCard(props: {
   closeLabel: string;
   onClose: () => void;
   children: ReactNode;
-  wide?: boolean;
   hideHeader?: boolean;
   panelId: string;
+  className?: string;
 }) {
   const reduceMotion = useReducedMotion();
+  const isPresent = useIsPresent();
   return (
-    <FocusTrap open disableRestoreFocus isEnabled={isViewportFocusTrapEnabled}>
+    <FocusTrap open={isPresent} disableRestoreFocus isEnabled={isViewportFocusTrapEnabled}>
       <MotionPaper
         role="dialog"
         tabIndex={-1}
         data-fusion-panel={props.panelId}
+        className={props.className}
+        inert={!isPresent}
         aria-modal="false"
         aria-label={props.title}
-        elevation={8}
+        elevation={FLOATING_SURFACE_ELEVATION}
         initial={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 28, scale: 0.985 }}
         animate={{ opacity: 1, x: 0, scale: 1 }}
         exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 24, scale: 0.985 }}
         transition={{ duration: reduceMotion ? 0 : 0.22, ease: [0.22, 1, 0.36, 1] }}
         sx={{
-          position: "fixed",
-          top: 104,
-          right: 18,
-          bottom: 18,
-          zIndex: 1340,
-          width: props.wide ? "min(760px, calc(100vw - 36px))" : "min(420px, calc(100vw - 36px))",
+          ...FUSION_PANEL_FRAME_SX,
           minHeight: 0,
           overflow: "hidden",
           display: "flex",
@@ -70,15 +70,7 @@ export function FusionViewportCard(props: {
           borderColor: "divider",
           borderRadius: 2.5,
           bgcolor: "background.paper",
-          pointerEvents: "auto",
-          "@media (max-width: 760px)": {
-            top: "auto",
-            left: 12,
-            right: 12,
-            bottom: 12,
-            width: "auto",
-            height: "min(78vh, 720px)",
-          },
+          pointerEvents: isPresent ? "auto" : "none",
         }}
         onKeyDown={(event) => {
           if (event.key === "Escape") {

@@ -1,9 +1,15 @@
-import type { GeoGebraApi } from "./ggbdeploy-wrapper";
+import { DEFAULT_GEOGEBRA_TOOLBAR_VISIBLE, type GeoGebraApi } from "./ggbdeploy-wrapper";
 import { canvasLabels, getAppletXml, readCanvasContext, tryReadCanvasContext, type CanvasContext } from "./canvas-context";
 import { normalizeGeoGebraCommandSyntax, normalizeGeoGebraFreeParameterCommands } from "@geochat-ai/app/functioncalls";
 import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import { evaluateCommand, type CommandResult } from "./command-executor";
 import { GeoGebraAnimationRuntime, type AnimationScheduler, type GeoGebraAnimationEasing, type GeoGebraAnimationMode } from "./animation-runtime";
+import {
+  UNAVAILABLE_GEOGEBRA_CONTROLS,
+  type GeoGebraCanvasAction,
+  type GeoGebraCanvasControls,
+  type GeoGebraControlsSnapshot,
+} from "./canvas-controls";
 import {
   CanvasMutationStateUnknownError,
   CanvasTransactionCoordinator,
@@ -16,10 +22,15 @@ const logger = createStructuredLogger("geogebra.controller");
 
 const COMMAND_DELAY_MS = 0;
 const DOCUMENT_IO_TIMEOUT_MS = 15_000;
+const DEFAULT_PIXELS_PER_UNIT = 50;
 
 export class GeoGebraController {
   private api: GeoGebraApi | null = null;
   private appletEpoch = 0;
+  private controlsSnapshot: GeoGebraControlsSnapshot = UNAVAILABLE_GEOGEBRA_CONTROLS;
+  private readonly controlsListeners = new Set<() => void>();
+  private clientListenerApi: GeoGebraApi | null = null;
+  private clientListener: ((event: unknown) => void) | null = null;
   private readonly animations: GeoGebraAnimationRuntime;
   private readonly transactions = new CanvasTransactionCoordinator({
     epoch: () => this.appletEpoch,
@@ -36,17 +47,32 @@ export class GeoGebraController {
     private readonly documentIoTimeoutMs = DOCUMENT_IO_TIMEOUT_MS,
   ) {
     this.animations = new GeoGebraAnimationRuntime((object, value) => this.call("setValue", object, value), animationScheduler);
+    this.transactions.subscribeRecovery(() => this.refreshCanvasControls());
   }
+
+  readonly canvasControls: GeoGebraCanvasControls = Object.freeze({
+    getSnapshot: () => this.controlsSnapshot,
+    subscribe: (listener: () => void) => {
+      this.controlsListeners.add(listener);
+      return () => this.controlsListeners.delete(listener);
+    },
+    setToolMode: (mode: number) => this.setCanvasToolMode(mode),
+    performAction: (action: GeoGebraCanvasAction) => this.performCanvasAction(action),
+  });
 
   setApi(api: GeoGebraApi | null) {
     if (api !== this.api) {
+      this.detachCanvasControlsListener();
       this.animations.dispose();
       this.appletEpoch += 1;
       this.api = api;
       if (api) this.transactions.clearRecoveryForAppletReplacement();
+      this.attachCanvasControlsListener(api);
+      this.refreshCanvasControls();
       return;
     }
     this.api = api;
+    this.refreshCanvasControls();
   }
   get ready() { return Boolean(this.api); }
   get canvasRecoveryState(): CanvasRecoveryState | null { return this.transactions.recoveryState; }
@@ -68,15 +94,77 @@ export class GeoGebraController {
     ));
   }
 
-  setToolbarVisible(visible: boolean) {
-    if (!this.api) throw new Error("GeoGebra 画板尚未加载完成。");
-    if (typeof this.api.showToolBar !== "function") {
-      throw new Error("当前 GeoGebra applet 不提供工具栏切换 API。");
+  private async setCanvasToolMode(mode: number) {
+    if (!Number.isSafeInteger(mode) || mode < 0) {
+      throw new Error("GeoGebra 工具模式必须是非负安全整数。");
     }
-    const result = this.call("showToolBar", visible);
-    if (result === false) throw new Error("GeoGebra 拒绝了工具栏切换。");
-    this.refreshVisuals();
-    return visible;
+    this.assertCanvasControlsAvailable();
+    if (!this.controlsSnapshot.supportsToolModes) {
+      throw new Error("当前 GeoGebra applet 不提供工具模式切换 API。");
+    }
+    try {
+      await this.transactions.run({ label: "controls:set-mode" }, async (transaction) => {
+        const result = await transaction.wait(() => Promise.resolve(this.call("setMode", mode)));
+        if (result === false) throw new Error("GeoGebra 拒绝了工具模式切换。");
+      });
+    } finally {
+      this.refreshCanvasControls();
+    }
+  }
+
+  private async performCanvasAction(action: GeoGebraCanvasAction) {
+    this.assertCanvasControlsAvailable();
+    if (!this.controlsSnapshot.supportedActions.includes(action)) {
+      throw new Error(`当前 GeoGebra applet 不支持画布操作 ${action}。`);
+    }
+    try {
+      await this.transactions.run({ label: `controls:${action}` }, async (transaction) => {
+        switch (action) {
+          case "undo":
+          case "redo": {
+            const result = await transaction.wait(() => Promise.resolve(this.call(action)));
+            if (result === false) throw new Error(`GeoGebra 拒绝了${action === "undo" ? "撤销" : "重做"}操作。`);
+            break;
+          }
+          case "toggleGrid": {
+            const current = readGridVisible(this.api!);
+            if (current === null) throw new Error("无法可靠读取 GeoGebra 网格状态。");
+            const result = await transaction.wait(() => Promise.resolve(this.call("setGridVisible", 1, !current)));
+            if (result === false) throw new Error("GeoGebra 拒绝了网格切换。");
+            break;
+          }
+          case "toggleAxes": {
+            const current = readAxesVisible(this.api!);
+            if (current === null) throw new Error("无法可靠读取 GeoGebra 坐标轴状态。");
+            const result = await transaction.wait(() => Promise.resolve(this.call("setAxesVisible", 1, !current, !current, false)));
+            if (result === false) throw new Error("GeoGebra 拒绝了坐标轴切换。");
+            break;
+          }
+          case "showAlgebra":
+          case "show3D":
+          case "showProperties":
+          case "showGraphics": {
+            const perspective = action === "showAlgebra"
+              ? "+A"
+              : action === "show3D"
+                ? "+T"
+                : action === "showProperties"
+                  ? "+P"
+                  : "G";
+            const result = await this.setPerspective(perspective, transaction);
+            if (!result.success) throw new Error(result.error ?? "GeoGebra 拒绝了视图切换。");
+            break;
+          }
+        }
+      });
+    } finally {
+      this.refreshCanvasControls();
+    }
+  }
+
+  private assertCanvasControlsAvailable() {
+    if (!this.api) throw new Error("GeoGebra 画板尚未加载完成。");
+    if (this.transactions.recoveryState) throw new Error("GeoGebra 画板正在等待恢复，暂时不能执行操作。");
   }
 
   async executeTool(toolName: string, args: unknown) {
@@ -90,6 +178,8 @@ export class GeoGebraController {
       } catch (error) {
         if (error instanceof CanvasToolResultError) return error.result;
         throw error;
+      } finally {
+        this.refreshCanvasControls();
       }
     }
     return this.executeToolWithinTransaction(toolName, args);
@@ -138,9 +228,10 @@ export class GeoGebraController {
         if (typeof this.api.setXML !== "function") throw new Error("当前 GeoGebra applet 不提供 XML 恢复 API。");
         this.animations.dispose();
         const raw = await waitForTransaction(transaction, () => Promise.resolve(this.call("setXML", xml)));
-        return raw === false
-          ? { ok: false, error: "GeoGebra rejected the XML snapshot." }
-          : { ok: true };
+        if (raw === false) return { ok: false, error: "GeoGebra rejected the XML snapshot." };
+        this.restoreShellChrome();
+        this.refreshCanvasControls();
+        return { ok: true };
       }
       case "exists": {
         const name = requiredString(input.name, "name");
@@ -160,9 +251,13 @@ export class GeoGebraController {
   }
 
   async restoreCanvasXml(xml: string) {
-    const result = await this.executeTool("__restoreCanvasXml", { xml });
-    if (!result || typeof result !== "object" || !("ok" in result) || result.ok !== true) {
-      throw new Error("GeoGebra rejected the stored document snapshot.");
+    try {
+      const result = await this.executeTool("__restoreCanvasXml", { xml });
+      if (!result || typeof result !== "object" || !("ok" in result) || result.ok !== true) {
+        throw new Error("GeoGebra rejected the stored document snapshot.");
+      }
+    } finally {
+      this.refreshCanvasControls();
     }
   }
 
@@ -201,19 +296,24 @@ export class GeoGebraController {
     });
   }
 
-  restoreDocumentBase64(base64: string): Promise<void> {
-    return this.transactions.run(
-      {
-        label: "document:restore",
-        supersedeKey: "document:restore",
-        captureSnapshot: () => this.captureDocumentBase64Raw(),
-        restoreSnapshot: (snapshot) => this.applyDocumentBase64(snapshot),
-      },
-      async (transaction) => {
-        this.animations.dispose();
-        await transaction.wait(() => this.applyDocumentBase64(base64));
-      },
-    );
+  async restoreDocumentBase64(base64: string): Promise<void> {
+    try {
+      await this.transactions.run(
+        {
+          label: "document:restore",
+          supersedeKey: "document:restore",
+          captureSnapshot: () => this.captureDocumentBase64Raw(),
+          restoreSnapshot: (snapshot) => this.applyDocumentBase64(snapshot),
+        },
+        async (transaction) => {
+          this.animations.dispose();
+          await transaction.wait(() => this.applyDocumentBase64(base64));
+          this.restoreShellChrome();
+        },
+      );
+    } finally {
+      this.refreshCanvasControls();
+    }
   }
 
   private applyDocumentBase64(base64: string): Promise<void> {
@@ -389,6 +489,9 @@ export class GeoGebraController {
   }
 
   private async resetCanvas(input: Record<string, unknown>, transaction?: CanvasTransactionContext) {
+    // Check before clearing: a reset must not succeed with a distorted viewport.
+    if (typeof this.api!.setCoordSystem !== "function") throw new Error("当前 GeoGebra applet 不支持恢复坐标比例。");
+    this.readGraphicsView();
     const canvasBefore = tryReadCanvasContext(this.api!, false);
     const resetMeta = await waitForTransaction(transaction, () => this.resetConstruction(canvasBefore, transaction));
     let perspectiveResult: PerspectiveResult | null = null;
@@ -396,6 +499,7 @@ export class GeoGebraController {
       const perspective = input.perspective.trim();
       perspectiveResult = await waitForTransaction(transaction, () => this.setPerspective(perspective, transaction));
     }
+    await waitForTransaction(transaction, () => this.resetGraphicsView());
     const canvasAfter = tryReadCanvasContext(this.api!, false);
     this.refreshVisuals();
     const error = perspectiveResult && !perspectiveResult.success
@@ -415,6 +519,36 @@ export class GeoGebraController {
     };
   }
 
+  private readGraphicsView() {
+    const raw = this.call("getViewProperties", 1);
+    const view = record(typeof raw === "string" ? JSON.parse(raw) : raw);
+    if (typeof view.width !== "number" || !Number.isFinite(view.width) || view.width <= 0
+      || typeof view.height !== "number" || !Number.isFinite(view.height) || view.height <= 0) {
+      throw new Error("无法读取 GeoGebra 画板尺寸，不能恢复坐标比例。");
+    }
+    return { width: view.width, height: view.height, xMin: view.xMin, yMin: view.yMin, invXscale: view.invXscale, invYscale: view.invYscale };
+  }
+
+  private resetGraphicsView() {
+    // Re-read after reset/perspective changes; the primary 2D view may have resized.
+    const { width, height } = this.readGraphicsView();
+    const halfX = width / (2 * DEFAULT_PIXELS_PER_UNIT);
+    const halfY = height / (2 * DEFAULT_PIXELS_PER_UNIT);
+    // Four arguments target the primary 2D view. A fifth would select the 3D overload.
+    if (this.call("setCoordSystem", -halfX, halfX, -halfY, halfY) === false) {
+      throw new Error("GeoGebra 拒绝了坐标比例重置。");
+    }
+    const actual = this.readGraphicsView();
+    const expectedScale = 1 / DEFAULT_PIXELS_PER_UNIT;
+    const matches = (value: unknown, expected: number) => typeof value === "number"
+      && Number.isFinite(value) && Math.abs(value - expected) <= 1e-8 * Math.max(1, Math.abs(expected));
+    if (!matches(actual.invXscale, expectedScale) || !matches(actual.invYscale, expectedScale)
+      || !matches(actual.xMin, -actual.width * expectedScale / 2)
+      || !matches(actual.yMin, -actual.height * expectedScale / 2)) {
+      throw new Error("GeoGebra 未能恢复原点居中、1:1 的坐标比例。");
+    }
+  }
+
   private async resetConstruction(canvasBefore: CanvasContext | undefined, transaction?: CanvasTransactionContext) {
     this.animations.dispose();
     const labels = canvasBefore ? canvasLabels(canvasBefore) : [];
@@ -427,6 +561,7 @@ export class GeoGebraController {
     if (typeof this.api!.reset === "function") {
       this.call("reset");
       await waitForTransaction(transaction, () => wait(50));
+      this.restoreShellChrome();
       return { method: labels.length ? "delete-objects-reset" : "reset", deleted, failed };
     }
     if (labels.length && failed === 0) {
@@ -467,6 +602,8 @@ export class GeoGebraController {
     try {
       const raw = await waitForTransaction(transaction, () => Promise.resolve(this.call("setPerspective", mode)));
       if (raw === false) return { ok: false, success: false, requestedMode: mode, mode, method: "setPerspective", error: "GeoGebra 拒绝了视图切换。" };
+      this.restoreShellChrome();
+      this.refreshCanvasControls();
       return { ok: true, success: true, requestedMode: mode, mode, method: "setPerspective" };
     } catch (error) {
       logger.warn("perspective_change_failed", "GEOGEBRA_PERSPECTIVE_CHANGE_FAILED", { error, perspective: mode });
@@ -487,6 +624,56 @@ export class GeoGebraController {
     catch (error) { logger.debug("optional_api_failed", "GEOGEBRA_OPTIONAL_API_FAILED", { error, api: name }); return undefined; }
   }
 
+  private restoreShellChrome() {
+    if (typeof this.api?.showMenuBar === "function") {
+      const menuResult = this.call("showMenuBar", false);
+      if (menuResult === false) throw new Error("GeoGebra 拒绝隐藏原生菜单栏。");
+    }
+    if (typeof this.api?.showToolBar === "function") {
+      const toolbarResult = this.call("showToolBar", DEFAULT_GEOGEBRA_TOOLBAR_VISIBLE);
+      if (toolbarResult === false) throw new Error("GeoGebra 拒绝隐藏原生工具栏。");
+    }
+  }
+
+  private attachCanvasControlsListener(api: GeoGebraApi | null) {
+    if (!api || typeof api.registerClientListener !== "function" || typeof api.unregisterClientListener !== "function") return;
+    const listener = (event: unknown) => {
+      if (this.api !== api) return;
+      if (!isCanvasControlsClientEvent(event)) return;
+      this.refreshCanvasControls();
+    };
+    try {
+      Reflect.apply(api.registerClientListener, api, [listener]);
+      this.clientListenerApi = api;
+      this.clientListener = listener;
+    } catch (error) {
+      logger.debug("controls_listener_registration_failed", "GEOGEBRA_CONTROLS_LISTENER_UNAVAILABLE", { error });
+    }
+  }
+
+  private detachCanvasControlsListener() {
+    const api = this.clientListenerApi;
+    const listener = this.clientListener;
+    this.clientListenerApi = null;
+    this.clientListener = null;
+    if (!api || !listener || typeof api.unregisterClientListener !== "function") return;
+    try {
+      Reflect.apply(api.unregisterClientListener, api, [listener]);
+    } catch (error) {
+      logger.debug("controls_listener_cleanup_failed", "GEOGEBRA_CONTROLS_LISTENER_CLEANUP_FAILED", { error });
+    }
+  }
+
+  private refreshCanvasControls() {
+    const next = buildCanvasControlsSnapshot(this.api, Boolean(this.transactions.recoveryState));
+    if (sameControlsSnapshot(this.controlsSnapshot, next)) return;
+    this.controlsSnapshot = next;
+    for (const listener of this.controlsListeners) {
+      try { listener(); }
+      catch (error) { logger.warn("controls_subscriber_failed", "GEOGEBRA_CONTROLS_SUBSCRIBER_FAILED", { error }); }
+    }
+  }
+
   private refreshVisuals() {
     const refreshViews = this.api?.refreshViews;
     if (typeof refreshViews === "function") {
@@ -497,6 +684,139 @@ export class GeoGebraController {
       try { recalculateEnvironments.call(this.api); } catch (caughtError) { logger.debug("recalculate_environments_failed", "GEOGEBRA_RECALCULATE_FAILED", { error: caughtError }); /* optional API */ }
     }
   }
+}
+
+function buildCanvasControlsSnapshot(api: GeoGebraApi | null, blocked: boolean): GeoGebraControlsSnapshot {
+  if (!api) return blocked ? { ...UNAVAILABLE_GEOGEBRA_CONTROLS, blocked: true } : UNAVAILABLE_GEOGEBRA_CONTROLS;
+  const canTransact = typeof api.getXML === "function" && typeof api.setXML === "function";
+  const supportsToolModes = canTransact && typeof api.getMode === "function" && typeof api.setMode === "function";
+  const supportsGridToggle = canTransact && typeof api.setGridVisible === "function";
+  const supportsAxesToggle = canTransact && typeof api.setAxesVisible === "function";
+  // State reads may fall back to getXML. Do not touch the construction for
+  // runtimes that cannot expose the corresponding interactive control anyway.
+  const gridVisible = supportsGridToggle ? readGridVisible(api) : null;
+  const axesVisible = supportsAxesToggle ? readAxesVisible(api) : null;
+  const supportedActions: GeoGebraCanvasAction[] = [];
+  if (canTransact && typeof api.undo === "function") supportedActions.push("undo");
+  if (canTransact && typeof api.redo === "function") supportedActions.push("redo");
+  if (supportsGridToggle && gridVisible !== null) supportedActions.push("toggleGrid");
+  if (supportsAxesToggle && axesVisible !== null) supportedActions.push("toggleAxes");
+  if (canTransact && typeof api.setPerspective === "function") {
+    supportedActions.push("showAlgebra", "show3D", "showProperties", "showGraphics");
+  }
+  return {
+    ready: true,
+    blocked,
+    mode: supportsToolModes ? readToolMode(api) : null,
+    gridVisible,
+    axesVisible,
+    supportsToolModes,
+    supportedActions: Object.freeze(supportedActions),
+  };
+}
+
+function readToolMode(api: GeoGebraApi) {
+  const value = safeApiCall(api, "getMode");
+  const mode = typeof value === "number"
+    ? value
+    : typeof value === "string" && value.trim()
+      ? Number(value)
+      : Number.NaN;
+  return Number.isSafeInteger(mode) && mode >= 0 ? mode : null;
+}
+
+function readGridVisible(api: GeoGebraApi): boolean | null {
+  const direct = safeApiCall(api, "getGridVisible", 1);
+  if (typeof direct === "boolean") return direct;
+  const options = readGraphicsOptions(api);
+  if (typeof options?.grid === "boolean") return options.grid;
+  return readEuclidianSetting(api, "grid");
+}
+
+function readAxesVisible(api: GeoGebraApi): boolean | null {
+  const options = readGraphicsOptions(api);
+  const axes = options?.axes;
+  if (axes && typeof axes === "object" && !Array.isArray(axes)) {
+    const values = axes as Record<string, unknown>;
+    const x = readAxisVisible(values.x);
+    const y = readAxisVisible(values.y);
+    if (x !== null || y !== null) return x !== null && y !== null && x === y ? x : null;
+  }
+  return readEuclidianAxes(api);
+}
+
+function safeApiCall(api: GeoGebraApi, name: string, ...args: unknown[]) {
+  const fn = api[name];
+  if (typeof fn !== "function") return undefined;
+  try { return Reflect.apply(fn, api, args); }
+  catch { return undefined; }
+}
+
+function readGraphicsOptions(api: GeoGebraApi): Record<string, unknown> | null {
+  const raw = safeApiCall(api, "getGraphicsOptions", 1);
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) return raw as Record<string, unknown>;
+  if (typeof raw === "string") {
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? parsed as Record<string, unknown>
+        : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function readAxisVisible(value: unknown): boolean | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const visible = (value as Record<string, unknown>).visible;
+  return typeof visible === "boolean" ? visible : null;
+}
+
+function readEuclidianSetting(api: GeoGebraApi, setting: "grid"): boolean | null {
+  const xml = safeApiCall(api, "getXML");
+  if (typeof xml !== "string") return null;
+  const view = /<euclidianView\b[\s\S]*?<\/euclidianView>/i.exec(xml)?.[0];
+  const settings = view && /<evSettings\b[^>]*>/i.exec(view)?.[0];
+  if (!settings) return null;
+  const match = new RegExp(`\\b${setting}\\s*=\\s*["'](true|false)["']`, "i").exec(settings);
+  return match ? match[1]?.toLowerCase() === "true" : null;
+}
+
+function readEuclidianAxes(api: GeoGebraApi): boolean | null {
+  const xml = safeApiCall(api, "getXML");
+  if (typeof xml !== "string") return null;
+  const view = /<euclidianView\b[\s\S]*?<\/euclidianView>/i.exec(xml)?.[0];
+  if (!view) return null;
+  const readAxis = (id: 0 | 1) => {
+    const tag = new RegExp(`<axis\\b(?=[^>]*\\bid\\s*=\\s*["']${id}["'])[^>]*>`, "i").exec(view)?.[0];
+    const match = tag && /\bshow\s*=\s*["'](true|false)["']/i.exec(tag);
+    return match ? match[1]?.toLowerCase() === "true" : null;
+  };
+  const x = readAxis(0);
+  const y = readAxis(1);
+  return x !== null && y !== null && x === y ? x : null;
+}
+
+function isCanvasControlsClientEvent(event: unknown) {
+  const type = Array.isArray(event)
+    ? event[0]
+    : event && typeof event === "object"
+      ? (event as { type?: unknown }).type
+      : event;
+  return type === "setMode" || type === "viewChanged" || type === "setCoordSystem" || type === "perspectiveChange";
+}
+
+function sameControlsSnapshot(left: GeoGebraControlsSnapshot, right: GeoGebraControlsSnapshot) {
+  return left.ready === right.ready
+    && left.blocked === right.blocked
+    && left.mode === right.mode
+    && left.gridVisible === right.gridVisible
+    && left.axesVisible === right.axesVisible
+    && left.supportsToolModes === right.supportsToolModes
+    && left.supportedActions.length === right.supportedActions.length
+    && left.supportedActions.every((action, index) => action === right.supportedActions[index]);
 }
 
 type PerspectiveResult = { ok: boolean; success: boolean; requestedMode: string; mode: string; method: string; error?: string };

@@ -2,7 +2,7 @@ import { AnimatePresence } from "motion/react";
 import type { ReactNode } from "react";
 import type { BlackboardEntry } from "@geochat-ai/app/blackboard";
 import { useTranslation } from "react-i18next";
-import { BlackboardDrawer } from "../../components/BlackboardDrawer";
+import { BlackboardPanel } from "../../components/BlackboardDrawer";
 import { ConversationDrawer, type ConversationSummary } from "../../components/ConversationDrawer";
 import { ProblemBankSidecar } from "../../components/ProblemBankSidecar";
 import {
@@ -59,17 +59,19 @@ export function FusionAssistantOverlays(props: {
         }}
         onDelete={props.conversationHistory.remove}
       />
-      <BlackboardDrawer
-        viewport
-        open={panel === "blackboard"}
-        conversationId={props.currentConversationId}
-        loading={props.blackboard.loading}
-        error={props.blackboard.error}
-        entries={props.blackboard.entries}
-        onClose={props.onClose}
-        onRefresh={() => void props.blackboard.load()}
-      />
       <AnimatePresence initial={false}>
+        {panel === "blackboard" && (
+          <FusionViewportCard key="fusion-blackboard" panelId="blackboard" title={t("blackboard.title")} closeLabel={t("blackboard.close")} onClose={props.onClose} hideHeader className="geochat-blackboard geochat-blackboard--fusion">
+            <BlackboardPanel
+              conversationId={props.currentConversationId}
+              loading={props.blackboard.loading}
+              error={props.blackboard.error}
+              entries={props.blackboard.entries}
+              onClose={props.onClose}
+              onRefresh={() => void props.blackboard.load()}
+            />
+          </FusionViewportCard>
+        )}
         {panel === "transcript" && (
           <FusionViewportCard key="fusion-transcript" panelId="transcript" title={props.panelTitle} closeLabel={t("history.close")} onClose={props.onClose}>
             <FusionTranscript emptyLabel={t("history.empty")} ariaLabel={t("fusion.transcript")} />
@@ -81,7 +83,7 @@ export function FusionAssistantOverlays(props: {
           </FusionViewportCard>
         )}
         {panel === "settings" && (
-          <FusionViewportCard key="fusion-settings" panelId="settings" wide title={t("settings.title")} closeLabel={t("settings.back")} onClose={props.onClose}>
+          <FusionViewportCard key="fusion-settings" panelId="settings" title={t("settings.title")} closeLabel={t("settings.back")} onClose={props.onClose}>
             {props.settings}
           </FusionViewportCard>
         )}

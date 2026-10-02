@@ -1,5 +1,7 @@
 import { createTheme } from "@mui/material/styles";
 
+export const FLOATING_SURFACE_ELEVATION = 3;
+
 export const copilotTheme = createTheme({
   palette: {
     mode: "light",
@@ -35,7 +37,10 @@ export const copilotTheme = createTheme({
   },
   components: {
     MuiCssBaseline: {
-      styleOverrides: {
+      styleOverrides: (theme) => ({
+        ":root": {
+          "--app-floating-shadow": theme.shadows[FLOATING_SURFACE_ELEVATION],
+        },
         "@media (prefers-reduced-motion: reduce)": {
           "*, *::before, *::after": {
             animationDuration: "0.01ms !important",
@@ -44,7 +49,7 @@ export const copilotTheme = createTheme({
             scrollBehavior: "auto !important",
           },
         },
-      },
+      }),
     },
     MuiIconButton: {
       styleOverrides: {
@@ -55,6 +60,7 @@ export const copilotTheme = createTheme({
       },
     },
     MuiPaper: {
+      defaultProps: { elevation: FLOATING_SURFACE_ELEVATION },
       styleOverrides: {
         root: {
           backgroundImage: "none",
@@ -121,11 +127,11 @@ export const copilotTheme = createTheme({
     },
     MuiDialog: {
       styleOverrides: {
-        paper: {
+        paper: ({ theme }) => ({
           borderRadius: 14,
           border: "1px solid #dfe5ee",
-          boxShadow: "0 18px 48px rgba(23, 32, 51, 0.18)",
-        },
+          boxShadow: theme.shadows[FLOATING_SURFACE_ELEVATION],
+        }),
       },
     },
     MuiDialogTitle: {
@@ -146,16 +152,22 @@ export const copilotTheme = createTheme({
     },
     MuiMenu: {
       styleOverrides: {
-        paper: {
+        paper: ({ theme }) => ({
           marginTop: 4,
           border: "1px solid rgba(255, 255, 255, 0.78)",
           borderRadius: 14,
-          boxShadow: "0 16px 36px rgba(24, 59, 36, 0.14)",
+          boxShadow: theme.shadows[FLOATING_SURFACE_ELEVATION],
           backgroundColor: "rgba(255, 255, 255, 0.9)",
           backdropFilter: "blur(20px) saturate(120%)",
           WebkitBackdropFilter: "blur(20px) saturate(120%)",
-        },
+        }),
       },
+    },
+    MuiDrawer: {
+      defaultProps: { elevation: FLOATING_SURFACE_ELEVATION },
+    },
+    MuiPopover: {
+      defaultProps: { elevation: FLOATING_SURFACE_ELEVATION },
     },
   },
 });

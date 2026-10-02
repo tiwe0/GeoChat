@@ -28,7 +28,6 @@ type AssistantSubmissionInput = {
   send: (submission: GeoChatAssistantSubmission, conversationId: string) => Promise<unknown>;
   retry: () => Promise<boolean>;
   setError: (error: string | null) => void;
-  onConversationStarted?: () => void;
 };
 
 export function useAssistantSubmission(input: AssistantSubmissionInput) {
@@ -59,7 +58,6 @@ export function useAssistantSubmission(input: AssistantSubmissionInput) {
         : compactConversationTitle(text || attachmentTitle) || input.t("history.newConversation"),
     });
     input.setError(null);
-    input.onConversationStarted?.();
     try {
       await input.send({ text, files }, conversationId);
       return true;

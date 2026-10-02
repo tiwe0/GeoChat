@@ -1,7 +1,6 @@
 import { AuiIf, MessagePrimitive, ThreadPrimitive, type MessageState } from "@assistant-ui/react";
-import { type ComponentType, type ReactNode, useMemo } from "react";
+import type { ReactNode } from "react";
 import {
-  GeoChatDisplayToolPart,
   GeoChatMessageContent,
   type GeoChatMessageSurface,
 } from "./GeoChatMessageParts";
@@ -110,73 +109,5 @@ export function GeoChatThread({
         )}
       </ThreadPrimitive.Viewport>
     </ThreadPrimitive.Root>
-  );
-}
-
-type GeoChatMessageByIdProps = Omit<GeoChatMessageProps, "role"> & {
-  messageId: string;
-};
-
-function messageComponent(
-  role: MessageState["role"],
-  props: Omit<GeoChatMessageByIdProps, "messageId">,
-): ComponentType {
-  return function BoundGeoChatMessage() {
-    return <GeoChatMessage {...props} role={role} />;
-  };
-}
-
-export function GeoChatMessageById({ messageId, ...messageProps }: GeoChatMessageByIdProps) {
-  const components = useMemo(() => ({
-    UserMessage: messageComponent("user", messageProps),
-    AssistantMessage: messageComponent("assistant", messageProps),
-    SystemMessage: messageComponent("system", messageProps),
-  }), [
-    messageProps.className,
-    messageProps.contentClassName,
-    messageProps.showDisplayTools,
-    messageProps.surface,
-  ]);
-
-  return (
-    <ThreadPrimitive.Unstable_MessageById
-      messageId={messageId}
-      components={components}
-    />
-  );
-}
-
-type GeoChatDisplayToolByIdProps = {
-  messageId: string;
-  partIndex: number;
-};
-
-function BoundDisplayToolMessage({ partIndex }: { partIndex: number }) {
-  return (
-    <MessagePrimitive.Root
-      data-geochat-message="true"
-      data-message-role="assistant"
-      data-message-surface="spatial"
-    >
-      <MessagePrimitive.PartByIndex
-        index={partIndex}
-        components={{ tools: { Override: GeoChatDisplayToolPart } }}
-      />
-    </MessagePrimitive.Root>
-  );
-}
-
-export function GeoChatDisplayToolById({ messageId, partIndex }: GeoChatDisplayToolByIdProps) {
-  const components = useMemo(() => ({
-    UserMessage: () => null,
-    SystemMessage: () => null,
-    AssistantMessage: () => <BoundDisplayToolMessage partIndex={partIndex} />,
-  }), [partIndex]);
-
-  return (
-    <ThreadPrimitive.Unstable_MessageById
-      messageId={messageId}
-      components={components}
-    />
   );
 }

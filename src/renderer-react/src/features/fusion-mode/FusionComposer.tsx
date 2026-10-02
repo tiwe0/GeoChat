@@ -45,12 +45,13 @@ export function FusionComposer(props: {
   useEffect(() => {
     const root = rootRef.current;
     if (!root || !props.onSizeChange) return;
-    const report = () => {
-      const bounds = root.getBoundingClientRect();
-      props.onSizeChange?.({ width: bounds.width, height: bounds.height });
+    const report = (entry?: ResizeObserverEntry) => {
+      // Layout size is stable during the surface's transform-based entrance.
+      const bounds = entry?.borderBoxSize?.[0];
+      props.onSizeChange?.({ width: bounds?.inlineSize ?? root.offsetWidth, height: bounds?.blockSize ?? root.offsetHeight });
     };
     report();
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(report);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver((entries) => report(entries[0]));
     observer?.observe(root);
     return () => observer?.disconnect();
   }, [props.onSizeChange]);
@@ -97,6 +98,7 @@ export function FusionComposer(props: {
   return (
     <Box
       ref={rootRef}
+      data-fusion-composer="true"
       sx={{
         position: "fixed",
         left: props.x,

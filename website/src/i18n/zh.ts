@@ -174,6 +174,7 @@ export const zh: Content = {
     lede: "免费、开源，不需要注册账号。安装后在设置里填入你自己的模型 API key 即可开始。",
     version: "最新版本",
     versionUnknown: "最新版本",
+    preview: "预览版",
     released: "发布于 {date}",
     detected: "看起来你在用 {platform}",
     otherPlatforms: "其他平台",

@@ -2,6 +2,7 @@ import { Box, ListItemText, Menu, MenuItem, Paper, type SxProps, type Theme } fr
 import { motion, useReducedMotion } from "motion/react";
 import { useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { FLOATING_SURFACE_ELEVATION } from "../../theme";
 import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import {
   CHAT_PAGE_MIN_HEIGHT,
@@ -86,7 +87,7 @@ export function AssistantWindowShell(props: {
   const { t } = useTranslation();
   const reduceMotion = useReducedMotion();
   const [contextMenu, setContextMenu] = useState<PanelContextMenuState | null>(null);
-  const { panelRef, collapsed, dragging, resizing } = props.panelWindow;
+  const { panelRef, collapsed, resizing } = props.panelWindow;
 
   function openContextMenu(event: ReactMouseEvent<HTMLElement>) {
     const target = event.target instanceof Element ? event.target : null;
@@ -120,7 +121,7 @@ export function AssistantWindowShell(props: {
       className="geochat-panel"
       aria-label={props.appLabel}
       lang={props.language}
-      elevation={dragging || resizing ? 10 : 6}
+      elevation={FLOATING_SURFACE_ELEVATION}
       layout={!resizing}
       initial={reduceMotion ? false : { opacity: 0, scale: 0.985, y: 8 }}
       animate={{ borderRadius: collapsed ? 20 : 4, opacity: 1, scale: 1, y: 0 }}

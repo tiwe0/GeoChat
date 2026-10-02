@@ -112,24 +112,6 @@ describe("controller tool boundary", () => {
     await expect(controller.executeTool("getCanvasContext", {})).rejects.toThrow();
   });
 
-  test("forwards both toolbar visibility states when the shell owns document persistence", () => {
-    const visibility: boolean[] = [];
-    const controller = new GeoGebraController();
-    controller.setApi(api({
-      showToolBar: (visible: boolean) => { visibility.push(visible); },
-    }));
-
-    expect(controller.setToolbarVisible(true)).toBe(true);
-    expect(controller.setToolbarVisible(false)).toBe(false);
-    expect(visibility).toEqual([true, false]);
-  });
-
-  test("reports an unavailable toolbar API instead of faking UI state", () => {
-    const controller = new GeoGebraController();
-    controller.setApi(api({}));
-    expect(() => controller.setToolbarVisible(true)).toThrow(/工具栏切换 API/);
-  });
-
   test("restores a persisted document through the transactional canvas boundary", async () => {
     let restored = "";
     const controller = new GeoGebraController();

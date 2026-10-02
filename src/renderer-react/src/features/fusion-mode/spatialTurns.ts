@@ -250,7 +250,8 @@ export function synchronizeFusionSpatialTurns(
       messageIds: visibleMessageIds,
       selectionObjectNames: [],
       status: "completed",
-      collapsed: true,
+      // Restored messages should be immediately readable; collapse is a user action.
+      collapsed: false,
       pinned: false,
       dismissed: false,
       createdAt: input.now ?? Date.now(),
@@ -324,8 +325,7 @@ export function collapseLatestFusionTurn(state: FusionSpatialState) {
 /**
  * Keep the canvas calm even after a long conversation. Active work wins,
  * followed by explicitly pinned turns, then the newest remaining turns. The
- * returned order remains chronological so older cards naturally sit behind
- * and fade before newer cards.
+ * returned order remains chronological without fading older cards.
  */
 export function selectVisibleFusionTurns(
   turns: readonly FusionSpatialTurn[],
@@ -340,25 +340,6 @@ export function selectVisibleFusionTurns(
   });
   const selected = new Set(prioritized.slice(0, limit).map((turn) => turn.id));
   return candidates.filter((turn) => selected.has(turn.id));
-}
-
-export function fusionTurnVisualOpacity(index: number, count: number, active: boolean) {
-  if (active || count <= 1) return 1;
-  const progress = Math.max(0, Math.min(1, index / (count - 1)));
-  return Number((0.44 + progress * 0.56).toFixed(3));
-}
-
-/**
- * Keep the latest conversation spatially attached to the composer. Previous
- * turns retain their frozen logical anchors, so moving the composer does not
- * drag the whole conversation history across the canvas.
- */
-export function fusionTurnDisplayAnchor(
-  turn: FusionSpatialTurn,
-  attachedTurnId: string | null,
-  composerPoint: FusionPoint,
-) {
-  return turn.id === attachedTurnId ? composerPoint : turn.anchor;
 }
 
 export function clampFusionTurnAnchors(

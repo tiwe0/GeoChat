@@ -100,38 +100,6 @@ html.interaction-mode-view-transition::view-transition-new(root) {
   border-left: 0 !important;
 }
 .frontend-canvas-host canvas { display: block !important; visibility: visible !important; opacity: 1 !important; max-width: none; }
-.frontend-canvas-intro {
-  position: absolute;
-  top: 72px;
-  left: 38px;
-  z-index: 4;
-  max-width: min(500px, calc(100vw - 76px));
-  pointer-events: none;
-  color: #18231e;
-  transform-origin: left top;
-  will-change: transform, opacity, clip-path;
-}
-.frontend-canvas-intro-fusion {
-  /* Fusion controls live in a top-level overlay. Keep the initial canvas
-     guidance visibly anchored to the board instead of underneath that layer. */
-  z-index: 1320;
-}
-.frontend-canvas-intro h1 {
-  max-width: 480px;
-  margin: 0 0 8px;
-  color: #18231e;
-  font-size: clamp(28px, 3vw, 42px);
-  font-weight: 800;
-  line-height: 1.12;
-  letter-spacing: -.045em;
-}
-.frontend-canvas-intro p {
-  max-width: 440px;
-  margin: 0;
-  color: #607168;
-  font-size: 16px;
-  line-height: 1.55;
-}
 .frontend-canvas-controls {
   position: absolute;
   right: 20px;
@@ -157,7 +125,7 @@ html.interaction-mode-view-transition::view-transition-new(root) {
 .frontend-canvas-control:hover:not(:disabled) { color: #078d48; background: rgba(239, 250, 243, .88); transform: translateY(-1px); }
 .frontend-canvas-control:focus-visible { outline: 2px solid #07c160; outline-offset: 2px; }
 .frontend-canvas-control:disabled { cursor: not-allowed; opacity: .5; }
-.frontend-canvas-toolbar.is-active { color: #078d48; background: #e7f8ed; border-color: #b8dfc5; }
+.frontend-shell:has(.fusion-mode-surface) .frontend-canvas-controls { display: none; }
 .geogebra-document-panel {
   position: absolute;
   right: 20px;
@@ -170,10 +138,17 @@ html.interaction-mode-view-transition::view-transition-new(root) {
   border: 1px solid #dbe6df;
   border-radius: 14px;
   background: rgba(255, 255, 255, .96);
-  box-shadow: 0 18px 48px rgba(24, 59, 36, .16);
+  box-shadow: var(--app-floating-shadow);
   backdrop-filter: blur(16px);
 }
 .geogebra-document-panel header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; color: #263c31; }
+.frontend-shell:has(.fusion-mode-surface) .geogebra-document-panel {
+  position: fixed;
+  right: 72px;
+  bottom: 12px;
+  z-index: 1400;
+  overscroll-behavior: contain;
+}
 .geogebra-document-panel header div { display: flex; align-items: center; gap: 8px; }
 .geogebra-document-panel header button { border: 0; color: #52645a; background: transparent; cursor: pointer; line-height: 1; }
 .geogebra-document-panel header button:last-child { font-size: 22px; }
@@ -199,7 +174,7 @@ html.interaction-mode-view-transition::view-transition-new(root) {
 .frontend-canvas-recovery-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .frontend-canvas-recovery-actions button { min-height: 32px; padding: 5px 10px; border: 1px solid #d7e0db; border-radius: 8px; color: #30483d; background: #fff; cursor: pointer; }
 .frontend-canvas-recovery-actions button:disabled { cursor: wait; opacity: 0.6; }
-.frontend-config-recovery-notice { position: fixed; top: 12px; left: 50%; z-index: 1500; width: min(640px, calc(100vw - 32px)); transform: translateX(-50%); box-shadow: 0 8px 24px rgb(15 23 42 / 14%); }
+.frontend-config-recovery-notice { position: fixed; top: 12px; left: 50%; z-index: 1500; width: min(640px, calc(100vw - 32px)); transform: translateX(-50%); box-shadow: var(--app-floating-shadow); }
 .frontend-loader { width: 24px; height: 24px; border: 2px solid #d6eadd; border-top-color: #07c160; border-radius: 50%; animation: frontend-spin .8s linear infinite; }
 .frontend-canvas-error { width: 24px; height: 24px; border: 2px solid #f0c8c4; border-radius: 50%; position: relative; }
 .frontend-canvas-error::before, .frontend-canvas-error::after { content: ""; position: absolute; inset: 10px 4px auto; height: 2px; background: #df574d; transform: rotate(45deg); }
@@ -208,7 +183,7 @@ html.interaction-mode-view-transition::view-transition-new(root) {
 .geochat-panel-host { position: fixed; z-index: 20; right: 20px; bottom: 20px; }
 
 .geochat-panel-host > .MuiPaper-root {
-  box-shadow: 0 20px 54px rgba(24, 59, 36, .18), 0 2px 8px rgba(24, 59, 36, .08);
+  box-shadow: var(--app-floating-shadow);
   background: rgba(255, 255, 255, .78);
   border-color: rgba(255, 255, 255, .72);
   backdrop-filter: blur(22px) saturate(120%);
@@ -220,7 +195,7 @@ html.interaction-mode-view-transition::view-transition-new(root) {
   border-color: rgba(185, 201, 191, .62);
 }
 .problem-bank-sidecar {
-  box-shadow: 0 20px 54px rgba(24, 59, 36, .16), 0 2px 8px rgba(24, 59, 36, .08);
+  box-shadow: var(--app-floating-shadow);
 }
 .problem-bank-sidecar-content {
   display: flex;
@@ -1018,9 +993,11 @@ html.interaction-mode-view-transition::view-transition-new(root) {
 .geochat-blackboard {
   background: rgba(23, 63, 53, .84) !important;
   border-color: rgba(220, 239, 226, .26) !important;
-  box-shadow: 0 20px 48px rgba(7, 31, 24, .26) !important;
   backdrop-filter: blur(22px) saturate(120%);
   -webkit-backdrop-filter: blur(22px) saturate(120%);
+}
+.geochat-blackboard:not(.geochat-blackboard--fusion) {
+  box-shadow: var(--app-floating-shadow) !important;
 }
 .copilot-markdown { min-width: 0; font-size: 14px; line-height: 1.68; overflow-wrap: anywhere; }
 .copilot-markdown p { margin: 0 0 9px; }
@@ -1050,6 +1027,15 @@ html.interaction-mode-view-transition::view-transition-new(root) {
   background: var(--mui-palette-background-default, #f7f9fc);
   outline: none;
   scrollbar-width: thin;
+}
+
+.geochat-assistant-thread--fusion {
+  flex: 1;
+}
+
+.geochat-assistant-thread--fusion .geochat-assistant-thread__viewport {
+  flex: 1;
+  background: transparent;
 }
 
 .geochat-assistant-thread__footer {
@@ -1137,8 +1123,3 @@ html.interaction-mode-view-transition::view-transition-new(root) {
 .user-message-markdown .katex { color: inherit; }
 .user-message-markdown .katex-display { max-width: 100%; margin: .45em 0; overflow: clip; }
 @media (max-width: 700px) { .geochat-panel-host { right: 10px; bottom: 10px; left: 10px; } }
-@media (max-width: 700px) {
-  .frontend-canvas-intro { top: 62px; left: 20px; max-width: calc(100vw - 40px); }
-  .frontend-canvas-intro h1 { font-size: clamp(25px, 8vw, 34px); }
-  .frontend-canvas-intro p { font-size: 14px; }
-}

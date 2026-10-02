@@ -1,8 +1,7 @@
 use super::{CredentialError, CredentialStore, SecretValue};
 use std::{collections::HashMap, sync::Mutex};
 
-/// Repository-owned test store. This deliberately does not use keyring's
-/// process-global mock/default store, which could mask production wiring bugs.
+/// Repository-owned test store, isolated per test case.
 #[derive(Default)]
 pub(crate) struct InMemoryCredentialStore {
     entries: Mutex<HashMap<String, SecretValue>>,

@@ -13,7 +13,13 @@ export const REPO_OWNER = "tiwe0";
 export const REPO_NAME = "GeoChat";
 export const REPO_URL = `https://github.com/${REPO_OWNER}/${REPO_NAME}`;
 export const RELEASES_URL = `${REPO_URL}/releases`;
-export const RELEASES_API = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
+/** Explicit download channel; set to null when featuring the stable release. */
+export const PREVIEW_RELEASE_TAG: string | null = "v0.7.0-preview";
+export const DOWNLOAD_MANIFEST = PREVIEW_RELEASE_TAG ? "preview.json" : "latest.json";
+export const FEATURED_RELEASE_URL = PREVIEW_RELEASE_TAG
+  ? `${RELEASES_URL}/tag/${PREVIEW_RELEASE_TAG}`
+  : `${RELEASES_URL}/latest`;
+export const RELEASES_API = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/${PREVIEW_RELEASE_TAG ? `tags/${PREVIEW_RELEASE_TAG}` : "latest"}`;
 export const ACTIONS_URL = `${REPO_URL}/actions`;
 
 /**
@@ -28,7 +34,7 @@ export const CONTACT_EMAIL = "contact@ivory.cafe";
  * release feed is reachable. Kept in sync with the desktop app's
  * package.json version by scripts/sync-version.mjs, which runs from `build`.
  */
-export const FALLBACK_VERSION = "0.6.1";
+export const FALLBACK_VERSION = "0.7.0";
 
 export const SITE_NAME = "GeoChat Desktop";
 
@@ -46,7 +52,7 @@ export const SITE_URL = (import.meta.env.VITE_SITE_URL ?? "").replace(/\/+$/, ""
  * Public base for installers mirrored to Cloudflare R2 by the release
  * workflow, e.g. "https://downloads.example.com/geochat".
  *
- * The download page reads `<base>/latest.json` in preference to the GitHub API:
+ * The download page reads the selected channel manifest before the GitHub API:
  * it is much faster from mainland China and is not subject to GitHub's
  * unauthenticated rate limit. Leave `VITE_DOWNLOADS_BASE` unset to skip the
  * mirror entirely and use the GitHub API alone.

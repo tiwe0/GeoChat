@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Alert, Button, CssBaseline, Paper, Stack, ThemeProvider, Typography } from "@mui/material";
 import { installedDesktopApi } from "../../../shared/desktop/tauri-bridge";
-import { copilotTheme } from "../theme";
+import { copilotTheme, FLOATING_SURFACE_ELEVATION } from "../theme";
 
 export function StartupFailure({ error }: { error: unknown }) {
   const [logError, setLogError] = useState<string | null>(null);
@@ -14,7 +14,7 @@ export function StartupFailure({ error }: { error: unknown }) {
     <ThemeProvider theme={copilotTheme}>
       <CssBaseline />
       <Stack sx={{ minHeight: "100vh", alignItems: "center", justifyContent: "center", p: 3, bgcolor: "background.default" }}>
-        <Paper elevation={4} sx={{ width: "min(560px, 100%)", p: 3 }}>
+        <Paper elevation={FLOATING_SURFACE_ELEVATION} sx={{ width: "min(560px, 100%)", p: 3 }}>
           <Stack spacing={2}>
             <Typography variant="h5" component="h1">GeoChat 无法启动</Typography>
             <Typography color="text.secondary">

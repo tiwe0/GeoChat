@@ -18,6 +18,10 @@ export type NativeConfigStorage = Storage & {
 export type NativePreferenceSchema = {
   geogebraCopilotInstallationId: string;
   geogebraCopilotLanguage: "en" | "zh-CN";
+  geochatLegalConsent: {
+    version: number;
+    acceptedAt: string;
+  };
   geochatSelectedModel: string;
   geogebraCopilotThinkingEnabled: boolean;
   geogebraCopilotThinkingEffort: "light" | "standard" | "extended";

@@ -10,12 +10,13 @@ describe("preview publication boundaries", () => {
   test("clean-runner resources precede Rust compilation and immutable tags can be rebuilt", () => {
     const workflow = Bun.YAML.parse(readFileSync(join(root, ".github/workflows/tauri-package.yml"), "utf8")) as {
       on: { workflow_dispatch: { inputs: { release_tag: unknown } } };
-      jobs: Record<string, { steps: Array<{ name: string; run?: string; uses?: string; with?: { ref?: string } }>; if?: string }>;
+      jobs: Record<string, { steps: Array<{ name: string; run?: string; uses?: string; with?: { ref?: string; components?: string } }>; if?: string }>;
     };
     const verify = workflow.jobs.verify.steps;
     for (const name of ["verify", "package"]) {
       const rust = workflow.jobs[name].steps.find((step) => step.name === "Set up Rust");
       expect(rust?.uses).toBe("dtolnay/rust-toolchain@1.96.0");
+      if (name === "verify") expect(rust?.with?.components).toBe("rustfmt, clippy");
     }
     const prepareIndex = verify.findIndex((step) => step.run === "bun run tauri:prepare");
     const clippyIndex = verify.findIndex((step) => step.run?.startsWith("cargo clippy"));

@@ -60,6 +60,8 @@ jobs:
       - name: Set up Rust
         # Keep lint and packaging on the same locally validated compiler.
         uses: dtolnay/rust-toolchain@1.96.0
+        with:
+          components: rustfmt, clippy
 
       - name: Cache Rust dependencies
         uses: swatinem/rust-cache@v2

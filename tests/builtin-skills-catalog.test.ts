@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { isFunctionCallToolName } from "@geochat-ai/app/functioncalls";
+import { findGeoGebraCommandReferenceEntry } from "../packages/app/src/geogebra-command-reference";
+import { findForbiddenViewportScaleCommands } from "../packages/app/src/geogebra-style-policy";
 import { BUILTIN_AGENT_SKILL_NAMES, DEFAULT_BUSINESS_AGENT_SKILL_NAMES } from "../src/shared/desktop/desktop-config";
 import {
   activateAgentSkill,
@@ -60,6 +63,41 @@ describe("built-in Agent Skill catalog", () => {
     }
   });
 
+  test("keeps every built-in workflow reachable and its examples within the vendored native command catalog", async () => {
+    const skills = await listAvailableAgentSkills(isolatedSkillEnv);
+    const names = new Set(skills.map((skill) => skill.name));
+
+    for (const summary of skills) {
+      const skill = await activateAgentSkill(summary.name, isolatedSkillEnv);
+      expect(skill.tools.length, `${skill.name}: no host tools declared`).toBeGreaterThan(0);
+      for (const tool of skill.tools) {
+        expect(isFunctionCallToolName(tool), `${skill.name}: unknown host tool ${tool}`).toBe(true);
+      }
+      expect(skill.recipes.length, `${skill.name}: no task recipes`).toBeGreaterThan(0);
+      const ancestors = new Set([skill.name]);
+      let parent = skill.parent;
+      while (parent) {
+        expect(names.has(parent), `${skill.name}: missing parent ${parent}`).toBe(true);
+        expect(ancestors.has(parent), `${skill.name}: cyclic parent ${parent}`).toBe(false);
+        ancestors.add(parent);
+        parent = skills.find((candidate) => candidate.name === parent)?.parent;
+      }
+
+      // Availability is a packaging contract, not proof of overload semantics or applet execution.
+      const examples = [...skill.markdown.matchAll(/^```ggb\n([\s\S]*?)^```/gm)];
+      expect(examples.length, `${skill.name}: no native construction example`).toBeGreaterThan(0);
+      for (const [, example] of examples) {
+        const commands = example.split("\n").map((line) => line.trim()).filter(Boolean);
+        expect(findForbiddenViewportScaleCommands({ commands }), `${skill.name}: distorted viewport example`).toEqual([]);
+        const input = example.replace(/"(?:\\.|[^"\\])*"/g, '""');
+        for (const [, command] of input.matchAll(/\b([A-Z][A-Za-z0-9]*)\s*\(/g)) {
+          expect(["Execute", "RunClickScript", "RunUpdateScript"], `${skill.name}: script execution in example`).not.toContain(command);
+          expect(findGeoGebraCommandReferenceEntry(command), `${skill.name}: unknown native command ${command}`).toBeDefined();
+        }
+      }
+    }
+  });
+
   test("covers middle and high school first-layer math domains", async () => {
     const builtIns = await listAvailableAgentSkills(isolatedSkillEnv);
     const categories = new Set(builtIns.map((skill) => skill.category));
@@ -90,6 +128,7 @@ describe("built-in Agent Skill catalog", () => {
       "quadratic-equation",
       "inequality-interval",
       "quadratic-function",
+      "native-expression-modeling",
       "piecewise-domain-function",
       "dynamic-parameter-exploration",
       "triangle-circle-geometry",
@@ -119,6 +158,41 @@ describe("built-in Agent Skill catalog", () => {
     }
     expect(secondLayer.length).toBeGreaterThanOrEqual(15);
     expect(secondLayer.every((skill) => Boolean(skill.parent))).toBe(true);
+  });
+
+  test("loads native expression modeling as a default skill with executable host tools", async () => {
+    const skill = await activateAgentSkill("native-expression-modeling", isolatedSkillEnv);
+
+    expect(skill.source).toBe("built-in");
+    expect(skill.maturity).toBe("default");
+    expect(skill.parent).toBe("function-graph");
+    expect(skill.level).toBe(2);
+    expect(DEFAULT_BUSINESS_AGENT_SKILL_NAMES).toContain(skill.name);
+    expect(skill.recipes).toEqual([
+      "free-dependent-expression-chain",
+      "boolean-condition-value-map",
+      "undefined-boundary-validation"
+    ]);
+    expect(skill.tools).toContain("executeGeoGebraCommands");
+    expect(skill.tools).toContain("inspectGeoGebraObjects");
+    expect(skill.tools.every(isFunctionCallToolName)).toBe(true);
+    expect(skill.advancedTools).toEqual([]);
+  });
+
+  test("discovers native expression and list workflows from programming-oriented requests", async () => {
+    const cases = [
+      ["原生表达式 Boolean 条件逻辑与对象依赖", "native-expression-modeling"],
+      ["If 分支赋值与未定义边界", "native-expression-modeling"],
+      ["Sequence Zip KeepIf 列表映射过滤", "list-driven-construction"],
+      ["If 分段函数定义域端点", "piecewise-domain-function"]
+    ] as const;
+
+    for (const [query, name] of cases) {
+      const results = await searchAvailableAgentSkills({ query, limit: 3 }, isolatedSkillEnv);
+      expect(results.map((result) => result.name)).toContain(name);
+      const skill = await activateAgentSkill(name, isolatedSkillEnv);
+      expect(skill.markdown.match(/^```ggb\n[\s\S]*?^```/gm)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    }
   });
 
   test("includes common and expert GeoGebra workflows with explicit safety and validation rules", async () => {

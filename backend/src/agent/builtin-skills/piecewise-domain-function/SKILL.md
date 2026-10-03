@@ -23,4 +23,60 @@ tools: [searchGeoGebraCommands, executeGeoGebraCommands, showAnimationGuide, sho
 
 常用 GeoGebra 方向：`If`、`Function`、`Intersect`、`Root`、`LimitAbove`、`LimitBelow`、`Point`、`Slider`。
 
-注意：`Function` 只限制图像显示区间；需要表达真正的条件函数或参与后续判断时，优先使用 `If`。
+## 原生命令示例
+
+以下示例均在空白构图中逐行输入；条件顺序和端点归属写在函数定义里，不依赖脚本补救。
+
+### 例 1：三段函数按顺序分配端点
+
+初始条件：第一段取 `x < -1`，第二段取 `-1 <= x <= 2`，其余输入进入第三段。
+
+```ggb
+f(x) = If(x < -1, x + 4, If(x <= 2, x^2, 6 - x))
+fAtLeft = f(-1)
+fAtRight = f(2)
+leftExcludedMarker = Point((-1, 3))
+leftIncludedMarker = Point((-1, fAtLeft))
+rightIncludedMarker = Point((2, fAtRight))
+SetPointStyle(leftExcludedMarker, 2)
+SetPointStyle(leftIncludedMarker, 0)
+SetPointStyle(rightIncludedMarker, 0)
+```
+
+预期结果：`fAtLeft = 1`、`fAtRight = 4`；`x = -1` 不会落入第一段，`x = 2` 落入第二段。`SetPointStyle` 的 `2` 为空心圆，`0` 为实心圆，明确显示开闭端点。常见错误：先写过宽条件会截走后续分支；嵌套 `If` 应从最具体的左侧条件开始，并逐个代入边界验证。
+
+### 例 2：省略 else，保留真正的未定义区间
+
+初始条件：平方根函数只定义在半开区间 `[0, 4)`。
+
+```ggb
+g(x) = If(0 <= x < 4, sqrt(x))
+gAtLeft = g(0)
+gInside = g(1)
+gAtRight = g(4)
+gLeftIncluded = Point((0, gAtLeft))
+gRightExcludedMarker = Point((4, 2))
+SetPointStyle(gLeftIncluded, 0)
+SetPointStyle(gRightExcludedMarker, 2)
+```
+
+预期结果：`gAtLeft = 0`、`gInside = 1`，`gAtRight` 未定义。`gRightExcludedMarker` 只是空心端点标记，不属于函数。常见错误：写成 `If(0 <= x <= 4, sqrt(x))` 会把右端点纳入定义域；随意补一个 else 值则会把区间外也定义出来。`If` 的各结果分支必须是兼容的对象类型，赋值应写在 `If` 外部，不能把 `b = 2` 之类的赋值塞进结果分支。
+
+### 例 3：闭区间限制与显式条件定义
+
+初始条件：比较同一个基础函数在闭区间 `[-2, 2]` 上的两种原生限制方式。
+
+```ggb
+base(x) = x^2 - 1
+restricted = Function(base, -2, 2)
+domainSafe(x) = If(-2 <= x <= 2, base(x))
+restrictedAtRight = restricted(2)
+restrictedOutside = restricted(3)
+safeProbe = domainSafe(3)
+```
+
+预期结果：`restrictedAtRight = 3`，`restrictedOutside` 与 `safeProbe` 都未定义；两种写法都得到限制在 `[-2, 2]` 的函数。`Function` 适合单个闭区间，`If` 适合开端点、半开区间、多个区间或分支表达式。边界验证：分别代入 `-2`、`2` 和区间外的 `3`，不要只凭图像是否显示判断定义域。
+
+官方参考：[If](https://geogebra.github.io/docs/manual/en/commands/If/)、[Function](https://geogebra.github.io/docs/manual/en/commands/Function/)、[Functions：Limit Function to Interval](https://geogebra.github.io/docs/manual/en/Functions/#_limit_function_to_interval)、[SetPointStyle](https://geogebra.github.io/docs/manual/en/commands/SetPointStyle/)。
+
+注意：不要把 `Function(f, a, b)` 简化为“只隐藏区间外图像”。官方函数文档把它与 `If(a <= x <= b, f(x))` 都列为区间限制；若需要开闭端点、非连续区间或多分支规则，则使用 `If` 明确表达条件。

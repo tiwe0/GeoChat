@@ -22,6 +22,7 @@ const BUILTIN_SKILL_RECIPES: Record<string, string[]> = {
   "quadratic-equation": ["discriminant-root-count", "vieta-root-relation", "parabola-zero-check"],
   "inequality-interval": ["number-line-endpoint-check", "rational-sign-table", "parameter-critical-collision"],
   "function-graph": ["expression-table-graph-link", "parameter-slider-transform", "option-feature-check"],
+  "native-expression-modeling": ["free-dependent-expression-chain", "boolean-condition-value-map", "undefined-boundary-validation"],
   "piecewise-domain-function": ["domain-boundary-partition", "piecewise-endpoint-check", "discontinuity-limit-compare"],
   "dynamic-parameter-exploration": ["single-driver-parameter-map", "predict-observe-explain", "staged-visibility-animation"],
   "quadratic-function": ["vertex-axis-zero-layout", "discriminant-intersection-count", "interval-extremum-visual-check"],

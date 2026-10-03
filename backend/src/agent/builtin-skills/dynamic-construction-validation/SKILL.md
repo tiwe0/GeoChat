@@ -11,7 +11,7 @@ tools: [getCanvasContext, searchGeoGebraCommands, createGeometryPlan, executeGeo
 
 # 动态构造验证
 
-用于区分“看起来像”与“按性质构造”。目标是让图形在允许的拖动范围内始终保持题设性质，同时仍覆盖该类图形的一般情形。
+用于区分“看起来像”与“按性质构造”。目标是让图形在允许的拖动范围内始终保持题设性质，同时仍覆盖该类图形的一般情形。静态证明用 `geometric-theorem-verification`；只需展示变换效果用 `geometric-transformations`；拖动通过不是符号证明。
 
 工作顺序：
 
@@ -26,3 +26,26 @@ tools: [getCanvasContext, searchGeoGebraCommands, createGeometryPlan, executeGeo
 常用 GeoGebra 方向：`Point`、`PointIn`、`Circle`、`Line`、`Segment`、`PerpendicularLine`、`ParallelLine`、`Intersect`、`Distance`、`Relation`。
 
 验证原则：坐标恰好满足性质不是证明。优先把性质写入对象依赖关系，再用测量或 `Relation` 做可见检查。
+
+## 小型原生例子：依赖构造矩形
+
+例子独立；执行前先确认名称无冲突，再按行输入。
+
+```ggb
+A = (-2, 0)
+B = (2, 0)
+base = Line(A, B)
+normalAtA = PerpendicularLine(A, base)
+C = Point(normalAtA)
+throughC = Line(C, base)
+throughB = PerpendicularLine(B, base)
+D = Intersect(throughC, throughB)
+rightCheck = ArePerpendicular(Line(A, C), Line(A, B))
+parallelCheck = AreParallel(Line(C, D), Line(A, B))
+```
+
+预期：拖动自由点 `A/B` 或路径点 `C` 后，`D` 自动更新，两个检查在非退化情形均为 `true`。正常检查逐个拖动；边界检查让 `C` 接近 `A`，矩形趋于零高；退化检查 `A = B` 时底边方向消失，或 `C = A` 时图形退化，不能保留旧 `D` 或声称仍是矩形。
+
+若 Boolean/`Relation` 检查失败，先检查依赖图和分支，不用样式修饰掩盖错误。只使用原生命令，不使用 JavaScript、XML 或 `Execute`；命令签名不确定时先用 `searchGeoGebraCommands`。
+
+官方参考：[自由对象与依赖对象](https://geogebra.github.io/docs/manual/en/Free_Dependent_and_Auxiliary_Objects/)、[Point](https://geogebra.github.io/docs/manual/en/commands/Point/)、[Line](https://geogebra.github.io/docs/manual/en/commands/Line/)、[Relation](https://geogebra.github.io/docs/manual/en/commands/Relation/)。

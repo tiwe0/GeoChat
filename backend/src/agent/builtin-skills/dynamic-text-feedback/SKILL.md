@@ -29,3 +29,24 @@ tools: [getCanvasContext, searchGeoGebraCommands, executeGeoGebraCommands, showT
 - 不把答案永久显示在题目旁；需要答案时由明确的状态或用户动作控制。
 - 不通过任意 JavaScript 拼接普通数学文本；优先使用 GeoGebra 对象、条件和文本命令。
 - 不用红绿颜色作为唯一的正误区分，必须同时提供文字、图标、线型或数值证据。
+
+## 原生动态文本示例
+
+适用范围：参数变化时同步显示公式、数值和文字状态；长篇说明继续使用 `showTeachingHint`，不要塞进画布文本。
+
+```ggb
+txtA = 2
+txtF(x) = txtA*x + 1
+txtFormula = FormulaText(txtF, true, true)
+txtRows = TableText({{"x", 0, 1}, {"f(x)", txtF(0), txtF(1)}}, "v")
+txtIsPositive = txtA > 0
+txtIsNonPositive = txtA <= 0
+txtPositive = Text("斜率为正：函数递增", (-4, 3))
+txtCheck = Text("检查斜率符号与图像方向", (-4, 2.4))
+SetConditionToShowObject(txtPositive, txtIsPositive)
+SetConditionToShowObject(txtCheck, txtIsNonPositive)
+```
+
+预期结果：初始公式含 `txtA = 2` 的当前值，表格显示 `1`、`3`，且出现“函数递增”的文字证据；把 `txtA` 改为负数后两个反馈文本互换，公式、表值同步更新。边界检查：测试 `txtA = 0`，确认不会把常值函数误报为递增；动态反馈不能只改变红/绿色。`FormulaText` 的第二个参数控制是否代入变量值，不要把一次性的字符串冒充依赖文本。
+
+官方来源：[FormulaText](https://geogebra.github.io/docs/manual/en/commands/FormulaText/)、[TableText](https://geogebra.github.io/docs/manual/en/commands/TableText/)、[SetConditionToShowObject](https://geogebra.github.io/docs/manual/en/commands/SetConditionToShowObject/)、[Text](https://geogebra.github.io/docs/manual/en/commands/Text/)。

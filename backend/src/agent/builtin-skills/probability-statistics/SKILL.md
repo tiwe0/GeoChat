@@ -19,3 +19,37 @@ tools: [searchGeoGebraCommands, executeGeoGebraCommands, showAnimationGuide, sho
 4. 分布题展示概率质量、累计概率或模拟频率稳定过程。
 
 禁忌：不要把频率直接当概率；不要在事件不独立时直接相乘。
+
+## 数学与能力规则
+
+- 先声明总体/样本、随机试验、样本空间、事件及是否等可能；描述统计量与概率模型不混用。
+- `Variance` 表示以总数据个数为分母的方差；题目要求样本方差时应改用 `SampleVariance`。
+- 随机模拟必须报告样本量和本次观测频率，不声称固定的随机序列/图形；需复现时先明示设置种子并说明重算规则。
+- 下例 `psd` 前缀执行前必须确认未占用。
+
+## 原生小例：确定样本的描述统计
+
+```ggb
+psdData = {1, 2, 2, 3, 5, 5, 5, 7}
+psdMean = Mean(psdData)
+psdMedian = Median(psdData)
+psdVariance = Variance(psdData)
+psdValues = Unique(psdData)
+psdCounts = Frequency(psdData)
+psdTable = FrequencyTable(psdData)
+```
+
+预期：`psdMean=3.75`、`psdMedian=4`、`psdVariance=3.6875`、`psdValues={1,2,3,5,7}`、`psdCounts={1,2,1,3,1}`，频数和为 8。该例完全确定，不把某次随机结果写成预期常量。
+
+## 检查与降级
+
+- 正常：检查频数和等于样本量、频率和在容差内为 1，统计量的单位/量纲正确。
+- 退化：空列表的均值/中位数/方差未定义；单元素数据的方差为 0，但样本方差不应被强制为 0。
+- 边界：缺失值、非数值项、权重为负或频数和为 0 时先停止计算并说明数据契约。
+- 若统计图命令在当前内核不可用，保留数据、频数列表和数值结果，不声称图已渲染。
+
+## 官方依据
+
+- [Mean 命令](https://geogebra.github.io/docs/manual/en/commands/Mean/)
+- [Variance 命令](https://geogebra.github.io/docs/manual/en/commands/Variance/)
+- [FrequencyTable 命令](https://geogebra.github.io/docs/manual/en/commands/FrequencyTable/)

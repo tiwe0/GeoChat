@@ -26,3 +26,19 @@ tools: [getCanvasContext, searchGeoGebraCommands, executeGeoGebraCommands, setPe
 - 保留精确数与符号表达式，非必要不提前转小数。
 - 每次变形都记录定义域、分母非零、根式和对数条件；数值图像只用于验证而非证明。
 - 不创建名称相近但无依赖关系的“影子对象”；跨视图数据只有一个来源。
+
+## 原生协同示例
+
+适用范围：需要把精确因式分解、方程解与图形中的零点对应起来；不把数值图像当证明。
+
+```ggb
+casPoly(x) = x^2 - 1
+casFactored(x) = Factor(casPoly(x))
+casDerivative = Derivative(casPoly)
+CasLeft = (-1, casPoly(-1))
+CasRight = (1, casPoly(1))
+```
+
+预期结果：普通构造入口可得到 `casFactored(x) = (x - 1) (x + 1)`、`casDerivative(x) = 2x`，且 `CasLeft`、`CasRight` 都在 x 轴上；分解、导数和点坐标都引用同一个 `casPoly`。边界检查：当前宿主命令执行器只通过 `asyncEvalCommandResult`、`evalCommandResult` 或 `evalCommand` 执行普通构造，没有专用 CAS 行输入工具。官方手册把单参数 `Solve(<Equation in x>)` 列为通用语法，但多参数、假设和方程组等重载列在 CAS Syntax；本技能不能把 `setPerspective("CG")` 说成已执行 CAS 推导，也不能保证 CAS 专用重载可用。需要这些操作时先查询准确签名和当前入口能力；无专用入口则保留普通精确构造，并明确 CAS 流程未执行。
+
+官方来源：[Factor](https://geogebra.github.io/docs/manual/en/commands/Factor/)、[Derivative](https://geogebra.github.io/docs/manual/en/commands/Derivative/)、[Solve](https://geogebra.github.io/docs/manual/en/commands/Solve/)、[CAS View](https://geogebra.github.io/docs/manual/en/CAS_View/)。

@@ -22,7 +22,25 @@ tools: [getCanvasContext, searchGeoGebraCommands, executeGeoGebraCommands, setPe
 
 建议流程：
 
-1. 读取 canvasContext，判断关键对象的空间范围和是否裁剪。
+1. 读取 canvasContext 确认关键对象存在；它没有像素边界或标签包围盒，不能据此判断是否裁剪。
 2. 2D 时用 CenterView 或 2D 等比 ZoomIn 调整关键点、函数图像、圆和标签的位置；3D 时可以使用 6 参数 ZoomIn，但 x/y/z 范围必须按同一尺度扩展。
 3. 如需 SetAxesRatio，只使用 SetAxesRatio(1, 1) 或 SetAxesRatio(1, 1, 1)。
-4. 调整后再次读取画布，确认主体、标签和关键辅助对象都在画面内。
+4. 调整后再次读取画布，确认主体、标签和关键辅助对象仍存在、数学定义未被取景命令改变；是否都落在像素画面内必须另做真实视觉检查。
+5. 所有构造和取景必须在业务动画配置前完成；播放中执行 `ZoomIn`、`CenterView` 或 `SetAxesRatio` 会停止当前业务动画，取景后立即验证并重新配置。
+
+## 小型取景示例
+
+适用范围：主体构造已经正确，只需在 2D 视图中等比缩放和留白；不改变对象定义。
+
+```ggb
+FrameA = (-4, -2)
+FrameB = (4, 2)
+frameDiag = Segment(FrameA, FrameB)
+frameCircle = Circle((0, 0), 2)
+ZoomIn(-6, -6, 6, 6)
+SetAxesRatio(1, 1)
+```
+
+预期结果：提交的视野以原点为中心，x/y 数值跨度同为 12，x/y 单位长度相同；线段、圆与标签是否在真实画布内留白且未裁剪必须另看截图或现场 UI。边界检查：宿主策略会把非等跨度的四参数 `ZoomIn` 修复为方形范围，因此示例直接使用等跨度边界，再执行并验证 `SetAxesRatio(1,1)`；动态图形还要在动画配置前逐个写入参数极值并立即验证，而非只看初态。canvasContext 没有像素边界或标签包围盒，不能宣称已完成像素级防裁剪验收。
+
+官方来源：[ZoomIn](https://geogebra.github.io/docs/manual/en/commands/ZoomIn/)、[SetAxesRatio](https://geogebra.github.io/docs/manual/en/commands/SetAxesRatio/)、[CenterView](https://geogebra.github.io/docs/manual/en/commands/CenterView/)。

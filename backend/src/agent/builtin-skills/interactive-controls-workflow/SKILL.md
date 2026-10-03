@@ -11,7 +11,7 @@ tools: [getCanvasContext, searchGeoGebraCommands, executeGeoGebraCommands]
 
 # 交互控件工作流
 
-用于让用户修改参数、切换提示、选择模型或触发有限动作。优先使用 GeoGebra 的原生链接与条件关系，只有原生关系无法表达时才考虑脚本。
+用于让用户修改参数、切换提示、选择模型或触发有限动作。只使用 GeoGebra 原生链接与条件关系；本技能不生成 JavaScript、点击脚本或更新脚本。
 
 工作顺序：
 
@@ -30,3 +30,21 @@ tools: [getCanvasContext, searchGeoGebraCommands, executeGeoGebraCommands]
 - 控件标题使用用户可理解的动作或量名，不暴露内部对象名。
 - 控件数量保持最少，避免遮挡图形；核心数学对象不能只靠颜色或隐藏状态表达。
 - 正误反馈必须包含文字、符号或数值依据，颜色只能作为辅助提示。
+
+## 原生控件示例
+
+适用范围：输入框修改一个自由对象，复选框控制一个语义层；复杂状态机和任意脚本不属于本技能。
+
+```ggb
+ctrlA = 2
+ctrlF(x) = ctrlA*x + 1
+ctrlInput = InputBox(ctrlA)
+ctrlHint = Text("斜率由输入框中的 ctrlA 决定", (-4, 3))
+ctrlShowHint = Checkbox("显示斜率说明", {ctrlHint})
+SetFixed(ctrlInput, true)
+SetFixed(ctrlShowHint, true)
+```
+
+预期结果：输入框链接 `ctrlA`，修改后 `ctrlF` 自动更新；复选框显示/隐藏 `ctrlHint`，不需要 OnClick/OnUpdate。边界检查：测试 `ctrlA = 0`、负数和非数值输入；链接对象未成功更新时不创建第二份影子参数。`InputBox`/`Checkbox` 命令创建动作对象，但不等于宿主已替用户点击、聚焦或提交 GUI 控件；当前 host 无通用菜单/鼠标操作工具时，不编造这些动作。
+
+官方来源：[InputBox](https://geogebra.github.io/docs/manual/en/commands/InputBox/)、[Checkbox](https://geogebra.github.io/docs/manual/en/commands/Checkbox/)、[Action Objects](https://geogebra.github.io/docs/manual/en/Action_Objects/)。

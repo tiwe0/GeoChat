@@ -47,17 +47,30 @@ describe("assistant workspace boundaries", () => {
     expect(workspace).not.toContain("ONBOARDING_TOUR_STORAGE_KEY");
     expect(onboarding).toContain("export const ONBOARDING_TOUR_VERSION = 3;");
     expect(fusionSurface).toContain("<FusionAssistantOverlays");
-    expect(overlays).toContain("<ConversationDrawer");
+    expect(overlays).toContain("<ConversationHistoryContent");
     expect(overlays).toContain("<BlackboardPanel");
     expect(overlays).toContain("<FusionViewportCard");
     expect(overlays).toContain("<FusionOnboardingTour");
   });
 
-  test("adds composer-style panel shadow without dimming the canvas behind fusion history", () => {
+  test("uses the shared non-modal viewport card for fusion history", () => {
     const history = readFileSync(join(rendererRoot, "components/ConversationDrawer.tsx"), "utf8");
-    expect(history).toContain('bgcolor: viewport ? "transparent" : "rgba(15, 23, 42, 0.22)"');
+    const overlays = readFileSync(join(workspaceRoot, "FusionAssistantOverlays.tsx"), "utf8");
+    expect(overlays).toContain('<FusionViewportCard key="fusion-history" panelId="history"');
+    expect(overlays).toContain("<ConversationHistoryContent");
+    expect(overlays).not.toContain("<ConversationDrawer");
+    expect(history).not.toContain("viewport");
+    expect(history).toContain('bgcolor: "rgba(15, 23, 42, 0.22)"');
     expect(history).toContain("boxShadow: FLOATING_SURFACE_ELEVATION");
-    expect(history).toContain('data-fusion-panel={viewport ? "history" : undefined}');
+  });
+
+  test("preserves history selection, deletion, disabled and close-reset behavior across both surfaces", () => {
+    const history = readFileSync(join(rendererRoot, "components/ConversationDrawer.tsx"), "utf8");
+    const overlays = readFileSync(join(workspaceRoot, "FusionAssistantOverlays.tsx"), "utf8");
+    expect(history).toContain("const busy = interactionDisabled || selectingId !== null || deletingId !== null");
+    expect(history).toContain("if (await onDelete(conversation)) setConfirmingId(null)");
+    expect(history).toContain('<ConversationHistoryContent key={open ? "open" : "closed"}');
+    expect(overlays).toContain("props.conversationHistory.select(conversation).finally(() => props.onClose())");
   });
 
   test("lets fusion blackboard use the shared card shadow without adding a modal veil", () => {

@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import type { BlackboardEntry } from "@geochat-ai/app/blackboard";
 import { useTranslation } from "react-i18next";
 import { BlackboardPanel } from "../../components/BlackboardDrawer";
-import { ConversationDrawer, type ConversationSummary } from "../../components/ConversationDrawer";
+import { ConversationHistoryContent, type ConversationSummary } from "../../components/ConversationDrawer";
 import { ProblemBankSidecar } from "../../components/ProblemBankSidecar";
 import {
   FusionOnboardingTour,
@@ -43,23 +43,24 @@ export function FusionAssistantOverlays(props: {
 
   return (
     <>
-      <ConversationDrawer
-        viewport
-        open={panel === "history"}
-        interactionDisabled={props.isStreaming}
-        loading={props.conversationHistory.loading}
-        selectingId={props.conversationHistory.selectingId}
-        deletingId={props.conversationHistory.deletingId}
-        error={props.conversationHistory.error}
-        conversations={props.conversationHistory.conversations}
-        currentConversationId={props.currentConversationId}
-        onClose={props.onClose}
-        onSelect={(conversation) => {
-          void props.conversationHistory.select(conversation).finally(() => props.onClose());
-        }}
-        onDelete={props.conversationHistory.remove}
-      />
       <AnimatePresence initial={false}>
+        {panel === "history" && (
+          <FusionViewportCard key="fusion-history" panelId="history" title={t("history.title")} closeLabel={t("history.close")} onClose={props.onClose}>
+            <ConversationHistoryContent
+              interactionDisabled={props.isStreaming}
+              loading={props.conversationHistory.loading}
+              selectingId={props.conversationHistory.selectingId}
+              deletingId={props.conversationHistory.deletingId}
+              error={props.conversationHistory.error}
+              conversations={props.conversationHistory.conversations}
+              currentConversationId={props.currentConversationId}
+              onSelect={(conversation) => {
+                void props.conversationHistory.select(conversation).finally(() => props.onClose());
+              }}
+              onDelete={props.conversationHistory.remove}
+            />
+          </FusionViewportCard>
+        )}
         {panel === "blackboard" && (
           <FusionViewportCard key="fusion-blackboard" panelId="blackboard" title={t("blackboard.title")} closeLabel={t("blackboard.close")} onClose={props.onClose} hideHeader className="geochat-blackboard geochat-blackboard--fusion">
             <BlackboardPanel

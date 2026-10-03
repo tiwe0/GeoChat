@@ -67,6 +67,7 @@ describe("fusion-mode module boundary", () => {
   test("stacks the fusion toolbar on the right without covering viewport panels", () => {
     const toolbar = readFileSync(join(moduleRoot, "FusionToolbar.tsx"), "utf8");
     const viewportCard = readFileSync(join(moduleRoot, "FusionViewportCard.tsx"), "utf8");
+    const overlays = readFileSync(join(workspaceRoot, "FusionAssistantOverlays.tsx"), "utf8");
     const tour = readFileSync(join(moduleRoot, "FusionOnboardingTour.tsx"), "utf8");
     expect(toolbar).toContain('direction="column"');
     expect(toolbar).toContain("right: 18");
@@ -78,10 +79,8 @@ describe("fusion-mode module boundary", () => {
     expect(toolbar).toContain('placement="left"');
     expect(tour).not.toContain('placement: "bottom-end"');
     expect(viewportCard).toContain("...FUSION_PANEL_FRAME_SX");
-    for (const drawer of ["ConversationDrawer.tsx"]) {
-      const source = readFileSync(join(import.meta.dir, "../src/renderer-react/src/components", drawer), "utf8");
-      expect(source).toContain('viewport ? FUSION_PANEL_FRAME_SX');
-    }
+    expect(overlays).toContain('<FusionViewportCard key="fusion-history" panelId="history"');
+    expect(overlays).not.toContain("<ConversationDrawer");
   });
 
   test("reverses the toolbar DOM and onboarding order with the window switch first", () => {

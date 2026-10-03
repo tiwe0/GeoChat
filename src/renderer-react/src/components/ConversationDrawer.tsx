@@ -14,7 +14,6 @@ import {
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FLOATING_SURFACE_ELEVATION } from "../theme";
-import { FUSION_PANEL_FRAME_SX } from "../features/fusion-mode/panelLayout";
 
 export type ConversationSummary = {
   id: string;
@@ -26,8 +25,11 @@ export type ConversationSummary = {
 };
 
 type ConversationDrawerProps = {
-  viewport?: boolean;
   open: boolean;
+  onClose: () => void;
+} & ConversationHistoryContentProps;
+
+export type ConversationHistoryContentProps = {
   interactionDisabled: boolean;
   loading: boolean;
   selectingId: string | null;
@@ -35,14 +37,11 @@ type ConversationDrawerProps = {
   error: string | null;
   conversations: ConversationSummary[];
   currentConversationId: string | null;
-  onClose: () => void;
   onSelect: (conversation: ConversationSummary) => void;
   onDelete: (conversation: ConversationSummary) => Promise<boolean>;
 };
 
-export function ConversationDrawer({
-  viewport = false,
-  open,
+export function ConversationHistoryContent({
   interactionDisabled,
   loading,
   selectingId,
@@ -50,204 +49,197 @@ export function ConversationDrawer({
   error,
   conversations,
   currentConversationId,
-  onClose,
   onSelect,
   onDelete,
-}: ConversationDrawerProps) {
+}: ConversationHistoryContentProps) {
   const { t } = useTranslation();
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const busy = interactionDisabled || selectingId !== null || deletingId !== null;
-  function closeDrawer() {
-    setConfirmingId(null);
-    onClose();
-  }
 
   return (
+    <Box
+      sx={{
+        minHeight: 0,
+        flex: 1,
+        overflowY: "auto",
+        px: 1,
+        pb: 1,
+        scrollbarWidth: "none",
+        "&::-webkit-scrollbar": { display: "none" },
+      }}
+    >
+      {loading ? (
+        <Stack spacing={0.75} aria-label={t("history.loading")}>
+          {Array.from({ length: 5 }, (_, index) => (
+            <Skeleton key={index} variant="rounded" height={42} animation="wave" />
+          ))}
+        </Stack>
+      ) : conversations.length === 0 ? (
+        error ? (
+          <Alert severity="error" sx={{ mt: 0.5 }}>
+            {error}
+          </Alert>
+        ) : (
+          <Typography variant="body2" color="text.secondary" sx={{ px: 1, py: 2 }}>
+            {t("history.empty")}
+          </Typography>
+        )
+      ) : (
+        <Stack spacing={0.25}>
+          {error && (
+            <Alert severity="error" sx={{ mb: 0.5 }}>
+              {error}
+            </Alert>
+          )}
+          {conversations.map((conversation) => {
+            const selected = conversation.id === currentConversationId;
+            const confirming = conversation.id === confirmingId;
+            const deleting = conversation.id === deletingId;
+            if (confirming) {
+              return (
+                <Stack
+                  key={conversation.id}
+                  spacing={0.5}
+                  sx={{ minHeight: 64, px: 1, py: 0.75, justifyContent: "center", borderRadius: 1, bgcolor: "action.hover" }}
+                >
+                  <Typography variant="caption" color="text.primary" sx={{ fontWeight: 700 }}>
+                    {t("history.confirmDelete")}
+                  </Typography>
+                  <Stack direction="row" spacing={0.5} sx={{ justifyContent: "flex-end" }}>
+                    <Button type="button" size="small" color="inherit" disabled={deleting} onClick={() => setConfirmingId(null)}>
+                      {t("history.cancelDelete")}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="small"
+                      color="error"
+                      disabled={deleting}
+                      startIcon={deleting ? <CircularProgress size={14} color="inherit" /> : <Trash2Icon size={18} />}
+                      onClick={async () => {
+                        if (await onDelete(conversation)) setConfirmingId(null);
+                      }}
+                    >
+                      {deleting ? t("history.deleting") : t("history.delete")}
+                    </Button>
+                  </Stack>
+                </Stack>
+              );
+            }
+            return (
+              <Box
+                key={conversation.id}
+                sx={{
+                  width: "100%",
+                  minHeight: 42,
+                  display: "flex",
+                  alignItems: "center",
+                  position: "relative",
+                  borderRadius: 1,
+                  bgcolor: selected ? "action.selected" : "transparent",
+                  color: selected ? "primary.main" : "text.primary",
+                  borderLeft: 3,
+                  borderColor: selected ? "primary.main" : "transparent",
+                  "&:hover": { bgcolor: selected ? "action.selected" : "action.hover" },
+                }}
+              >
+                <ButtonBase
+                  component="button"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onSelect(conversation)}
+                  aria-current={selected ? "page" : undefined}
+                  sx={{
+                    minWidth: 0,
+                    minHeight: 42,
+                    flex: 1,
+                    px: 1,
+                    py: 0.75,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "flex-start",
+                    gap: 1,
+                    borderRadius: 1,
+                    color: "inherit",
+                    textAlign: "left",
+                    "&:focus-visible": { outline: "2px solid", outlineColor: "primary.main", outlineOffset: -2 },
+                  }}
+                >
+                  <MessageCircleIcon size={17} style={{ flex: "0 0 auto" }} />
+                  <Typography variant="body2" noWrap sx={{ minWidth: 0, flex: 1, fontWeight: selected ? 700 : 500 }}>
+                    {conversation.title || t("history.untitled")}
+                  </Typography>
+                </ButtonBase>
+                <IconButton
+                  type="button"
+                  size="small"
+                  color="error"
+                  disabled={busy}
+                  onClick={() => setConfirmingId(conversation.id)}
+                  aria-label={t("history.deleteConversation", { title: conversation.title || t("history.untitled") })}
+                  title={t("history.deleteConversation", { title: conversation.title || t("history.untitled") })}
+                  sx={{ flex: "0 0 auto", mr: 0.25 }}
+                >
+                  <Trash2Icon size={18} />
+                </IconButton>
+              </Box>
+            );
+          })}
+        </Stack>
+      )}
+    </Box>
+  );
+}
+
+export function ConversationDrawer({
+  open,
+  onClose,
+  ...historyProps
+}: ConversationDrawerProps) {
+  const { t } = useTranslation();
+  return (
     <Drawer
-      data-fusion-panel={viewport ? "history" : undefined}
-      anchor={viewport ? "right" : "left"}
+      anchor="left"
       open={open}
-      onClose={closeDrawer}
+      onClose={onClose}
       variant="temporary"
       ModalProps={{ keepMounted: true, disablePortal: true }}
       slotProps={{
-        backdrop: { sx: { position: "absolute", bgcolor: viewport ? "transparent" : "rgba(15, 23, 42, 0.22)" } },
+        backdrop: { sx: { position: "absolute", bgcolor: "rgba(15, 23, 42, 0.22)" } },
         paper: {
           "aria-label": t("history.title"),
           sx: {
             position: "absolute",
             // Let conversation titles determine the drawer width while keeping
             // long titles readable without allowing the panel to take over.
-            width: viewport ? "100%" : "fit-content",
-            minWidth: viewport ? 0 : 220,
-            maxWidth: viewport ? "100%" : "min(480px, calc(100% - 40px))",
-            border: viewport ? 1 : 0,
+            width: "fit-content",
+            minWidth: 220,
+            maxWidth: "min(480px, calc(100% - 40px))",
             borderRight: 1,
             borderColor: "divider",
             boxShadow: FLOATING_SURFACE_ELEVATION,
             bgcolor: "background.paper",
             overflowX: "hidden",
-            borderRadius: viewport ? 2.5 : 0,
           },
         },
       }}
       sx={{
-        position: viewport ? "fixed" : "absolute",
-        ...(viewport ? FUSION_PANEL_FRAME_SX : { inset: 0 }),
-        zIndex: viewport ? 1340 : 4,
+        position: "absolute",
+        inset: 0,
+        zIndex: 4,
         "& .MuiDrawer-paper": { position: "absolute" },
         "& .MuiModal-backdrop": { position: "absolute" },
       }}
     >
       <Stack sx={{ height: "100%", minHeight: 0 }}>
-        <Stack
-          direction="row"
-          sx={{ minHeight: viewport ? 52 : 56, px: viewport ? 1.5 : 1.25, alignItems: "center", borderBottom: 1, borderColor: "divider" }}
-        >
+        <Stack direction="row" sx={{ minHeight: 56, px: 1.25, alignItems: "center", borderBottom: 1, borderColor: "divider" }}>
           <Typography variant="subtitle2" sx={{ flex: 1, fontWeight: 800 }}>
             {t("history.title")}
           </Typography>
-          <IconButton data-fusion-panel-close={viewport ? true : undefined} type="button" size="small" onClick={closeDrawer} aria-label={t("history.close")} title={t("history.close")}>
+          <IconButton type="button" size="small" onClick={onClose} aria-label={t("history.close")} title={t("history.close")}>
             <XIcon size={18} />
           </IconButton>
         </Stack>
-
-        <Box
-          sx={{
-            minHeight: 0,
-            flex: 1,
-            overflowY: "auto",
-            px: 1,
-            pb: 1,
-            scrollbarWidth: "none",
-            "&::-webkit-scrollbar": { display: "none" },
-          }}
-        >
-          {loading ? (
-            <Stack spacing={0.75} aria-label={t("history.loading")}>
-              {Array.from({ length: 5 }, (_, index) => (
-                <Skeleton key={index} variant="rounded" height={42} animation="wave" />
-              ))}
-            </Stack>
-          ) : conversations.length === 0 ? (
-            error ? (
-              <Alert severity="error" sx={{ mt: 0.5 }}>
-                {error}
-              </Alert>
-            ) : (
-              <Typography variant="body2" color="text.secondary" sx={{ px: 1, py: 2 }}>
-                {t("history.empty")}
-              </Typography>
-            )
-          ) : (
-            <Stack spacing={0.25}>
-              {error && (
-                <Alert severity="error" sx={{ mb: 0.5 }}>
-                  {error}
-                </Alert>
-              )}
-              {conversations.map((conversation) => {
-                const selected = conversation.id === currentConversationId;
-                const confirming = conversation.id === confirmingId;
-                const deleting = conversation.id === deletingId;
-                if (confirming) {
-                  return (
-                    <Stack
-                      key={conversation.id}
-                      spacing={0.5}
-                      sx={{ minHeight: 64, px: 1, py: 0.75, justifyContent: "center", borderRadius: 1, bgcolor: "action.hover" }}
-                    >
-                      <Typography variant="caption" color="text.primary" sx={{ fontWeight: 700 }}>
-                        {t("history.confirmDelete")}
-                      </Typography>
-                      <Stack direction="row" spacing={0.5} sx={{ justifyContent: "flex-end" }}>
-                        <Button
-                          type="button"
-                          size="small"
-                          color="inherit"
-                          disabled={deleting}
-                          onClick={() => setConfirmingId(null)}
-                        >
-                          {t("history.cancelDelete")}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="small"
-                          color="error"
-                          disabled={deleting}
-                          startIcon={deleting ? <CircularProgress size={14} color="inherit" /> : <Trash2Icon size={18} />}
-                          onClick={async () => {
-                            if (await onDelete(conversation)) setConfirmingId(null);
-                          }}
-                        >
-                          {deleting ? t("history.deleting") : t("history.delete")}
-                        </Button>
-                      </Stack>
-                    </Stack>
-                  );
-                }
-                return (
-                  <Box
-                    key={conversation.id}
-                    sx={{
-                      width: "100%",
-                      minHeight: 42,
-                      display: "flex",
-                      alignItems: "center",
-                      position: "relative",
-                      borderRadius: 1,
-                      bgcolor: selected ? "action.selected" : "transparent",
-                      color: selected ? "primary.main" : "text.primary",
-                      borderLeft: 3,
-                      borderColor: selected ? "primary.main" : "transparent",
-                      "&:hover": { bgcolor: selected ? "action.selected" : "action.hover" },
-                    }}
-                  >
-                    <ButtonBase
-                      component="button"
-                      type="button"
-                      disabled={busy}
-                      onClick={() => onSelect(conversation)}
-                      aria-current={selected ? "page" : undefined}
-                      sx={{
-                        minWidth: 0,
-                        minHeight: 42,
-                        flex: 1,
-                        px: 1,
-                        py: 0.75,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "flex-start",
-                        gap: 1,
-                        borderRadius: 1,
-                        color: "inherit",
-                        textAlign: "left",
-                        "&:focus-visible": { outline: "2px solid", outlineColor: "primary.main", outlineOffset: -2 },
-                      }}
-                    >
-                      <MessageCircleIcon size={17} style={{ flex: "0 0 auto" }} />
-                      <Typography variant="body2" noWrap sx={{ minWidth: 0, flex: 1, fontWeight: selected ? 700 : 500 }}>
-                        {conversation.title || t("history.untitled")}
-                      </Typography>
-                    </ButtonBase>
-                    <IconButton
-                      type="button"
-                      size="small"
-                      color="error"
-                      disabled={busy}
-                      onClick={() => setConfirmingId(conversation.id)}
-                      aria-label={t("history.deleteConversation", { title: conversation.title || t("history.untitled") })}
-                      title={t("history.deleteConversation", { title: conversation.title || t("history.untitled") })}
-                      sx={{ flex: "0 0 auto", mr: 0.25 }}
-                    >
-                      <Trash2Icon size={18} />
-                    </IconButton>
-                  </Box>
-                );
-              })}
-            </Stack>
-          )}
-        </Box>
+        <ConversationHistoryContent key={open ? "open" : "closed"} {...historyProps} />
       </Stack>
     </Drawer>
   );

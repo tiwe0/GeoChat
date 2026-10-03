@@ -18,11 +18,11 @@ describe("fusion toolbar panel surface consistency", () => {
   test("all panels share four-edge geometry, including settings and narrow history", () => {
     expect(FUSION_PANEL_FRAME_SX).toMatchObject({ top: "max(12px, calc((100dvh - var(--fusion-toolbar-height, 0px)) / 2))", right: 72, bottom: 12, width: "min(420px, calc(100vw - 84px))" });
     const card = readFileSync(join(renderer, "features/fusion-mode/FusionViewportCard.tsx"), "utf8");
-    const history = readFileSync(join(renderer, "components/ConversationDrawer.tsx"), "utf8");
     const overlays = readFileSync(join(renderer, "features/assistant-workspace/FusionAssistantOverlays.tsx"), "utf8");
     expect(card).toContain("...FUSION_PANEL_FRAME_SX");
-    expect(history).toContain("viewport ? FUSION_PANEL_FRAME_SX");
-    expect(history).toContain("border: viewport ? 1 : 0");
+    expect(overlays).toContain('panelId="history"');
+    expect(overlays).toContain("<ConversationHistoryContent");
+    expect(overlays).not.toContain("<ConversationDrawer");
     expect(overlays).not.toContain(" wide");
     expect(card).not.toContain("wide?:");
   });
@@ -66,7 +66,7 @@ describe("fusion toolbar panel surface consistency", () => {
     expect(card).toContain("elevation={FLOATING_SURFACE_ELEVATION}");
   });
 
-  for (const panelId of ["blackboard", "problem-bank", "settings", "transcript"]) {
+  for (const panelId of ["blackboard", "history", "problem-bank", "settings", "transcript"]) {
     test(`${panelId} inherits the theme panel shadow`, () => {
       const html = renderToStaticMarkup(createElement(ThemeProvider, { theme: copilotTheme }, createElement(FusionViewportCard, {
         panelId, title: panelId, closeLabel: "Close", onClose: () => {}, children: "Content",
@@ -77,15 +77,13 @@ describe("fusion toolbar panel surface consistency", () => {
     });
   }
 
-  test("history uses the same floating shadow in fusion and window surfaces", async () => {
+  test("window history retains the drawer shadow", async () => {
     const i18n = i18next.createInstance();
     await i18n.init({ lng: "en", resources: { en: { translation: { history: { title: "History", close: "Close", empty: "Empty" } } } } });
-    for (const viewport of [true, false]) {
-      const html = renderToStaticMarkup(createElement(ThemeProvider, { theme: copilotTheme }, createElement(I18nextProvider, { i18n }, createElement(ConversationDrawer, {
-        viewport, open: true, interactionDisabled: false, loading: false, selectingId: null, deletingId: null,
-        error: null, conversations: [], currentConversationId: null, onClose: () => {}, onSelect: () => {}, onDelete: async () => true,
-      }))));
-      expect(html).toContain(`box-shadow:${copilotTheme.shadows[FLOATING_SURFACE_ELEVATION]}`);
-    }
+    const html = renderToStaticMarkup(createElement(ThemeProvider, { theme: copilotTheme }, createElement(I18nextProvider, { i18n }, createElement(ConversationDrawer, {
+      open: true, interactionDisabled: false, loading: false, selectingId: null, deletingId: null,
+      error: null, conversations: [], currentConversationId: null, onClose: () => {}, onSelect: () => {}, onDelete: async () => true,
+    }))));
+    expect(html).toContain(`box-shadow:${copilotTheme.shadows[FLOATING_SURFACE_ELEVATION]}`);
   });
 });

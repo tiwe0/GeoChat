@@ -6,7 +6,7 @@ import { parseGithub, parseMirror } from "../website/src/lib/release";
 
 const root = join(import.meta.dir, "..");
 
-describe("preview publication boundaries", () => {
+describe("release publication boundaries", () => {
   test("clean-runner resources precede Rust compilation and immutable tags can be rebuilt", () => {
     const workflow = Bun.YAML.parse(readFileSync(join(root, ".github/workflows/tauri-package.yml"), "utf8")) as {
       on: { workflow_dispatch: { inputs: { release_tag: unknown } } };
@@ -35,21 +35,19 @@ describe("preview publication boundaries", () => {
     expect(workflow.jobs.mirror.if).toContain("github.event_name == 'push'");
   });
 
-  test("preview parsers accept the exact release and reject stale or stable payloads", () => {
+  test("stable parsers accept stable releases and reject preview payloads", () => {
     const mirror = {
-      tag: "v0.7.0-preview", version: "0.7.0-preview", prerelease: true,
+      tag: "v0.7.0", version: "0.7.0", prerelease: false,
       assets: [{ name: "GeoChat.dmg", url: "https://example.test/GeoChat.dmg", size: 42 }]
     };
-    expect(parseMirror(mirror)?.version).toBe("0.7.0-preview");
-    expect(parseMirror({ ...mirror, tag: "v0.6.1" })).toBeNull();
-    expect(parseMirror({ ...mirror, version: "0.7.0" })).toBeNull();
+    expect(parseMirror(mirror)?.version).toBe("0.7.0");
+    expect(parseMirror({ ...mirror, tag: "v0.7.0-preview", version: "0.7.0-preview", prerelease: true })).toBeNull();
     const github = {
-      tag_name: "v0.7.0-preview", prerelease: true, draft: false,
+      tag_name: "v0.7.0", prerelease: false, draft: false,
       assets: [{ name: "GeoChat.dmg", browser_download_url: "https://example.test/GeoChat.dmg", size: 42 }]
     };
-    expect(parseGithub(github)?.version).toBe("0.7.0-preview");
-    expect(parseGithub({ ...github, tag_name: "v0.6.1" })).toBeNull();
-    expect(parseGithub({ ...github, prerelease: false })).toBeNull();
+    expect(parseGithub(github)?.version).toBe("0.7.0");
+    expect(parseGithub({ ...github, tag_name: "v0.7.0-preview", prerelease: true })).toBeNull();
     expect(parseGithub({ ...github, draft: true })).toBeNull();
   });
 
@@ -64,16 +62,19 @@ describe("preview publication boundaries", () => {
     expect(workflow).toContain('$BUCKET/$PREFIX/$MANIFEST_NAME');
   });
 
-  test("website requests and caches the exact featured preview without stale-channel fallbacks", () => {
+  test("website requests and caches the stable channel without preview fallbacks", () => {
     const site = readFileSync(join(root, "website/src/site.ts"), "utf8");
     const feed = readFileSync(join(root, "website/src/lib/release.ts"), "utf8");
     const page = readFileSync(join(root, "website/src/pages/Download.tsx"), "utf8");
-    expect(site).toContain('PREVIEW_RELEASE_TAG: string | null = "v0.7.0-preview"');
+    expect(site).toContain("PREVIEW_RELEASE_TAG: string | null = null");
     expect(site).toContain('`tags/${PREVIEW_RELEASE_TAG}`');
     expect(site).toContain('PREVIEW_RELEASE_TAG ? "preview.json" : "latest.json"');
+    expect(site).toContain('PREVIEW_RELEASE_TAG ? `tags/${PREVIEW_RELEASE_TAG}` : "latest"');
     expect(feed).toContain('`geochat:release:${PREVIEW_RELEASE_TAG ?? "stable"}`');
     expect(feed).toContain('body.tag !== PREVIEW_RELEASE_TAG');
     expect(feed).toContain('tag !== PREVIEW_RELEASE_TAG');
+    expect(feed).toContain('body.prerelease === true || version.includes("-")');
+    expect(feed).toContain('body.prerelease === true || tag.includes("-")');
     expect(feed).toContain('`${DOWNLOADS_BASE}/${DOWNLOAD_MANIFEST}`');
     expect(page).toContain('t.download.preview');
     expect(page).toContain('href={FEATURED_RELEASE_URL}');

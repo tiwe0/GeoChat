@@ -14,7 +14,7 @@ export const REPO_NAME = "GeoChat";
 export const REPO_URL = `https://github.com/${REPO_OWNER}/${REPO_NAME}`;
 export const RELEASES_URL = `${REPO_URL}/releases`;
 /** Explicit download channel; set to null when featuring the stable release. */
-export const PREVIEW_RELEASE_TAG: string | null = "v0.7.0-preview";
+export const PREVIEW_RELEASE_TAG: string | null = null;
 export const DOWNLOAD_MANIFEST = PREVIEW_RELEASE_TAG ? "preview.json" : "latest.json";
 export const FEATURED_RELEASE_URL = PREVIEW_RELEASE_TAG
   ? `${RELEASES_URL}/tag/${PREVIEW_RELEASE_TAG}`

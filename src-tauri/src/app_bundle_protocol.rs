@@ -86,13 +86,64 @@ pub(crate) fn app_bundle_protocol_response(
     content_type: &'static str,
     body: Vec<u8>,
 ) -> http::Response<Vec<u8>> {
+    protocol_response(
+        status,
+        content_type,
+        body,
+        APP_BUNDLE_CONTENT_SECURITY_POLICY,
+    )
+}
+
+pub(crate) fn app_bundle_renderer_response(body: Vec<u8>) -> http::Response<Vec<u8>> {
+    // Only the verified renderer entry's Vite local module bootstrap gets a
+    // nonce. Never mark arbitrary vendor HTML or remote script src elements:
+    // CSP nonces authorize external sources too, regardless of the allowlist.
+    let Ok(html) = String::from_utf8(body) else {
+        return app_bundle_protocol_response(
+            http::StatusCode::INTERNAL_SERVER_ERROR,
+            "text/plain; charset=utf-8",
+            b"renderer entry is not valid UTF-8".to_vec(),
+        );
+    };
+    let (body, policy) = {
+        // Two UUIDv4 values provide 244 random bits (each UUID reserves six
+        // version/variant bits), exceeding CSP's 128-bit randomness minimum.
+        let nonce = format!(
+            "{}{}",
+            uuid::Uuid::new_v4().simple(),
+            uuid::Uuid::new_v4().simple()
+        );
+        let policy = APP_BUNDLE_CONTENT_SECURITY_POLICY.replacen(
+            "script-src 'self'",
+            &format!("script-src 'nonce-{nonce}' 'self'"),
+            1,
+        );
+        let body = html
+            .replace(
+                "<script type=\"module\" crossorigin src=\"./assets/",
+                &format!("<script nonce=\"{nonce}\" type=\"module\" crossorigin src=\"./assets/"),
+            )
+            .into_bytes();
+        (body, policy)
+    };
+    protocol_response(
+        http::StatusCode::OK,
+        "text/html; charset=utf-8",
+        body,
+        &policy,
+    )
+}
+
+fn protocol_response(
+    status: http::StatusCode,
+    content_type: &'static str,
+    body: Vec<u8>,
+    policy: &str,
+) -> http::Response<Vec<u8>> {
     http::Response::builder()
         .status(status)
         .header(http::header::CONTENT_TYPE, content_type)
-        .header(
-            http::header::CONTENT_SECURITY_POLICY,
-            APP_BUNDLE_CONTENT_SECURITY_POLICY,
-        )
+        .header(http::header::CONTENT_SECURITY_POLICY, policy)
         .header(http::header::X_CONTENT_TYPE_OPTIONS, "nosniff")
         .body(body)
         .unwrap_or_else(|_| http::Response::new(Vec::new()))
@@ -100,27 +151,44 @@ pub(crate) fn app_bundle_protocol_response(
 
 #[cfg(test)]
 mod tests {
-    use super::{app_bundle_protocol_response, APP_BUNDLE_CONTENT_SECURITY_POLICY};
+    use super::{
+        app_bundle_protocol_response, app_bundle_renderer_response,
+        APP_BUNDLE_CONTENT_SECURITY_POLICY,
+    };
     use tauri::http;
 
     #[test]
     fn custom_protocol_html_response_enforces_production_csp() {
-        let body = b"<!doctype html><script>alert('blocked without policy')</script>".to_vec();
-        let response = app_bundle_protocol_response(
-            http::StatusCode::OK,
-            "text/html; charset=utf-8",
-            body.clone(),
-        );
+        let body =
+            b"<!doctype html><script type=\"module\" crossorigin src=\"./assets/app.js\"></script>"
+                .to_vec();
+        let response = app_bundle_renderer_response(body);
 
         assert_eq!(response.status(), http::StatusCode::OK);
-        assert_eq!(response.body(), &body);
-        assert_eq!(
-            response
-                .headers()
-                .get(http::header::CONTENT_SECURITY_POLICY)
-                .and_then(|value| value.to_str().ok()),
-            Some(APP_BUNDLE_CONTENT_SECURITY_POLICY)
-        );
+        let html = std::str::from_utf8(response.body()).unwrap();
+        let nonce = html
+            .split("nonce=\"")
+            .nth(1)
+            .unwrap()
+            .split('"')
+            .next()
+            .unwrap();
+        assert_eq!(nonce.len(), 64);
+        assert!(nonce.chars().all(|character| character.is_ascii_hexdigit()));
+        let policy = response.headers()[http::header::CONTENT_SECURITY_POLICY]
+            .to_str()
+            .unwrap();
+        assert!(policy.contains(&format!("'nonce-{nonce}'")));
+        assert!(policy.contains("geochat-bundle:"));
+        assert!(!policy
+            .split("script-src ")
+            .nth(1)
+            .unwrap()
+            .split(';')
+            .next()
+            .unwrap()
+            .contains("'unsafe-inline'"));
+        assert!(html.contains("src=\"./assets/app.js\""));
         assert_eq!(
             response
                 .headers()
@@ -130,6 +198,60 @@ mod tests {
         );
         assert!(APP_BUNDLE_CONTENT_SECURITY_POLICY.contains("object-src 'none'"));
         assert!(APP_BUNDLE_CONTENT_SECURITY_POLICY.contains("frame-ancestors 'none'"));
+    }
+
+    #[test]
+    fn html_nonce_is_unique_per_document_and_not_added_to_asset_responses() {
+        let html = || {
+            app_bundle_renderer_response(
+                b"<script type=\"module\" crossorigin src=\"./assets/app.js\"></script>".to_vec(),
+            )
+        };
+        assert_ne!(
+            html().headers()[http::header::CONTENT_SECURITY_POLICY],
+            html().headers()[http::header::CONTENT_SECURITY_POLICY]
+        );
+        let script = app_bundle_protocol_response(
+            http::StatusCode::OK,
+            "text/javascript; charset=utf-8",
+            b"window.test = true;".to_vec(),
+        );
+        assert_eq!(
+            script.headers()[http::header::CONTENT_SECURITY_POLICY],
+            APP_BUNDLE_CONTENT_SECURITY_POLICY
+        );
+        assert_eq!(script.body(), b"window.test = true;");
+    }
+
+    #[test]
+    fn remote_scripts_and_vendor_html_never_receive_a_nonce() {
+        let remote = "<script type=\"module\" crossorigin src=\"https://example.com/app.js\"></script><script src=\"//js.live.net/v5.0/wl.js\"></script><script>alert(1)</script>";
+        let renderer = app_bundle_renderer_response(remote.as_bytes().to_vec());
+        assert_eq!(renderer.body(), remote.as_bytes());
+        assert!(!std::str::from_utf8(renderer.body())
+            .unwrap()
+            .contains("nonce="));
+        let vendor = app_bundle_protocol_response(
+            http::StatusCode::OK,
+            "text/html; charset=utf-8",
+            remote.as_bytes().to_vec(),
+        );
+        assert_eq!(vendor.body(), remote.as_bytes());
+        assert_eq!(
+            vendor.headers()[http::header::CONTENT_SECURITY_POLICY],
+            APP_BUNDLE_CONTENT_SECURITY_POLICY
+        );
+    }
+
+    #[test]
+    fn invalid_renderer_utf8_fails_without_nonce_authorization() {
+        let response = app_bundle_renderer_response(vec![0xff, 0xfe]);
+        assert_eq!(response.status(), http::StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(response.body(), b"renderer entry is not valid UTF-8");
+        assert_eq!(
+            response.headers()[http::header::CONTENT_SECURITY_POLICY],
+            APP_BUNDLE_CONTENT_SECURITY_POLICY
+        );
     }
 
     #[test]

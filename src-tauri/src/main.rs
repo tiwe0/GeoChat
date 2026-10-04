@@ -26,6 +26,7 @@ use access::{
 use app_bundle::{resolve_startup_app_bundle, ActiveAppBundle};
 use app_bundle_protocol::{
     app_bundle_content_type, app_bundle_protocol_request_path, app_bundle_protocol_response,
+    app_bundle_renderer_response,
 };
 use commands::access::{check_access, get_access_state};
 use commands::app_bundle_update::{
@@ -554,6 +555,7 @@ fn handle_app_bundle_protocol_request<R: tauri::Runtime>(
     }
     let asset_path = bundle.root.join(&request_path);
     match fs::read(&asset_path) {
+        Ok(bytes) if request_path == "renderer/index.html" => app_bundle_renderer_response(bytes),
         Ok(bytes) => app_bundle_protocol_response(
             http::StatusCode::OK,
             app_bundle_content_type(&request_path),

@@ -1,5 +1,6 @@
 import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
+import { assertGeoGebraNonceRuntime } from "./lib/geogebra-nonce-contract.mjs";
 
 const vendorDir = resolve("dist/vendor");
 const geogebraVendorDir = resolve(vendorDir, "geogebra");
@@ -27,5 +28,6 @@ rmSync(agentSkillsDir, { recursive: true, force: true });
 mkdirSync(vendorDir, { recursive: true });
 mkdirSync(agentSkillsDir, { recursive: true });
 cpSync(resolve("vendor/geogebra"), geogebraVendorDir, { recursive: true });
+assertGeoGebraNonceRuntime(geogebraVendorDir);
 cpSync(resolve("backend/src/agent/builtin-skills"), agentSkillsDir, { recursive: true });
 stripJavaScriptSourceMaps(geogebraVendorDir);

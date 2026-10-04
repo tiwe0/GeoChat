@@ -60,6 +60,8 @@ describe("release publication boundaries", () => {
     expect(workflow).toContain("manifest=latest.json");
     expect(workflow).toContain('release-assets/$MANIFEST_NAME');
     expect(workflow).toContain('$BUCKET/$PREFIX/$MANIFEST_NAME');
+    expect(workflow).toContain('sha256="$(sha256sum "$file" | awk \'{print $1}\')"');
+    expect(workflow).toContain('$BUCKET/$PREFIX/$TAG_NAME/$sha256/$name');
   });
 
   test("website requests and caches the stable channel without preview fallbacks", () => {
@@ -92,8 +94,41 @@ describe("release publication boundaries", () => {
       expect(manifest.tag).toBe("v0.7.0-preview");
       expect(manifest.version).toBe("0.7.0-preview");
       expect(manifest.prerelease).toBe(true);
-      expect(manifest.assets[0].url).toBe("https://example.test/geochat/v0.7.0-preview/GeoChat_0.7.0.dmg");
       expect(manifest.assets[0].sha256).toMatch(/^[a-f0-9]{64}$/);
+      expect(manifest.assets[0].url).toBe(
+        `https://example.test/geochat/v0.7.0-preview/${manifest.assets[0].sha256}/GeoChat_0.7.0.dmg`
+      );
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("rebuilding the same tag with different bytes produces a different immutable URL", () => {
+    const directory = mkdtempSync(join(tmpdir(), "geochat-rebuilt-manifest-"));
+    try {
+      const installer = join(directory, "GeoChat_0.7.0.dmg");
+      const output = join(directory, "latest.json");
+      const buildManifest = () => {
+        const result = Bun.spawnSync([
+          "node", join(root, "scripts/build-r2-download-manifest.mjs"),
+          "--assets", directory, "--tag", "v0.7.0", "--base", "https://example.test/geochat", "--out", output
+        ]);
+        expect(result.exitCode).toBe(0);
+        return JSON.parse(readFileSync(output, "utf8"));
+      };
+
+      writeFileSync(installer, "first v0.7.0 installer bytes");
+      const first = buildManifest();
+      writeFileSync(installer, "replacement v0.7.0 installer bytes");
+      const replacement = buildManifest();
+
+      expect(first.tag).toBe("v0.7.0");
+      expect(replacement.tag).toBe("v0.7.0");
+      expect(first.assets[0].name).toBe(replacement.assets[0].name);
+      expect(first.assets[0].sha256).not.toBe(replacement.assets[0].sha256);
+      expect(first.assets[0].url).not.toBe(replacement.assets[0].url);
+      expect(first.assets[0].url).toContain(`/${first.assets[0].sha256}/`);
+      expect(replacement.assets[0].url).toContain(`/${replacement.assets[0].sha256}/`);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

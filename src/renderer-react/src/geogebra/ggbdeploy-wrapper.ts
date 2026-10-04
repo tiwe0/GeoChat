@@ -20,6 +20,7 @@ declare global {
 const DEPLOY_SCRIPT = "__geogebra_deployggb_script__";
 const GEOGEBRA_STYLESHEET = "__geogebra_runtime_stylesheet__";
 const GEOGEBRA_MODULE_BASE = "__geogebra_web3d_module_base__";
+const DEFAULT_INITIALIZATION_TIMEOUT_MS = 20_000;
 let deployPromise: Promise<void> | undefined;
 let stylesheetPromise: Promise<void> | undefined;
 // deployggb keeps a process-wide applet registry keyed by the DOM id. Keep a
@@ -94,6 +95,10 @@ export async function mountGeoGebra(options: {
   /** Cancels an in-flight mount (notably React StrictMode effect replay). */
   signal?: AbortSignal;
   onReady: (api: GeoGebraApi) => void;
+  /** Reports failures that happen after deployggb has injected the applet. */
+  onError?: (error: Error) => void;
+  /** Test and diagnostics override; production uses a finite 20 second limit. */
+  initializationTimeoutMs?: number;
 }) {
   const mountToken = Symbol("geogebra-mount");
   activeMounts.set(options.container, mountToken);
@@ -107,9 +112,22 @@ export async function mountGeoGebra(options: {
   // the web3d module directory. The old URL returned 404 in both dev and the
   // packaged backend; browsers often still fire link.onload for that response,
   // leaving GeoGebra injected without its required layout styles.
-  await loadGeoGebraStylesheet(`${assetBase}/HTML5/5.0/css/bundles/bundle.css`);
+  const initializationTimeoutMs = Math.max(1, options.initializationTimeoutMs ?? DEFAULT_INITIALIZATION_TIMEOUT_MS);
+  await waitForMountStep(
+    loadGeoGebraStylesheet(`${assetBase}/HTML5/5.0/css/bundles/bundle.css`),
+    initializationTimeoutMs,
+    "GeoGebra 样式表加载超时。",
+    options.signal,
+    isActiveMount,
+  );
   throwIfMountCancelled(options.signal, isActiveMount);
-  await loadDeployScript(`${assetBase}/deployggb.js`);
+  await waitForMountStep(
+    loadDeployScript(`${assetBase}/deployggb.js`),
+    initializationTimeoutMs,
+    "GeoGebra deployggb.js 加载超时。",
+    options.signal,
+    isActiveMount,
+  );
   throwIfMountCancelled(options.signal, isActiveMount);
   if (!window.GGBApplet) throw new Error("GeoGebra deployggb.js 未就绪。");
 
@@ -136,6 +154,41 @@ export async function mountGeoGebra(options: {
   let resizeFrame: number | undefined;
   let drawingCanvasObserved = false;
   let disposed = false;
+  let initializationSettled = false;
+  let initializationTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+
+  const removeInitializationWatchers = () => {
+    if (initializationTimer !== undefined) {
+      globalThis.clearTimeout(initializationTimer);
+      initializationTimer = undefined;
+    }
+    window.removeEventListener("error", handleInitializationError);
+    window.removeEventListener("unhandledrejection", handleInitializationRejection);
+    options.signal?.removeEventListener("abort", handleInitializationAbort);
+  };
+  const finishInitialization = () => {
+    if (initializationSettled) return false;
+    initializationSettled = true;
+    removeInitializationWatchers();
+    return true;
+  };
+  const reportInitializationError = (error: unknown) => {
+    if (disposed || !isActiveMount() || options.signal?.aborted || !finishInitialization()) return;
+    const normalized = normalizeError(error, "GeoGebra 初始化失败。");
+    if (options.onError) options.onError(normalized);
+    else logger.error("runtime_initialization_failed", "GEOGEBRA_INITIALIZATION_FAILED", { error: normalized });
+  };
+  function handleInitializationError(event: ErrorEvent) {
+    const error = geogebraInitializationError(event.error, event.message, event.filename);
+    if (error) reportInitializationError(error);
+  }
+  function handleInitializationRejection(event: PromiseRejectionEvent) {
+    const error = geogebraInitializationError(event.reason);
+    if (error) reportInitializationError(error);
+  }
+  function handleInitializationAbort() {
+    finishInitialization();
+  }
 
   const refreshRuntimeViews = () => {
     if (!runtimeApi) return;
@@ -260,6 +313,7 @@ export async function mountGeoGebra(options: {
     borderColor: "#dfe7e2",
     appletOnLoad: (api: GeoGebraApi) => {
       if (disposed || !isActiveMount() || options.signal?.aborted) return;
+      finishInitialization();
       runtimeApi = api;
       // Do not reapply the perspective here. GeoGebra's runtime perspective
       // switch rewrites the menu/toolbar flags and couples two options that
@@ -269,10 +323,21 @@ export async function mountGeoGebra(options: {
     },
   });
   throwIfMountCancelled(options.signal, isActiveMount);
-  pinGeoGebraModuleBase(codebase);
-  applet.setHTML5Codebase(codebase);
-  throwIfMountCancelled(options.signal, isActiveMount);
-  applet.inject(options.container, "html5", true);
+  window.addEventListener("error", handleInitializationError);
+  window.addEventListener("unhandledrejection", handleInitializationRejection);
+  options.signal?.addEventListener("abort", handleInitializationAbort, { once: true });
+  initializationTimer = globalThis.setTimeout(() => {
+    reportInitializationError(new Error(`GeoGebra 初始化超时（${initializationTimeoutMs}ms）。`));
+  }, initializationTimeoutMs);
+  try {
+    pinGeoGebraModuleBase(codebase);
+    applet.setHTML5Codebase(codebase);
+    throwIfMountCancelled(options.signal, isActiveMount);
+    applet.inject(options.container, "html5", true);
+  } catch (error) {
+    finishInitialization();
+    throw error;
+  }
   // Observe the stage. Observing the host would feed syncSize its own writes.
   const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleSyncSize);
   resizeObserver?.observe(options.container.parentElement ?? options.container);
@@ -300,6 +365,7 @@ export async function mountGeoGebra(options: {
     applet,
     dispose() {
       disposed = true;
+      finishInitialization();
       if (resizeFrame !== undefined) window.cancelAnimationFrame(resizeFrame);
       resizeObserver?.disconnect();
       mutationObserver?.disconnect();
@@ -325,7 +391,52 @@ export function geogebraAssetBaseUrl(
 
 function throwIfMountCancelled(signal: AbortSignal | undefined, isActiveMount: () => boolean) {
   if (!signal?.aborted && isActiveMount()) return;
+  throw mountCancellationError();
+}
+
+function waitForMountStep<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string,
+  signal: AbortSignal | undefined,
+  isActiveMount: () => boolean,
+) {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      if (timer !== undefined) globalThis.clearTimeout(timer);
+      signal?.removeEventListener("abort", handleAbort);
+      callback();
+    };
+    const handleAbort = () => finish(() => reject(mountCancellationError()));
+    timer = globalThis.setTimeout(() => finish(() => {
+      reject(signal?.aborted || !isActiveMount() ? mountCancellationError() : new Error(timeoutMessage));
+    }), timeoutMs);
+    signal?.addEventListener("abort", handleAbort, { once: true });
+    promise.then(
+      (value) => finish(() => resolve(value)),
+      (error) => finish(() => reject(error)),
+    );
+  });
+}
+
+function mountCancellationError() {
   const error = new Error("GeoGebra mount cancelled.");
   error.name = "AbortError";
-  throw error;
+  return error;
+}
+
+function normalizeError(error: unknown, fallback: string) {
+  if (error instanceof Error) return error;
+  if (typeof error === "string" && error.trim()) return new Error(error);
+  return new Error(fallback);
+}
+
+function geogebraInitializationError(error: unknown, message = "", filename = "") {
+  const normalized = normalizeError(error, message || "GeoGebra 初始化失败。");
+  const evidence = `${message} ${filename} ${normalized.message} ${normalized.stack ?? ""}`.toLowerCase();
+  return /geogebra|deployggb|web3d|\bgwt\b/.test(evidence) ? normalized : null;
 }

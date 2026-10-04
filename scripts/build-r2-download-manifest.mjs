@@ -61,14 +61,16 @@ const trimmedBase = base.replace(/\/+$/, "");
 const assets = files.map((file) => {
   const name = path.basename(file);
   const body = readFileSync(file);
+  const sha256 = createHash("sha256").update(body).digest("hex");
   return {
     name,
-    // Matches the R2 key layout written by the release workflow.
-    url: `${trimmedBase}/${tag}/${name}`,
+    // The digest keeps a rebuilt tag from resolving to stale immutable bytes.
+    // This must match the content-addressed R2 key written by the workflow.
+    url: `${trimmedBase}/${tag}/${sha256}/${name}`,
     size: statSync(file).size,
-    // Published so a cautious user can verify a download; the installers are
-    // not code-signed, so a checksum is the only integrity check on offer.
-    sha256: createHash("sha256").update(body).digest("hex")
+    // Published in addition to platform signing so users and automation can
+    // independently verify the exact installer bytes they downloaded.
+    sha256
   };
 });
 

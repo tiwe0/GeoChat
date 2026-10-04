@@ -60,6 +60,12 @@ export default function App() {
       container,
       backendBaseUrl: backendOrigin(),
       signal: mountAbort.signal,
+      onError: (error) => {
+        if (disposed) return;
+        logger.error("applet_initialization_failed", "GEOGEBRA_APPLET_INITIALIZATION_FAILED", { error });
+        setCanvasState("error");
+        setCanvasError(error.message);
+      },
       onReady: (api) => {
         if (disposed) return;
         controllerRef.current.setApi(api);

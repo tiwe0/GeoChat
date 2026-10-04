@@ -121,6 +121,47 @@ class FakeApplet {
   }
 }
 
+class FakeBrowserWindow {
+  readonly listeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
+  readonly GGBApplet: typeof FakeAppletConstructor;
+
+  constructor() {
+    this.GGBApplet = FakeAppletConstructor;
+  }
+
+  requestAnimationFrame(_callback: FrameRequestCallback) {
+    return 1;
+  }
+
+  cancelAnimationFrame(_handle: number) {}
+
+  addEventListener(type: string, listener: EventListenerOrEventListenerObject) {
+    const listeners = this.listeners.get(type) ?? new Set<EventListenerOrEventListenerObject>();
+    listeners.add(listener);
+    this.listeners.set(type, listeners);
+  }
+
+  removeEventListener(type: string, listener: EventListenerOrEventListenerObject) {
+    this.listeners.get(type)?.delete(listener);
+  }
+
+  dispatchEvent(event: Event) {
+    for (const listener of this.listeners.get(event.type) ?? []) {
+      if (typeof listener === "function") listener(event);
+      else listener.handleEvent(event);
+    }
+    return true;
+  }
+}
+
+class FakeAppletConstructor {
+  constructor(_version: number, parameters: { appletOnLoad: AppletOnLoad }) {
+    const applet = new FakeApplet(parameters);
+    applets.push(applet);
+    return applet;
+  }
+}
+
 const originalGlobals = {
   document: globalThis.document,
   HTMLElement: globalThis.HTMLElement,
@@ -132,21 +173,12 @@ const originalGlobals = {
 
 let document: FakeDocument;
 let applets: FakeApplet[];
+let browserWindow: FakeBrowserWindow;
 
 function installBrowserHarness() {
   document = new FakeDocument();
   applets = [];
-  const browserWindow = {
-    GGBApplet: class {
-      constructor(_version: number, parameters: { appletOnLoad: AppletOnLoad }) {
-        const applet = new FakeApplet(parameters);
-        applets.push(applet);
-        return applet;
-      }
-    },
-    requestAnimationFrame: (_callback: FrameRequestCallback) => 1,
-    cancelAnimationFrame: (_handle: number) => undefined,
-  };
+  browserWindow = new FakeBrowserWindow();
 
   Object.assign(globalThis, {
     document,
@@ -181,6 +213,17 @@ describe("GeoGebra mount lifecycle", () => {
     applets.length = 0;
   });
   afterAll(restoreBrowserHarness);
+
+  test("rejects when an initial GeoGebra asset never finishes loading", async () => {
+    const mount = mountGeoGebra({
+      container: createHost(),
+      backendBaseUrl: "http://127.0.0.1:8787",
+      initializationTimeoutMs: 5,
+      onReady: () => undefined,
+    });
+
+    await expect(mount).rejects.toThrow("样式表加载超时");
+  });
 
   test("StrictMode effect replay aborts the first in-flight mount before it constructs an applet", async () => {
     const host = createHost();
@@ -271,5 +314,89 @@ describe("GeoGebra mount lifecycle", () => {
     expect(controller.getCanvasXml()).toBe("current");
 
     second.dispose();
+  });
+
+  test("reports a finite initialization timeout when the injected runtime never becomes ready", async () => {
+    const errors: Error[] = [];
+    const mounted = await finishAssetLoad(mountGeoGebra({
+      container: createHost(),
+      backendBaseUrl: "http://127.0.0.1:8787",
+      initializationTimeoutMs: 5,
+      onReady: () => undefined,
+      onError: (error) => errors.push(error),
+    }));
+
+    await Bun.sleep(15);
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.message).toContain("初始化超时");
+    mounted.dispose();
+  });
+
+  test("ready, dispose, and abort each suppress a stale initialization timeout", async () => {
+    const readyErrors: Error[] = [];
+    const readyMount = await finishAssetLoad(mountGeoGebra({
+      container: createHost(),
+      backendBaseUrl: "http://127.0.0.1:8787",
+      initializationTimeoutMs: 5,
+      onReady: () => undefined,
+      onError: (error) => readyErrors.push(error),
+    }));
+    applets.at(-1)!.onLoad({});
+
+    const disposedErrors: Error[] = [];
+    const disposedMount = await mountGeoGebra({
+      container: createHost(),
+      backendBaseUrl: "http://127.0.0.1:8787",
+      initializationTimeoutMs: 5,
+      onReady: () => undefined,
+      onError: (error) => disposedErrors.push(error),
+    });
+    disposedMount.dispose();
+
+    const abortController = new AbortController();
+    const abortedErrors: Error[] = [];
+    const abortedMount = await mountGeoGebra({
+      container: createHost(),
+      backendBaseUrl: "http://127.0.0.1:8787",
+      initializationTimeoutMs: 5,
+      signal: abortController.signal,
+      onReady: () => undefined,
+      onError: (error) => abortedErrors.push(error),
+    });
+    abortController.abort();
+
+    await Bun.sleep(15);
+
+    expect(readyErrors).toHaveLength(0);
+    expect(disposedErrors).toHaveLength(0);
+    expect(abortedErrors).toHaveLength(0);
+    readyMount.dispose();
+    abortedMount.dispose();
+  });
+
+  test("reports a deferred GeoGebra bootstrap error once and removes initialization listeners", async () => {
+    const errors: Error[] = [];
+    const mounted = await finishAssetLoad(mountGeoGebra({
+      container: createHost(),
+      backendBaseUrl: "http://127.0.0.1:8787",
+      initializationTimeoutMs: 50,
+      onReady: () => undefined,
+      onError: (error) => errors.push(error),
+    }));
+    const event = Object.assign(new Event("error"), {
+      error: new Error("web3d bootstrap failed"),
+      filename: "app://localhost/vendor/geogebra/web3d.nocache.js",
+      message: "web3d bootstrap failed",
+    });
+
+    browserWindow.dispatchEvent(event);
+    browserWindow.dispatchEvent(event);
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.message).toContain("web3d bootstrap failed");
+    expect(browserWindow.listeners.get("error")?.size ?? 0).toBe(0);
+    expect(browserWindow.listeners.get("unhandledrejection")?.size ?? 0).toBe(0);
+    mounted.dispose();
   });
 });

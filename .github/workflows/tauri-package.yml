@@ -217,7 +217,12 @@ jobs:
           GEOCHAT_PACKAGED_LAUNCH_EVIDENCE_PATH: .artifacts/package-smoke/launch-${{ matrix.platform }}.json
         run: bun run package:launch-smoke
 
+      - name: Smoke packaged GeoGebra canvas in native WebKit
+        if: matrix.platform == 'macos'
+        run: bun run package:canvas-smoke --app src-tauri/target/release/bundle/macos/GeoChat.app --json-out .artifacts/package-smoke/canvas-macos.json
+
       - name: Upload package smoke evidence
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: package-smoke-${{ matrix.platform }}-${{ github.sha }}
@@ -376,12 +381,14 @@ jobs:
               --remote
           }
 
-          # Installers live under a per-tag prefix and never change, so they are
-          # cached for a year.
+          # Installer keys include their SHA-256 digest. Rebuilding an existing
+          # tag therefore publishes a new immutable URL instead of serving
+          # stale bytes from the previous release.
           uploaded=0
           for file in release-assets/**/*.dmg release-assets/**/*.exe release-assets/**/*.msi; do
             [[ -f "$file" ]] || continue
             name="$(basename "$file")"
+            sha256="$(sha256sum "$file" | awk '{print $1}')"
             case "$name" in
               *.dmg) type='application/x-apple-diskimage' ;;
               *.msi) type='application/x-msi' ;;
@@ -389,7 +396,7 @@ jobs:
             esac
 
             echo "Uploading $name"
-            put "$BUCKET/$PREFIX/$TAG_NAME/$name" "$file" "$type" \
+            put "$BUCKET/$PREFIX/$TAG_NAME/$sha256/$name" "$file" "$type" \
               'public, max-age=31536000, immutable'
             uploaded=$((uploaded + 1))
           done
@@ -407,4 +414,4 @@ jobs:
           put "$BUCKET/$PREFIX/$MANIFEST_NAME" "release-assets/$MANIFEST_NAME" \
             'application/json' 'public, max-age=300'
 
-          echo "Mirrored $uploaded installer(s) to $BUCKET/$PREFIX/$TAG_NAME/"
+          echo "Mirrored $uploaded content-addressed installer(s) to $BUCKET/$PREFIX/$TAG_NAME/"

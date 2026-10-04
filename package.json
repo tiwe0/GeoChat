@@ -20,6 +20,7 @@
     "bundle:install": "bun scripts/install-app-bundle.mjs",
     "package:backend-smoke": "bun scripts/smoke-packaged-backend-runtime.mjs",
     "package:launch-smoke": "bun scripts/smoke-packaged-app-launch.mjs",
+    "package:canvas-smoke": "bun scripts/smoke-geogebra-canvas.mjs",
     "preview": "vite preview --config vite.react.config.ts --host 127.0.0.1",
     "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "tauri:dev:mcp": "tauri dev --config src-tauri/tauri.dev.conf.json -- -- --mcp",

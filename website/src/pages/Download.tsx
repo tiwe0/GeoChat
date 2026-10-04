@@ -121,9 +121,8 @@ export function Download() {
         </Container>
       </section>
 
-      {/* Not a footnote: an unsigned installer stops most first-time users dead,
-          and telling them what to click is the difference between an install
-          and an abandoned download. */}
+      {/* Keep platform-specific trust boundaries visible: macOS is signed and
+          notarized, while Windows may still present SmartScreen. */}
       <section className="border-b border-rule bg-ochre-wash/60 py-16 sm:py-20">
         <Container>
           <div className="max-w-[52rem]">

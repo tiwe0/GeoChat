@@ -163,8 +163,8 @@ export const en: Content = {
         a: "The packaging pipeline currently produces macOS and Windows installers only. Linux works from source, and the repository has full build instructions."
       },
       {
-        q: "Why does it say the developer cannot be verified?",
-        a: "The installers are not code-signed. Signing means paying Apple and a certificate authority every year, which is hard to justify for a solo open-source project right now. The download page has the steps for both platforms."
+        q: "Are the installers code-signed?",
+        a: "The macOS installer is signed with Developer ID and notarized by Apple, so it opens normally. Authenticode signing has not been verified for the Windows installer, so SmartScreen may still appear on first run; the download page explains what to expect."
       }
     ]
   },
@@ -181,7 +181,7 @@ export const en: Content = {
     platforms: {
       macos: {
         name: "macOS",
-        requirement: "macOS 11 Big Sur or later · Apple silicon and Intel"
+        requirement: "macOS 11 Big Sur or later · this prebuilt release supports Apple silicon only"
       },
       windows: {
         name: "Windows",
@@ -196,24 +196,24 @@ export const en: Content = {
     downloadLabel: "Download",
     sizeLabel: "about {size}",
     checksums: "Checksums (SHA-256)",
-    checksumsNote: "The installers are not code-signed, so a checksum is the only integrity check available. Use shasum -a 256 <file> on macOS, or certutil -hashfile <file> SHA256 on Windows.",
+    checksumsNote: "The macOS installer is Developer ID-signed and notarized by Apple; Authenticode signing has not been verified for the Windows installer. We still recommend checking SHA-256 with shasum -a 256 <file> on macOS or certutil -hashfile <file> SHA256 on Windows.",
     loading: "Fetching the latest release…",
     error: "Could not load release information — GitHub may be rate-limiting.",
     errorAction: "Open GitHub Releases",
     unsigned: {
-      title: "The first launch takes one extra step",
-      lede: "The installers are not code-signed, so your system will stop and ask. That is not a sign anything is wrong with the file — you can confirm on GitHub Actions that it was built from this repository's source.",
+      title: "Installation and security notes",
+      lede: "The macOS installer is signed with Developer ID and notarized by Apple, so it opens normally. Authenticode signing has not been verified for the Windows installer, so SmartScreen may appear. Every installer is built from this repository by GitHub Actions.",
       macos: [
-        "Drag GeoChat into your Applications folder.",
-        "In Applications, right-click GeoChat and choose Open — it must be Open from the context menu; a plain double-click will not work.",
-        "Click Open again in the dialog that appears. From then on it launches normally."
+        "Open the downloaded DMG and drag GeoChat into your Applications folder.",
+        "Double-click GeoChat in Applications to launch it normally; macOS verifies its Developer ID signature and Apple notarization ticket.",
+        "If macOS still reports that the app is damaged or the developer cannot be verified, do not bypass the check. Download it again from this site or GitHub Releases, verify SHA-256, or open an issue."
       ],
       windows: [
         "Run the installer. If a blue “Windows protected your PC” dialog appears, click More info.",
         "Click the Run anyway button that appears.",
         "Follow the installer through to the end."
       ],
-      why: "Why is it not signed?"
+      why: "View public build records"
     },
     source: {
       title: "Build from source",
@@ -334,7 +334,7 @@ export const en: Content = {
       {
         heading: "Installers and code signing",
         paragraphs: [
-          "The installers offered here are built automatically by GitHub Actions from the public repository source, and the build logs are public. They are not currently code-signed, which is why macOS and Windows show a security prompt on first launch.",
+          "The installers offered here are built automatically by GitHub Actions from the public repository source, and the build logs are public. The macOS installer is signed with Developer ID and notarized by Apple. Authenticode signing has not been verified for the Windows installer, so SmartScreen may still appear on first run.",
           "Please obtain installers only from this download page or the project's GitHub Releases page. We cannot vouch for builds distributed through any other channel."
         ]
       },

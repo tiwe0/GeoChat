@@ -125,8 +125,9 @@ mainland China. GitHub Releases stays the source of truth: if R2 is not
 configured the job logs a notice and skips, and the site works unchanged.
 
 `latest.json` also carries a SHA-256 per installer, which the download page
-shows. The installers are not code-signed, so a checksum is the only integrity
-check a cautious user can perform.
+shows. The macOS installer is Developer ID-signed and notarized by Apple;
+Authenticode signing has not been verified for the Windows installer. The
+checksum remains an additional cross-platform integrity check.
 
 ## Regenerating media
 

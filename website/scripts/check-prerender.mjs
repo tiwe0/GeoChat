@@ -21,13 +21,22 @@ const EXPECT = [
   { file: "index.html", needle: "已知", label: "zh home headline" },
   { file: "index.html", needle: "PerpendicularBisector", label: "zh pipeline commands" },
   { file: "en/index.html", needle: "Given", label: "en home headline" },
-  { file: "download/index.html", needle: "首次打开需要多一步", label: "zh unsigned-install steps" },
-  { file: "en/download/index.html", needle: "Run anyway", label: "en unsigned-install steps" },
+  { file: "download/index.html", needle: "安装与安全提示", label: "zh platform trust notes" },
+  { file: "download/index.html", needle: "Developer ID 签名并通过 Apple 公证", label: "zh macOS signing status" },
+  { file: "download/index.html", needle: "Windows 安装包尚未验证 Authenticode 签名", label: "zh Windows signing boundary" },
+  { file: "en/download/index.html", needle: "Installation and security notes", label: "en platform trust notes" },
+  { file: "en/download/index.html", needle: "signed with Developer ID and notarized by Apple", label: "en macOS signing status" },
+  { file: "en/download/index.html", needle: "Authenticode signing has not been verified", label: "en Windows signing boundary" },
   { file: "privacy/index.html", needle: "不使用 Cookie", label: "zh privacy body" },
   { file: "en/privacy/index.html", needle: "no cookies", label: "en privacy body" },
   { file: "terms/index.html", needle: "Apache License 2.0", label: "zh terms body" },
   { file: "en/terms/index.html", needle: "Apache-2.0", label: "en terms body" },
   { file: "404.html", needle: "noindex", label: "404 robots directive" }
+];
+
+const REJECT = [
+  { file: "download/index.html", needle: "右键点击 GeoChat", label: "obsolete zh unsigned-app bypass" },
+  { file: "en/download/index.html", needle: "right-click GeoChat", label: "obsolete en unsigned-app bypass" }
 ];
 
 /** Assets referenced by the markup that must exist on disk. */
@@ -89,6 +98,13 @@ for (const { file, needle, label } of EXPECT) {
     if (body.includes(marker)) {
       failures.push(`${file}: placeholder ${marker} was never replaced`);
     }
+  }
+}
+
+for (const { file, needle, label } of REJECT) {
+  const full = path.join(dist, file);
+  if (existsSync(full) && readFileSync(full, "utf8").includes(needle)) {
+    failures.push(`${file}: contains ${label} (${JSON.stringify(needle)})`);
   }
 }
 

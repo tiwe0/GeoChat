@@ -163,8 +163,8 @@ export const zh: Content = {
         a: "目前的打包流水线只产出 macOS 和 Windows 安装包。Linux 可以从源码构建，仓库里有完整的构建说明。"
       },
       {
-        q: "为什么打开时提示「无法验证开发者」？",
-        a: "安装包没有做代码签名。这需要每年向 Apple 和证书机构付费，对一个独立开源项目来说暂时不划算。下载页有两个平台的具体处理步骤。"
+        q: "安装包有代码签名吗？",
+        a: "macOS 安装包已使用 Developer ID 签名并通过 Apple 公证，可以正常打开。Windows 安装包尚未验证 Authenticode 签名，首次运行时仍可能出现 SmartScreen 提示；下载页有对应说明。"
       }
     ]
   },
@@ -181,7 +181,7 @@ export const zh: Content = {
     platforms: {
       macos: {
         name: "macOS",
-        requirement: "macOS 11 Big Sur 或更高版本 · Apple 芯片与 Intel 均可"
+        requirement: "macOS 11 Big Sur 或更高版本 · 本版预编译安装包仅支持 Apple 芯片"
       },
       windows: {
         name: "Windows",
@@ -196,24 +196,24 @@ export const zh: Content = {
     downloadLabel: "下载",
     sizeLabel: "约 {size}",
     checksums: "校验和 (SHA-256)",
-    checksumsNote: "安装包没有代码签名，校验和是你唯一能做的完整性检查。macOS 用 shasum -a 256 <文件>，Windows 用 certutil -hashfile <文件> SHA256。",
+    checksumsNote: "macOS 安装包已使用 Developer ID 签名并通过 Apple 公证；Windows 安装包尚未验证 Authenticode 签名。仍建议核对 SHA-256：macOS 用 shasum -a 256 <文件>，Windows 用 certutil -hashfile <文件> SHA256。",
     loading: "正在获取最新版本…",
     error: "获取版本信息失败，可能是 GitHub 接口限流了。",
     errorAction: "前往 GitHub Releases 页面",
     unsigned: {
-      title: "首次打开需要多一步",
-      lede: "安装包未做代码签名，系统会拦一下。这不代表安装包有问题——你可以在 GitHub Actions 的构建记录里核对它确实由本仓库源码打出。",
+      title: "安装与安全提示",
+      lede: "macOS 安装包已使用 Developer ID 签名并通过 Apple 公证，可正常打开。Windows 安装包尚未验证 Authenticode 签名，系统可能显示 SmartScreen 提示。所有安装包都由 GitHub Actions 从本仓库源码构建。",
       macos: [
-        "把 GeoChat 拖进「应用程序」文件夹。",
-        "在「应用程序」里右键点击 GeoChat，选择「打开」——注意是右键菜单里的「打开」，直接双击不行。",
-        "在弹出的对话框里再次点击「打开」。之后就可以正常双击启动了。"
+        "打开下载的 DMG，把 GeoChat 拖进「应用程序」文件夹。",
+        "在「应用程序」中双击 GeoChat 即可正常启动，macOS 会验证 Developer ID 签名和 Apple 公证票据。",
+        "如果仍出现「已损坏」或「无法验证开发者」，请勿绕过系统检查；请从本站或 GitHub Releases 重新下载并核对 SHA-256，或提交 issue。"
       ],
       windows: [
         "双击安装包后，若出现「Windows 已保护你的电脑」蓝色弹窗，点击「更多信息」。",
         "点击出现的「仍要运行」按钮。",
         "按安装向导完成安装。"
       ],
-      why: "为什么不签名？"
+      why: "查看公开构建记录"
     },
     source: {
       title: "从源码构建",
@@ -334,7 +334,7 @@ export const zh: Content = {
       {
         heading: "安装包与代码签名",
         paragraphs: [
-          "本站提供的安装包由 GitHub Actions 从公开仓库的源码自动构建，构建记录公开可查。这些安装包目前没有做代码签名，因此 macOS 和 Windows 在首次打开时会显示安全提示。",
+          "本站提供的安装包由 GitHub Actions 从公开仓库的源码自动构建，构建记录公开可查。macOS 安装包已使用 Developer ID 签名并通过 Apple 公证；Windows 安装包尚未验证 Authenticode 签名，因此首次运行时仍可能显示 SmartScreen 安全提示。",
           "请只从本站的下载页或本项目的 GitHub Releases 页面获取安装包。我们无法对通过其他渠道分发的构建产物负责。"
         ]
       },

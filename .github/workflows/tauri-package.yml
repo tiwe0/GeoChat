@@ -48,23 +48,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
 
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.11
 
       - name: Set up Rust
         # Keep lint and packaging on the same locally validated compiler.
-        uses: dtolnay/rust-toolchain@1.96.0
+        uses: dtolnay/rust-toolchain@3db9de313aa3e84732d075f6fd8938cc0d6d4b58 # 1.96.0
         with:
           components: rustfmt, clippy
 
       - name: Cache Rust dependencies
-        uses: swatinem/rust-cache@v2
+        uses: swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: src-tauri
 
@@ -109,7 +109,7 @@ jobs:
 
       - name: Upload harness evaluation
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: geochat-harness-evals-${{ github.sha }}
           if-no-files-found: warn
@@ -119,6 +119,9 @@ jobs:
     name: Package (${{ matrix.platform }})
     needs: verify
     runs-on: ${{ matrix.os }}
+    env:
+      # Never expose Developer ID credentials to PR or arbitrary branch builds.
+      MACOS_RELEASE_SIGNING: ${{ matrix.platform == 'macos' && github.repository == 'tiwe0/GeoChat' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')) }}
     strategy:
       fail-fast: false
       matrix:
@@ -138,20 +141,40 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
+          fetch-depth: 0
           ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
 
+      - name: Validate trusted macOS signing source
+        if: matrix.platform == 'macos' && (env.MACOS_RELEASE_SIGNING == 'true' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
+        shell: bash
+        env:
+          REQUESTED_RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          if [[ "$MACOS_RELEASE_SIGNING" != 'true' ]]; then
+            echo 'Refusing to publish unsigned macOS installers from an untrusted workflow ref.' >&2
+            exit 1
+          fi
+          if [[ -n "$REQUESTED_RELEASE_TAG" && ! "$REQUESTED_RELEASE_TAG" =~ ^v[0-9][A-Za-z0-9._-]*$ ]]; then
+            echo 'Signing requires a version tag, not an arbitrary checkout ref.' >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor HEAD origin/master; then
+            echo 'Refusing to expose signing credentials to source outside master history.' >&2
+            exit 1
+          fi
+
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.11
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@1.96.0
+        uses: dtolnay/rust-toolchain@3db9de313aa3e84732d075f6fd8938cc0d6d4b58 # 1.96.0
 
       - name: Cache Rust dependencies
-        uses: swatinem/rust-cache@v2
+        uses: swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: src-tauri
 
@@ -159,7 +182,19 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build Tauri bundles
+        if: env.MACOS_RELEASE_SIGNING != 'true'
         run: bunx tauri build --bundles "${{ matrix.bundles }}"
+
+      - name: Build and verify Developer ID macOS bundles
+        if: env.MACOS_RELEASE_SIGNING == 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bun scripts/build-signed-macos.mjs
 
       - name: Test native credential storage on target platform
         run: cargo test --manifest-path src-tauri/Cargo.toml credentials::platform::tests
@@ -183,14 +218,14 @@ jobs:
         run: bun run package:launch-smoke
 
       - name: Upload package smoke evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: package-smoke-${{ matrix.platform }}-${{ github.sha }}
           if-no-files-found: error
           path: .artifacts/package-smoke/*.json
 
       - name: Upload packaged artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: geochat-${{ matrix.platform }}-${{ github.sha }}
           if-no-files-found: error
@@ -205,13 +240,13 @@ jobs:
       contents: write
     steps:
       - name: Check out source
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
           ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
 
       - name: Download packaged artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           pattern: geochat-*
           path: release-assets
@@ -261,12 +296,12 @@ jobs:
       contents: read
     steps:
       - name: Check out source
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
 
       - name: Download packaged artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           pattern: geochat-*
           path: release-assets
@@ -300,7 +335,7 @@ jobs:
 
       - name: Set up Node
         if: steps.config.outputs.ready == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
 

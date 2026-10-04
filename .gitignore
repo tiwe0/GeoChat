@@ -29,6 +29,14 @@ docs/local/
 .env.*
 !.env.example
 
+# Developer ID exports, private keys and temporary signing keychains.
+*.p12
+*.pfx
+*.pem
+*.key
+*.keychain
+*.keychain-db
+
 .artifacts/
 
 # Local-only public/commercial boundary audit.

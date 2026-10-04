@@ -16,7 +16,7 @@ describe("preview publication boundaries", () => {
     expect(verify.find((step) => step.name === "Install Linux system dependencies")?.run).toContain("ripgrep");
     for (const name of ["verify", "package"]) {
       const rust = workflow.jobs[name].steps.find((step) => step.name === "Set up Rust");
-      expect(rust?.uses).toBe("dtolnay/rust-toolchain@1.96.0");
+      expect(rust?.uses).toBe("dtolnay/rust-toolchain@3db9de313aa3e84732d075f6fd8938cc0d6d4b58"); // 1.96.0 action
       if (name === "verify") expect(rust?.with?.components).toBe("rustfmt, clippy");
     }
     const prepareIndex = verify.findIndex((step) => step.run === "bun run tauri:prepare");
@@ -26,7 +26,7 @@ describe("preview publication boundaries", () => {
     expect(prepareIndex).toBeLessThan(clippyIndex);
     expect(workflow.on.workflow_dispatch.inputs.release_tag).toBeDefined();
     for (const name of ["verify", "package", "release", "mirror"]) {
-      const checkout = workflow.jobs[name].steps.find((step) => step.uses === "actions/checkout@v5");
+      const checkout = workflow.jobs[name].steps.find((step) => step.uses?.startsWith("actions/checkout@"));
       expect(checkout?.with?.ref).toBe("${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}");
     }
     expect(workflow.jobs.release.if).toContain("startsWith(inputs.release_tag, 'v')");

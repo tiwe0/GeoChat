@@ -8,10 +8,19 @@ inside the generated `.app` bundle. On Windows, the launch target is the
 release-build executable at `src-tauri/target/release/geochat-desktop-tauri.exe`;
 it is not an executable discovered through an NSIS or MSI installation.
 
-That evidence does **not** claim any of the following unless a later release
-explicitly says otherwise:
+Trusted macOS builds using the signed pipeline additionally produce
+`signing-macos.json`. This separate evidence covers Developer ID signatures and
+secure timestamps on the App, shell, Bun and DMG; hardened runtime on executables;
+Bun's runtime-specific entitlements; accepted DMG notarization; App and DMG staple
+validation; and Gatekeeper assessment. The DMG is mounted read-only to validate
+its embedded App and compare the shell, Bun and sealed-resource manifest against
+the original signed App. Missing credentials or any failed check block artifact
+upload. PR and build-only untrusted-branch jobs do not receive Apple credentials
+and do not claim this signing evidence.
 
-- Developer ID, Authenticode, Apple notarization, or staple verification;
+Neither the ordinary smoke evidence nor the additional signing evidence claims:
+
+- Windows Authenticode verification;
 - successful requests to a live third-party model provider;
 - successful installation of the Windows NSIS or MSI artifact, or a
   post-install launch from either installer;

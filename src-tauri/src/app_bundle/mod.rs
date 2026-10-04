@@ -18,7 +18,8 @@ pub(crate) use installer::{
 };
 pub(crate) use manifest::{
     app_bundle_requires_shell_update, bundled_resource_root, is_newer_app_bundle_version,
-    is_shell_version_compatible, resolve_active_app_bundle, ActiveAppBundle,
+    is_shell_version_compatible, resolve_active_app_bundle, resolve_startup_app_bundle,
+    ActiveAppBundle,
 };
 #[allow(unused_imports)]
 pub(crate) use manifest::{
@@ -160,6 +161,47 @@ mod tests {
             serde_json::to_vec(&manifest).unwrap(),
         )
         .unwrap();
+    }
+
+    #[test]
+    fn source_dev_does_not_activate_packaged_assets() {
+        let root = temp_root("source-dev-assets");
+        let resource_dir = root.join("resources");
+        write_test_bundle_root(&resource_dir, "0.7.0+test", b"packaged backend");
+
+        assert!(resolve_startup_app_bundle(
+            &root.join("app-data"),
+            &resource_dir,
+            env!("CARGO_PKG_VERSION"),
+            false,
+        )
+        .is_none());
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn built_backend_startup_resolves_verified_assets() {
+        let root = temp_root("built-startup-assets");
+        let resource_dir = root.join("resources");
+        write_test_bundle_root(&resource_dir, "0.7.0+test", b"packaged backend");
+
+        let bundle = resolve_startup_app_bundle(
+            &root.join("app-data"),
+            &resource_dir,
+            env!("CARGO_PKG_VERSION"),
+            true,
+        )
+        .expect("built backend startup must resolve verified assets");
+        assert_eq!(bundle.root, resource_dir);
+        assert_eq!(bundle.source, "bundled");
+
+        fs::write(resource_dir.join("backend/backend.bundle.js"), b"changed").unwrap();
+        assert!(verify_app_bundle_assets(&resource_dir, &bundle.manifest)
+            .unwrap_err()
+            .contains("hash mismatch"));
+
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

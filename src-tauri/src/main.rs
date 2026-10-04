@@ -23,7 +23,7 @@ use access::{
     access_allows_runtime_use, refresh_runtime_authorization, schedule_silent_access_check,
     stable_device_id,
 };
-use app_bundle::{resolve_active_app_bundle, ActiveAppBundle};
+use app_bundle::{resolve_startup_app_bundle, ActiveAppBundle};
 use app_bundle_protocol::{
     app_bundle_content_type, app_bundle_protocol_request_path, app_bundle_protocol_response,
 };
@@ -71,7 +71,7 @@ use mcp::{auto_start_desktop_mcp_requested, DesktopMcpStatus, McpRuntime};
 use problem_bank_cache::ProblemBankCacheRuntime;
 use renderer_storage::RendererStorage;
 use settings::{desktop_database_path, load_settings, DesktopSettings, DesktopUpdatePreferences};
-use sidecar::{project_root, start_backend, BackendRuntime};
+use sidecar::{project_root, should_use_built_backend, start_backend, BackendRuntime};
 use std::{
     env, fs,
     fs::{File, OpenOptions},
@@ -340,10 +340,14 @@ fn initialize_desktop_app(app: &AppHandle) -> Result<(), String> {
     )?;
     app.manage(credential_state);
     let shell_update_state = initial_shell_update_state(settings.update_preferences.clone());
-    // Resolving verifies every asset in the manifest by hash, so it happens
-    // exactly once here and everything downstream reads the cached result.
-    let active_app_bundle =
-        resolve_active_app_bundle(&app_data_dir, &resource_dir, env!("CARGO_PKG_VERSION"));
+    // Only activate packaged assets when the runtime actually uses them;
+    // ordinary source/Vite development must not inspect stale release output.
+    let active_app_bundle = resolve_startup_app_bundle(
+        &app_data_dir,
+        &resource_dir,
+        env!("CARGO_PKG_VERSION"),
+        should_use_built_backend(),
+    );
     let app_bundle_update_state = initial_app_bundle_update_state(
         &app_data_dir,
         active_app_bundle

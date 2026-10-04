@@ -910,7 +910,7 @@ fn backend_launch_paths(
     ))
 }
 
-fn should_use_built_backend() -> bool {
+pub(crate) fn should_use_built_backend() -> bool {
     should_use_built_backend_for(
         env::var("GEOCHAT_DESKTOP_USE_BUILT_BACKEND")
             .ok()

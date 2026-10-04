@@ -114,6 +114,20 @@ pub(crate) fn bundled_resource_root(resource_dir: &Path) -> PathBuf {
     resource_dir.to_path_buf()
 }
 
+pub(crate) fn resolve_startup_app_bundle(
+    app_data_dir: &Path,
+    resource_dir: &Path,
+    shell_version: &str,
+    use_built_backend: bool,
+) -> Option<ActiveAppBundle> {
+    // Source/Vite development does not consume packaged assets. In particular,
+    // partial builds may leave dist's release manifest intentionally out of date.
+    if !use_built_backend {
+        return None;
+    }
+    resolve_active_app_bundle(app_data_dir, resource_dir, shell_version)
+}
+
 pub(crate) fn resolve_active_app_bundle(
     app_data_dir: &Path,
     resource_dir: &Path,

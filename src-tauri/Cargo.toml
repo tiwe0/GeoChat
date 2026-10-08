@@ -19,7 +19,7 @@ serde_json = "1"
 sha2 = "0.10"
 tauri = { version = "~2.12.1", default-features = false, features = ["wry"] }
 tauri-plugin-log = "~2.10.0"
-tauri-plugin-opener = { version = "~2.6.0", default-features = false }
+tauri-plugin-opener = { version = "~2.7.0", default-features = false }
 tauri-plugin-updater = { version = "~2.13.0", default-features = false, features = ["rustls-tls"] }
 time = { version = "0.3", features = ["formatting"] }
 url = "2"

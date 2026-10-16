@@ -27,6 +27,19 @@
 
 `v0.7.0` · 默认启用全新的融合模式
 
+## 最新更新：DeepSeek Harness 插件（DSH Plugin）
+
+在 DeepSeek Harness 中直接使用 GeoChat 画布：Agent 通过原生工具打开右侧 GeoGebra
+画布，完成数学构造、动画与对象检查。插件内置 55 个数学技能和离线画布资源，
+无需另行启动 GeoChat 桌面应用。
+
+插件新增场景与样式读回、文字字号设置、当前帧文字框重叠/越界检测和连续帧截图；
+检测明确列出未覆盖项，不把数值检查或有限截图当作完整视觉验收。
+
+<img src="docs/media/geochat-dsh-plugin.png" alt="GeoChat DeepSeek Harness 插件：左侧对话验证太阳系构造，右侧原生 GeoGebra 画布展示行星与轨道">
+
+安装方法、兼容版本和使用限制见 [DSH 插件文档](plugins/deepseek-harness/README.md)。
+
 ## 认识 GeoChat
 
 GeoChat 是一款面向数学学习、教学与探索的 AI GeoGebra 助手。

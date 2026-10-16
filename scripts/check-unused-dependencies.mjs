@@ -33,8 +33,11 @@ export const UNUSED_DEPENDENCY_ALLOWLIST = Object.freeze({
 });
 
 function isSkippedDirectory(root, candidate) {
-  const path = relative(root, candidate).split("\\").join("/");
-  return [...SKIPPED_DIRECTORIES].some((entry) => path === entry || path.startsWith(`${entry}/`));
+  const segments = relative(root, candidate).split("\\").join("/").split("/");
+  const path = segments.join("/");
+  return [...SKIPPED_DIRECTORIES].some((entry) => entry.includes("/")
+    ? path === entry || path.startsWith(`${entry}/`)
+    : segments.includes(entry));
 }
 
 function walkSourceFiles(root, directory = root, files = []) {

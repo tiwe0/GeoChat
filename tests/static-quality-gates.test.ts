@@ -48,6 +48,17 @@ const RETIRED_PRODUCTION_SYMBOLS = [
 ] as const;
 
 describe("static quality gate configuration", () => {
+  test("runs desktop and independently installed Harness plugin tests in separate CI lanes", () => {
+    const workflow = readFileSync(resolve(root, ".github/workflows/tauri-package.yml"), "utf8");
+    expect(packageJson.scripts.test).toBe("bun test ./tests");
+    expect(workflow).toContain("run: bun test ./tests");
+    expect(workflow).toContain("  verify-plugin:");
+    expect(workflow).toContain("node-version: 24");
+    expect(workflow).toContain("working-directory: plugins/deepseek-harness");
+    expect(workflow).toContain("run: npm ci");
+    expect(workflow).toContain("run: npm run check");
+  });
+
   test("typechecks the live Vite entry instead of removed configs", () => {
     const nodeConfig = JSON.parse(readFileSync(resolve(root, "tsconfig.node.json"), "utf8"));
     expect(nodeConfig.include).toContain("vite.react.config.ts");
@@ -90,7 +101,7 @@ describe("static quality gate configuration", () => {
 
   test("uses frozen installs and warning-failing Rust checks in packaging CI", () => {
     const workflow = readFileSync(resolve(root, ".github/workflows/tauri-package.yml"), "utf8");
-    expect(workflow.match(/bun install --frozen-lockfile/g)).toHaveLength(2);
+    expect(workflow.match(/bun install --frozen-lockfile/g)).toHaveLength(3);
     expect(workflow).not.toContain("bun install --no-save");
     expect(workflow).toContain("bun run quality:check");
     expect(workflow).toContain("cargo fmt --manifest-path src-tauri/Cargo.toml --check");

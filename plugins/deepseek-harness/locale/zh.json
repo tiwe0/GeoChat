@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "GeoChat 画布",
+    "description": "为 DeepSeek Harness 提供原生 GeoGebra 画布：包含 20 个工具，支持会话隔离作图、场景读回、文字布局检测与动画多帧截图，内置 55 个数学技能及离线资源。"
+  }
+}

@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   UNUSED_DEPENDENCY_ALLOWLIST,
   extractPackageSpecifiers,
@@ -37,6 +40,28 @@ describe("unused dependency gate", () => {
   test("keeps every non-import exception documented", () => {
     for (const reason of Object.values(UNUSED_DEPENDENCY_ALLOWLIST)) {
       expect(reason.trim().length).toBeGreaterThan(20);
+    }
+  });
+
+  test("ignores nested dependency and build directories without skipping plugin sources", () => {
+    const root = mkdtempSync(join(tmpdir(), "geochat-dependency-gate-"));
+    try {
+      writeFileSync(join(root, "package.json"), JSON.stringify({
+        dependencies: { "plugin-runtime": "1.0.0", "vendor-only": "1.0.0" },
+      }));
+      const plugin = join(root, "plugins", "example");
+      mkdirSync(join(plugin, "src"), { recursive: true });
+      writeFileSync(join(plugin, "src", "index.ts"), 'import "plugin-runtime";');
+      for (const directory of ["node_modules", "dist", ".artifacts"]) {
+        mkdirSync(join(plugin, directory), { recursive: true });
+        writeFileSync(join(plugin, directory, "broken.ts"), "import {");
+        writeFileSync(join(plugin, directory, "vendor.ts"), 'import "vendor-only";');
+      }
+      const { unused, used } = inspectUnusedDependencies(root);
+      expect([...used]).toEqual(["plugin-runtime"]);
+      expect(unused).toEqual(["vendor-only"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 

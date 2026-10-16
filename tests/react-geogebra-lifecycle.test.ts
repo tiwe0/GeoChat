@@ -225,6 +225,20 @@ describe("GeoGebra mount lifecycle", () => {
     await expect(mount).rejects.toThrow("样式表加载超时");
   });
 
+  test("uses an explicit asset root without requiring a desktop backend URL", async () => {
+    const mount = mountGeoGebra({
+      container: createHost(),
+      assetBaseUrl: "/geochat-assets/",
+      onReady: () => undefined,
+    });
+    const stylesheet = document.head.children.find((element) => element.rel === "stylesheet");
+
+    expect(stylesheet?.href).toBe("/geochat-assets/HTML5/5.0/css/bundles/bundle.css");
+    const mounted = await finishAssetLoad(mount);
+    expect(applets[0]!.codebaseCalls).toEqual([["/geochat-assets/HTML5/5.0/web3d/", undefined]]);
+    mounted.dispose();
+  });
+
   test("StrictMode effect replay aborts the first in-flight mount before it constructs an applet", async () => {
     const host = createHost();
     const firstAbort = new AbortController();

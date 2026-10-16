@@ -112,6 +112,10 @@ export class GeoGebraAnimationRuntime {
     };
   }
 
+  snapshots(): GeoGebraAnimationSnapshot[] {
+    return [...this.states.keys()].map((object) => this.snapshot(object)!);
+  }
+
   dispose() {
     for (const state of this.states.values()) this.cancelStateFrame(state);
     this.states.clear();

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "root": false,
+  "files": {
+    "includes": ["src/**", "client/**", "tests/**", "scripts/**", "locale/**", "*.json", "!package-lock.json"]
+  },
+  "formatter": { "indentStyle": "space", "lineWidth": 120 },
+  "javascript": { "formatter": { "trailingCommas": "none" } },
+  "assist": { "enabled": false },
+  "linter": {
+    "rules": {
+      "preset": "none",
+      "correctness": { "noUndeclaredVariables": "error", "noUnreachable": "error" },
+      "suspicious": {
+        "noDebugger": "error",
+        "noDuplicateCase": "error",
+        "noDuplicateObjectKeys": "error",
+        "noDuplicateParameters": "error",
+        "noVar": "error"
+      }
+    }
+  }
+}

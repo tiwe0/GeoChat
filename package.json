@@ -36,7 +36,7 @@
     "renderer:chunks:check": "bun scripts/check-renderer-chunks.mjs",
     "release": "node scripts/release.mjs",
     "dist": "bun run tauri:build",
-    "test": "bun test tests",
+    "test": "bun test ./tests",
     "typecheck": "tsc -p packages/app/tsconfig.json --pretty && tsc -p tsconfig.node.json --pretty && tsc -p tsconfig.web.json --pretty",
     "format": "biome format --write",
     "format:check": "biome format",

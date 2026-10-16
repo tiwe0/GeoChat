@@ -91,7 +91,9 @@ function pinGeoGebraModuleBase(codebase: string) {
 export async function mountGeoGebra(options: {
   container: HTMLElement;
   /** Base URL of the local backend, used for GeoGebra assets during development. */
-  backendBaseUrl: string;
+  backendBaseUrl?: string;
+  /** Explicit GeoGebra asset root for hosts that bundle the applet themselves. */
+  assetBaseUrl?: string;
   /** Cancels an in-flight mount (notably React StrictMode effect replay). */
   signal?: AbortSignal;
   onReady: (api: GeoGebraApi) => void;
@@ -106,7 +108,8 @@ export async function mountGeoGebra(options: {
   // Development serves the vendored runtime from the loopback backend. A
   // packaged build loads the same manifest-verified files through its own app
   // protocol so CSP never has to trust JavaScript from an arbitrary local port.
-  const assetBase = geogebraAssetBaseUrl(options.backendBaseUrl);
+  const assetBase = options.assetBaseUrl?.replace(/\/$/, "")
+    ?? geogebraAssetBaseUrl(options.backendBaseUrl ?? "");
   const codebase = `${assetBase}/HTML5/5.0/web3d/`;
   // The shared stylesheet lives beside the selected GWT codebase, not inside
   // the web3d module directory. The old URL returned 404 in both dev and the
@@ -381,7 +384,7 @@ export async function mountGeoGebra(options: {
 export function geogebraAssetBaseUrl(
   backendBaseUrl: string,
   rendererUrl = globalThis.location?.href,
-  development = import.meta.env.DEV
+  development = Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV)
 ) {
   if (development || !rendererUrl) {
     return `${backendBaseUrl.replace(/\/$/, "")}/tools/geogebra-assets-v2`;

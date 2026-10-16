@@ -1,0 +1,114 @@
+{
+  "name": "dsh-geochat-plugin",
+  "version": "0.1.5",
+  "description": "Native GeoGebra canvas for DeepSeek Harness: 20 session-scoped tools for drawing, scene readback, text layout checks and animation capture, plus 55 mathematical skills and offline assets.",
+  "author": {
+    "name": "tiwe0",
+    "url": "https://github.com/tiwe0"
+  },
+  "homepage": "https://chat-with-geogebra.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tiwe0/GeoChat.git",
+    "directory": "plugins/deepseek-harness"
+  },
+  "bugs": {
+    "url": "https://github.com/tiwe0/GeoChat/issues"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "geochat",
+    "geogebra",
+    "mathematics",
+    "geometry",
+    "education",
+    "canvas"
+  ],
+  "icon": "dist/icon.png",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
+    "./client": "./dist/client.js"
+  },
+  "files": [
+    "dist",
+    "locale",
+    "README.md",
+    "VALIDATION.md",
+    "NATIVE_PLUGIN_PLAN.md",
+    "cordis.patch.yml",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "dsh": {
+    "manifestVersion": 1,
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-ui-sidebar-right",
+        "@deepseek-ai/dsh-api-gateway"
+      ]
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "node": ">=24.0.0",
+    "dsh": "0.2.0-rc.2"
+  },
+  "scripts": {
+    "build": "node ./scripts/build.mjs",
+    "typecheck": "tsc -p ./tsconfig.json --noEmit && tsc -p ./tsconfig.client.json --noEmit",
+    "lint": "biome check .",
+    "test": "npm run build && node --import tsx --test tests/*.test.ts",
+    "check": "npm run lint && npm run typecheck && npm test",
+    "prepack": "npm run check"
+  },
+  "license": "Apache-2.0",
+  "peerDependencies": {
+    "@deepseek-ai/dsh-client-connection": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-attachment": "0.2.0-rc.2",
+    "@deepseek-ai/cordis": "4.0.4",
+    "@deepseek-ai/dsh-skill": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
+    "@deepseek-ai/schemastery": "3.18.4",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-typert-registry": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-host-webserver": "0.2.0-rc.2"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-agent": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-connection": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-sidebar-right": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.0-rc.2",
+    "react": "18.3.1",
+    "@types/react": "18.3.28",
+    "@deepseek-ai/dsh-attachment": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-attachment-local": "0.2.0-rc.2",
+    "@deepseek-ai/cordis": "4.0.4",
+    "@deepseek-ai/dsh-skill": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-system-prompt": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
+    "@deepseek-ai/schemastery": "3.18.4",
+    "@types/node": "24.10.1",
+    "@biomejs/biome": "2.5.15",
+    "esbuild": "0.28.2",
+    "tsx": "4.22.4",
+    "typescript": "5.9.3",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-typert-registry": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-host-webserver": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-api-gateway": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-session": "0.2.0-rc.2"
+  }
+}

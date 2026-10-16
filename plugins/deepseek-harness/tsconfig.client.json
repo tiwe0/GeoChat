@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "types": ["react"],
+    "paths": {
+      "@geochat-ai/app/functioncalls": ["../../packages/app/src/geogebra-command-normalization.ts"],
+      "@geochat-ai/app/structured-logger": ["../../packages/app/src/structured-logger.ts"]
+    }
+  },
+  "include": ["client/**/*.ts", "client/**/*.tsx"]
+}

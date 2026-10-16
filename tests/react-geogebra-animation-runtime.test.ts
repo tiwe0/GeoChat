@@ -107,4 +107,18 @@ describe("GeoGebra business animation runtime", () => {
       .toThrow("setValue failed");
     expect(runtime.snapshot("a")).toBeUndefined();
   });
+
+  test("lists configured business animations without changing playback", () => {
+    const scheduler = new FakeScheduler();
+    const runtime = new GeoGebraAnimationRuntime(() => {}, scheduler);
+    expect(runtime.snapshots()).toEqual([]);
+    runtime.configure({ object: "a", from: 0, to: 1, durationMs: 2000, mode: "once", easing: "linear" }, true);
+    runtime.configure({ object: "b", from: 0, to: 2, durationMs: 2000, mode: "loop", easing: "linear" }, false);
+    scheduler.advance(500);
+    expect(runtime.snapshots()).toMatchObject([
+      { object: "a", status: "running", currentValue: 0.25 },
+      { object: "b", status: "configured", currentValue: 0 },
+    ]);
+    expect(scheduler.frames.size).toBe(1);
+  });
 });

@@ -3,6 +3,9 @@ import { canvasLabels, getAppletXml, readCanvasContext, tryReadCanvasContext, ty
 import { normalizeGeoGebraCommandSyntax, normalizeGeoGebraFreeParameterCommands } from "@geochat-ai/app/functioncalls";
 import { createStructuredLogger } from "@geochat-ai/app/structured-logger";
 import { evaluateCommand, type CommandResult } from "./command-executor";
+import { captureCanvasFrames } from "./canvas-frames";
+import { readSceneReport } from "./canvas-scene";
+import { measureCanvasLayout } from "./canvas-layout";
 import { GeoGebraAnimationRuntime, type AnimationScheduler, type GeoGebraAnimationEasing, type GeoGebraAnimationMode } from "./animation-runtime";
 import {
   UNAVAILABLE_GEOGEBRA_CONTROLS,
@@ -201,6 +204,15 @@ export class GeoGebraController {
         return this.resetCanvas(input, transaction);
       case "getCanvasContext":
         return { ok: true, ...readCanvasContext(this.api, input.includeXml === true) };
+      case "sceneReport":
+        return { ...readSceneReport(this.api, input), businessAnimations: this.animations.snapshots() };
+      case "checkLayout":
+        return measureCanvasLayout(this.api, input, () => transaction?.assertCurrent());
+      case "captureFrames":
+        return captureCanvasFrames(input, (options) => this.getPngBase64(options),
+          (ms) => waitForTransaction(transaction, () => wait(ms)));
+      case "setTextStyle":
+        return this.setTextStyle(input);
       case "getPNGBase64":
         return this.getPngBase64(input);
       case "setPerspective":
@@ -248,6 +260,31 @@ export class GeoGebraController {
   /** The construction as GeoGebra currently holds it, for callers that need to restore it later. */
   getCanvasXml() {
     return this.api ? getAppletXml(this.api) : undefined;
+  }
+
+  private setTextStyle(input: Record<string, unknown>) {
+    const names = requiredStringArray(input.objects, "objects", 32);
+    const size = requiredNumber(input.fontSize, "fontSize");
+    if (!names.length || names.length > 32 || size < 8 || size > 96) throw new Error("文字对象数量需为 1–32，字号需为 8–96。");
+    if (typeof this.api!.setFont !== "function") throw new Error("当前 Applet 不支持对象字号设置。");
+    for (const key of ["bold", "italic", "serif"]) {
+      if (input[key] !== undefined && typeof input[key] !== "boolean") throw new Error(`${key} 必须是布尔值。`);
+    }
+    // Validate the whole batch before writing; setFont silently ignores non-text objects.
+    for (const name of names) {
+      if (!this.call("exists", name) || this.call("getObjectType", name) !== "text") {
+        throw new Error(`${name} 不是已有文字对象；普通对象标签不支持此字号接口。`);
+      }
+    }
+    const objects = names.map((name) => {
+      if (this.call("setFont", name, size, input.bold === true, input.italic === true, input.serif === true) === false) {
+        throw new Error(`GeoGebra 拒绝了 ${name} 的字体设置。`);
+      }
+      return { name, styleXml: this.optionalCall("getStyleXML", name) ?? null };
+    });
+    this.refreshVisuals();
+    return { ok: true, requested: { fontSize: size, bold: input.bold === true, italic: input.italic === true, serif: input.serif === true }, objects,
+      visualCheckHint: "调用 geochat_capture_canvas 检查文字清晰度；字体 XML 是读回结果，不是渲染像素字号证明。" };
   }
 
   async restoreCanvasXml(xml: string) {
@@ -420,6 +457,7 @@ export class GeoGebraController {
       failedCommandIndex: failedIndex >= 0 ? failedIndex + 1 : null,
       failedCommand: failedIndex >= 0 ? results[failedIndex]?.command ?? null : null,
       lastCompletedCommand: [...results].reverse().find((result) => result.success)?.command ?? null,
+      visualCheckHint: "构造或样式发生变化后，用 geochat_sceneReport 回读样式，再用 geochat_capture_canvas 看图；数值正确不代表排版合格。",
       error,
       clientMeta: {
         source: "geogebra-applet",
@@ -846,6 +884,8 @@ function compactRecord(value: Record<string, unknown>) { return Object.fromEntri
 function wait(ms: number) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
 const CANVAS_MUTATION_TOOLS = new Set([
+  "checkLayout",
+  "setTextStyle",
   "executeGeoGebraCommands",
   "configureGeoGebraAnimation",
   "controlGeoGebraAnimation",

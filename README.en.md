@@ -27,6 +27,21 @@
 
 `v0.7.0` · The new Fusion Mode is enabled by default
 
+## Latest Update: DeepSeek Harness Plugin (DSH Plugin)
+
+Use the GeoChat canvas directly inside DeepSeek Harness. The agent opens a native GeoGebra canvas
+in the right sidebar to build constructions, run animations, and inspect objects. The plugin bundles
+55 mathematical skills and offline canvas assets; the GeoChat desktop app is not required.
+
+New tools provide scene/style readback, text font sizing, current-frame text-box overlap and
+overflow checks, and multi-frame captures. Reports explicitly identify unmeasured content;
+numerical checks and sparse screenshots do not establish complete visual correctness.
+
+<img src="docs/media/geochat-dsh-plugin.png" alt="GeoChat DeepSeek Harness plugin: conversation-based solar-system verification beside a native GeoGebra canvas showing planets and orbits">
+
+See the [DSH plugin documentation](plugins/deepseek-harness/README.md) for installation,
+compatible versions, and limitations.
+
 ## Meet GeoChat
 
 GeoChat is an AI GeoGebra assistant for learning, teaching, and exploring mathematics.

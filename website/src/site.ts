@@ -13,6 +13,11 @@ export const REPO_OWNER = "tiwe0";
 export const REPO_NAME = "GeoChat";
 export const REPO_URL = `https://github.com/${REPO_OWNER}/${REPO_NAME}`;
 export const RELEASES_URL = `${REPO_URL}/releases`;
+export const DSH_PLUGIN_VERSION = "0.1.5";
+export const DSH_PLUGIN_RELEASE_URL = `${RELEASES_URL}/tag/dsh-plugin-v${DSH_PLUGIN_VERSION}`;
+export const DSH_PLUGIN_TARBALL_URL = `${RELEASES_URL}/download/dsh-plugin-v${DSH_PLUGIN_VERSION}/dsh-geochat-plugin-${DSH_PLUGIN_VERSION}.tgz`;
+export const DSH_PLUGIN_DOCS_URL = `${REPO_URL}/tree/master/plugins/deepseek-harness`;
+export const DSH_PLUGIN_INSTALL = `dsh plugin --profile web add ${DSH_PLUGIN_TARBALL_URL}`;
 /** Explicit download channel; set to null when featuring the stable release. */
 export const PREVIEW_RELEASE_TAG: string | null = null;
 export const DOWNLOAD_MANIFEST = PREVIEW_RELEASE_TAG ? "preview.json" : "latest.json";

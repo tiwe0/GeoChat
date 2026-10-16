@@ -53,7 +53,7 @@ function Nav() {
 
   return (
     <header className="sticky top-0 z-30 border-b border-rule bg-paper/92 backdrop-blur-[2px]">
-      <Container className="flex h-14 items-center justify-between gap-4">
+      <Container className="flex h-14 items-center justify-between gap-2 sm:gap-4">
         <Link
           to={localePath(locale)}
           className="rounded-sm text-ink transition-opacity hover:opacity-70"
@@ -61,7 +61,10 @@ function Nav() {
           <Wordmark />
         </Link>
 
-        <nav className="flex items-center gap-1 text-[0.875rem]">
+        <nav className="flex shrink-0 items-center gap-1 text-[0.8125rem] sm:text-[0.875rem]">
+          <a href={`${localePath(locale)}#dsh-plugin`} className="whitespace-nowrap rounded-sm px-1.5 py-1.5 text-ink-soft transition-colors hover:text-ink sm:px-2">
+            {t.nav.plugin}
+          </a>
           <a
             href={`${localePath(locale)}#what`}
             className="hidden rounded-sm px-2.5 py-1.5 text-ink-soft transition-colors hover:text-ink sm:block"
@@ -87,14 +90,14 @@ function Nav() {
             to={localePath(other, rest)}
             lang={other === "en" ? "en" : "zh-Hans"}
             aria-label={t.nav.switchToLabel}
-            className="ml-1 rounded-sm px-2.5 py-1.5 text-ink-soft transition-colors hover:text-ink"
+            className="whitespace-nowrap rounded-sm px-1.5 py-1.5 text-ink-soft transition-colors hover:text-ink sm:ml-1 sm:px-2.5"
           >
             {t.nav.switchTo}
           </Link>
 
           <Link
             to={localePath(locale, "/download")}
-            className="ml-1.5 rounded-[7px] bg-ink px-3.5 py-2 font-medium text-paper transition-colors hover:bg-construct"
+            className="whitespace-nowrap rounded-[7px] bg-ink px-2.5 py-2 font-medium text-paper transition-colors hover:bg-construct sm:ml-1.5 sm:px-3.5"
           >
             {t.nav.download}
           </Link>
@@ -121,6 +124,9 @@ function Footer() {
 
           <div className="flex flex-wrap gap-x-14 gap-y-8 text-[0.9375rem]">
             <FooterColumn title={t.footer.product}>
+              <FooterLink to={`${localePath(locale)}#dsh-plugin`}>
+                {t.nav.plugin}
+              </FooterLink>
               <FooterLink to={localePath(locale, "/download")}>
                 {t.nav.download}
               </FooterLink>

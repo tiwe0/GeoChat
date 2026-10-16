@@ -29,7 +29,7 @@ export const SEO: Record<Locale, Record<MetaKey, RouteMeta>> = {
     home: {
       title: "GeoChat — 本地优先的 AI 数学作图工作台",
       description:
-        "输入一道数学题，GeoChat 生成构造步骤、写进内嵌的 GeoGebra 画板并讲清每一步。数据留在本机，用你自己的模型密钥，开源免费。"
+        "GeoChat 桌面版把数学题转为 GeoGebra 构造与解释；DSH 原生插件让 DeepSeek Harness 直接作图、读回场景并截图检查。"
     },
     download: {
       title: "下载 GeoChat 桌面版 — macOS 与 Windows",
@@ -55,7 +55,7 @@ export const SEO: Record<Locale, Record<MetaKey, RouteMeta>> = {
     home: {
       title: "GeoChat — A local-first AI workbench for mathematics",
       description:
-        "Describe a problem and GeoChat plans the construction, writes real commands into an embedded GeoGebra canvas, and explains each step. Local-first, bring your own model key, open source."
+        "GeoChat Desktop turns math problems into GeoGebra constructions and explanations. The native DSH plugin brings construction, scene readback and visual inspection to DeepSeek Harness."
     },
     download: {
       title: "Download GeoChat Desktop — macOS and Windows",

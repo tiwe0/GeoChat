@@ -21,6 +21,13 @@ const EXPECT = [
   { file: "index.html", needle: "已知", label: "zh home headline" },
   { file: "index.html", needle: "PerpendicularBisector", label: "zh pipeline commands" },
   { file: "en/index.html", needle: "Given", label: "en home headline" },
+  ...["index.html", "en/index.html"].flatMap((file) => [
+    { file, needle: 'id="dsh-plugin"', label: "plugin section anchor" },
+    { file, needle: "dsh plugin --profile web add https://github.com/tiwe0/GeoChat/releases/download/dsh-plugin-v0.1.5/dsh-geochat-plugin-0.1.5.tgz", label: "versioned plugin install command" },
+    { file, needle: "geochat_capture_canvas", label: "native visual inspection capability" },
+    { file, needle: "/media/dsh-plugin-1600.webp", label: "local plugin screenshot" },
+    { file, needle: "https://www.geogebra.org/license", label: "GeoGebra license boundary" }
+  ]),
   { file: "download/index.html", needle: "安装与安全提示", label: "zh platform trust notes" },
   { file: "download/index.html", needle: "Developer ID 签名并通过 Apple 公证", label: "zh macOS signing status" },
   { file: "download/index.html", needle: "Windows 安装包尚未验证 Authenticode 签名", label: "zh Windows signing boundary" },
@@ -52,6 +59,8 @@ const ASSETS = [
   "media/shot-zh-1600.webp",
   "media/shot-en-1600.webp",
   "media/app-icon.webp",
+  "media/dsh-plugin-960.webp",
+  "media/dsh-plugin-1600.webp",
   "_headers"
 ];
 

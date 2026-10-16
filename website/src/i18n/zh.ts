@@ -8,6 +8,7 @@ export const zh: Content = {
     skipToContent: "跳到主要内容",
     features: "能做什么",
     how: "怎么运作",
+    plugin: "DSH 插件",
     download: "下载",
     source: "源码",
     switchTo: "EN",
@@ -27,6 +28,32 @@ export const zh: Content = {
     metaPlatforms: "macOS 与 Windows",
     figureAlt:
       "尺规作图动画：黑色三点 A、B、C 落位，蓝色中垂线扫出并交于外心 O，红色外接圆闭合。"
+  },
+
+  plugin: {
+    title: "在 DeepSeek Harness 里，直接作图",
+    lede: "给 Harness 加一块 GeoGebra 画布。Agent 用原生工具作图、读回场景、截图检查，你可以在同一块画布上拖动对象和滑块。无需安装 GeoChat 桌面版，也不用另接 MCP 服务。",
+    download: "下载插件",
+    docs: "查看插件文档",
+    imageAlt: "DeepSeek Harness 中的 GeoChat 插件：左侧对话检查作图结果，右侧 GeoGebra 画布展示太阳系轨道与行星。",
+    caption: "实际运行画面：同一个 Harness 会话中，对话与交互画布并排展示。",
+    capabilities: "作图之外，也能检查结果",
+    items: [
+      { title: "20 个原生工具，55 个数学技能", body: "打开会话画布、查命令、执行构造、检查对象与控制动画；Applet 资源随包提供，不依赖外部 CDN。" },
+      { title: "让 Agent 看到真实画面", body: "geochat_capture_canvas 返回可直接查看的图片内容块；连续帧采样帮助检查动画中的变化，不只读取对象数值。" },
+      { title: "读回场景与文字排版", body: "读取视口、样式及部分依赖信息，检测当前帧命名文字与有限文字列表的容器重叠、越界。不覆盖普通对象标签或全部动画时刻，仍需截图复核。" }
+    ],
+    install: "安装到 Harness",
+    copy: "复制命令",
+    copied: "已复制",
+    copyFailed: "无法自动复制，请选中下方命令手动复制。",
+    requirements: "适配 Harness 0.2.0-rc.2 · Node.js 24+ · Web profile（非 Desktop 载体）",
+    restart: "安装后重启对应 Harness profile，读取 geochat 技能后开始作图。使用 Harness 已配置的模型，无需另外填写插件 Key。",
+    prompt: "试着说：在 GeoChat 画布上绘制一个太阳系动画，完成后截图检查标签和布局。",
+    memory: "画布按会话隔离，仅保存在当前页面内存中。刷新、关闭画布或重启会丢失构造，请先保存需要保留的内容。离线资源不代表无需网络，Harness 连接仍由原生 Remote 管理。",
+    license: "插件自有代码采用 Apache-2.0；随包 GeoGebra 资源受非商业许可限制，商业使用或分发需另行取得许可。",
+    licenseLink: "GeoGebra 许可说明",
+    checksums: "版本说明与 SHA-256 校验"
   },
 
   legend: {

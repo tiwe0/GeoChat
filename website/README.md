@@ -54,6 +54,17 @@ therefore never disagree about where downloads come from.
 
 ## Architecture notes
 
+- **DSH plugin.** The bilingual homepage features the independently versioned
+  Harness plugin immediately after the desktop hero. `src/site.ts` owns its
+  versioned tarball, release and documentation links; it does not change the
+  desktop download channel. The install command copies locally with explicit
+  success/failure feedback. `DSH_PLUGIN_SURFACE.md` records the approved scope;
+  `DESIGN.md` records the inherited website direction and finish review.
+  Screenshot derivatives `public/media/dsh-plugin-{960,1600}.webp` come from the
+  user-selected `docs/media/geochat-dsh-plugin.png`; preserve the full frame.
+  Plugin copy must retain its Web/Node compatibility, in-memory lifecycle,
+  limited layout coverage and GeoGebra non-commercial licensing boundaries.
+
 - **Prerendering.** `scripts/prerender.mjs` renders each route with
   `react-dom/server` and injects it into the built shell, so every page ships
   real HTML with its own `<title>`, description, canonical and hreflang. This is

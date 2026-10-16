@@ -43,6 +43,7 @@ export type Content = {
     skipToContent: string;
     features: string;
     how: string;
+    plugin: string;
     download: string;
     source: string;
     switchTo: string;
@@ -70,6 +71,28 @@ export type Content = {
     ink: string;
     construct: string;
     result: string;
+  };
+
+  plugin: {
+    title: string;
+    lede: string;
+    download: string;
+    docs: string;
+    imageAlt: string;
+    caption: string;
+    capabilities: string;
+    items: Array<{ title: string; body: string }>;
+    install: string;
+    copy: string;
+    copied: string;
+    copyFailed: string;
+    requirements: string;
+    restart: string;
+    prompt: string;
+    memory: string;
+    license: string;
+    licenseLink: string;
+    checksums: string;
   };
 
   selling: {

@@ -8,6 +8,7 @@ export const en: Content = {
     skipToContent: "Skip to content",
     features: "What it does",
     how: "How it works",
+    plugin: "DSH plugin",
     download: "Download",
     source: "Source",
     switchTo: "中文",
@@ -27,6 +28,32 @@ export const en: Content = {
     metaPlatforms: "macOS and Windows",
     figureAlt:
       "Animated straightedge-and-compass construction: points A, B and C are placed in black, blue perpendicular bisectors sweep out and meet at circumcenter O, and a red circumcircle closes."
+  },
+
+  plugin: {
+    title: "Draw directly in DeepSeek Harness",
+    lede: "Give Harness a GeoGebra canvas. Your agent uses native tools to construct, read back the scene and inspect screenshots. Drag objects and sliders on that same canvas, without installing GeoChat Desktop or connecting a separate MCP service.",
+    download: "Download plugin",
+    docs: "Read plugin docs",
+    imageAlt: "GeoChat inside DeepSeek Harness: a conversation checking the construction on the left, with a GeoGebra solar-system canvas on the right.",
+    caption: "Actual running interface: conversation and interactive canvas alongside each other in one Harness session.",
+    capabilities: "Construct, then check the result",
+    items: [
+      { title: "20 native tools, 55 mathematical skills", body: "Open a session canvas, search commands, construct objects, inspect results and control animations. Applet assets ship in the package, without an external CDN." },
+      { title: "Let the agent see the actual canvas", body: "geochat_capture_canvas returns directly viewable image content. Frame sampling helps inspect changes during animation, beyond numeric object values." },
+      { title: "Read back scenes and text layout", body: "Read the viewport, styles and partial dependencies; check container overlap and bounds for named text and bounded text lists in the current frame. Ordinary object labels and all animation instants are not covered; screenshots remain necessary." }
+    ],
+    install: "Install in Harness",
+    copy: "Copy command",
+    copied: "Copied",
+    copyFailed: "Automatic copy failed. Select the command below and copy it manually.",
+    requirements: "Harness 0.2.0-rc.2 · Node.js 24+ · Web profile (not the Desktop carrier)",
+    restart: "Restart the matching Harness profile after installation, then read the geochat skill. The plugin uses your configured Harness model; no separate plugin key is needed.",
+    prompt: "Try: Draw an animated solar system on the GeoChat canvas, then capture it to check labels and layout.",
+    memory: "Each session has its own in-memory canvas. Refreshing, closing the canvas or restarting loses the construction; save anything you need first. Bundled offline assets do not mean no network: Harness manages the native Remote connection.",
+    license: "Plugin-owned code is Apache-2.0. Bundled GeoGebra assets have non-commercial license restrictions; commercial use or distribution requires separate permission.",
+    licenseLink: "GeoGebra licensing",
+    checksums: "Release notes and SHA-256 checksums"
   },
 
   legend: {

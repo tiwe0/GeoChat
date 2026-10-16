@@ -1,4 +1,5 @@
 import { Hero } from "../sections/Hero";
+import { HarnessPlugin } from "../sections/HarnessPlugin";
 import { Selling } from "../sections/Selling";
 import { Pipeline } from "../sections/Pipeline";
 import { Demo, Shots } from "../sections/Media";
@@ -10,6 +11,7 @@ export function Home() {
   return (
     <>
       <Hero />
+      <HarnessPlugin />
       <Selling />
       <Pipeline />
       <Demo />
